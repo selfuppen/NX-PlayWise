@@ -462,6 +462,8 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
     today.dock_policy = (PtcDockPolicy){false, true, 30};
     today.dock_dirty = false; today.bedtime_dirty = false; today.eye_care_dirty = false;
     today.dock_available = today.undocked_usage_available = true;
+    today.dock_status_available = today.bedtime_status_available = true;
+    today.bedtime_status_enabled = true;
     today.undocked_used_minutes = 12; today.undocked_remaining_minutes = 18;
     today.dock_restriction_active = today.dock_waived_today = false;
     snprintf(today.operation_mode, sizeof(today.operation_mode), "undocked");
@@ -476,6 +478,7 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
     today.bedtime_next_start_day_index = today.day_index;
     today.bedtime_next_start_minute = 21 * 60 + 30;
     today.bedtime_next_end_minute = 7 * 60;
+    today.bedtime_next_window_instance_id = ptc_bedtime_window_instance_id(today.day_index, 21 * 60 + 30);
     failed |= save_preview(directory, "parent", "today-planning", &today, dark);
     {
         PtcUiModel variant = today;
@@ -498,6 +501,15 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
         variant = today;
         variant.recovery_active = true;
         failed |= save_preview(directory, "parent", "today-recovery", &variant, dark);
+        variant = today;
+        variant.eye_care_policy.enabled = variant.bedtime_policy.enabled = variant.bedtime_status_enabled = false;
+        variant.dock_policy.force_docked = variant.dock_policy.undocked_limit_enabled = false;
+        variant.daily_buffer_minutes = 0; variant.daily_buffer_available = false;
+        variant.usage_present = true; variant.usage_captured_at = variant.status_updated_at;
+        variant.forecast[0].mode = PTC_RULE_MODE_UNLIMITED; variant.forecast[0].minutes = 0;
+        failed |= save_preview(directory, "parent", "today-policies-off", &variant, dark);
+        variant.status_updated_at = 879; variant.usage_captured_at = 879;
+        failed |= save_preview(directory, "parent", "today-policies-off-stale", &variant, dark);
     }
     today.home_details_page = 1;
     failed |= save_preview(directory, "parent", "today-rules", &today, dark);

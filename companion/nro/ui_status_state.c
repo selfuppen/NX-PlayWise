@@ -119,6 +119,68 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
 
 static int today_min(int a, int b) { return a < b ? a : b; }
 
+static bool today_status_fresh(const PtcUiModel *model, int64_t now, uint16_t day)
+{
+    return model && ptc_ui_status_is_fresh(model, now) &&
+        !model->home_details_refresh_failed && !model->waiting && day == model->day_index;
+}
+
+void ptc_ui_project_home_details_status(const PtcUiModel *model, int64_t now,
+    uint16_t day, int second, PtcUiHomeDetailsStatus *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->fresh = second >= 0 && second < 86400 && today_status_fresh(model, now, day);
+    out->eye_badge = PTC_UI_T_TO_BE_CONFIRMED;
+    snprintf(out->quota, sizeof(out->quota), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+    snprintf(out->usage, sizeof(out->usage), "%s: %s", ptc_ui_text(PTC_UI_T_CONSOLE_USAGE),
+        ptc_ui_text(out->fresh ? PTC_UI_T_UNAVAILABLE : PTC_UI_T_STATUS_TO_CONFIRM));
+    snprintf(out->buffer, sizeof(out->buffer), "%s", ptc_ui_text(PTC_UI_T_AUTONOMY_STATUS_PENDING));
+    snprintf(out->eye, sizeof(out->eye), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
+    ptc_ui_project_policy_status(out->fresh ? model : NULL, now, day, second, &out->policies);
+    if (!out->fresh) return;
+
+    out->usage_available = model->played_minutes_available && model->played_minutes >= 0;
+    if (out->usage_available) snprintf(out->usage, sizeof(out->usage),
+        ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_U_MIN : PTC_UI_T_DETAIL_USED_LABEL),
+        (unsigned)model->played_minutes);
+    if (model->forecast_available && model->forecast[0].day_index == day) {
+        const PtcResultForecastDay *quota = &model->forecast[0];
+        if (quota->mode == PTC_RULE_MODE_UNLIMITED) {
+            snprintf(out->quota, sizeof(out->quota), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+            out->usage_progress_percent = 100;
+        } else if (quota->mode == PTC_RULE_MODE_LIMIT && quota->minutes > 0 && quota->minutes <= 1440) {
+            snprintf(out->quota, sizeof(out->quota), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)quota->minutes);
+            if (out->usage_available) {
+                int64_t percent = (int64_t)model->played_minutes * 100 / quota->minutes;
+                out->usage_progress_percent = percent > 100 ? 100 : (int)percent;
+            }
+        }
+    }
+    if (model->daily_buffer_available && model->daily_buffer_minutes > 0)
+        snprintf(out->buffer, sizeof(out->buffer), ptc_ui_text(PTC_UI_T_DETAIL_BUFFER_CLAIMABLE_FMT),
+            (unsigned)model->daily_buffer_minutes);
+    else snprintf(out->buffer, sizeof(out->buffer), "%s", ptc_ui_text(
+        model->daily_buffer_minutes == 0 ? PTC_UI_T_AUTONOMY_STATUS_OFF : PTC_UI_T_THERE_ARE_NO_AUTONOMOUS_BUFFERS_TO_CLAIM));
+
+    ptc_ui_format_eye_care_cycle(model, now, out->eye, sizeof(out->eye));
+    if (!model->eye_care_policy.enabled || strcmp(model->eye_care_phase, "off") == 0) {
+        out->eye_badge = PTC_UI_T_DISABLED_2;
+        out->eye_state = PTC_POLICY_OFF;
+    } else if (strcmp(model->eye_care_phase, "playing") == 0 &&
+        model->eye_care_used_minutes < model->eye_care_policy.play_minutes) {
+        out->eye_badge = PTC_UI_T_DETAIL_TAG_ACTIVE;
+        out->eye_state = PTC_POLICY_AVAILABLE;
+    } else if (strcmp(model->eye_care_phase, "resting") == 0 && model->eye_care_break_id &&
+        (int64_t)model->eye_care_rest_remaining_seconds > ptc_ui_status_age_seconds(model, now)) {
+        out->eye_badge = PTC_UI_T_EYE_CARE_BADGE_RESTING;
+        out->eye_state = PTC_POLICY_WAITING;
+    } else if (strcmp(model->eye_care_phase, "paused") == 0) {
+        out->eye_badge = PTC_UI_T_ADJUST_BADGE_PAUSED;
+        out->eye_state = PTC_POLICY_PENDING;
+    }
+}
+
 static void today_segment(PtcUiTodayProjection *out, int start, int end, bool resting)
 {
     if (end <= start || out->segment_count >= PTC_UI_USAGE_SEGMENTS_MAX) return;
@@ -138,8 +200,7 @@ void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
     if (!model || second_of_day < 0 || second_of_day >= 86400) return;
     out->now_second = out->stop_second = second_of_day;
     ptc_ui_build_plan_rules(model, PTC_UI_PLAN_SAVED, &rules);
-    out->fresh = ptc_ui_status_is_fresh(model, now) &&
-        !model->home_details_refresh_failed && local_day_index == model->day_index;
+    out->fresh = today_status_fresh(model, now, local_day_index);
     if (model->home_details_refresh_failed || model->waiting) out->pending_reason = PTC_UI_ESTIMATE_REFRESH;
     else if (local_day_index != model->day_index) out->pending_reason = PTC_UI_ESTIMATE_DATE;
     else if (ptc_ui_status_age_seconds(model, now) > 120) out->pending_reason = PTC_UI_ESTIMATE_STALE;

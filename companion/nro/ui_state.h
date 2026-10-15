@@ -7,6 +7,18 @@
 void ptc_ui_project_policy_status(const PtcUiModel *model, int64_t now,
     int local_day_index, int second_of_day, PtcPolicyStatus *out);
 
+typedef struct {
+    bool fresh, usage_available;
+    int usage_progress_percent;
+    char quota[96], usage[128], buffer[160], eye[160];
+    PtcUiTextId eye_badge;
+    PtcPolicyDisplayState eye_state;
+    PtcPolicyStatus policies;
+} PtcUiHomeDetailsStatus;
+
+void ptc_ui_project_home_details_status(const PtcUiModel *model, int64_t now,
+    uint16_t local_day_index, int second_of_day, PtcUiHomeDetailsStatus *out);
+
 #include "ui_input_state.h"
 
 void ptc_ui_open_support_guide(PtcUiModel *model);

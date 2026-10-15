@@ -4011,6 +4011,78 @@ static PtcUiModel today_projection_model(void)
     return m;
 }
 
+static void test_home_details_status(void)
+{
+    PtcUiModel m = today_projection_model();
+    PtcUiHomeDetailsStatus s;
+    const int second = 16 * 3600;
+    m.usage_present = true; m.usage_captured_at = 1000;
+    m.bedtime_status_available = m.dock_status_available = true;
+    m.eye_care_policy.enabled = m.bedtime_policy.enabled = false;
+    m.dock_policy.undocked_limit_enabled = false;
+    m.forecast[0].mode = PTC_RULE_MODE_UNLIMITED; m.forecast[0].minutes = 0;
+    m.daily_buffer_minutes = 0; m.daily_buffer_available = false;
+    PtcUiModel original = m;
+    for (int language = PTC_UI_LANGUAGE_SIMPLIFIED; language <= PTC_UI_LANGUAGE_ENGLISH; ++language) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)language);
+        ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+        check_true(s.fresh && s.usage_available && strstr(s.usage, "69"), "details show fresh direct usage in each language");
+        check_true(strcmp(s.quota, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED)) == 0 && s.usage_progress_percent == 100,
+            "unlimited wire zero is never displayed as a zero-minute allowance");
+        check_true(s.eye_state == PTC_POLICY_OFF && s.eye_badge == PTC_UI_T_DISABLED_2 &&
+            strcmp(s.eye, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_OFF)) == 0,
+            "disabled eye care does not invent a future rest countdown");
+        check_true(s.policies.bedtime.state == PTC_POLICY_OFF && s.policies.dock.state == PTC_POLICY_OFF,
+            "disabled policies do not show enabled or handheld restriction badges");
+        check_true(strcmp(s.buffer, ptc_ui_text(PTC_UI_T_AUTONOMY_STATUS_OFF)) == 0,
+            "disabled buffer never offers zero claimable minutes");
+        ptc_ui_project_home_details_status(&m, 1120, m.day_index, second, &s);
+        check_true(s.usage_available, "details retain the inclusive 120-second boundary");
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(!s.fresh && !s.usage_available && !strstr(s.usage, "69") && s.usage_progress_percent == 0,
+            "expired details hide old usage and its progress");
+        check_true(s.eye_state == PTC_POLICY_UNKNOWN && s.policies.bedtime.state == PTC_POLICY_UNKNOWN &&
+            s.policies.dock.state == PTC_POLICY_UNKNOWN, "expired disabled policies require a fresh confirmation");
+        ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+        check_true(s.usage_available && s.policies.bedtime.state == PTC_POLICY_OFF,
+            "fresh confirmation restores current usage and policy labels");
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(memcmp(&m, &original, sizeof(m)) == 0, "details projection never modifies saved or current state");
+    m.played_minutes = 0;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(s.usage_available && strstr(s.usage, "0"), "known zero usage remains a real observation");
+    m.played_minutes_available = false;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.usage_available && !strstr(s.usage, "0"), "missing usage is not known zero");
+    m = original; m.home_details_refresh_failed = true;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.fresh && !strstr(s.usage, "69"), "failed refresh suppresses even a young cached counter");
+    m = original; m.waiting = true;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.fresh && !s.usage_available, "pending refresh does not relabel cached data as current");
+    m = original;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index + 1, second, &s);
+    check_true(!s.fresh && !s.usage_available, "previous-day details cannot become fresh by reopening");
+    ptc_ui_project_home_details_status(&m, 999, m.day_index, second, &s);
+    check_true(!s.fresh, "clock rollback keeps details unknown");
+    m.usage_captured_at = 1001;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.fresh, "future usage capture is not an observation of the current moment");
+    m = original; m.eye_care_policy.enabled = true;
+    snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "resting");
+    m.eye_care_break_id = 9; m.eye_care_rest_remaining_seconds = 60;
+    m.dock_policy.undocked_limit_enabled = true;
+    snprintf(m.operation_mode, sizeof(m.operation_mode), "docked");
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(s.eye_state == PTC_POLICY_WAITING && s.eye_badge == PTC_UI_T_EYE_CARE_BADGE_RESTING,
+        "real resting phase uses its countdown and warning badge");
+    check_true(s.policies.mode == PTC_UI_T_DOCK_TV_BADGE && s.policies.dock.state == PTC_POLICY_AVAILABLE,
+        "TV mode and known remaining quota come from the backend snapshot");
+    ptc_ui_project_home_details_status(&m, 1060, m.day_index, second, &s);
+    check_true(s.eye_state == PTC_POLICY_UNKNOWN, "rest deadline does not imply an automatic release");
+}
+
 static void test_today_projection(void)
 {
     PtcUiModel m = today_projection_model();
@@ -4267,6 +4339,7 @@ int main(void)
 {
     test_direct_usage_freshness();
     test_policy_status();
+    test_home_details_status();
     test_today_projection();
     test_today_details_navigation();
     test_today_settings_links();
