@@ -530,6 +530,11 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
     failed |= save_preview(directory, "parent", "today-refresh-failed", &today, dark);
     today.home_details_refresh_failed = false;
     today.daily_restriction_active = today.bedtime_active = today.dock_restriction_active = true;
+    today.today_override_present = true;
+    today.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 60};
+    today.forecast[0].minutes = 60;
+    today.forecast[0].rule_source = "today_override";
+    snprintf(today.rule_source, sizeof(today.rule_source), "today_override");
     today.played_minutes = today.forecast[0].minutes;
     today.undocked_used_minutes = today.dock_policy.undocked_daily_minutes;
     today.undocked_remaining_minutes = 0;

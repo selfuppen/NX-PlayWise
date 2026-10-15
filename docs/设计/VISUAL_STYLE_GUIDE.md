@@ -144,14 +144,27 @@ In list rows, health-care cards, and decision cells, content must strictly separ
 
 ![Today: plan and status composite control preview](../images/usage-en/parent/today-planning-light.png)
 
-### 4.4 Two-Stage Decision & Rule Matrix
+### 4.4 Two-Stage Decision & Rule Matrix and Natural Guidance
+The view moves beyond rigid and cramped layouts, adopting conversational, parent-friendly wording and an expansive, breathing visual architecture:
 
-The page is organized as a two-stage flow — "first the total, then whether you can play" — with numbered badges ① / ② and a mid-flow pill making the causal chain explicit. Section subtitles are phrased as conversational questions.
-
-* **Stage ① "Total first"**: four priority candidate cards (Today → Set Date → Holiday → Weekly) cascade left to right. The winning card uses a 2px `UI_SUCCESS` stroke with a soft green background (`UI_SUCCESS_SOFT`); overridden fallbacks are dimmed with a 1px `UI_BORDER` and `UI_PAGE` background. Each card carries a domain vector icon (calendar / gift / clock) plus a `P1`–`P4` chip, and the winning card shows a one-line "why this one" note in its domain color.
-* **Priority flow**: 2px directional arrows with a single triangular head run between cards (Temporary $\to$ Specified Date $\to$ Holiday $\to$ Weekly Plan); the winning junction draws a red cut-off barrier that truncates the downstream flow, and the active card feeds down into the "today's total = N minutes" result bar (an emphasized soft bar with a leading clock icon).
-* **Stage ② "Can we play"**: four gate cards (Daily Total / Bedtime / Eye Rest / TV·Handheld) each carry a dedicated icon (clock / moon / eye / controller) and a 4px left domain bar in `UI_ACCENT` / `UI_HERO` / `UI_SUCCESS` / `UI_WARNING`. Any block turns the whole card and its bar to `UI_DANGER`. Downward leads from the four cards merge into a bus that feeds a centered master gate bar: success color with "all 4 gates green" when clear, otherwise danger color with a centered "restricted" caption and an optional right-aligned "allowance does not waive health rules" note.
-* **Top banner and footer**: the banner switches between success and warning soft colors (and check / info icons) depending on whether eye care triggers first; the footer has three columns, each a vector icon (info / shield / TV) in `UI_MUTED` / `UI_WARNING` / `UI_ACCENT` paired with one plain-language sentence.
+* **Top Verdict Banner**: Height 34px, utilizing soft semantic backgrounds (`UI_SUCCESS_SOFT` / `UI_WARNING_SOFT`) and vector micro-icons (checkmark / info) to provide an immediate plain-language verdict on whether gaming is currently permitted. An adaptive badge on the right highlights the next key milestone (e.g., bedtime at 21:00 or impending eye-care break).
+* **Stage 1: Where Today's Quota Comes From (Pipeline)**:
+  * **Direct Subtitle**: "Checked left to right — the first matching rule sets the daily quota."
+  * **Four Rule Pipeline Cards (98px high)**: "Today's Adjustment (P1)", "Specific Date (P2)", "Holiday (P3)", and "Weekly Plan (P4)". Each card features domain vector icons (calendar / gift / clock) and high-contrast priority tags.
+  * **Hero Active Rule Card**: The matching rule card stands out prominently with a light-green wash, 2px vivid green border, bold 16px quota digits, and an "Active Rule" badge; downstream overridden cards are cleanly dimmed with subtle borders.
+  * **Cascade Arrows & Result Bar**: Horizontal directional arrows link the pipeline stages; the active card drops an indicator line into a 38px full-width summary bar confirming total approved minutes, rule source, played time, and remaining time.
+* **Stage Transition Linker**: A centered downward arrow connects Stage 1 results into Stage 2 access evaluation.
+* **Stage 2: Real-time Access & 4 Health Guardians**:
+  * **Direct Subtitle**: "All 4 gates must show green; any trigger means pause and rest."
+  * **Four Guardian Cards (124px high)**:
+    * **Total Daily Allowance** (`UI_ACCENT` blue bar + clock icon + "from Step 1" provenance badge + 15px bold remaining time).
+    * **Bedtime Schedule** (`UI_HERO` navy bar + crescent moon icon + 15px restriction time + overnight schedule).
+    * **Eye-care Break** (`UI_SUCCESS` green bar + eye icon + 15px elapsed/cycle metrics + rest countdown).
+    * **Screen & Dock Mode** (`UI_WARNING` orange bar + controller/TV icon + 15px mode display + remaining time).
+    * Each card terminates in a full-width status pill (green "Pass", red "Restricted now", or gray "Limit off"). Any restriction transforms the entire card border and fill to danger red.
+  * **Convergence Gate Bar**: Downward leads from all four cards converge into a centered 36px master gate bar. Clear states show "All 4 gates green: healthy schedule clear, ready to play!", while any blockage displays a danger warning.
+* **Footer Guidance Tips Bar**: Height 36px, structured as a 3-column micro-card row with vector icons (info, shield, TV) delivering warm parental tips (independent gates, extra time boundaries, TV dock advantages).
+* **Adaptive Multi-Context Scaling**: In tighter modal viewports such as Forecast Day Details, card heights smoothly compress (98px/124px $\to$ 88px/112px) and include an explicit causal transition pill (`① Approved Daily Quota ↓ handed to ② 4 Real-time Guardians`), ensuring consistent visual elegance across all screen modes.
 
 ![Decision and rules priority matrix preview](../images/usage-en/parent/parent-details-rules-light.png)
 
