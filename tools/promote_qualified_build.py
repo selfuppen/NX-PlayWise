@@ -73,7 +73,7 @@ def promote(packages: Path, verification_path: Path, output: Path) -> dict:
                 baseline.get("model", ""), baseline.get("hos", ""), baseline.get("atmosphere", ""))
         except usage_qualification.UsageQualificationError as exc:
             raise PromotionError(str(exc)) from exc
-        if checked != attestation or not set(usage_qualification.CHECKS) <= set(verification.get("checks", [])):
+        if checked != attestation or not set(usage_qualification.checks_for(checked["contract"])) <= set(verification.get("checks", [])):
             raise PromotionError("1952 资格证据或检查记录已变化")
     if output.exists() and any(output.iterdir()):
         raise PromotionError(f"晋级目录不是空目录：{output}")

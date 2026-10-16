@@ -57,6 +57,11 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStat
         return stub->read_error;
     }
     *out = stub->status;
+    if (stub->direct_usage_model) {
+        out->usage_supported = out->usage_available = true;
+        out->usage_result = 0;
+        out->usage_ns = (uint64_t)stub->played_minutes_today * UINT64_C(60000000000) + stub->usage_fraction_ns;
+    }
     if (stub->model_elapsed_time && out->limited_today) {
         uint64_t configured = (uint64_t)stub->configured_minutes * 60000000000ULL;
         uint64_t used = (uint64_t)stub->played_minutes_today * 60000000000ULL + stub->usage_fraction_ns;
@@ -140,8 +145,8 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
         stub->status.remaining_minutes = target->minutes > stub->played_minutes_today
             ? target->minutes - stub->played_minutes_today
             : 0U;
-        stub->status.restricted_now = target->mode == PTC_PCTL_TARGET_LIMIT &&
-            target->minutes <= stub->played_minutes_today;
+        stub->status.restricted_now = target->mode == PTC_PCTL_TARGET_BLOCKED ||
+            (target->mode == PTC_PCTL_TARGET_LIMIT && target->minutes <= stub->played_minutes_today);
     } else {
         stub->status.remaining_minutes = target->minutes;
         /* A blocked day allows no play time at all, so the device reports it as
@@ -443,10 +448,15 @@ bool ptc_pctl_stub_advance_usage_ns(PtcPctlStub *stub, uint64_t elapsed_ns, uint
     uint64_t minutes;
     uint64_t whole;
     if (!stub || !carry_ns) return false;
-    if (!stub->model_elapsed_time || !stub->status.limited_today ||
-        !stub->status.play_timer_enabled || stub->status.temporary_unlocked ||
-        stub->played_minutes_today >= stub->configured_minutes) {
-        *carry_ns = 0;
+    bool unlimited_direct = stub->direct_usage_model && stub->status.unrestricted_today;
+    if (!stub->model_elapsed_time || stub->status.blocked_today ||
+        (!unlimited_direct && (!stub->status.limited_today || !stub->status.play_timer_enabled ||
+            stub->played_minutes_today >= stub->configured_minutes)) || stub->status.temporary_unlocked) {
+        *carry_ns = stub->usage_fraction_ns;
+        return false;
+    }
+    if (unlimited_direct && stub->played_minutes_today >= 1440u) {
+        stub->usage_fraction_ns = *carry_ns = 0;
         return false;
     }
     whole = elapsed_ns / minute_ns;
@@ -455,9 +465,13 @@ bool ptc_pctl_stub_advance_usage_ns(PtcPctlStub *stub, uint64_t elapsed_ns, uint
     *carry_ns %= minute_ns;
     stub->usage_fraction_ns = *carry_ns;
     if (minutes == 0) return false;
-    if (minutes > stub->configured_minutes - stub->played_minutes_today)
+    if (!unlimited_direct && minutes > stub->configured_minutes - stub->played_minutes_today)
         minutes = stub->configured_minutes - stub->played_minutes_today;
+    if (unlimited_direct && minutes > 1440u - (stub->played_minutes_today < 1440u ? stub->played_minutes_today : 1440u))
+        minutes = 1440u - (stub->played_minutes_today < 1440u ? stub->played_minutes_today : 1440u);
     stub->played_minutes_today += (uint32_t)minutes;
+    if (unlimited_direct && stub->played_minutes_today >= 1440u)
+        stub->usage_fraction_ns = *carry_ns = 0;
     stub_sync_usage(stub);
     return true;
 }

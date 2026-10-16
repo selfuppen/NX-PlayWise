@@ -532,7 +532,7 @@ def verify(packages: Path, reports: Path, expected_model: str,
         result["checks"].extend(["eye_care_rest_cycle", "eye_care_isolation"])
         result["reports"]["eye_care_path"] = str(eye_care_report.resolve())
     if usage_attestation is not None:
-        result["checks"].extend(usage_qualification.CHECKS)
+        result["checks"].extend(usage_qualification.checks_for(usage_attestation["contract"]))
         result["pctl_usage"] = usage_attestation
     if observation_source == "vision_ai":
         result["checks"].append("vision_attestation")
@@ -581,6 +581,7 @@ def main() -> int:
         "pctl1952_candidate_identity": "1952 报告、原始样本文件与当前候选二进制绑定",
         "pctl1952_usage_grant_continuity": "独立累计、超额加时及恢复后一分钟消费一致",
         "pctl1952_proxy_handover": "1440 代理循环及剩余限制交接证据一致（不证明代理可移除）",
+        "pctl1952_direct_handover": "1952 无代理不限时、自动恢复及剩余限制交接均与标准原始行一致",
         "pctl1952_restore": "1952 候选报告记录 0x44 与 timer 精确恢复",
     }
     for check_name in result["checks"]:

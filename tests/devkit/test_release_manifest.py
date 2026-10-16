@@ -60,7 +60,7 @@ def test_candidate_defaults_to_pending() -> None:
     require(data["build"]["libnx"] == "libnx 4.12.0-1", "libnx package identity must be recorded")
     require(data["build"]["container_image"] == "devkitpro:v1", "Docker image tag must be recorded")
     require(data["build"]["source_dirty"] is False, "tracked dirty state must be recorded")
-    require(data["usage_contract"] == "pctl1952_v1_proxy1440",
+    require(data["usage_contract"] == "pctl1952_v2_direct",
             "release declares the direct counter contract while retaining the proxy")
 
 

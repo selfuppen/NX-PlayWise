@@ -11,6 +11,9 @@ from playwise_version import read_playwise_version
 
 
 CONTRACT = "pctl1952_v1_proxy1440"
+DIRECT_CONTRACT = "pctl1952_v2_direct"
+CURRENT_CONTRACT = DIRECT_CONTRACT
+SUPPORTED_CONTRACTS = (CONTRACT, DIRECT_CONTRACT)
 REPORT_NAME = "pctl-usage-qualification.json"
 CHECKS = ("pctl1952_candidate_identity", "pctl1952_usage_grant_continuity",
           "pctl1952_proxy_handover", "pctl1952_restore")
@@ -22,6 +25,21 @@ CASES = {
 }
 OBSERVATIONS = ("same_candidate_loaded", "raw_pairing_checked", "console_scope_confirmed",
                 "grant_access_restored", "proxy_cycle_observed", "remaining_reason_still_blocks")
+DIRECT_CASES = dict(CASES)
+DIRECT_CASES.pop("proxy_cycle")
+DIRECT_CASES["direct_cycle"] = ("unlimited", "tracking", "blocked", "restored", "unlimited_restored")
+DIRECT_OBSERVATIONS = tuple("direct_cycle_observed" if name == "proxy_cycle_observed" else name for name in OBSERVATIONS)
+
+
+def checks_for(contract: str) -> tuple[str, ...]:
+    require(contract in SUPPORTED_CONTRACTS, "unsupported PCTL usage contract")
+    return tuple("pctl1952_direct_handover" if name == "pctl1952_proxy_handover" else name
+                 for name in CHECKS) if contract == DIRECT_CONTRACT else CHECKS
+
+
+def contract_cases(contract: str) -> dict[str, tuple[str, ...]]:
+    require(contract in SUPPORTED_CONTRACTS, "unsupported PCTL usage contract")
+    return DIRECT_CASES if contract == DIRECT_CONTRACT else CASES
 COMPONENTS = ("atmosphere/contents/4200000000BD2300/exefs.nsp",
               "switch/playwise/pctc.nro", "switch/.overlays/playwise.ovl")
 MINUTE_NS = 60_000_000_000
@@ -119,14 +137,65 @@ def bound_file(reports: Path, binding: object, label: str) -> Path:
     return resolved
 
 
+def direct_raw_pair(reports: Path, value: dict, bindings: list[dict], manifest: dict) -> dict:
+    """New contracts pair every endpoint to an actual stopped production stream."""
+    import pctl_standard_evidence as production
+    from pctl_capture import normalized_sample
+    binding = value.get("raw_source")
+    path = bound_file(reports, binding, "direct sample raw")
+    require(any(Path(item["path"]) == path and item["sha256"] == binding["sha256"] for item in bindings),
+            "direct sample raw is outside its retained sources")
+    data = path.read_bytes()
+    try:
+        first = json.loads(data.splitlines()[0])
+    except (IndexError, ValueError, UnicodeError) as exc:
+        raise UsageQualificationError("malformed direct production raw") from exc
+    require(isinstance(first, dict), "production start object required")
+    require(first.get("commit") == manifest["commit"] and first.get("release_id") == manifest["release_id"],
+            "direct raw belongs to another production candidate")
+    require(isinstance(first.get("run_id"), str) and re.fullmatch(r"[0-9a-f]{32}", first["run_id"]) is not None,
+            "direct raw run identity missing")
+    duration = nanoseconds(first.get("duration_ns"), False, "raw duration")
+    require(duration % 1_000_000_000 == 0, "non-integral raw lease")
+    config = {"commit": manifest["commit"], "release_id": manifest["release_id"],
+              "run_id": first.get("run_id"), "duration_s": duration // 1_000_000_000}
+    integer(config["duration_s"], 300, 7200, "raw lease")
+    audit = production.audit(data, config)
+    require(audit["stop_record_present"] and not audit["partial_tail_lines"] and
+            not audit["invalid_sample_lines"] and not audit["gaps"], "direct raw is incomplete or invalid")
+    stop = json.loads([line for line in data.splitlines() if line.strip()][-1])
+    require(stop["consecutive_failures"] == 0 and stop["reason"] in
+            ("config_removed_or_changed", "lease_expired", "process_handoff"), "direct raw ended in failure")
+    line = integer(binding.get("line"), 2, len(data.splitlines()), "raw source line")
+    found = [item["raw"] for item in audit["samples"] if item["line"] == line]
+    require(len(found) == 1, "direct endpoint is not a production sample")
+    raw = found[0]
+    decoded = normalized_sample(dict(raw, day_index=raw["day_before"]))
+    expected_mode = "limit" if decoded["settings_mode"] == "limited" else decoded["settings_mode"]
+    require(value["pctl_mode"] == expected_mode and value["configured_minutes"] == decoded["configured_minutes"],
+            "direct target differs from complete raw 0x44")
+    require(all(value[name] == raw[field] for name, field in (
+        ("boot_id", "boot_id"), ("day_index", "day_before"), ("captured_at", "unix_after"),
+        ("monotonic_ns", "begin_ns"), ("total_ns", "total_ns"), ("timer_enabled", "timer_enabled"),
+        ("temporarily_unlocked", "temporarily_unlocked"))), "direct endpoint differs from retained raw")
+    require(value["pairing_span_ns"] == int(raw["end_ns"]) - int(raw["begin_ns"]) and
+            value["start_timer_calls"] == int(raw["start_timer_calls"]), "direct pairing or 1451 count differs from raw")
+    if expected_mode == "limit":
+        require(value["signed_remaining_ns"] == raw["signed_remaining_ns"], "direct signed remaining differs from raw")
+    return raw
+
+
 def verify_report(reports: Path, manifest: dict, standard_sha256: str, components: dict[str, str],
                   model: str, hos: str, atmosphere: str) -> dict:
     path = reports / REPORT_NAME
     report = read_json(path)
     require(report.get("schema_version") == 1 and type(report.get("schema_version")) is int and
             report.get("report_status") == "final", f"{REPORT_NAME}: final schema v1 required")
-    require(manifest.get("usage_contract") == CONTRACT and report.get("usage_contract") == CONTRACT,
-            "unsupported PCTL usage contract; proxy removal needs a separate candidate and gate")
+    contract = manifest.get("usage_contract")
+    require(contract in SUPPORTED_CONTRACTS and report.get("usage_contract") == contract,
+            "unsupported or mismatched PCTL usage contract")
+    direct = contract == DIRECT_CONTRACT
+    cases_spec = contract_cases(contract)
     require(manifest.get("build", {}).get("source_dirty") is False, "PCTL candidate contains tracked modifications")
     subject = {key: manifest[key] for key in ("commit", "release_id")}
     require(report.get("subject") == subject and report.get("standard_zip_sha256") == standard_sha256 and
@@ -135,7 +204,8 @@ def verify_report(reports: Path, manifest: dict, standard_sha256: str, component
     require(report.get("environment") == {"model": expected_model, "hos": hos, "atmosphere": atmosphere},
             "PCTL report environment mismatch")
     observations = report.get("observations", {})
-    require(isinstance(observations, dict) and all(observations.get(key) is True for key in OBSERVATIONS),
+    require(isinstance(observations, dict) and all(observations.get(key) is True for key in
+            (DIRECT_OBSERVATIONS if direct else OBSERVATIONS)),
             "PCTL report manual observations incomplete")
     attestation = report.get("attestation", {})
     require(isinstance(attestation, dict) and isinstance(attestation.get("operator"), str) and
@@ -151,10 +221,11 @@ def verify_report(reports: Path, manifest: dict, standard_sha256: str, component
             restoration.get("timer_after") is restoration["timer_before"] and
             restoration.get("unexpected_raw_offsets") == [], "PCTL exact restoration not proved")
     cases = report.get("cases")
-    require(isinstance(cases, dict) and set(cases) == set(CASES), "PCTL case set incomplete")
+    require(isinstance(cases, dict) and set(cases) == set(cases_spec), "PCTL case set incomplete")
     evidence = []
+    paired_raw = {}
     used_paths = set()
-    for case, phases in CASES.items():
+    for case, phases in cases_spec.items():
         binding = cases[case]
         resolved = bound_file(reports, binding, case)
         require(resolved not in used_paths and resolved != path.resolve(), f"{case}: evidence file reused")
@@ -177,6 +248,8 @@ def verify_report(reports: Path, manifest: dict, standard_sha256: str, component
         for index, (value, phase) in enumerate(zip(values, phases)):
             sample(value, f"{case}.{phase}")
             require(value.get("phase") == phase, f"{case}: phase order mismatch")
+            if direct:
+                paired_raw[json.dumps(value["raw_source"], sort_keys=True)] = direct_raw_pair(reports, value, raw_bindings, manifest)
             if index:
                 previous = values[index - 1]
                 elapsed = int(value["monotonic_ns"]) - int(previous["monotonic_ns"])
@@ -213,6 +286,21 @@ def verify_report(reports: Path, manifest: dict, standard_sha256: str, component
                     abs(int(end["total_ns"]) - int(after["total_ns"]) -
                         (int(end["monotonic_ns"]) - int(after["monotonic_ns"]))) <= PAIRING_NS,
                     "grant_recovery: excess usage, actual award or usable recovery not proved")
+        elif case == "direct_cycle":
+            expected = ("unlimited", "unlimited", "blocked", "unlimited", "unlimited")
+            require(all(v["pctl_mode"] == mode and v["configured_minutes"] == 0 and
+                        v["business_mode"] == "unlimited" and v["business_minutes"] == 0
+                        for v, mode in zip(values, expected)), "direct_cycle: synthetic quota or incorrect restoration")
+            require(all(type(v.get("eye_care_enabled")) is bool for v in values) and
+                    [v.get("eye_care_enabled") for v in values] == [False, True, True, True, False] and
+                    [set(v["restriction_reasons"]) for v in values] == [set(), set(), {"eye_care"}, set(), set()] and
+                    data.get("automatic_recovery") is True, "direct_cycle: health lifecycle or automatic recovery missing")
+            elapsed = int(values[1]["monotonic_ns"]) - int(values[0]["monotonic_ns"])
+            require(elapsed >= MINUTE_NS and abs(int(values[1]["total_ns"]) - int(values[0]["total_ns"]) - elapsed) <= PAIRING_NS,
+                    "direct_cycle: true-unlimited consumption progression missing")
+            require(len({v["start_timer_calls"] for v in values}) == 1 and
+                    int(values[3]["total_ns"]) - int(values[2]["total_ns"]) <= PAIRING_NS,
+                    "direct_cycle: automatic 1451 or consumption during restriction")
         elif case == "proxy_cycle":
             expected = ("unlimited", "limit", "blocked", "limit", "unlimited")
             require(all(v["pctl_mode"] == mode and v["configured_minutes"] == (1440 if mode == "limit" else 0) and
@@ -223,27 +311,42 @@ def verify_report(reports: Path, manifest: dict, standard_sha256: str, component
                     "proxy_cycle: automatic rest recovery introduced 1451")
         else:
             require([set(v["restriction_reasons"]) for v in values] == [{"eye_care", "dock"}, {"dock"}, set()] and
-                    [v["pctl_mode"] for v in values] == ["blocked", "blocked", "limit"] and
-                    values[-1]["configured_minutes"] == 1440 and
-                    values[-1]["timer_enabled"] and
+                    [v["pctl_mode"] for v in values] == ["blocked", "blocked", "unlimited" if direct else "limit"] and
+                    values[-1]["configured_minutes"] == (0 if direct else 1440) and
+                    (direct or values[-1]["timer_enabled"]) and
                     all(v["business_mode"] == "unlimited" and v["business_minutes"] == 0 for v in values) and
                     len({v["start_timer_calls"] for v in values}) == 1,
                     "reason_handover: remaining reason released or automatic 1451 introduced")
         evidence.append({"case": case, "path": str(resolved), "sha256": binding["sha256"], "raw_sources": raw_bindings})
-    return {"contract": CONTRACT, "path": str(path.resolve()), "sha256": sha256_file(path), "evidence": evidence}
+    if direct:
+        restored_rows = []
+        for name in ("before_raw_source", "after_raw_source"):
+            key = json.dumps(restoration.get(name), sort_keys=True)
+            require(key in paired_raw, "direct restoration is not paired to an audited endpoint")
+            restored_rows.append(paired_raw[key])
+        require(restored_rows[0]["settings_hex"].lower() == restoration["settings_before_hex"].lower() and
+                restored_rows[1]["settings_hex"].lower() == restoration["settings_restored_hex"].lower() and
+                restored_rows[0]["timer_enabled"] is restoration["timer_before"] and
+                restored_rows[1]["timer_enabled"] is restoration["timer_after"], "direct raw does not prove exact restoration")
+    return {"contract": contract, "path": str(path.resolve()), "sha256": sha256_file(path), "evidence": evidence}
 
 
 def template(manifest: dict, standard_sha256: str, components: dict[str, str],
              model: str, hos: str, atmosphere: str) -> dict:
-    return {"schema_version": 1, "report_status": "draft", "usage_contract": CONTRACT,
+    contract = manifest.get("usage_contract")
+    cases = contract_cases(contract)
+    result = {"schema_version": 1, "report_status": "draft", "usage_contract": contract,
             "subject": {key: manifest[key] for key in ("commit", "release_id")},
             "standard_zip_sha256": standard_sha256, "release_components": components,
             "environment": {"model": model, "hos": hos, "atmosphere": atmosphere},
-            "observations": {key: None for key in OBSERVATIONS},
+            "observations": {key: None for key in (DIRECT_OBSERVATIONS if contract == DIRECT_CONTRACT else OBSERVATIONS)},
             "attestation": {"operator": None, "signed_at": None},
             "restoration": {"settings_before_hex": None, "settings_restored_hex": None,
                             "timer_before": None, "timer_after": None, "unexpected_raw_offsets": None},
-            "cases": {case: {"path": f"{case}.json", "sha256": None} for case in CASES}}
+            "cases": {case: {"path": f"{case}.json", "sha256": None} for case in cases}}
+    if contract == DIRECT_CONTRACT:
+        result["restoration"].update(before_raw_source=None, after_raw_source=None)
+    return result
 
 
 def main() -> int:
@@ -259,7 +362,7 @@ def main() -> int:
     archive_path = args.packages / f"playwise-{version}.zip"
     with zipfile.ZipFile(archive_path) as archive:
         manifest = json.loads(archive.read("switch/playwise/build.json"))
-        require(manifest.get("usage_contract") == CONTRACT, "candidate does not declare this usage contract")
+        require(manifest.get("usage_contract") in SUPPORTED_CONTRACTS, "candidate does not declare a supported usage contract")
         components = {name: hashlib.sha256(archive.read(name)).hexdigest() for name in COMPONENTS}
     draft = template(manifest, sha256_file(archive_path), components, args.model, args.hos, args.atmosphere)
     args.output.parent.mkdir(parents=True, exist_ok=True)

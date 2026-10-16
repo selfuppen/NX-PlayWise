@@ -3017,8 +3017,8 @@ static void test_eye_care_cycle_and_stale_skip(void)
         "\"eye_care_enabled\":true,\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
         "change original rule to unlimited while eye care is active");
     (void)ptc_sysmodule_enforce_tick(&sysmodule);
-    check_true(pctl.status.limited_today && pctl.last_target.minutes == 1440,
-        "unlimited rule uses temporary 1440 minute target during eye care");
+    check_true(pctl.status.unrestricted_today && pctl.last_target.mode == PTC_PCTL_TARGET_UNLIMITED,
+        "unlimited rule remains truly unlimited during eye care");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
         "{\"version\":1,\"week\":[{\"mode\":\"unlimited\",\"minutes\":0},"
         "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
@@ -4061,9 +4061,8 @@ done:
 
 static void test_calendar_activation_dock_unlimited_timer(void)
 {
-    /* Regression: an unlimited day with only dock policy enabled (eye care off)
-       must install the 24h proxy LIMIT on calendar activation, matching enforce;
-       it previously wrote UNLIMITED because activation omitted the dock check. */
+    /* Calendar activation must compose existing dock restrictions while keeping
+       the underlying unlimited rule free of counting-only quotas. */
     static const char *empty =
         "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
         "\"year\":2026,\"holidays\":[],\"workdays\":[]}";
@@ -4096,9 +4095,8 @@ static void test_calendar_activation_dock_unlimited_timer(void)
     check_true(mem->storage.vtable->read_text(&mem->storage,
         "app/results/cal-dock-activate.json", result, sizeof(result)) &&
         strstr(result, "\"status\":\"ok\""), "dock calendar activation succeeds");
-    check_true(pctl.last_target.mode == PTC_PCTL_TARGET_LIMIT &&
-        pctl.last_target.minutes == 1440,
-        "unlimited + dock installs 24h proxy timer on calendar activation");
+    check_true(pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED,
+        "calendar activation preserves dock restriction when mode is unknown");
 done:
     free(catalog);
     free(sysmodule);

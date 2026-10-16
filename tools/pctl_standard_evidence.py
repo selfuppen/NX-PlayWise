@@ -66,7 +66,7 @@ def save_new(path: Path, value: dict) -> None:
 def prepare(packages: Path, out: Path, duration_s: int) -> dict:
     usage.integer(duration_s, 300, 7200, "duration_s")
     manifest, hashes, components = standard_candidate_identity(packages)
-    usage.require(manifest.get("usage_contract") == usage.CONTRACT, "production usage contract missing")
+    usage.require(manifest.get("usage_contract") in usage.SUPPORTED_CONTRACTS, "production usage contract missing")
     usage.require(not out.exists(), "batch directory already exists; preserve previous materials")
     config = {"schema_version": 1, "run_id": uuid.uuid4().hex, "commit": manifest["commit"],
               "release_id": manifest["release_id"], "duration_s": duration_s}

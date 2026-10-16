@@ -374,8 +374,7 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         }
         state->dock_waived_today = runtime_state->dock_waived && runtime_state->dock_waived_day_index == now.day_index;
         state->dock_restriction_active = dock_policy_blocks(sysmodule, rules, dock_view, now);
-        state->dock_unlimited_capped = dock_policy_enabled(rules) &&
-            ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index)).mode == PTC_RULE_MODE_UNLIMITED;
+        state->dock_unlimited_capped = false;
         if (runtime_state->dock_enforced) {
             PtcDayRule base = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
             state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT && dock_view->dock_baseline_known &&
@@ -390,9 +389,7 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
     state->eye_care_enabled = rules->eye_care.enabled;
     state->eye_care_play_minutes = rules->eye_care.play_minutes;
     state->eye_care_rest_minutes = rules->eye_care.rest_minutes;
-    state->eye_care_unlimited_capped = rules->eye_care.enabled &&
-        ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index)).mode ==
-            PTC_RULE_MODE_UNLIMITED;
+    state->eye_care_unlimited_capped = false;
     state->eye_care_used_minutes = runtime_state->eye_care_accumulated_minutes;
     PtcRuntimeState eye_projected = *runtime_state;
     bool eye_direct = pctl_status->usage_supported ||
@@ -407,8 +404,7 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
     else {
         PtcDayRule day_rule = ptc_rules_today_rule(rules, now.day_index,
             ptc_weekday_from_day_index(now.day_index));
-        uint16_t base_minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED
-            ? PTC_UNLIMITED_PROXY_LIMIT_MINUTES : day_rule.minutes;
+        uint16_t base_minutes = day_rule.minutes;
         state->eye_care_phase = "unknown";
         if (eye_direct) {
             if (!runtime_state->apply_pending_confirmation)

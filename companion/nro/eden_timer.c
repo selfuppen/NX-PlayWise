@@ -15,7 +15,15 @@ bool ptc_eden_restore_timer(PtcSysmodule *core, PtcPctlStub *pctl,
     uint64_t used = (uint64_t)(now.minute_of_day < 30 ? now.minute_of_day : 30) * 60000000000ULL;
     if (state.dock_tracking_started && state.dock_day_index == now.day_index && state.dock_baseline_known)
         used = state.dock_last_used_ns;
+    if (state.eye_usage_counter.known && state.eye_usage_counter.day_index == now.day_index &&
+        state.eye_usage_counter.total_ns > used) used = state.eye_usage_counter.total_ns;
+    if (state.dock_usage_counter.known && state.dock_usage_counter.day_index == now.day_index &&
+        state.dock_usage_counter.total_ns > used) used = state.dock_usage_counter.total_ns;
     pctl->model_elapsed_time = true;
+    pctl->direct_usage_model = true;
+    pctl->status.usage_supported = pctl->status.usage_available = true;
+    pctl->status.usage_day_index = now.day_index;
+    pctl->status.usage_captured_at = now.unix_seconds;
     pctl->played_minutes_today = (uint32_t)(used / 60000000000ULL);
     pctl->usage_fraction_ns = *carry_ns = used % 60000000000ULL;
     target.weekday = ptc_weekday_from_day_index(now.day_index);
@@ -27,12 +35,7 @@ bool ptc_eden_restore_timer(PtcSysmodule *core, PtcPctlStub *pctl,
         target.minutes = state.last_enforced_minutes;
     } else {
         PtcDayRule base = ptc_rules_today_rule(&rules, now.day_index, target.weekday);
-        target.mode = target_from_day_rule(base);
-        target.minutes = base.minutes;
-        if (base.mode == PTC_RULE_MODE_UNLIMITED && (rules.eye_care.enabled || dock_policy_enabled(&rules))) {
-            target.mode = PTC_PCTL_TARGET_LIMIT;
-            target.minutes = 1440;
-        }
+        target.mode = ptc_compose_base_target(base, &target.minutes);
     }
     pctl->status.play_timer_enabled = true;
     return pctl->pctl.vtable->apply_target(&pctl->pctl, &target) == PTC_ERR_OK;

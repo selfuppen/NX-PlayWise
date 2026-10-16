@@ -170,8 +170,8 @@ def make_manifest(profile: str) -> dict:
     if profile == "release":
         data["hot_reload_events_version"] = 1
         data["capture_restart_version"] = 1
-        from pctl_usage_qualification import CONTRACT
-        data["usage_contract"] = CONTRACT
+        from pctl_usage_qualification import CURRENT_CONTRACT
+        data["usage_contract"] = CURRENT_CONTRACT
     return data
 
 

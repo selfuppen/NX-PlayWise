@@ -241,6 +241,8 @@ bool ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
             armTicksToNs(tick - runtime->last_usage_tick), &runtime->usage_carry_ns);
     }
     runtime->last_usage_tick = tick;
+    runtime->pctl.status.usage_day_index = now.day_index;
+    runtime->pctl.status.usage_captured_at = now.unix_seconds;
     (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
     return usage_changed;
 }

@@ -1228,7 +1228,7 @@ static void test_dock_accounting_failures(void)
         f.mem->storage.vtable->exists(&f.mem->storage, "app/flags/disable.flag"), "protected waiver restores only dock target");
     free(f.mem);
 
-    init_fixture(&f);
+    seed_direct_grant(&f, 20 * PTC_USAGE_MINUTE_NS, 120);
     mode.mode = PTC_OPERATION_MODE_UNDOCKED;
     f.core.operation_mode_provider = &provider;
     confirm_dock_fixture(&f);
@@ -1237,8 +1237,8 @@ static void test_dock_accounting_failures(void)
     expect(save_rules(&f.core, &rules), "seed unlimited dock");
     (void)ptc_sysmodule_enforce_tick(&f.core);
     request(&f, "dock-unlimited-enable", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":30}");
-    expect(result_has(&f, "dock-unlimited-enable", "\"status\":\"ok\"") && f.pctl.configured_minutes == 1440 &&
-        load_state(&f.core, &state) && state.dock_usage_known, "unlimited first enable installs reliable timer cap");
+    expect(result_has(&f, "dock-unlimited-enable", "\"status\":\"ok\"") && f.pctl.status.unrestricted_today &&
+        load_state(&f.core, &state) && state.dock_usage_known, "unlimited first enable uses direct counter without cap");
     request(&f, "dock-off", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":false,\"undocked_daily_minutes\":0}");
     expect(result_has(&f, "dock-off", "\"status\":\"ok\"") && f.pctl.status.unrestricted_today,
         "turning off last timer feature restores unlimited");
@@ -1407,6 +1407,7 @@ static void test_eden_timer_restart(void)
         "Eden unreadable state rejects guessed restart");
     f.mem->fail_read_path_contains = NULL;
     f.clock.snapshot.day_index++;
+    f.clock.snapshot.unix_seconds += 86400;
     f.clock.snapshot.minute_of_day = 10;
     expect(ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry) &&
         f.pctl.played_minutes_today == 10 && carry == 0,
@@ -1788,10 +1789,15 @@ static void test_usage_state_validation(void)
     free(f.mem);
 }
 
+#include "test_direct_unlimited.inc"
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
     test_direct_usage_projection();
+    test_direct_unlimited_lifecycle();
+    test_direct_unlimited_reason_recovery();
+    test_eden_direct_unlimited_counter();
     test_positive_subminute_runtime();
     test_direct_grants();
     test_direct_grant_rollbacks();

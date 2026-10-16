@@ -17,10 +17,10 @@ import verify_device_qualification as verifier  # noqa: E402
 import test_qualification_tools as fixtures  # noqa: E402
 
 
-def set_contract(packages: Path) -> None:
+def set_contract(packages: Path, contract: str = usage.CONTRACT) -> None:
     build_path = packages / "playwise/switch/playwise/build.json"
     manifest = json.loads(build_path.read_text(encoding="utf-8"))
-    manifest["usage_contract"] = usage.CONTRACT
+    manifest["usage_contract"] = contract
     build_path.write_text(json.dumps(manifest), encoding="utf-8")
     archive_path = packages / verifier.STANDARD_ZIP
     with zipfile.ZipFile(archive_path) as archive:

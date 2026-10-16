@@ -67,9 +67,7 @@ static bool process_disable_today_limit(
 
     pctl_changed = true;
     uint16_t disable_minutes;
-    PtcPctlTargetMode disable_mode = ptc_compose_base_target(
-        updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules),
-        updated_rules.today_override.rule, &disable_minutes);
+    PtcPctlTargetMode disable_mode = ptc_compose_base_target(updated_rules.today_override.rule, &disable_minutes);
     err = apply_target(sysmodule, request, now, "release", disable_mode, disable_minutes);
     if (err == PTC_ERR_OK) {
         err = observe_target_with_optional_activation(sysmodule, request, now,
@@ -181,8 +179,7 @@ PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *req
         PtcDayRule base = ptc_rules_today_rule(
             rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
         uint16_t base_minutes;
-        PtcPctlTargetMode base_mode = ptc_compose_base_target(
-            rules->eye_care.enabled || dock_policy_enabled(rules), base, &base_minutes);
+        PtcPctlTargetMode base_mode = ptc_compose_base_target(base, &base_minutes);
         err = apply_target(sysmodule, request, now, "release",
             base_mode, base_minutes);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;

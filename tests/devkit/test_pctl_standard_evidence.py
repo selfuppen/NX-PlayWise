@@ -33,9 +33,9 @@ def rewrite_standard(packages: Path, mutate) -> None:
             archive.writestr(name, data)
 
 
-def prepare_packages(root: Path) -> Path:
+def prepare_packages(root: Path, contract: str = usage.CONTRACT) -> Path:
     packages = fixtures.prepare_packages(root)
-    set_contract(packages)
+    set_contract(packages, contract)
     manifest_path = packages / "playwise/switch/playwise/build.json"
     manifest = json.loads(manifest_path.read_bytes())
     original = write_package(packages / evidence.qualification.STANDARD_ZIP, True)
@@ -401,6 +401,11 @@ def test_activation_check() -> None:
 
 
 if __name__ == "__main__":
+    with tempfile.TemporaryDirectory() as directory:
+        direct_root = Path(directory)
+        direct_packages = prepare_packages(direct_root, usage.DIRECT_CONTRACT)
+        direct_plan = evidence.prepare(direct_packages, direct_root / "direct-batch", 300)
+        assert direct_plan["qualified"] is False and direct_plan["identity_scope"] == evidence.IDENTITY_SCOPE
     test_activation_check()
     test_standard_candidate_scope()
     test_audit()

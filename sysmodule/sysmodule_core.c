@@ -59,13 +59,16 @@ bool eye_care_sample_direct(const PtcRules *rules, PtcRuntimeState *state,
         state->eye_usage_counter.source = sample.source;
         return true;
     }
-    /* A stopped or temporarily unlocked timer cannot prove an eye break.
-       Preserve the trusted baseline so subsequent consumption can recover. */
+    /* Unlimited allowance does not need an enabled allowance timer: 1952 is
+       independent. Require its actual unblocked native state before accepting
+       that path; a stopped limited timer or temporary PIN remains untrusted. */
+    bool true_unlimited = day_rule.mode == PTC_RULE_MODE_UNLIMITED && status->unrestricted_today &&
+        status->restricted_now_available && !status->restricted_now;
     if (dock_blocked || status->blocked_today ||
         (status->restricted_now_available && status->restricted_now) ||
         (status->limited_today && ptc_pctl_remaining_exhausted(status)) ||
         (status->temporary_unlocked_available && status->temporary_unlocked) ||
-        !status->play_timer_enabled_available || !status->play_timer_enabled) {
+        (!true_unlimited && (!status->play_timer_enabled_available || !status->play_timer_enabled))) {
         state->eye_care_usage_known = false;
         state->eye_care_idle_since = 0;
         return false;
@@ -185,7 +188,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         return 0;
     }
     dock_should_enforce = dock_policy_blocks(sysmodule, &rules, &runtime_state, now);
-    base_mode = ptc_compose_base_target(rules.eye_care.enabled || dock_policy_enabled(&rules), active_rule, &base_minutes);
+    base_mode = ptc_compose_base_target(active_rule, &base_minutes);
     memset(&eye_usage_status, 0, sizeof(eye_usage_status));
     if (rules.eye_care.enabled && !runtime_state.eye_care_resting && !bedtime_should_enforce)
         eye_usage_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl,

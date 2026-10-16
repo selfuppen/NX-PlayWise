@@ -129,7 +129,7 @@ void dock_rebaseline(PtcSysmodule *sysmodule, PtcRuntimeState *state, uint8_t we
     if (!load_rules(sysmodule, &rules)) return;
     base = ptc_rules_today_rule(&rules, state->dock_day_index, weekday);
     bool read_ok = read_used_ns(sysmodule, weekday,
-        base.mode == PTC_RULE_MODE_UNLIMITED ? PTC_UNLIMITED_PROXY_LIMIT_MINUTES : base.minutes, &used);
+        base.minutes, &used);
     if (!read_ok) {
         PtcPctlStatus status;
         if (sysmodule->pctl->vtable->read_status(sysmodule->pctl, weekday, &status) == PTC_ERR_OK &&
@@ -205,7 +205,7 @@ void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
         state->last_enforced_day_index == now.day_index) return;
     PtcDayRule base = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     bool read_ok = read_used_ns(sysmodule, ptc_weekday_from_day_index(now.day_index),
-        base.mode == PTC_RULE_MODE_UNLIMITED ? PTC_UNLIMITED_PROXY_LIMIT_MINUTES : base.minutes, &used);
+        base.minutes, &used);
     /* Midnight may still expose the previous confirmed allowance until
        Enforce installs today's target. Never accept an arbitrary mismatch. */
     if (!read_ok && rollover && state->last_enforced_day_index != now.day_index &&
@@ -213,15 +213,8 @@ void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
         read_ok = read_used_ns(sysmodule, ptc_weekday_from_day_index(now.day_index),
             state->last_enforced_minutes, &used);
     if (!read_ok) {
-        PtcPctlStatus status;
-        /* A newly enabled unlimited day deliberately has no timer until the
-           composed target installs the 1440-minute cap. All other failures
-           make the allowance unknown, including failure to read that status. */
-        bool installing_cap = !state->dock_baseline_known && state->dock_usage_known &&
-            !state->dock_interval_unknown && base.mode == PTC_RULE_MODE_UNLIMITED &&
-            sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-                ptc_weekday_from_day_index(now.day_index), &status) == PTC_ERR_OK && status.unrestricted_today;
-        if (installing_cap) return;
+        /* Legacy allowance subtraction cannot measure an unlimited day.
+           Preserve unknown rather than installing a counting-only quota. */
         state->dock_interval_unknown = true;
         state->dock_usage_known = false;
         return;
@@ -331,9 +324,9 @@ bool process_dock_request(PtcSysmodule *sysmodule, const PtcRequest *request,
             PtcDayRule base = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
             bool blocked = dock_policy_blocks(sysmodule, &rules, &state, now) ||
                 bedtime_blocks_grants(sysmodule, now) || state.eye_care_resting;
-            bool capped = (rules.eye_care.enabled || dock_policy_enabled(&rules)) && base.mode == PTC_RULE_MODE_UNLIMITED;
-            PtcPctlTargetMode target = blocked ? PTC_PCTL_TARGET_BLOCKED : capped ? PTC_PCTL_TARGET_LIMIT : target_from_day_rule(base);
-            uint16_t minutes = blocked ? 0 : capped ? PTC_UNLIMITED_PROXY_LIMIT_MINUTES : base.minutes;
+            uint16_t minutes;
+            PtcPctlTargetMode target = ptc_compose_base_target(base, &minutes);
+            if (blocked) { target = PTC_PCTL_TARGET_BLOCKED; minutes = 0; }
             if (sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &status) != PTC_ERR_OK ||
                 !target_settings_observed(target, minutes, &status)) err = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
         }
@@ -343,11 +336,8 @@ bool process_dock_request(PtcSysmodule *sysmodule, const PtcRequest *request,
     if (err == PTC_ERR_OK && disabled && waive && state.dock_enforced) {
         PtcDayRule base = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
         PtcPctlStatus observed;
-        PtcPctlTargetMode target = target_from_day_rule(base);
-        uint16_t minutes = base.minutes;
-        if ((rules.eye_care.enabled || dock_policy_enabled(&rules)) && base.mode == PTC_RULE_MODE_UNLIMITED) {
-            target = PTC_PCTL_TARGET_LIMIT; minutes = PTC_UNLIMITED_PROXY_LIMIT_MINUTES;
-        }
+        uint16_t minutes;
+        PtcPctlTargetMode target = ptc_compose_base_target(base, &minutes);
         if (bedtime_blocks_grants(sysmodule, now) || state.eye_care_resting) {
             target = PTC_PCTL_TARGET_BLOCKED; minutes = 0;
         }
