@@ -46,15 +46,15 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 For device experiments, see [Stable device probing workflow (Chinese)](开发/真机稳定探测方法.md): bounded same-process capture, transaction recovery, unattended evidence and qualified human observations.
 
+Use the [research index](调研/README.md) (Chinese) to separate reusable references, topic analysis and historical investigations. Current operations belong in the development guides.
+
 | Record (Chinese only) | Scope | Date |
 | --- | --- | --- |
 | [Enabling system Parental Controls](调研/开启系统家长控制功能调研.md) | Native PIN registration, handover prerequisites and proposed entry point | 2026-10-06 |
 | [Non-PCTL suspension and overlay capabilities](调研/非PCTL暂停与浮窗能力调研.md) | Source-level display, input, process suspension and recovery capabilities | 2026-10-06 |
-| [Bedtime timer activation diagnosis](调研/就寝恢复误启动计时诊断-2026-10-08.md) | SD evidence, version comparison, recovery boundaries and device retest | 2026-10-08 |
 | [Overlay memory and freeze risk audit](调研/Overlay内存与死机风险自查.md) | Bounded glyph ownership, resource teardown, thread races and hardware evidence limits | 2026-10-13 |
-| [PCTL1952 mainline findings](调研/PCTL1952主线探测计划.md) | Usage semantics, first takeover, lifecycle and natural midnight evidence | 2026-10-14 |
-| [PCTL1952 feature impact handoff](调研/PCTL1952功能影响分析交接.md) | Analysis inputs for totals, eye care, bedtime, dock policy and combined state machines | 2026-10-14 |
-| [Updates without a system reboot and test automation](调研/免系统重启更新与自动化测试-20261015.md) | Existing hot reload, build identity and takeover gaps, staged deployment coordination and device validation | 2026-10-15 |
+| [PCTL1952 feature impact analysis](调研/专题分析/PCTL1952功能影响分析.md) | Cross-feature analysis bound to its original source baseline, not the current backlog | 2026-10-14 |
+| [Historical investigations](调研/历史调查/README.md) | Five diagnostic, capability-probe and handoff records with original version and evidence boundaries | 2026-10 |
 
 ## Maintenance
 
