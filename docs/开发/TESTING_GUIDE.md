@@ -10,7 +10,7 @@
 
 ## Batch execution and evidence
 
-Use the [current progress](当前进度与后续指导.md) and [test procedure](测试操作手册.md) (Chinese) to select the remaining gap and recovery plan. A failed prerequisite stops dependent deployment or commit commands. Read persisted JSON back and repeat offline verification before sealing; use stable schema keys, including string keys for 7/30-day aggregates.
+Select regression coverage for the change and use the [test procedure](测试操作手册.md) (Chinese) for execution and recovery. Keep stage progress, scheduling and pending confirmations in the relevant task documents, without making any particular handoff a global prerequisite. A failed prerequisite stops dependent deployment or commit commands. Read persisted JSON back and repeat offline verification before sealing; schema keys and types must follow the relevant contract.
 
 Keep human statements in separate records bound to the gallery, image and machine-index hashes. Do not ask again for unchanged, already-confirmed frames or infer visible effects from machine state. Preserve successful business records when restoring test policy, while retaining failure rollback semantics. Host, Eden, hardware capability, candidate-specific observations and full qualification remain separate scopes.
 

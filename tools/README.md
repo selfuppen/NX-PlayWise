@@ -1,6 +1,6 @@
 # 工具分类与使用入口
 
-[开发文档入口](../docs/开发/README.md) · [当前进度](../docs/开发/当前进度与后续指导.md) · [测试操作手册](../docs/开发/测试操作手册.md)
+[开发文档入口](../docs/开发/README.md) · [测试操作手册](../docs/开发/测试操作手册.md)
 
 本目录盘点于2026-10-16：57个Python／PowerShell脚本及`ptc_frontend/`的14个既有跟踪文件。分类清单同时保存在[catalog.json](catalog.json)，每个脚本恰好一项；README与catalog本身为本次新增索引。
 

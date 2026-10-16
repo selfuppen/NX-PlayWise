@@ -8,7 +8,7 @@
 
 # Developer Guide
 
-For continuing hardware work, start with [current progress](当前进度与后续指导.md) and the [test procedure](测试操作手册.md) (Chinese). Recorded console state is a dated snapshot; recheck before device operations. Keep durable rules in AGENTS and stable guides, and candidate-specific results in acceptance records. Documentation commits do not require redeploying an unchanged frozen production candidate. Preserve successful consumption, claims, nonces and activity when restoring test policy; failed transactions retain their protocol rollback rules.
+Use the [test procedure](测试操作手册.md) (Chinese) to select validation for the change. Keep cross-task rules in AGENTS and stable guides. Stage progress, next steps, temporary authorization and candidate-specific results belong in the relevant task documents and acceptance records; no particular handoff document is a global reading prerequisite. Date console snapshots and recheck before device operations. Documentation commits do not require redeploying an unchanged frozen production candidate. Preserve successful consumption, claims, nonces and activity when restoring test policy; failed transactions retain their protocol rollback rules.
 
 Check each dependent command's exit code before building, deploying or committing. Verify reports after JSON serialization and repeat the offline checks before sealing. Later corrections and human observations must bind unchanged original hashes in separate supplements.
 
