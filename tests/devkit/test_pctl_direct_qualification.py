@@ -76,7 +76,7 @@ def prepare(packages: Path, reports: Path, mutate=None) -> dict:
         data={"schema_version":1,"kind":"pctl_usage_samples","subject":report["subject"],"release_components":components,
               "samples":samples,"raw_sources":[binding]}
         if case=="grant_recovery":data.update(grant_minutes=15,effective_minutes=15)
-        if case=="direct_cycle":data["automatic_recovery"]=True
+        if case=="direct_cycle":data.update(automatic_recovery=True,rest_deadline_unix=1241)
         path=reports/report['cases'][case]['path']
         path.write_text(json.dumps(data),encoding='utf-8');report['cases'][case]['sha256']=usage.sha256_file(path)
         if case=='direct_cycle':
@@ -87,7 +87,8 @@ def prepare(packages: Path, reports: Path, mutate=None) -> dict:
 
 
 def test_direct_gate() -> None:
-    for mode in ('ok','proxy','activation','blocked_consumption','missing_eye_state','wrong_raw_line','old_report','missing_direct_check','invented_restore'):
+    successes=('ok','post_expiry_use','missing_direct_check')
+    for mode in (*successes,'proxy','activation','blocked_consumption','missing_eye_state','wrong_raw_line','old_report','invented_restore','late_endpoint','missing_deadline'):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);packages=fixtures.prepare_packages(root);reports=fixtures.prepare_reports(root)
             set_contract(packages,usage.DIRECT_CONTRACT)
@@ -97,7 +98,17 @@ def test_direct_gate() -> None:
                     for value in values['direct_cycle'][3:]:value['start_timer_calls']=1
                 if mode=='blocked_consumption':values['direct_cycle'][3]['total_ns']=str(197_000_000_000)
                 if mode=='missing_eye_state':values['direct_cycle'][1]['eye_care_enabled']=1
+                if mode=='post_expiry_use':
+                    values['direct_cycle'][3].update(captured_at=1250,monotonic_ns='350000000000',total_ns='195000000000')
+                    values['direct_cycle'][4].update(captured_at=1257,monotonic_ns='357000000000',total_ns='202000000000')
+                if mode=='late_endpoint':
+                    values['direct_cycle'][3].update(captured_at=1260,monotonic_ns='360000000000')
+                    values['direct_cycle'][4].update(captured_at=1267,monotonic_ns='367000000000')
             report=prepare(packages,reports,mutate)
+            if mode=='missing_deadline':
+                path=reports/report['cases']['direct_cycle']['path'];data=json.loads(path.read_bytes());data.pop('rest_deadline_unix')
+                path.write_text(json.dumps(data),encoding='utf-8');report['cases']['direct_cycle']['sha256']=usage.sha256_file(path)
+                (reports/usage.REPORT_NAME).write_text(json.dumps(report),encoding='utf-8')
             if mode in ('wrong_raw_line','old_report','invented_restore'):
                 if mode=='old_report':report['usage_contract']=usage.CONTRACT
                 elif mode=='invented_restore':
@@ -109,9 +120,9 @@ def test_direct_gate() -> None:
                 (reports/usage.REPORT_NAME).write_text(json.dumps(report),encoding='utf-8')
             try:result=verifier.verify(packages,reports,'oled','22.5.0','1.11.2')
             except verifier.QualificationError:
-                assert mode not in ('ok','missing_direct_check'),mode
+                assert mode not in successes,mode
                 continue
-            assert mode in ('ok','missing_direct_check'),mode
+            assert mode in successes,mode
             assert 'pctl1952_direct_handover' in result['checks'] and 'pctl1952_proxy_handover' not in result['checks']
             if mode=='ok':
                 argv=['verify_device_qualification.py','--packages',str(packages),'--reports',str(reports),
@@ -124,7 +135,7 @@ def test_direct_gate() -> None:
             verification=root/'verification.json';verification.write_text(json.dumps(result),encoding='utf-8')
             try:promoter.promote(packages,verification,root/'qualified')
             except promoter.PromotionError:assert mode=='missing_direct_check'
-            else:assert mode=='ok'
+            else:assert mode in ('ok','post_expiry_use')
 
 
 if __name__=='__main__':

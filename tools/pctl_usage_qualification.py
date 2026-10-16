@@ -185,6 +185,30 @@ def direct_raw_pair(reports: Path, value: dict, bindings: list[dict], manifest: 
     return raw
 
 
+def verify_direct_cycle(values: list[dict], data: dict) -> None:
+    expected = ("unlimited", "unlimited", "blocked", "unlimited", "unlimited")
+    require(len(values) == 5 and all(v["pctl_mode"] == mode and v["configured_minutes"] == 0 and
+            v["business_mode"] == "unlimited" and v["business_minutes"] == 0
+            for v, mode in zip(values, expected)), "direct_cycle: synthetic quota or incorrect restoration")
+    require(all(type(v.get("eye_care_enabled")) is bool for v in values) and
+            [v["eye_care_enabled"] for v in values] == [False, True, True, True, False] and
+            [set(v["restriction_reasons"]) for v in values] == [set(), set(), {"eye_care"}, set(), set()] and
+            data.get("automatic_recovery") is True, "direct_cycle: health lifecycle or automatic recovery missing")
+    elapsed = int(values[1]["monotonic_ns"]) - int(values[0]["monotonic_ns"])
+    require(elapsed >= MINUTE_NS and abs(int(values[1]["total_ns"]) - int(values[0]["total_ns"]) - elapsed) <= PAIRING_NS,
+            "direct_cycle: true-unlimited consumption progression missing")
+    deadline = integer(data.get("rest_deadline_unix"), 1, (1 << 63) - 1, "rest deadline")
+    # A five-second sample after expiry legitimately includes resumed use. Bound
+    # only that suffix, never treat the whole blocked interval as usable time.
+    suffix = values[3]["captured_at"] - deadline
+    require(values[2]["captured_at"] < deadline and 0 <= suffix <= 15,
+            "direct_cycle: natural expiry endpoint missing or too late")
+    delta = int(values[3]["total_ns"]) - int(values[2]["total_ns"])
+    require(len({v["start_timer_calls"] for v in values}) == 1 and
+            0 <= delta <= suffix * 1_000_000_000 + PAIRING_NS,
+            "direct_cycle: automatic 1451 or consumption during restriction")
+
+
 def verify_report(reports: Path, manifest: dict, standard_sha256: str, components: dict[str, str],
                   model: str, hos: str, atmosphere: str) -> dict:
     path = reports / REPORT_NAME
@@ -287,20 +311,7 @@ def verify_report(reports: Path, manifest: dict, standard_sha256: str, component
                         (int(end["monotonic_ns"]) - int(after["monotonic_ns"]))) <= PAIRING_NS,
                     "grant_recovery: excess usage, actual award or usable recovery not proved")
         elif case == "direct_cycle":
-            expected = ("unlimited", "unlimited", "blocked", "unlimited", "unlimited")
-            require(all(v["pctl_mode"] == mode and v["configured_minutes"] == 0 and
-                        v["business_mode"] == "unlimited" and v["business_minutes"] == 0
-                        for v, mode in zip(values, expected)), "direct_cycle: synthetic quota or incorrect restoration")
-            require(all(type(v.get("eye_care_enabled")) is bool for v in values) and
-                    [v.get("eye_care_enabled") for v in values] == [False, True, True, True, False] and
-                    [set(v["restriction_reasons"]) for v in values] == [set(), set(), {"eye_care"}, set(), set()] and
-                    data.get("automatic_recovery") is True, "direct_cycle: health lifecycle or automatic recovery missing")
-            elapsed = int(values[1]["monotonic_ns"]) - int(values[0]["monotonic_ns"])
-            require(elapsed >= MINUTE_NS and abs(int(values[1]["total_ns"]) - int(values[0]["total_ns"]) - elapsed) <= PAIRING_NS,
-                    "direct_cycle: true-unlimited consumption progression missing")
-            require(len({v["start_timer_calls"] for v in values}) == 1 and
-                    int(values[3]["total_ns"]) - int(values[2]["total_ns"]) <= PAIRING_NS,
-                    "direct_cycle: automatic 1451 or consumption during restriction")
+            verify_direct_cycle(values, data)
         elif case == "proxy_cycle":
             expected = ("unlimited", "limit", "blocked", "limit", "unlimited")
             require(all(v["pctl_mode"] == mode and v["configured_minutes"] == (1440 if mode == "limit" else 0) and
