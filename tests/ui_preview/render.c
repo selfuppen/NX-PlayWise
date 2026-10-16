@@ -450,6 +450,15 @@ static int render_support_guide_previews(const char *directory, const PtcUiModel
     return failed;
 }
 
+/* Sample an unobstructed part of the actual convergence banner. This catches
+ * the stale-state regression where all cards were unknown but the gate was green. */
+static int check_rules_gate_color(uint32_t color)
+{
+    if (preview_pixels[580 * 1280 + 200] == resolve_color(color)) return 0;
+    fprintf(stderr, "FAIL: rendered rule gate has the wrong semantic state\n");
+    return 1;
+}
+
 static int render_today_details_previews(const char *directory, const PtcUiModel *baseline, bool dark)
 {
     int failed = 0;
@@ -513,6 +522,36 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
     }
     today.home_details_page = 1;
     failed |= save_preview(directory, "parent", "today-rules", &today, dark);
+    failed |= check_rules_gate_color(UI_SUCCESS_SOFT);
+    {
+        PtcUiModel variant = today;
+        variant.rules_dialog_open = true;
+        failed |= save_preview(directory, "parent", "today-rules-explanation", &variant, dark);
+        variant = today;
+        variant.status_updated_at = 879;
+        failed |= save_preview(directory, "parent", "today-rules-stale", &variant, dark);
+        failed |= check_rules_gate_color(UI_WARNING_SOFT);
+        variant = today;
+        variant.disable_flag_present = true;
+        variant.forecast[0].mode = PTC_RULE_MODE_UNLIMITED;
+        variant.current_week[ptc_weekday_from_day_index(variant.day_index)].mode = PTC_RULE_MODE_UNLIMITED;
+        variant.unrestricted_today = 1;
+        variant.daily_buffer_available = false;
+        variant.eye_care_policy.enabled = variant.bedtime_policy.enabled = false;
+        variant.dock_policy.force_docked = variant.dock_policy.undocked_limit_enabled = false;
+        failed |= save_preview(directory, "parent", "today-rules-control-off", &variant, dark);
+        failed |= check_rules_gate_color(UI_WARNING_SOFT);
+        variant = today;
+        variant.home_details_page = 0;
+        variant.forecast[0].mode = PTC_RULE_MODE_UNLIMITED;
+        variant.current_week[ptc_weekday_from_day_index(variant.day_index)].mode = PTC_RULE_MODE_UNLIMITED;
+        variant.unrestricted_today = 1;
+        variant.daily_buffer_available = false;
+        variant.eye_care_policy.play_minutes = variant.eye_care_policy.rest_minutes = 1;
+        variant.eye_care_used_minutes = 0;
+        failed |= save_preview(directory, "parent", "today-planning-dense", &variant, dark);
+    }
+
     {
         PtcUiModel history = today;
         history.usage_direct_present = true;
@@ -560,6 +599,7 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
     failed |= save_preview(directory, "parent", "today-multiple-limits", &today, dark);
     today.home_details_page = 1;
     failed |= save_preview(directory, "parent", "parent-details-rules-restricted", &today, dark);
+    failed |= check_rules_gate_color(UI_DANGER_SOFT);
     today = *baseline;
     today.view = PTC_UI_PARENT;
     today.overlay = PTC_UI_OVERLAY_DAY_DECISION;
@@ -1584,22 +1624,18 @@ int main(int argc, char **argv)
     failed |= render_config_backup_previews(en_dir, &model);
     failed |= render_policy_previews(en_dir, &model);
     failed |= render_parent_pin_error_previews(en_dir, &model);
-    /* Traditional Chinese covers the new details and focused health surfaces. */
+    /* Keep dialog and long-text coverage identical in all three languages. */
     char zh_hant_dir[1024];
     snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
     ptc_mkdir(zh_hant_dir);
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
     localize_preview_baseline(&model);
+    failed |= render_all_previews(zh_hant_dir, &model);
     failed |= render_eye_care_previews(zh_hant_dir, &model);
     failed |= render_dock_previews(zh_hant_dir, &model);
     failed |= render_config_backup_previews(zh_hant_dir, &model);
     failed |= render_policy_previews(zh_hant_dir, &model);
     failed |= render_parent_pin_error_previews(zh_hant_dir, &model);
-    for (int dark = 0; dark < 2; ++dark) {
-        failed |= render_today_details_previews(zh_hant_dir, &model, dark);
-        failed |= render_setup_previews(zh_hant_dir, &model, dark);
-        failed |= render_support_guide_previews(zh_hant_dir, &model, dark);
-    }
     FT_Done_Face(g_ui.face);
     free(bytes);
     return failed;

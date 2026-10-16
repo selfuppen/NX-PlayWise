@@ -421,14 +421,54 @@ static void detail_time(int seconds, char *out, size_t size)
     else snprintf(out, size, "%02u:%02u", (unsigned)(seconds / 3600), (unsigned)((seconds / 60) % 60));
 }
 
+static bool detail_runtime_available(const PtcUiModel *model)
+{
+    return !model->disable_flag_present && !model->recovery_active &&
+        !model->apply_pending_confirmation && !model->temporary_unlocked &&
+        strcmp(model->setup_phase, "active") == 0 && model->restricted_now != 1 && model->blocked_today != 1;
+}
+
 static bool detail_available(const PtcUiModel *model, const PtcUiTodayProjection *p)
 {
-    if (!p->fresh || p->active_reasons || model->disable_flag_present || model->recovery_active ||
-        model->apply_pending_confirmation || model->temporary_unlocked ||
-        strcmp(model->setup_phase, "active") != 0 || model->restricted_now == 1 || model->blocked_today == 1)
-        return false;
+    if (!p->fresh || p->active_reasons || !detail_runtime_available(model)) return false;
     for (int i = 0; i < 4; ++i) if (p->conditions[i] == PTC_UI_CONDITION_UNKNOWN) return false;
     return true;
+}
+
+/* Keep labels in two measured lanes; a dense day may omit earlier labels,
+ * while the rail still preserves every segment and the final stop. */
+static void detail_timeline_label(uint32_t *pixels, uint32_t stride, UiRect rail,
+                                  int anchor, int second, const char *label,
+                                  uint32_t bg, uint32_t border, uint32_t fg,
+                                  int lane, int *right, bool *omitted, bool leaders)
+{
+    char time_text[16], fitted[128];
+    detail_time(second, time_text, sizeof(time_text));
+    int width = measure_text(time_text, 10);
+    int label_width = measure_text(label, 10);
+    if (label_width > width) width = label_width;
+    width += 16;
+    if (width > rail.width / 3) width = rail.width / 3;
+    int x = anchor - width / 2;
+    if (x + width > *right) x = *right - width;
+    if (x < rail.x + 18) x = rail.x + 18;
+    if (x + width > *right) {
+        *omitted = true;
+        return;
+    }
+    UiRect bubble = {x, rail.y - 68 + lane * 34, width, 30};
+    if (leaders) {
+        draw_line(pixels, stride, x + width / 2, bubble.y + bubble.height,
+                  anchor, rail.y + rail.height / 2, 1, border);
+        *right = x - 6;
+        return;
+    }
+    fill_round_rect(pixels, stride, bubble, 5, bg);
+    draw_rect_outline(pixels, stride, bubble, 5, 1, border);
+    draw_text_center(pixels, stride, (UiRect){x, bubble.y + 2, width, 14}, time_text, 10, fg);
+    fit_text(fitted, sizeof(fitted), label, 10, width - 12);
+    draw_text_center(pixels, stride, (UiRect){x, bubble.y + 16, width, 14}, fitted, 10, fg);
+    *right = x - 6;
 }
 
 static void detail_current(const PtcUiModel *model, const PtcUiTodayProjection *p, char *out, size_t size)
@@ -796,62 +836,51 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
             detail_text(pixels, stride, (UiRect){prediction.x + 24, prediction.y + 78, prediction.width - 48, 48},
                         text, 15, UI_DANGER, 2);
         } else {
-            UiRect rail = {prediction.x + 24, prediction.y + 102, prediction.width - 48, 18};
+            UiRect rail = {prediction.x + 24, prediction.y + 122, prediction.width - 48, 18};
             fill_round_rect(pixels, stride, rail, 4, UI_RAISED);
             int range = p->stop_second - p->now_second;
             if (range <= 0) range = 1;
-
             for (int i = 0; i < p->segment_count; ++i) {
                 const PtcUiUsageSegment *seg = &p->segments[i];
                 int x = rail.x + (seg->start_second - p->now_second) * rail.width / range;
                 int end = rail.x + (seg->end_second - p->now_second) * rail.width / range;
-                uint32_t seg_color = seg->resting ? UI_WARNING : UI_ACCENT;
-                fill_rect(pixels, stride, (UiRect){x, rail.y, end - x, rail.height}, seg_color);
-
-                /* 气泡标签 */
-                if (seg->resting) {
-                    char t1[16];
-                    detail_time(seg->start_second, t1, sizeof(t1));
-                    int bx = x;
-                    UiRect bubble = {bx - 36, rail.y - 34, 72, 30};
-                    uint32_t b_bg = UI_WARNING_SOFT;
-                    uint32_t b_bd = UI_WARNING_BORDER;
-                    uint32_t b_fg = UI_WARNING_TEXT;
-                    fill_round_rect(pixels, stride, bubble, 5, b_bg);
-                    draw_rect_outline(pixels, stride, bubble, 5, 1, b_bd);
-                    draw_text_center(pixels, stride, (UiRect){bubble.x, bubble.y + 2, bubble.width, 14}, t1, 10, b_fg);
-                    char r_text[32];
-                    snprintf(r_text, sizeof(r_text), ptc_ui_text(PTC_UI_T_DETAIL_SIM_REST_FMT), (unsigned)((seg->end_second - seg->start_second) / 60));
-                    draw_text_center(pixels, stride, (UiRect){bubble.x, bubble.y + 16, bubble.width, 14}, r_text, 10, b_fg);
-                    support_fill_circle_mini(pixels, stride, (float)x, (float)(rail.y + rail.height / 2), 4.5f, b_fg);
-                    support_fill_circle_mini(pixels, stride, (float)x, (float)(rail.y + rail.height / 2), 2.0f, UI_PAGE);
-
-                    /* 恢复节点 */
-                    char t2[16];
-                    detail_time(seg->end_second, t2, sizeof(t2));
-                    UiRect b_resume = {end - 28, rail.y - 34, 56, 30};
-                    fill_round_rect(pixels, stride, b_resume, 5, UI_ACCENT_SOFT);
-                    draw_rect_outline(pixels, stride, b_resume, 5, 1, UI_ACCENT);
-                    draw_text_center(pixels, stride, (UiRect){b_resume.x, b_resume.y + 2, b_resume.width, 14}, t2, 10, UI_ACCENT);
-                    draw_text_center(pixels, stride, (UiRect){b_resume.x, b_resume.y + 16, b_resume.width, 14},
-                                     ptc_ui_text(PTC_UI_T_DETAIL_SIM_RESUME_LABEL), 10, UI_ACCENT);
-                    support_fill_circle_mini(pixels, stride, (float)end, (float)(rail.y + rail.height / 2), 4.5f, UI_ACCENT);
-                    support_fill_circle_mini(pixels, stride, (float)end, (float)(rail.y + rail.height / 2), 2.0f, UI_PAGE);
-                }
+                fill_rect(pixels, stride, (UiRect){x, rail.y, end - x, rail.height},
+                          seg->resting ? UI_WARNING : UI_ACCENT);
             }
-
-            /* 终止节点气泡 */
             char t_stop[16];
             detail_time(p->stop_second, t_stop, sizeof(t_stop));
-            UiRect b_stop = {rail.x + rail.width - 56, rail.y - 34, 76, 30};
-            fill_round_rect(pixels, stride, b_stop, 5, UI_RAISED);
-            draw_rect_outline(pixels, stride, b_stop, 5, 1, UI_MUTED);
-            draw_text_center(pixels, stride, (UiRect){b_stop.x, b_stop.y + 2, b_stop.width, 14}, t_stop, 10, UI_INK);
-            char stop_reason[128], stop_label[128];
-            detail_reasons(p->stop_reasons, stop_reason, sizeof(stop_reason));
-            fit_text(stop_label, sizeof(stop_label), stop_reason, 9, b_stop.width - 8);
-            draw_text_center(pixels, stride, (UiRect){b_stop.x, b_stop.y + 16, b_stop.width, 14},
-                             stop_label, 9, UI_MUTED);
+            /* Paint all leaders first so none can cut through another label. */
+            for (int pass = 0; pass < 2; ++pass) {
+                int right[2] = {rail.x + rail.width, rail.x + rail.width};
+                bool omitted = false;
+                int lane = 0;
+                char stop_reason[128];
+                detail_reasons(p->stop_reasons, stop_reason, sizeof(stop_reason));
+                detail_timeline_label(pixels, stride, rail, rail.x + rail.width, p->stop_second,
+                                      stop_reason, UI_RAISED, UI_MUTED, UI_INK,
+                                      lane, &right[lane], &omitted, pass == 0);
+                for (int i = p->segment_count - 1; i >= 0; --i) {
+                    const PtcUiUsageSegment *seg = &p->segments[i];
+                    if (!seg->resting) continue;
+                    int x = rail.x + (seg->start_second - p->now_second) * rail.width / range;
+                    int end = rail.x + (seg->end_second - p->now_second) * rail.width / range;
+                    if (seg->end_second < p->stop_second) {
+                        lane = 1 - lane;
+                        detail_timeline_label(pixels, stride, rail, end, seg->end_second,
+                                              ptc_ui_text(PTC_UI_T_DETAIL_SIM_RESUME_LABEL),
+                                              UI_ACCENT_SOFT, UI_ACCENT, UI_ACCENT,
+                                              lane, &right[lane], &omitted, pass == 0);
+                    }
+                    lane = 1 - lane;
+                    char rest[64];
+                    snprintf(rest, sizeof(rest), ptc_ui_text(PTC_UI_T_DETAIL_SIM_REST_FMT),
+                             (unsigned)((seg->end_second - seg->start_second) / 60));
+                    detail_timeline_label(pixels, stride, rail, x, seg->start_second,
+                                          rest, UI_WARNING_SOFT, UI_WARNING_BORDER, UI_WARNING_TEXT,
+                                          lane, &right[lane], &omitted, pass == 0);
+                }
+                if (pass == 1 && omitted) draw_text(pixels, stride, rail.x, rail.y - 40, "...", 12, UI_MUTED);
+            }
 
             /* 刻度文字 */
             detail_time(p->now_second, text, sizeof(text));
@@ -978,7 +1007,10 @@ static void draw_rules_conditions_gate(uint32_t *pixels, uint32_t stride,
     /* 标题行: 第二步：实时准入与四大健康关卡 */
     bool any_block = (conditions[0] == PTC_UI_CONDITION_BLOCK || conditions[1] == PTC_UI_CONDITION_BLOCK ||
                       conditions[2] == PTC_UI_CONDITION_BLOCK || conditions[3] == PTC_UI_CONDITION_BLOCK);
-    uint32_t badge_color = any_block ? UI_DANGER : UI_SUCCESS;
+    bool any_unknown = is_today && !detail_runtime_available(model);
+    for (int i = 0; i < 4; ++i)
+        if (conditions[i] == PTC_UI_CONDITION_UNKNOWN) any_unknown = true;
+    uint32_t badge_color = any_block ? UI_DANGER : any_unknown ? UI_WARNING : UI_SUCCESS;
     support_fill_circle_mini(pixels, stride, (float)(sec1.x + 24), (float)(sec1.y + 18), 9.0f, badge_color);
     draw_text_center(pixels, stride, (UiRect){sec1.x + 15, sec1.y + 9, 18, 18}, "2", 12, UI_ON_ACCENT);
     const char *sec1_title = ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC1_TITLE);
@@ -1155,7 +1187,7 @@ static void draw_rules_conditions_gate(uint32_t *pixels, uint32_t stride,
     }
 
     /* 汇聚横线及连接节点 */
-    uint32_t bus_color = any_block ? UI_DANGER : UI_SUCCESS;
+    uint32_t bus_color = any_block ? UI_DANGER : any_unknown ? UI_WARNING : UI_SUCCESS;
     draw_line(pixels, stride, lx1, bus_y, lx2, bus_y, 2, bus_color);
     for (int i = 0; i < 4; ++i) {
         int bx = sec1.x + 16 + i * (card_w1 + gap1) + card_w1 / 2;
@@ -1168,9 +1200,11 @@ static void draw_rules_conditions_gate(uint32_t *pixels, uint32_t stride,
     support_draw_arrow_down(pixels, stride, mid_x, gate.y, 22, 14, bus_color);
 
     /* 居中横条 (总闸门) */
-    fill_round_rect(pixels, stride, gate, 8, any_block ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
-    draw_rect_outline(pixels, stride, gate, 8, 2, any_block ? UI_DANGER : UI_SUCCESS);
-    if (!any_block) {
+    fill_round_rect(pixels, stride, gate, 8, any_block ? UI_DANGER_SOFT : any_unknown ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
+    draw_rect_outline(pixels, stride, gate, 8, 2, bus_color);
+    if (!any_block && any_unknown) {
+        draw_text_center(pixels, stride, gate, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM), 13, UI_WARNING);
+    } else if (!any_block) {
         const char *pass_txt = ptc_ui_text(PTC_UI_T_DETAIL_RULES_GATE_PASS);
         support_draw_checkmark(pixels, stride, gate.x + 24, gate.y + gate_h / 2, 7, UI_SUCCESS, UI_ON_ACCENT);
         draw_text_center(pixels, stride, gate, pass_txt, 13, UI_INK);
@@ -1395,40 +1429,21 @@ static void draw_today_rules(uint32_t *pixels, uint32_t stride, const PtcUiModel
     PtcUiRect body = ptc_ui_home_details_body_rect();
     ui_set_vertical_clip(body.y, body.y + body.h);
 
-    /* 1. 顶部全局提示横幅 (y = 72, h = 34)：按是否先触发护眼切换语义色与图标，右侧显示下一个作息关键节点 */
+    /* Use the same current-state projection as the overview. A future break
+     * must never turn a blocked or stale result into permission to play. */
     {
-        bool eye_first = model->eye_care_policy.enabled &&
-                         strcmp(model->eye_care_phase, "playing") == 0;
+        bool available = detail_available(model, p);
+        bool blocked = p->fresh && p->active_reasons != 0;
+        uint32_t fg = available ? UI_SUCCESS : blocked ? UI_DANGER : UI_WARNING;
+        uint32_t bg = available ? UI_SUCCESS_SOFT : blocked ? UI_DANGER_SOFT : UI_WARNING_SOFT;
         UiRect banner = {40, 72, 1200, 34};
-        if (eye_first) {
-            fill_round_rect(pixels, stride, banner, 8, UI_WARNING_SOFT);
-            draw_rect_outline(pixels, stride, banner, 8, 1, UI_WARNING);
-            draw_text(pixels, stride, banner.x + 16, banner.y + 23, "🌿", 15, UI_INK);
-        } else {
-            fill_round_rect(pixels, stride, banner, 8, UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, banner, 8, 1, UI_SUCCESS);
-            draw_text(pixels, stride, banner.x + 16, banner.y + 23, "✨", 15, UI_INK);
-        }
-        draw_text_bold(pixels, stride, banner.x + 40, banner.y + 22,
-                       ptc_ui_text(PTC_UI_T_DETAIL_RULES_GLOBAL_BANNER), 13, UI_INK);
-
-        /* 右侧展示下一个关键作息节点（如就寝时间或护眼休息） */
-        char next_event[128];
-        next_event[0] = '\0';
-        if (model->eye_care_policy.enabled && eye_first && model->eye_care_policy.play_minutes > model->eye_care_used_minutes) {
-            unsigned left_eye = (unsigned)(model->eye_care_policy.play_minutes - model->eye_care_used_minutes);
-            snprintf(next_event, sizeof(next_event), ptc_ui_text(PTC_UI_T_DETAIL_RULES_NEXT_EYE_FMT), left_eye);
-        } else if (model->bedtime_policy.enabled) {
-            unsigned b_st = model->bedtime_policy.week[ptc_weekday_from_day_index(model->day_index)].start_minute;
-            snprintf(next_event, sizeof(next_event), ptc_ui_text(PTC_UI_T_DETAIL_RULES_NEXT_BEDTIME_FMT), b_st / 60, b_st % 60);
-        }
-        if (next_event[0]) {
-            int ne_w = measure_text(next_event, 11) + 18;
-            UiRect ne_pill = {banner.x + banner.width - ne_w - 12, banner.y + (banner.height - 22) / 2, ne_w, 22};
-            fill_round_rect(pixels, stride, ne_pill, 5, UI_PAGE);
-            draw_rect_outline(pixels, stride, ne_pill, 5, 1, eye_first ? UI_WARNING : UI_SUCCESS);
-            draw_text_center(pixels, stride, ne_pill, next_event, 11, eye_first ? UI_WARNING : UI_SUCCESS);
-        }
+        char current[256], fitted[256];
+        detail_current(model, p, current, sizeof(current));
+        fit_text(fitted, sizeof(fitted), current, 13, banner.width - 64);
+        fill_round_rect(pixels, stride, banner, 8, bg);
+        draw_rect_outline(pixels, stride, banner, 8, 1, fg);
+        support_draw_checkmark(pixels, stride, banner.x + 22, banner.y + 17, 9, fg, bg);
+        draw_text_bold(pixels, stride, banner.x + 40, banner.y + 22, fitted, 13, UI_INK);
     }
 
     /* 2. 区块 ① 先算总量：今天一共能玩多久？ (y = 110, h = 152) */
