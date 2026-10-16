@@ -391,8 +391,12 @@ void ptc_overlay_format_child_quota_parts(
         int total = summary->daily_rule_minutes;
         if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), total);
-        if (note_out && note_size > 0 && summary->played_minutes_available && summary->played_minutes >= 0) {
-            snprintf(note_out, note_size, ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
+        if (note_out && note_size > 0) {
+            if (summary->played_minutes_available && summary->played_minutes >= 0) {
+                snprintf(note_out, note_size, ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
+            } else if (summary->usage_present) {
+                snprintf(note_out, note_size, "%s %s", ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_POLICY_PENDING));
+            }
         }
         return;
     }

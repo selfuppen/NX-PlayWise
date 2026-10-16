@@ -213,7 +213,7 @@
         std::initializer_list<OverlayPanelLine> lines, tsl::Color color)
     {
         const auto &vp = page_layout_.viewport;
-        const int gap = parent_view_ == ParentView::Child ? 6 : 12;
+        const int gap = (parent_view_ == ParentView::Child || parent_view_ == ParentView::Pin) ? 6 : 12;
         int height = 0;
         for (const auto &line : lines)
             height += overlay_text_height(renderer, line.text, vp.w - 36, line.size) + gap;
@@ -338,7 +338,17 @@
     bool status_is_stale() const
     {
         if (!has_status_snapshot_ || last_refresh_tick_ == 0) return false;
-        return armTicksToNs(armGetSystemTick() - last_refresh_tick_) >= 30000000000ULL;
+        if (armTicksToNs(armGetSystemTick() - last_refresh_tick_) >= 30000000000ULL) return true;
+        if (displayed_summary_.usage_present && !displayed_summary_.played_minutes_available) return true;
+        return false;
+    }
+
+    bool needs_refresh() const
+    {
+        if (!has_status_snapshot_ || last_refresh_tick_ == 0) return true;
+        if (status_is_stale()) return true;
+        if (displayed_summary_.usage_present && !displayed_summary_.played_minutes_available) return true;
+        return false;
     }
 
     bool child_status_fresh(const PtcCompanionResultSummary &summary, int &day, int &second) const

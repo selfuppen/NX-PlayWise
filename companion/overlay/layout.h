@@ -67,6 +67,7 @@ typedef struct {
     PtcOverlayRect parent;
     PtcOverlayRect backspace;
     PtcOverlayRect actions[PTC_OVERLAY_PARENT_ACTION_COUNT];
+    PtcOverlayRect pin_keys[16];
     int scroll_max;
 } PtcOverlayPageLayout;
 
@@ -223,6 +224,40 @@ static inline PtcOverlayRect ptc_overlay_keypad_nav_back_rect(int origin_x, int 
 static inline PtcOverlayRect ptc_overlay_keypad_nav_parent_rect(int origin_x, int origin_y, int width)
 {
     return ptc_overlay_rect(origin_x + 214, origin_y + 550, width - 226, 52);
+}
+
+static inline PtcOverlayRect ptc_overlay_pin_wheel_rect(int origin_x, int origin_y, unsigned int index)
+{
+    static const int cols[8] = {0, 1, 2, 0, 2, 0, 1, 2};
+    static const int rows[8] = {0, 0, 0, 1, 1, 2, 2, 2};
+    if (index >= 8) return ptc_overlay_rect(0, 0, 0, 0);
+    return ptc_overlay_rect(origin_x + 14 + cols[index] * 132,
+                            origin_y + rows[index] * 74,
+                            124, 66);
+}
+
+static inline PtcOverlayRect ptc_overlay_pin_center_0_rect(int origin_x, int origin_y)
+{
+    return ptc_overlay_rect(origin_x + 146, origin_y + 74, 58, 66);
+}
+
+static inline PtcOverlayRect ptc_overlay_pin_center_9_rect(int origin_x, int origin_y)
+{
+    return ptc_overlay_rect(origin_x + 212, origin_y + 74, 58, 66);
+}
+
+static inline PtcOverlayRect ptc_overlay_pin_numpad_key_rect(int origin_x, int origin_y, unsigned int digit)
+{
+    unsigned int row = digit == 0 ? 3u : (digit - 1u) / 3u;
+    unsigned int col = digit == 0 ? 1u : (digit - 1u) % 3u;
+    return ptc_overlay_rect(origin_x + 14 + (int)col * 132,
+                            origin_y + (int)row * 66,
+                            124, 58);
+}
+
+static inline PtcOverlayRect ptc_overlay_pin_numpad_clear_rect(int origin_x, int origin_y)
+{
+    return ptc_overlay_rect(origin_x + 278, origin_y + 3 * 66, 124, 58);
 }
 
 #endif

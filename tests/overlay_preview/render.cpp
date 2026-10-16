@@ -27,12 +27,20 @@ public:
     bool preview_changed_ = false, error_ = false, success_visible_ = false;
     bool result_pending_ = false, result_failed_ = false, touch_hold_warning_ = false;
     bool keypad_active_ = false;
+    bool details_tech_expanded_ = false, parent_pin_standard_keypad_ = false;
     PtcOverlayHoldState confirm_hold_{};
     ParentView parent_view_ = ParentView::Child;
     bool parent_action_succeeded_ = false;
     int parent_action_ = 0, daily_add_minutes_ = 15;
     char pin_[PTC_AUTH_PIN_MAX_LEN + 1]{}, pin_message_[128]{};
     size_t pin_length_ = 0;
+    int child_overview_focus_ = 0;
+    int status_details_focus_ = 0;
+    int parent_pin_focus_ = 1;
+    int preview_focus_ = 1;
+    int confirm_focus_ = 1;
+    int result_focus_ = 0;
+    int keypad_nav_focus_ = -1;
 #include "../../companion/overlay/source/render_methods.hpp"
 };
 }
@@ -443,10 +451,17 @@ int main(int argc, char **argv) {
                     for (const auto &run : renderer.text_runs) drawn += run.text + " ";
                     require(drawn.find("60") != std::string::npos,
                         "merged dashboard must keep the business quota even when consumption exceeds it or is unknown");
-                    require((drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos) == (scene == 56),
-                        "merged dashboard must identify direct console consumption only when available");
-                    require((drawn.find("69") != std::string::npos) == (scene == 56),
-                        "merged dashboard must not retain an unavailable console counter");
+                    require(drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos,
+                        "merged dashboard must keep console usage label present");
+                    if (scene == 56) {
+                        require(drawn.find("69") != std::string::npos,
+                            "available console consumption must display played counter");
+                    } else {
+                        require(drawn.find(ptc_ui_text(PTC_UI_T_POLICY_PENDING)) != std::string::npos,
+                            "expired console consumption must require refresh confirmation");
+                        require(drawn.find("69") == std::string::npos,
+                            "merged dashboard must not retain an unavailable console counter");
+                    }
                 }
                 if (view.parent_view_ == ParentView::Result) {
                     const auto label = bridge.waiting ? PTC_UI_T_PROCESSING_REQUEST : view.parent_action_succeeded_ ?
@@ -487,6 +502,12 @@ int main(int argc, char **argv) {
                 if (view.parent_view_ == ParentView::Child && !view.status_expanded_ && view.page_layout_.scroll_max) {
                     std::fprintf(stderr, "Child overflow: %s%s (%dpx)\n", folders[language], scenes[scene], view.page_layout_.scroll_max);
                     ++child_overflows;
+                }
+                if (view.parent_view_ == ParentView::Pin && scene == 20) {
+                    require(view.page_layout_.scroll_max == 0,
+                        "parent pin entry must fit on one screen without scrolling");
+                    require(view.page_layout_.pin_keys[10].y == view.page_layout_.backspace.y,
+                        "toggle button and backspace button must share the same row");
                 }
                 if (scene == 37) {
                     require(view.page_identity() == 22 && view.page_layout_.primary.w == 0 &&
