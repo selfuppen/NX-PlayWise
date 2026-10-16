@@ -74,16 +74,18 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 - **Activity History**: Local family activity logs and 7/30-day playtime allowance analytics. Scoped to total console screen time; missing dates remain unknown; per-title breakdown is currently pending.
 - **Support & Recovery**: Diagnostics export, emergency disable, rollback to pre-installation settings, and safe reload after in-place upgrades.
 
-For detailed walkthroughs of each page, see the [User Guide](docs/使用/USER_GUIDE.md).
+For detailed walkthroughs and [core time control logic](docs/使用/USER_GUIDE.md#core-time-control-logic) (four-tier priority pipeline and four independent gates), see the [User Guide](docs/使用/USER_GUIDE.md).
 
-<details open>
-<summary>View Parent Portal Daily Dispatch & Rule Breakdown Preview</summary>
+<details>
+<summary>Daily Dispatch Preview</summary>
 
 ![Parent portal daily dispatch preview](docs/images/usage/parent/parent-dark.png)
 
-![Today's allowance rule breakdown preview](docs/images/usage/parent/parent-details-decision-light.png)
+![Today's plan and status preview](docs/images/usage-en/parent/today-planning-light.png)
 
-![TV mode eyesight protection rules preview](docs/images/usage/plan/dock-policy-light.png)
+![Decision and rules preview](docs/images/usage-en/parent/parent-details-rules-light.png)
+
+![Decision and rules restriction active preview](docs/images/usage-en/parent/parent-details-rules-restricted-light.png)
 
 </details>
 

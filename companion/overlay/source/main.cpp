@@ -498,6 +498,8 @@ public:
     void open_parent_pin()
     {
         parent_view_ = ParentView::Pin;
+        parent_pin_standard_keypad_ = false;
+        parent_pin_focus_ = 1;
         ptc_overlay_hold_reset(&confirm_hold_);
         parent_authorized_ = false;
         std::memset(pin_, 0, sizeof(pin_));
@@ -588,31 +590,192 @@ public:
         const s32 ty = static_cast<s32>(touch.y);
         prev_touch_down_ = touch_down;
         if (parent_view_ == ParentView::Pin) {
-            const int left_digit = ptc_overlay_pin_digit_from_vector(left.x, left.y, 16000);
-            const int right_digit = ptc_overlay_pin_digit_from_vector(right.x, right.y, 16000);
-            if (left_digit < 0) left_pin_latched_ = -1;
-            if (right_digit < 0) right_pin_latched_ = -1;
-            if (left_digit >= 0 && left_pin_latched_ < 0) {
-                append_pin_digit(left_digit);
-                left_pin_latched_ = left_digit;
-            } else if (left_digit < 0 && right_digit >= 0 && right_pin_latched_ < 0) {
-                append_pin_digit(right_digit);
-                right_pin_latched_ = right_digit;
+            if (keysDown & HidNpadButton_Minus) {
+                parent_pin_standard_keypad_ = !parent_pin_standard_keypad_;
+                parent_pin_focus_ = parent_pin_standard_keypad_ ? 1 : 0;
+                return true;
             }
-            const int direction_digit = ptc_overlay_pin_digit_from_direction(
-                to_overlay_buttons(dpad_down));
-            if (direction_digit >= 0) append_pin_digit(direction_digit);
+            if (!parent_pin_standard_keypad_) {
+                const int left_digit = ptc_overlay_pin_digit_from_vector(left.x, left.y, 16000);
+                const int right_digit = ptc_overlay_pin_digit_from_vector(right.x, right.y, 16000);
+                if (left_digit < 0) left_pin_latched_ = -1;
+                if (right_digit < 0) right_pin_latched_ = -1;
+                if (left_digit >= 0 && left_pin_latched_ < 0) {
+                    append_pin_digit(left_digit);
+                    left_pin_latched_ = left_digit;
+                } else if (left_digit < 0 && right_digit >= 0 && right_pin_latched_ < 0) {
+                    append_pin_digit(right_digit);
+                    right_pin_latched_ = right_digit;
+                }
+                const int direction_digit = ptc_overlay_pin_digit_from_direction(
+                    to_overlay_buttons(dpad_down));
+                if (direction_digit >= 0) append_pin_digit(direction_digit);
+                if (keysDown & HidNpadButton_X) append_pin_digit(0);
+                else if (keysDown & HidNpadButton_Y) append_pin_digit(9);
+            } else {
+                if (keysDown & HidNpadButton_X) {
+                    if (pin_length_ > 0) pin_[--pin_length_] = '\0';
+                } else if (keysDown & HidNpadButton_Y) {
+                    std::memset(pin_, 0, sizeof(pin_));
+                    pin_length_ = 0;
+                }
+            }
+            if (parent_pin_standard_keypad_) {
+                int old_focus = parent_pin_focus_;
+                if (keysDown & HidNpadButton_Up) {
+                    if (parent_pin_focus_ >= 1 && parent_pin_focus_ <= 3) {
+                        // Top row of numpad: stay at 1..3
+                    } else if (parent_pin_focus_ >= 4 && parent_pin_focus_ <= 9) {
+                        parent_pin_focus_ -= 3;
+                    } else if (parent_pin_focus_ == 10) {
+                        parent_pin_focus_ = 7;
+                    } else if (parent_pin_focus_ == 11) {
+                        parent_pin_focus_ = 8;
+                    } else if (parent_pin_focus_ == 12) {
+                        parent_pin_focus_ = 9;
+                    } else if (parent_pin_focus_ == 0) {
+                        parent_pin_focus_ = 10;
+                    } else if (parent_pin_focus_ == 15) {
+                        parent_pin_focus_ = 12;
+                    } else if (parent_pin_focus_ == 13) {
+                        parent_pin_focus_ = 0;
+                    } else if (parent_pin_focus_ == 14) {
+                        parent_pin_focus_ = 15;
+                    }
+                } else if (keysDown & HidNpadButton_Down) {
+                    if (parent_pin_focus_ >= 1 && parent_pin_focus_ <= 6) {
+                        parent_pin_focus_ += 3;
+                    } else if (parent_pin_focus_ == 7) {
+                        parent_pin_focus_ = 10;
+                    } else if (parent_pin_focus_ == 8) {
+                        parent_pin_focus_ = 11;
+                    } else if (parent_pin_focus_ == 9) {
+                        parent_pin_focus_ = 12;
+                    } else if (parent_pin_focus_ == 10 || parent_pin_focus_ == 11) {
+                        parent_pin_focus_ = 0;
+                    } else if (parent_pin_focus_ == 12) {
+                        parent_pin_focus_ = 15;
+                    } else if (parent_pin_focus_ == 0) {
+                        parent_pin_focus_ = 13;
+                    } else if (parent_pin_focus_ == 15) {
+                        parent_pin_focus_ = 14;
+                    }
+                } else if (keysDown & HidNpadButton_Left) {
+                    if (parent_pin_focus_ == 2 || parent_pin_focus_ == 3 ||
+                        parent_pin_focus_ == 5 || parent_pin_focus_ == 6 ||
+                        parent_pin_focus_ == 8 || parent_pin_focus_ == 9) {
+                        parent_pin_focus_ -= 1;
+                    } else if (parent_pin_focus_ == 11 || parent_pin_focus_ == 12) {
+                        parent_pin_focus_ -= 1;
+                    } else if (parent_pin_focus_ == 15) {
+                        parent_pin_focus_ = 0;
+                    } else if (parent_pin_focus_ == 14) {
+                        parent_pin_focus_ = 13;
+                    }
+                } else if (keysDown & HidNpadButton_Right) {
+                    if (parent_pin_focus_ == 1 || parent_pin_focus_ == 2 ||
+                        parent_pin_focus_ == 4 || parent_pin_focus_ == 5 ||
+                        parent_pin_focus_ == 7 || parent_pin_focus_ == 8) {
+                        parent_pin_focus_ += 1;
+                    } else if (parent_pin_focus_ == 10 || parent_pin_focus_ == 11) {
+                        parent_pin_focus_ += 1;
+                    } else if (parent_pin_focus_ == 0) {
+                        parent_pin_focus_ = 15;
+                    } else if (parent_pin_focus_ == 13) {
+                        parent_pin_focus_ = 14;
+                    }
+                }
+                if (parent_pin_focus_ != old_focus) {
+                    PtcOverlayRect target_rect{};
+                    if (parent_pin_focus_ == 0) target_rect = page_layout_.pin_keys[10];
+                    else if (parent_pin_focus_ >= 1 && parent_pin_focus_ <= 9) target_rect = page_layout_.pin_keys[parent_pin_focus_];
+                    else if (parent_pin_focus_ == 10) target_rect = page_layout_.pin_keys[12];
+                    else if (parent_pin_focus_ == 11) target_rect = page_layout_.pin_keys[0];
+                    else if (parent_pin_focus_ == 12) target_rect = page_layout_.pin_keys[11];
+                    else if (parent_pin_focus_ == 15) target_rect = page_layout_.backspace;
+                    else if (parent_pin_focus_ == 13) target_rect = page_layout_.secondary;
+                    else if (parent_pin_focus_ == 14) target_rect = page_layout_.primary;
+                    if (target_rect.w > 0) {
+                        page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
+                            page_layout_.viewport, target_rect, static_cast<int>(page_scroll_target_), page_layout_.scroll_max));
+                    }
+                }
+                if (keysDown & HidNpadButton_A) {
+                    if (parent_pin_focus_ == 0) {
+                        parent_pin_standard_keypad_ = false;
+                        return true;
+                    } else if (parent_pin_focus_ >= 1 && parent_pin_focus_ <= 9) {
+                        append_pin_digit(parent_pin_focus_);
+                        return true;
+                    } else if (parent_pin_focus_ == 10 || parent_pin_focus_ == 15) {
+                        keysDown |= HidNpadButton_ZL;
+                    } else if (parent_pin_focus_ == 11) {
+                        append_pin_digit(0);
+                        return true;
+                    } else if (parent_pin_focus_ == 12) {
+                        std::memset(pin_, 0, sizeof(pin_));
+                        pin_length_ = 0;
+                        return true;
+                    } else if (parent_pin_focus_ == 13) {
+                        keysDown |= HidNpadButton_B;
+                    } else if (parent_pin_focus_ == 14) {
+                        keysDown |= HidNpadButton_Plus;
+                    }
+                }
+            }
             if (touch_pressed) {
-                if (flow_hit(page_layout_.backspace, tx, ty))
+                if (flow_hit(page_layout_.pin_keys[10], tx, ty)) {
+                    parent_pin_standard_keypad_ = !parent_pin_standard_keypad_;
+                    parent_pin_focus_ = parent_pin_standard_keypad_ ? 1 : 0;
+                    return true;
+                }
+                if (!parent_pin_standard_keypad_) {
+                    static const int wheel_digits[8] = {8, 1, 2, 7, 3, 6, 5, 4};
+                    for (int i = 0; i < 8; ++i) {
+                        if (flow_hit(page_layout_.pin_keys[i], tx, ty)) {
+                            append_pin_digit(wheel_digits[i]);
+                            return true;
+                        }
+                    }
+                    if (flow_hit(page_layout_.pin_keys[8], tx, ty)) {
+                        append_pin_digit(0);
+                        return true;
+                    }
+                    if (flow_hit(page_layout_.pin_keys[9], tx, ty)) {
+                        append_pin_digit(9);
+                        return true;
+                    }
+                } else {
+                    for (int d = 0; d < 10; ++d) {
+                        if (flow_hit(page_layout_.pin_keys[d], tx, ty)) {
+                            parent_pin_focus_ = (d == 0 ? 11 : d);
+                            append_pin_digit(d);
+                            return true;
+                        }
+                    }
+                    if (flow_hit(page_layout_.pin_keys[11], tx, ty)) {
+                        parent_pin_focus_ = 12;
+                        std::memset(pin_, 0, sizeof(pin_));
+                        pin_length_ = 0;
+                        return true;
+                    }
+                    if (flow_hit(page_layout_.pin_keys[12], tx, ty)) {
+                        parent_pin_focus_ = 10;
+                        keysDown |= HidNpadButton_ZL;
+                    }
+                }
+                if (flow_hit(page_layout_.backspace, tx, ty)) {
+                    parent_pin_focus_ = 15;
                     keysDown |= HidNpadButton_ZL;
-                else if (page_hit(page_layout_.primary, tx, ty))
+                } else if (page_hit(page_layout_.primary, tx, ty)) {
+                    parent_pin_focus_ = 14;
                     keysDown |= HidNpadButton_Plus;
-                else if (page_hit(page_layout_.secondary, tx, ty))
+                } else if (page_hit(page_layout_.secondary, tx, ty)) {
+                    parent_pin_focus_ = 13;
                     keysDown |= HidNpadButton_B;
+                }
             }
-            if (keysDown & HidNpadButton_X) append_pin_digit(0);
-            else if (keysDown & HidNpadButton_Y) append_pin_digit(9);
-            else if ((keysDown & HidNpadButton_ZL) && pin_length_ > 0) {
+            if ((keysDown & HidNpadButton_ZL) && pin_length_ > 0) {
                 pin_[--pin_length_] = '\0';
             } else if (keysDown & HidNpadButton_B) {
                 parent_view_ = ParentView::Child;
@@ -679,18 +842,35 @@ public:
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_RIGHT))
                 daily_add_minutes_ = daily_add_minutes_ >= 120 ? 120 : daily_add_minutes_ + 5;
             if (direction & PTC_OVERLAY_BUTTON_UP) {
-                parent_action_ = ptc_overlay_parent_action_move(parent_action_, -1);
-                focus_parent_action();
+                if (parent_action_ == 0) {
+                    parent_action_ = -1;
+                } else if (parent_action_ > 0) {
+                    parent_action_ = ptc_overlay_parent_action_move(parent_action_, -1);
+                    focus_parent_action();
+                }
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
             }
             if (direction & PTC_OVERLAY_BUTTON_DOWN) {
-                parent_action_ = ptc_overlay_parent_action_move(parent_action_, 1);
-                focus_parent_action();
+                if (parent_action_ == -1) {
+                    parent_action_ = 0;
+                    focus_parent_action();
+                } else {
+                    parent_action_ = ptc_overlay_parent_action_move(parent_action_, 1);
+                    focus_parent_action();
+                }
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
             }
-            if (keysDown & HidNpadButton_B) {
+            if (parent_action_ == -1) {
+                if ((keysDown & HidNpadButton_A) && !bridge_->waiting) {
+                    (void)begin_status_refresh();
+                } else if (keysDown & HidNpadButton_B) {
+                    parent_authorized_ = false;
+                    parent_view_ = ParentView::Child;
+                    ptc_overlay_hold_reset(&confirm_hold_);
+                }
+            } else if (keysDown & HidNpadButton_B) {
                 parent_authorized_ = false;
                 parent_view_ = ParentView::Child;
                 ptc_overlay_hold_reset(&confirm_hold_);
@@ -700,6 +880,7 @@ public:
                 if (parent_action_ == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP ||
                     parent_action_ == PTC_OVERLAY_PARENT_WAIVE_DOCK) {
                     parent_view_ = ParentView::Confirm;
+                    confirm_focus_ = 1;
                     parent_confirm_armed_ = false;
                     ptc_overlay_hold_reset(&confirm_hold_);
                 } else {
@@ -720,17 +901,29 @@ public:
                 displayed_summary_.bedtime_skipped;
             if (!(keysHeld & HidNpadButton_A)) parent_confirm_armed_ = true;
             if (touch_pressed) {
-                if (page_hit(page_layout_.secondary, tx, ty)) keysDown |= HidNpadButton_B;
-                else if (page_hit(page_layout_.primary, tx, ty) && !immediate && parent_confirm_armed_) keysDown |= HidNpadButton_A;
+                if (page_hit(page_layout_.secondary, tx, ty)) {
+                    confirm_focus_ = 0;
+                    keysDown |= HidNpadButton_B;
+                } else if (page_hit(page_layout_.primary, tx, ty) && !immediate && parent_confirm_armed_) {
+                    confirm_focus_ = 1;
+                    keysDown |= HidNpadButton_A;
+                }
+            }
+            if (keysDown & (HidNpadButton_Left | HidNpadButton_Right)) {
+                confirm_focus_ = confirm_focus_ == 0 ? 1 : 0;
             }
             if (keysDown & HidNpadButton_B) {
                 parent_view_ = ParentView::Actions;
                 ptc_overlay_hold_reset(&confirm_hold_);
+            } else if ((keysDown & HidNpadButton_A) && confirm_focus_ == 0) {
+                parent_view_ = ParentView::Actions;
+                ptc_overlay_hold_reset(&confirm_hold_);
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
-                       !immediate && parent_confirm_armed_ && (keysDown & HidNpadButton_A)) {
+                       !immediate && parent_confirm_armed_ && (keysDown & HidNpadButton_A) && confirm_focus_ == 1) {
                 (void)submit_parent_action();
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
-                       immediate && parent_confirm_armed_ && !(gesture_.active && gesture_.dragged) && (keysHeld & HidNpadButton_A)) {
+                       immediate && parent_confirm_armed_ && !(gesture_.active && gesture_.dragged) &&
+                       (keysHeld & HidNpadButton_A) && confirm_focus_ == 1) {
                 if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
                     (void)submit_parent_action();
             } else {
@@ -738,15 +931,31 @@ public:
             }
             return true;
         }
+        const bool can_reverify = last_request_kind_ != OverlayRequestKind::ClaimDailyBuffer;
         if (touch_pressed) {
-            if (page_hit(page_layout_.primary, tx, ty)) keysDown |= HidNpadButton_B;
-            else if (page_hit(page_layout_.secondary, tx, ty)) keysDown |= HidNpadButton_Y;
+            if (page_hit(page_layout_.primary, tx, ty)) {
+                result_focus_ = 0;
+                keysDown |= HidNpadButton_B;
+            } else if (page_hit(page_layout_.secondary, tx, ty) && can_reverify) {
+                result_focus_ = 1;
+                keysDown |= HidNpadButton_Y;
+            }
+        }
+        if (can_reverify && (keysDown & (HidNpadButton_Left | HidNpadButton_Right))) {
+            result_focus_ = result_focus_ == 0 ? 1 : 0;
         }
         if (keysDown & HidNpadButton_B) {
             parent_view_ = ParentView::Child;
             error_ = false;
+        } else if (keysDown & HidNpadButton_A) {
+            if (result_focus_ == 0) {
+                parent_view_ = ParentView::Child;
+                error_ = false;
+            } else if (result_focus_ == 1 && can_reverify && !bridge_->waiting) {
+                open_parent_pin();
+            }
         } else if ((keysDown & HidNpadButton_Y) && !bridge_->waiting) {
-            if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer) {
+            if (!can_reverify) {
                 parent_view_ = ParentView::Child;
                 error_ = false;
             } else {
@@ -870,6 +1079,8 @@ private:
     bool error_ = false;
     bool has_status_snapshot_ = false;
     bool status_expanded_ = false;
+    bool details_tech_expanded_ = false;
+    bool parent_pin_standard_keypad_ = false;
     bool preview_ready_ = false;
     bool preview_changed_ = false;
     bool preview_recheck_ = false;
@@ -901,6 +1112,13 @@ private:
     char pin_[PTC_AUTH_PIN_MAX_LEN + 1]{};
     size_t pin_length_ = 0;
     char pin_message_[128]{};
+    int child_overview_focus_ = 0;
+    int status_details_focus_ = 0;
+    int parent_pin_focus_ = 1;
+    int preview_focus_ = 1;
+    int confirm_focus_ = 1;
+    int result_focus_ = 0;
+    int keypad_nav_focus_ = -1;
 };
 
 class PctcOverlay final : public tsl::Overlay {

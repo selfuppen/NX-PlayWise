@@ -326,6 +326,13 @@ void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        if (ui->model.rules_dialog_open) {
+            if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_X | HidNpadButton_Plus)) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ui->model.rules_dialog_open = false;
+            }
+            return;
+        }
         if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
             ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_home_details_back(&ui->model);
@@ -333,6 +340,9 @@ void handle_overlay_input(UiState *ui, u64 down)
             if (ui->model.home_details_page == 0) {
                 ptc_audio_play(PTC_SE_POPUP);
                 ptc_ui_home_details_activate(&ui->model, 0);
+            } else if (ui->model.home_details_page == 1) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ui->model.rules_dialog_open = true;
             }
         } else if (down & HidNpadButton_Y) {
             if (!ui->waiting) {
@@ -366,6 +376,18 @@ void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+        if (ui->model.rules_dialog_open) {
+            if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_X | HidNpadButton_Plus)) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ui->model.rules_dialog_open = false;
+            }
+            return;
+        }
+        if (down & HidNpadButton_X) {
+            ptc_audio_play(PTC_SE_POPUP);
+            ui->model.rules_dialog_open = true;
+            return;
+        }
         if (down & (HidNpadButton_Left | HidNpadButton_L | HidNpadButton_ZL)) {
             if (ui->model.forecast_detail_day_offset > 0) {
                 ui->model.forecast_detail_day_offset--;

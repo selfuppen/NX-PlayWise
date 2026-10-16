@@ -142,15 +142,38 @@ In list rows, health-care cards, and decision cells, content must strictly separ
   * Rest Period: Warm amber (`#FFF7E6` bg + `#FA8C16` border), displaying rest duration clearly.
   * Exhaustion Point: Pulsing micro-circle paired with an endpoint time balloon.
 
-### 4.4 Decision & Rule Priority Matrix
-* **Active Selected Rule**: 2px stroke in `UI_SUCCESS`, soft green background (`UI_SUCCESS_SOFT`), embedded "Active" pill.
-* **Fallback Unhit Rules**: 1px border in `UI_BORDER`, canvas-blended background (`UI_PAGE`), muted text.
-* **Priority Arrows**: 2px directional arrows between rule stages illustrating evaluation flow (Temporary $\to$ Specified Date $\to$ Holiday $\to$ Weekly Plan $\to$ Final Balance).
+![Today: plan and status composite control preview](../images/usage-en/parent/today-planning-light.png)
+
+### 4.4 Two-Stage Decision & Rule Matrix and Natural Guidance
+The view moves beyond rigid and cramped layouts, adopting conversational, parent-friendly wording and an expansive, breathing visual architecture:
+
+* **Top Verdict Banner**: Height 34px, utilizing soft semantic backgrounds (`UI_SUCCESS_SOFT` / `UI_WARNING_SOFT`) and full-color vector Emojis (✨ normal / 🌿 eye-care first) to provide an immediate plain-language verdict on whether gaming is currently permitted. An adaptive badge on the right highlights the next key milestone (e.g., bedtime at 21:00 or impending eye-care break).
+* **Stage 1: Where Today's Quota Comes From (Pipeline)**:
+  * **Direct Subtitle**: "Checked left to right — the first matching rule sets the daily quota."
+  * **Four Rule Pipeline Cards**: "Today's Adjustment (P1)", "Specific Date (P2)", "Holiday (P3)", and "Weekly Plan (P4)". Each card features domain full-color vector Emojis (📅 / 📅 / 🎁 / 🕒) and high-contrast priority tags.
+  * **Hero Active Rule Card**: The matching rule card stands out prominently with a light-green wash, 2px vivid green border, bold 16px quota digits, and an "Active Rule" badge; downstream overridden cards are cleanly dimmed with subtle borders.
+  * **Cascade Arrows & Solid Downward Injection Arrow**: Horizontal directional arrows link the pipeline stages, cutting off downstream flow at the matching rule; the active card drops an indicator line and a solid triangle downward arrow (`support_draw_arrow_down`) into a full-width summary bar (with a ⏰ Emoji) confirming total approved minutes, rule source, played time, and remaining time.
+* **Stage Transition Linker (Pipeline Flow Bridge)**: A spacious 68px vertical clearway featuring a centered causal pill (`① Determine daily quota ↓ Pass to ② 4 Guardians`), paired with an emphasized conduit line and a bold 20x14px solid triangle downward arrow with 38px of unobstructed channel beneath the text pill, powerfully injecting the quota into Stage 2 access evaluation without arrow obstruction.
+* **Stage 2: Real-time Access & 4 Health Guardians**:
+  * **Direct Subtitle**: "All 4 gates must show green; any trigger means pause and rest."
+  * **Embedded Independent Protection Action Row**: An interactive row at the top of the module presenting "🛡️ Independent Protection: the 4 gates evaluate conditions independently without interference", with a `[ Rule Guide ❯ ]` pill button. Clicking or pressing X opens a fullscreen translucent modal dialog detailing the 4 core principles: independent protection, quota pipeline priority, convergence gate, and health baseline rules.
+  * **Four Compact Guardian Cards (Height 76px)**:
+    * **Total Daily Allowance** (`UI_ACCENT` blue bar + ⏰ Emoji + 14px bold remaining time + secondary used summary).
+    * **Bedtime Schedule** (`UI_HERO` navy bar + 🌙 Emoji + 14px restriction time + overnight schedule).
+    * **Eye-care Break** (`UI_SUCCESS` green bar + 🌿 Emoji + 14px elapsed/cycle metrics + rest countdown).
+    * **Screen & Dock Mode** (`UI_WARNING` orange bar + 📺 Emoji + 14px mode display + remaining time).
+    * Each card embeds a compact status pill in the top-right corner (green "✓ Pass", red "✕ Blocked", or gray "Off"), saving 40px of vertical space to accommodate long, clear downstream convergence channels.
+  * **Long Convergence Leads & Master Injector Arrow**: Downward leads from all four cards drop 38px into a horizontal decision bus with status solder nodes. The bus center deploys a 50px vertical main channel and a bold 22x14px solid triangle downward arrow directly injecting into the centered master gate bar. Clear states show "All 4 gates green: healthy schedule clear, ready to play!", while any blockage displays a danger warning.
+* **Adaptive Multi-Context Scaling**: In tighter modal viewports such as Forecast Day Details, card heights smoothly compress, uniformly rendering the `① Determine daily quota ↓ Pass to ② 4 Guardians` bridge pill, solid downward arrow, and independent protection interactive row, with the calendar explanatory card featuring a 📅 Emoji, ensuring consistent visual elegance across all screen modes.
+
+![Decision and rules priority matrix preview](../images/usage-en/parent/parent-details-rules-light.png)
+
+![Decision and rules restriction active preview](../images/usage-en/parent/parent-details-rules-restricted-light.png)
 
 ### 4.5 Tesla Overlay Current Design & Dark Baseline Contract
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
-  * Child and parent cards, code slots, keypad keys and buttons share closed chamfered outlines. Overlapping stair-step pixels join horizontal and vertical strokes at all four corners; both normal 1px and emphasized 2px borders must remain continuous.
+  * Child and parent cards, code slots, keypad keys and buttons share closed rounded outlines (radius r=4 for cards/buttons, full half-height for pills). CPU span calculations render smooth rounded fills and outer borders; both normal 1px and emphasized 2px borders remain continuous without jagged seams.
   * Card Surface: `#131B2A` with high `0xE6` opacity, effectively shielding background game graphics.
   * Decorative Border: `#233047` with subtle `0xB0` opacity, providing restrained, clean edges.
   * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm sepia warning `#332211`, dark jade success `#193C32`).
@@ -165,8 +188,8 @@ In list rows, health-care cards, and decision cells, content must strictly separ
   * Wrap Chinese at UTF-8 codepoint boundaries and English at word boundaries; split oversized words, preserve explicit newlines and blank lines. Keep important explanations complete instead of shrinking fonts or adding ellipses.
   * Measure localized text to determine card heights. Parent cards retain stacked text; child cards prefer measured edge-aligned rows and stack only when the texts cannot share a line. Production and Host previews share rendering; input consumes the renderer's `PtcOverlayPageLayout` instead of recreating touch coordinates.
 * **Child overview, entry and explanations**:
-  * **Dark dashboard surfaces**: Child pages use CPU rectangle primitives for small chamfered corners, thin top highlights and bounded geometric texture. Time cards use a dark blue-gray surface; rule cards carry a narrow state rail. Eye-care, bedtime and TV rule titles all use 32px, summaries 28px and supporting notes 24px. Blue eye, moon and TV icons are functional decoration, displayed only when measurement leaves room for the icon, title and summary on one line. Omit icons when space is limited; never shrink text or add height for decoration.
-  * Available states use green. Unknown or boundary states, exhausted non-TV allowance while connected to TV, and bedtime within 15 minutes use bright orange. Active bedtime/TV restrictions and failures use coral red; eye-care rest uses orange and disabled rules use secondary gray. Restrictions and redemption outcomes use matching soft panels; pending outcomes use warning colors. Code slots and keypad keys use chamfers, highlights and blue soft fills/borders for the insertion point, focused key and enabled submission. Parent pages share the chamfered, highlighted surfaces while retaining their stacked layout and scrolling contract.
+  * **Dark dashboard surfaces**: Child pages use CPU pixel primitives for smooth rounded corners, thin top highlights and bounded geometric texture. Time cards use a dark blue-gray surface; rule cards carry a narrow state rail. Eye-care, bedtime and TV rule titles all use 32px, summaries 28px and supporting notes 24px. Blue eye, moon and TV icons are functional decoration, displayed only when measurement leaves room for the icon, title and summary on one line. Omit icons when space is limited; never shrink text or add height for decoration.
+  * Available states use green. Unknown or boundary states, exhausted non-TV allowance while connected to TV, and bedtime within 15 minutes use bright orange. Active bedtime/TV restrictions and failures use coral red; eye-care rest uses orange and disabled rules use secondary gray. Restrictions and redemption outcomes use matching soft panels; pending outcomes use warning colors. Code slots and keypad keys use rounded corners, highlights and blue soft fills/borders for the insertion point, focused key and enabled submission. Parent pages share the rounded, highlighted surfaces while retaining their stacked layout and scrolling contract.
   * Add a measured eye-care row showing disabled, play minutes until rest, remaining rest time, paused or awaiting confirmation. Rest and confirmation use warning colors. Combine daily quota and estimated usage in the main time card's note. Status details show the full play/rest cycle and sleep timing explanation; the rest restriction keeps its 56px countdown and fixed Back/Parent buttons. At zero, wait for backend confirmation.
   * Common child pages prioritize a complete single-screen view while preserving primary large type. Use measured heights and 6px card gaps instead of the parent 104px minimum. Combine quota and usage, use compact rule summaries, and remove the duplicate redeem card. Redeem, buffer and parent shortcuts remain fixed. A / Plus or the entry button opens the keypad; B returns or closes.
   * Eight 44×64px code slots have 5px gaps and 40px digits. The 3×4 keypad uses 124×56px keys, a 64px row step and 36px digits. Count and console date occupy separate lines; digits, submit and navigation remain accessible on one screen.

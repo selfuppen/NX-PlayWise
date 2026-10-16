@@ -552,14 +552,34 @@ PtcUiRect ptc_ui_day_decision_next_rect(void)
     return (PtcUiRect){852, 66, 44, 30};
 }
 
-PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){108, 108, 1064, 480}; }
+PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 72, 1200, 552}; }
+
+PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model)
+{
+    if (model && model->overlay == PTC_UI_OVERLAY_DAY_DECISION)
+        return (PtcUiRect){124, 354, 1032, 26};
+    return (PtcUiRect){56, 358, 1168, 26};
+}
+
+PtcUiRect ptc_ui_rules_dialog_rect(void)
+{
+    return (PtcUiRect){140, 80, 1000, 560};
+}
+
+PtcUiRect ptc_ui_rules_dialog_close_rect(void)
+{
+    return (PtcUiRect){140 + (1000 - 220) / 2, 80 + 560 - 58, 220, 44};
+}
 
 PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
 {
     if (!model) return (PtcUiRect){0, 0, 0, 0};
-    if (index == 1) return (PtcUiRect){342, 606, 180, 44};
-    if (index == 2) return (PtcUiRect){108, 606, 222, 44};
-    if (index == 0 && model->home_details_page == 0) return (PtcUiRect){824, 504, 348, 64};
+    if (index == 1) return (PtcUiRect){276, 628, 170, 44};
+    if (index == 2) return (PtcUiRect){40, 628, 220, 44};
+    if (index == 0) {
+        if (model->home_details_page == 0) return (PtcUiRect){796, 498, 444, 118};
+        if (model->home_details_page == 1) return ptc_ui_rules_independent_tip_rect(model);
+    }
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -596,12 +616,18 @@ void ptc_ui_home_details_activate(PtcUiModel *model, int index)
     if (index == 0 && model->home_details_page == 0) {
         model->home_details_page = 1;
         model->home_details_focus = 2;
+    } else if (index == 0 && model->home_details_page == 1) {
+        model->rules_dialog_open = true;
     }
 }
 
 void ptc_ui_home_details_back(PtcUiModel *model)
 {
     if (!model) return;
+    if (model->rules_dialog_open) {
+        model->rules_dialog_open = false;
+        return;
+    }
     if (model->home_details_page == 1) {
         if (model->home_details_entry_page == 1) {
             ptc_ui_cancel_overlay(model);
@@ -805,8 +831,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 420;
         break;
     case PTC_UI_OVERLAY_HOME_DETAILS:
-        *width = 1120;
-        *height = 640;
+        *width = 1240;
+        *height = 684;
         break;
     case PTC_UI_OVERLAY_MINUTES:
         *width = 720;
@@ -913,6 +939,9 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 560;
         break;
     case PTC_UI_OVERLAY_THEME:
+        *width = 1160;
+        *height = 600;
+        break;
     case PTC_UI_OVERLAY_LANGUAGE:
         *width = 820;
         *height = 360;
@@ -1594,7 +1623,7 @@ PtcUiRect ptc_ui_theme_option_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_THEME);
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 40 + index * 250, dialog.y + 154, 230, 100};
+    return (PtcUiRect){dialog.x + 40 + index * 370, dialog.y + 130, 340, 390};
 }
 
 PtcUiRect ptc_ui_language_option_rect(int index)

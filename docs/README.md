@@ -15,7 +15,7 @@
 
 | 文档 | 内容 | English |
 | --- | --- | --- |
-| [使用指南](使用/使用指南.md) | 安装、首次设置、计划、加时码、浮窗、排障与升级 | [User Guide](使用/USER_GUIDE.md) |
+| [使用指南](使用/使用指南.md) | 时间管控逻辑、安装、首次设置、计划、加时码、浮窗、排障与升级 | [User Guide](使用/USER_GUIDE.md) |
 | [自制节假日日历格式](使用/自制节假日日历格式.md) | 导入文件字段、完整 JSON 与错误示例 | [Custom Holiday Calendar Format](使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) |
 
 ## 开发

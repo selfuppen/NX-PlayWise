@@ -86,6 +86,9 @@ uint32_t resolve_color(uint32_t source)
     case UI_WARNING_BORDER: return pack_rgb(UI_BLENDED(warning_border));
     case UI_DANGER_BORDER: return pack_rgb(UI_BLENDED(danger_border));
     case UI_WARNING_TEXT: return pack_rgb(UI_BLENDED(warning_text));
+    case UI_HERO: return pack_rgb(UI_BLENDED(hero));
+    case UI_ON_HERO: return pack_rgb(UI_BLENDED(on_hero));
+    case UI_HERO_SECONDARY: return pack_rgb(UI_BLENDED(hero_secondary));
     default: return pack_rgb(source);
     }
 }

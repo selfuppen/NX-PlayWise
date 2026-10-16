@@ -4300,6 +4300,18 @@ static void test_today_details_navigation(void)
     check_int(m.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "direct rules open sets overlay");
     check_int(m.home_details_page, 1, "direct rules open is page 1");
     check_int(m.home_details_entry_page, 1, "records entry page as 1");
+    ptc_ui_home_details_activate(&m, 0);
+    check_true(m.rules_dialog_open, "rules explanation opens above the decision page");
+    check_hit(hit_center(&m, ptc_ui_rules_dialog_close_rect()), PTC_UI_HIT_HOME_DETAILS_ACTION, 2,
+        "explanation close cannot submit the underlying refresh action");
+    check_hit(hit_center(&m, ptc_ui_rules_dialog_rect()), PTC_UI_HIT_NONE, 0,
+        "explanation content does not activate underlying controls");
+    m.waiting = true;
+    ptc_ui_home_details_back(&m);
+    check_true(!m.rules_dialog_open && m.overlay == PTC_UI_OVERLAY_HOME_DETAILS && m.home_details_page == 1,
+        "dismiss explanation while waiting without leaving its decision page");
+    check_true(m.waiting, "read-only explanation preserves the pending request");
+    m.waiting = false;
     ptc_ui_home_details_back(&m);
     check_int(m.overlay, PTC_UI_OVERLAY_NONE, "direct rules back closes overlay immediately to parent page");
     check_int(m.selected_index, 11, "parent origin preserved");

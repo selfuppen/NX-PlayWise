@@ -15,7 +15,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
-| [User Guide](使用/USER_GUIDE.md) | Installation, setup, plans, grants, overlay, troubleshooting and upgrades | [使用指南](使用/使用指南.md) |
+| [User Guide](使用/USER_GUIDE.md) | Time control logic, installation, setup, plans, grants, overlay, troubleshooting and upgrades | [使用指南](使用/使用指南.md) |
 | [Custom Holiday Calendar Format](使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) | Import fields, complete JSON and invalid examples | [自制节假日日历格式](使用/自制节假日日历格式.md) |
 
 ## Development — `开发/`
