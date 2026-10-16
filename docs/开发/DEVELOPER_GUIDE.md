@@ -8,6 +8,10 @@
 
 # Developer Guide
 
+For continuing hardware work, start with [current progress](当前进度与后续指导.md) and the [test procedure](测试操作手册.md) (Chinese). Recorded console state is a dated snapshot; recheck before device operations. Keep durable rules in AGENTS and stable guides, and candidate-specific results in acceptance records. Documentation commits do not require redeploying an unchanged frozen production candidate. Preserve successful consumption, claims, nonces and activity when restoring test policy; failed transactions retain their protocol rollback rules.
+
+Check each dependent command's exit code before building, deploying or committing. Verify reports after JSON serialization and repeat the offline checks before sealing. Later corrections and human observations must bind unchanged original hashes in separate supplements.
+
 PlayWise validates protocols, queues, security state machines, and recovery transactions on the host side first before interacting with physical Switch PCTL. Environment prerequisites and platform specifics are detailed in the [Development Environment Guide](DEVELOPMENT_ENVIRONMENT_GUIDE.md); external behavioral changes must be synchronized with the [Protocol Specification](../设计/PROTOCOL.md) and [Testing Guide](TESTING_GUIDE.md).
 
 ## Config import regression
