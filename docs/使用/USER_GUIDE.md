@@ -16,7 +16,7 @@ Preview the timestamp and source device, then choose among eleven groups. Ordina
 
 Selecting PIN also requires the backup PIN and ends the parent session after success. Selecting pairing restores the device name/URL and generates a fresh grant key: pair the phone again; old codes expire. Environment qualifications, setup authorization, PCTL snapshots, external hbmenu configuration and logs do not migrate. First restriction enable requires local Nintendo-control/overlay confirmation. Invalid files change nothing; write/readback failures roll back the whole import, with recovery materials retained in protection if rollback fails.
 
-![Eleven import groups and preview](../images/usage/en/settings/config-backup-light.png)
+![Eleven import groups and preview](../images/usage-en/settings/config-backup-light.png)
 
 Time Plan's independent column contains four compact cards: bedtime, eye care, TV rules, buffer. Public modes are TV and non-TV, which includes handheld/tabletop. Eden's TV rules page adds simulation buttons; switching keeps today's usage and the mode file survives restart. Daily allowance, bedtime and eye care still apply.
 

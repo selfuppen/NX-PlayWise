@@ -1,0 +1,305 @@
+{
+  "schema_version": 1,
+  "reviewed_date": "2026-10-16",
+  "scope": "playwise/tools",
+  "script_count": 57,
+  "scripts": [
+    {
+      "path": "test.py",
+      "category": "daily",
+      "purpose": "完整Host回归"
+    },
+    {
+      "path": "package_remote.py",
+      "category": "daily",
+      "purpose": "统一devkitPro构建、标准包与默认Eden"
+    },
+    {
+      "path": "grant_code.py",
+      "category": "daily",
+      "purpose": "显式生成测试或家长离线码，不把真实密钥写进示例"
+    },
+    {
+      "path": "ptc_frontend_server.py",
+      "category": "daily",
+      "purpose": "本地前端与队列服务"
+    },
+    {
+      "path": "protocol_probe.py",
+      "category": "daily",
+      "purpose": "本地协议目录探测"
+    },
+    {
+      "path": "release_version.py",
+      "category": "daily",
+      "purpose": "版本维护，会修改版本文件／Git状态，按发布流程使用"
+    },
+    {
+      "path": "auto_update.py",
+      "category": "daily_device",
+      "purpose": "正常PIN有界更新／显式同候选采集重启，禁止重放已开始run"
+    },
+    {
+      "path": "pctl_standard_evidence.py",
+      "category": "daily_device",
+      "purpose": "标准候选prepare、stage、只读拉回和原始审计；不授予完整资格"
+    },
+    {
+      "path": "pctl_production_midnight.py",
+      "category": "daily_device",
+      "purpose": "新标准raw的自然午夜离线核验；不创建时间窗口或设备采集"
+    },
+    {
+      "path": "bounded_input_batch.py",
+      "category": "daily_device",
+      "purpose": "受限输入辅助库，限制动作／期限并释放detach，不是任意导航脚本"
+    },
+    {
+      "path": "install_package_to_sd.ps1",
+      "category": "maintenance",
+      "purpose": "本地SD目录安装"
+    },
+    {
+      "path": "install_package_via_dbi_mtp.ps1",
+      "category": "maintenance",
+      "purpose": "DBI MTP安装"
+    },
+    {
+      "path": "install_package_via_ftp.ps1",
+      "category": "maintenance",
+      "purpose": "FTP安装的PowerShell入口"
+    },
+    {
+      "path": "install_package_via_ftp.py",
+      "category": "maintenance",
+      "purpose": "FTP安装实现与CLI"
+    },
+    {
+      "path": "build_ptc_standalone.py",
+      "category": "build_dependency",
+      "purpose": "离线家长网页生成"
+    },
+    {
+      "path": "convert_ui_previews.py",
+      "category": "build_dependency",
+      "purpose": "PPM转PNG"
+    },
+    {
+      "path": "generate_release_manifest.py",
+      "category": "build_dependency",
+      "purpose": "产物／源码／工具链身份清单"
+    },
+    {
+      "path": "make_audio_fixtures.py",
+      "category": "build_dependency",
+      "purpose": "音效fixture生成"
+    },
+    {
+      "path": "make_fixtures.py",
+      "category": "build_dependency",
+      "purpose": "令牌确定性fixture生成"
+    },
+    {
+      "path": "package_delivery.py",
+      "category": "build_dependency",
+      "purpose": "完整交付包"
+    },
+    {
+      "path": "package_device_lab.py",
+      "category": "build_dependency",
+      "purpose": "独立Device Lab包"
+    },
+    {
+      "path": "package_sdmc.py",
+      "category": "build_dependency",
+      "purpose": "标准SD目录与Zip组织"
+    },
+    {
+      "path": "playwise_version.py",
+      "category": "build_dependency",
+      "purpose": "版本读取／校验共享库"
+    },
+    {
+      "path": "stage_timer.py",
+      "category": "build_dependency",
+      "purpose": "构建阶段计时与报告"
+    },
+    {
+      "path": "sync_doc_previews.py",
+      "category": "build_dependency",
+      "purpose": "文档预览同步"
+    },
+    {
+      "path": "ptc_token_v1.py",
+      "category": "library",
+      "purpose": "v1令牌算法"
+    },
+    {
+      "path": "ptc_token_v2.py",
+      "category": "library",
+      "purpose": "v2八位码算法"
+    },
+    {
+      "path": "ptc_request_queue.py",
+      "category": "library",
+      "purpose": "标准请求队列参考实现"
+    },
+    {
+      "path": "pctl_usage_qualification.py",
+      "category": "qualification",
+      "purpose": "v1／v2草稿、原始端点配对及短链核验"
+    },
+    {
+      "path": "verify_device_qualification.py",
+      "category": "qualification",
+      "purpose": "完整包组与报告门禁"
+    },
+    {
+      "path": "promote_qualified_build.py",
+      "category": "qualification",
+      "purpose": "通过正式门禁后晋级产物"
+    },
+    {
+      "path": "assert_device_evidence.py",
+      "category": "lab",
+      "purpose": "标准／Lab拉回材料的机器断言"
+    },
+    {
+      "path": "assert_selfdrive_evidence.py",
+      "category": "lab",
+      "purpose": "Lab自驱动流断言"
+    },
+    {
+      "path": "capability_probe.py",
+      "category": "lab",
+      "purpose": "Lab能力探测"
+    },
+    {
+      "path": "capture_device_observations.py",
+      "category": "lab",
+      "purpose": "不可自动替代观察的采集"
+    },
+    {
+      "path": "device_lab_roundtrip.py",
+      "category": "lab",
+      "purpose": "Lab证据往返"
+    },
+    {
+      "path": "lab_wire_client.py",
+      "category": "lab",
+      "purpose": "Lab FTP wire客户端"
+    },
+    {
+      "path": "make_bedtime_qualification_template.py",
+      "category": "lab",
+      "purpose": "就寝资格模板"
+    },
+    {
+      "path": "make_eye_care_qualification_template.py",
+      "category": "lab",
+      "purpose": "护眼资格模板"
+    },
+    {
+      "path": "prepare_device_lab_sd.ps1",
+      "category": "lab",
+      "purpose": "准备Lab SD目录"
+    },
+    {
+      "path": "sys_botbase_client.py",
+      "category": "specialized",
+      "purpose": "socket客户端；pixelPeek截图与输入是不同能力"
+    },
+    {
+      "path": "input_smoke_harness.py",
+      "category": "specialized",
+      "purpose": "输入通道烟测，不直接证明业务／游戏效果"
+    },
+    {
+      "path": "probe_report.py",
+      "category": "specialized",
+      "purpose": "能力探测HTML报告"
+    },
+    {
+      "path": "vision_capture_driver.py",
+      "category": "specialized",
+      "purpose": "Lab视觉采集驱动"
+    },
+    {
+      "path": "vision_verdict.py",
+      "category": "specialized",
+      "purpose": "绑定视觉判读附件，保留来源类型和适用门禁"
+    },
+    {
+      "path": "package_pctl_capture.py",
+      "category": "historical",
+      "purpose": "内部诊断tap暂存包，改变NSP，不授予标准候选资格"
+    },
+    {
+      "path": "package_usage_probe.py",
+      "category": "historical",
+      "purpose": "独立使用时间实验产物"
+    },
+    {
+      "path": "pctl_capture.py",
+      "category": "historical",
+      "purpose": "旧诊断tap暂存／激活／恢复事务"
+    },
+    {
+      "path": "pctl_fresh_takeover.py",
+      "category": "historical",
+      "purpose": "原新安装隔离与恢复调查，不能从任意现场一键重放"
+    },
+    {
+      "path": "pctl_mainline_report.py",
+      "category": "historical",
+      "purpose": "旧主线材料汇总"
+    },
+    {
+      "path": "pctl_midnight_evidence.py",
+      "category": "historical",
+      "purpose": "旧午夜报告接口，保留不归零等历史结果"
+    },
+    {
+      "path": "pctl_next_day_usage.py",
+      "category": "historical",
+      "purpose": "旧次日实际60分钟窗口"
+    },
+    {
+      "path": "pctl_usage_evidence.py",
+      "category": "historical",
+      "purpose": "旧PCTL主线独立计数对账"
+    },
+    {
+      "path": "pctl_usage_scenarios.py",
+      "category": "historical",
+      "purpose": "旧有限主线补充场景"
+    },
+    {
+      "path": "usage_probe.py",
+      "category": "historical",
+      "purpose": "旧实验驱动及当前部分工具仍导入的Device等基础设施"
+    },
+    {
+      "path": "usage_probe_analysis.py",
+      "category": "historical",
+      "purpose": "旧时间线重建，派生候选不等于事实"
+    },
+    {
+      "path": "usage_probe_autostart.py",
+      "category": "historical",
+      "purpose": "旧自启动实验协调器；已知旧BD23F1故障路径不得默认重走"
+    }
+  ],
+  "directories": [
+    {
+      "path": "ptc_frontend",
+      "category": "product_source",
+      "purpose": "家长网页源码／资源及打包生成的离线页，14个现有跟踪文件，不能作为临时截图删除"
+    }
+  ],
+  "temporary_patterns": [
+    "__pycache__/",
+    "*.pyc"
+  ],
+  "one_off_policy": "新批次临时脚本放build；封存引用后作为证据保留，不在tools堆放带日期副本"
+}

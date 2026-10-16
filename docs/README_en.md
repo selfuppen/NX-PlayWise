@@ -8,6 +8,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 - Installation and daily use: read the [User Guide](使用/USER_GUIDE.md), then the [calendar format](使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) when creating a region calendar.
 - Development and validation: start with the [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md), followed by the [Developer Guide](开发/DEVELOPER_GUIDE.md) and [Testing Guide](开发/TESTING_GUIDE.md).
+- Continuing hardware work: use the [development index](开发/README.md), [current progress and next steps](开发/当前进度与后续指导.md), and [reusable test procedure](开发/测试操作手册.md) (Chinese). Historical records keep their original scope.
 - Protocol and control behavior: consult the [Protocol Specification](设计/PROTOCOL.md) and [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md). UI styling and palettes follow the [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md). Built-in calendar sources are in [Holiday Calendar Data](设计/节假日日历.md) (Chinese).
 - Exploring capabilities: consult the research records below. Findings and proposed experiments do not establish released features or hardware qualification for the current candidate.
 
@@ -26,9 +27,11 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | [Developer Guide](开发/DEVELOPER_GUIDE.md) | Module responsibilities, safety boundaries, upstream research and merge requirements | [开发指南](开发/开发指南.md) |
 | [Testing Guide](开发/TESTING_GUIDE.md) | Local regression, CI gate, packaging gates, Eden, UI, hardware acceptance and evidence round-trip | [测试指南](开发/测试指南.md) |
 | [Unattended Updates and Tests (Chinese)](开发/无人值守更新与测试指南.md) | Bounded deployment, PIN authorization, recovery, evidence and test readiness | [无人值守更新与测试指南](开发/无人值守更新与测试指南.md) |
-| [PCTL1952 Candidate Acceptance (Chinese)](开发/PCTL1952候选验收.md) | Independent consumption, grant recovery, 1440 proxy baseline and evidence binding | [PCTL1952候选验收](开发/PCTL1952候选验收.md) |
-| [PCTL1952 Current Status and Handoff (Chinese)](开发/PCTL1952当前状态与后续交接-20261015.md) | Current candidate, verified evidence, default build and capture integration, priorities and authorization boundaries | [PCTL1952当前状态与后续交接](开发/PCTL1952当前状态与后续交接-20261015.md) |
-| [PCTL1952 Follow-up Checklist (Chinese)](开发/PCTL1952后续工作清单.md) | Historical qualification roadmap and iteration records; use the current handoff for execution | [PCTL1952后续工作清单](开发/PCTL1952后续工作清单.md) |
+| [PCTL1952 Candidate Acceptance (Chinese)](开发/PCTL1952候选验收.md) | Direct v2 and legacy proxy v1 contracts, raw pairing and qualification gates | [PCTL1952候选验收](开发/PCTL1952候选验收.md) |
+| [Current Progress and Next Steps (Chinese)](开发/当前进度与后续指导.md) | Frozen candidate, last verified console state, completed work and remaining conditions | [当前进度与后续指导](开发/当前进度与后续指导.md) |
+| [Reusable Test Procedure (Chinese)](开发/测试操作手册.md) | Bounded batches, one-time requests, recovery, offline reruns and grouped observations | [测试操作手册](开发/测试操作手册.md) |
+| [Stage and Acceptance Records (Chinese)](开发/验收记录/README.md) | Monthly archives preserving historical candidate and failure boundaries | [验收记录](开发/验收记录/README.md) |
+| [Tool Categories (Chinese)](../tools/README.md) | Daily entry points, dependencies, specialized and historical tools, and disposable caches | [目录整理说明](开发/目录整理说明.md) |
 
 ## Design — `设计/`
 
