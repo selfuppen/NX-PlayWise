@@ -33,7 +33,7 @@ Host Python 回归入口跨平台可用；C host、Companion NRO 和 package 的
 
 - `python tools/test.py`：运行全部本地 Python、协议和安全打包回归。
 - `python tools/package_remote.py`：在 devkitPro 环境运行 C/Python 核心测试，增量生成并校验标准分发包与 Eden 模拟器测试应用（产物位于 `build/eden-test/pctc-eden.nro`）；发布前或需完整交付包、Device Lab 及文档 UI 截图时使用 `--release`（或追加 `--clean` 完整清理）。
-- `python tools/make_fixtures.py`：重新生成确定性的令牌 fixture。
+- `python tools/build/make_fixtures.py`：重新生成确定性的令牌 fixture。
 - `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 

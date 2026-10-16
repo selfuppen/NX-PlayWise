@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/capability_probe.py.
+"""Host regression for tools/lab/capability_probe.py.
 
 Drives the orchestrator with in-memory fakes (fake sys-botbase, fake wire, a
 session source that models the device advancing its own phases) so no real
@@ -14,11 +14,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import capability_probe as cp  # noqa: E402
-import lab_wire_client as lwc  # noqa: E402
-import sys_botbase_client as sbb  # noqa: E402
+import tools.lab.capability_probe as cp  # noqa: E402
+import tools.lab.lab_wire_client as lwc  # noqa: E402
+import tools.automation.sys_botbase_client as sbb  # noqa: E402
 
 FAILURES = 0
 

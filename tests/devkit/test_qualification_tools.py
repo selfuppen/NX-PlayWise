@@ -10,11 +10,11 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-import promote_qualified_build as promoter  # noqa: E402
-import verify_device_qualification as verifier  # noqa: E402
-import make_eye_care_qualification_template as make_eye_care  # noqa: E402
+import tools.qualification.promote_qualified_build as promoter  # noqa: E402
+import tools.qualification.verify_device_qualification as verifier  # noqa: E402
+import tools.qualification.make_eye_care_qualification_template as make_eye_care  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:

@@ -7,9 +7,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-import assert_device_evidence as ade  # noqa: E402
+import tools.lab.assert_device_evidence as ade  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:

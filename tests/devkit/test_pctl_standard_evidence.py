@@ -10,10 +10,10 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-import pctl_standard_evidence as evidence
-import pctl_usage_qualification as usage
+import tools.device.pctl_standard_evidence as evidence
+import tools.qualification.pctl_usage_qualification as usage
 import test_qualification_tools as fixtures
 from test_pctl_usage_qualification import set_contract
 from test_package_remote import write_package

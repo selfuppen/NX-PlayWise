@@ -55,4 +55,4 @@ jobs:
       - name: Render previews and compare against committed baselines
         run: |
           make ui-previews
-          python3 tools/sync_doc_previews.py --check
+          python3 tools/build/sync_doc_previews.py --check

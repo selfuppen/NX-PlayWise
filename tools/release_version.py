@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
-import subprocess
 import sys
+from pathlib import Path
 
-from playwise_version import ROOT, read_playwise_version, validate_playwise_version, write_playwise_version
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import argparse
+import subprocess
+
+from tools.build.playwise_version import ROOT, read_playwise_version, validate_playwise_version, write_playwise_version
 
 
 VERSION_PATHS = ("common/version.h", "common/version.mk")

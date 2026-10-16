@@ -59,6 +59,12 @@
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import argparse
 import hashlib
 import json
@@ -68,7 +74,6 @@ import shlex
 import shutil
 import struct
 import subprocess
-import sys
 import time
 import zipfile
 
@@ -83,9 +88,9 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-from playwise_version import read_playwise_version
-import stage_timer
-from sync_doc_previews import PREVIEW_FILES, synchronize
+from tools.build.playwise_version import read_playwise_version
+import tools.build.stage_timer as stage_timer
+from tools.build.sync_doc_previews import PREVIEW_FILES, synchronize
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -603,7 +608,7 @@ def container_command(
     targets_str = f"make {job_flag}{' '.join(targets)}"
     test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
     preview_cmd = f"make {job_flag}ui-previews && " if (with_previews and (only == "previews" or only == "all" or not test_cmd or with_previews)) else ""
-    sync_cmd = "python3 tools/sync_doc_previews.py && " if with_previews else ""
+    sync_cmd = "python3 tools/build/sync_doc_previews.py && " if with_previews else ""
     identity_exports = ""
     if build_image:
         identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
@@ -885,12 +890,12 @@ def build_and_verify(
             print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage-en'}")
     
     if with_usage_probe:
-        import package_usage_probe
+        import tools.legacy.package_usage_probe as package_usage_probe
         package_usage_probe.verify()
         print(f"PASS: standalone usage probe -> {package_usage_probe.ZIP}")
 
     if with_pctl_capture:
-        import package_pctl_capture
+        import tools.legacy.package_pctl_capture as package_pctl_capture
         package_pctl_capture.verify()
         print(f"PASS: internal PCTL capture staging -> {package_pctl_capture.ZIP}")
 

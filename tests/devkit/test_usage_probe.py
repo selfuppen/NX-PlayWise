@@ -11,12 +11,12 @@ import hashlib
 import struct
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-import usage_probe as probe
-import package_remote
-import package_usage_probe as pkg
-import usage_probe_autostart as autostart
-from usage_probe_analysis import focus_for_samples, focus_window, stats_window, unique_events
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import tools.legacy.usage_probe as probe
+import tools.package_remote as package_remote
+import tools.legacy.package_usage_probe as pkg
+import tools.legacy.usage_probe_autostart as autostart
+from tools.legacy.usage_probe_analysis import focus_for_samples, focus_window, stats_window, unique_events
 
 
 def sample(remaining: int, spent: int, minutes: int = 60) -> dict:

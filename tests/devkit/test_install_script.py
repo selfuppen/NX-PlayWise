@@ -10,9 +10,9 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
-INSTALL_SCRIPT = ROOT / "tools" / "install_package_to_sd.ps1"
-MTP_INSTALL_SCRIPT = ROOT / "tools" / "install_package_via_dbi_mtp.ps1"
-PREPARE_LAB_SCRIPT = ROOT / "tools" / "prepare_device_lab_sd.ps1"
+INSTALL_SCRIPT = ROOT / "tools" / "install" / "install_package_to_sd.ps1"
+MTP_INSTALL_SCRIPT = ROOT / "tools" / "install" / "install_package_via_dbi_mtp.ps1"
+PREPARE_LAB_SCRIPT = ROOT / "tools" / "lab" / "prepare_device_lab_sd.ps1"
 
 
 def require(condition: bool, message: str) -> None:
@@ -208,8 +208,8 @@ def test_device_lab_preparation_safety_contract() -> None:
             "post-install boot flag state must be verified")
 
 
-FTP_INSTALL_PY = ROOT / "tools" / "install_package_via_ftp.py"
-FTP_INSTALL_PS1 = ROOT / "tools" / "install_package_via_ftp.ps1"
+FTP_INSTALL_PY = ROOT / "tools" / "install" / "install_package_via_ftp.py"
+FTP_INSTALL_PS1 = ROOT / "tools" / "install" / "install_package_via_ftp.ps1"
 
 
 def create_fake_lab_package(root: Path) -> Path:

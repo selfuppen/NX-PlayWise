@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/probe_report.py.
+"""Host regression for tools/automation/probe_report.py.
 
 Builds a probe directory with a dummy frame and one scenario, renders the
 review bundle, and pins: screenshots appear by relative path (and base64 when
@@ -13,9 +13,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import probe_report  # noqa: E402
+import tools.automation.probe_report as probe_report  # noqa: E402
 
 FAILURES = 0
 

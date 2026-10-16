@@ -546,8 +546,8 @@ If prompted that installation is incomplete, re-copy files from the **same** sta
 On Windows, DBI/MTP data-preserving scripts can be previewed before applying:
 
 ```powershell
-.\tools\install_package_via_dbi_mtp.ps1 -SourceFolder .\build\packages
-.\tools\install_package_via_dbi_mtp.ps1 -SourceFolder .\build\packages -Apply
+.\tools\install\install_package_via_dbi_mtp.ps1 -SourceFolder .\build\packages
+.\tools\install\install_package_via_dbi_mtp.ps1 -SourceFolder .\build\packages -Apply
 ```
 
 Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP full-clean and Device Lab installations alter existing data and control environments and are reserved strictly for developers following the [Testing Guide](../开发/TESTING_GUIDE.md). Standard users should install only standard release packages and never run both background daemons simultaneously.
@@ -572,7 +572,7 @@ Documentation images fall into two categories, with paths relative to repository
 
 | Source | Image Paths | Update Method |
 | --- | --- | --- |
-| Automatically Generated Console and Overlay UI Previews | Selected PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support,overlay}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
+| Automatically Generated Console and Overlay UI Previews | Selected PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support,overlay}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/build/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
 | Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/pairing-qr-demo.png`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
 
 Automated previews are generated from production C/C++ rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](../开发/TESTING_GUIDE.md) for details.

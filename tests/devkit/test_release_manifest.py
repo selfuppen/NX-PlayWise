@@ -10,9 +10,9 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-import generate_release_manifest as manifest  # noqa: E402
+import tools.build.generate_release_manifest as manifest  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:

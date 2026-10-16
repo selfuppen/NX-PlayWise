@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/sys_botbase_client.py.
+"""Host regression for tools/automation/sys_botbase_client.py.
 
 Drives the client against an in-process fake sys-botbase TCP server (no real
 device) and verifies the exact wire strings, especially that a "physical hold"
@@ -14,9 +14,9 @@ import tempfile
 import threading
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import sys_botbase_client as sbb  # noqa: E402
+import tools.automation.sys_botbase_client as sbb  # noqa: E402
 
 FAILURES = 0
 

@@ -9,10 +9,10 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-import package_delivery  # noqa: E402
-import package_remote  # noqa: E402
+import tools.build.package_delivery as package_delivery  # noqa: E402
+import tools.package_remote as package_remote  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:

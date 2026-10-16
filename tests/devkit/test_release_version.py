@@ -10,11 +10,11 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-from playwise_version import read_playwise_version  # noqa: E402
-from release_version import next_alpha_version, release  # noqa: E402
-import release_version  # noqa: E402
+from tools.build.playwise_version import read_playwise_version  # noqa: E402
+from tools.release_version import next_alpha_version, release  # noqa: E402
+import tools.release_version as release_version  # noqa: E402
 
 
 def git(root: Path, *args: str) -> str:

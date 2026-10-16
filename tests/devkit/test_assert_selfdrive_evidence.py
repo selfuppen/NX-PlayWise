@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/assert_selfdrive_evidence.py.
+"""Host regression for tools/lab/assert_selfdrive_evidence.py.
 
 Builds advisory self-drive evidence trees in a temp dir and checks the asserter
 passes a clean run and FAILS on a fabricated human observation, an unrestored
@@ -12,9 +12,9 @@ from pathlib import Path
 import sys
 import tempfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import assert_selfdrive_evidence as asd  # noqa: E402
+import tools.lab.assert_selfdrive_evidence as asd  # noqa: E402
 
 FAILURES = 0
 

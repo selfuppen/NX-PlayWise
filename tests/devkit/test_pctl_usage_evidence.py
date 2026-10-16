@@ -9,16 +9,16 @@ import unittest
 from unittest import mock
 import zipfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-import pctl_usage_evidence as evidence
-import package_pctl_capture as capture
-import package_remote
-import pctl_capture as live
-import pctl_usage_scenarios as scenarios
-import pctl_mainline_report as mainline_report
-import pctl_midnight_evidence as midnight
-import pctl_next_day_usage as next_day
-import pctl_fresh_takeover as fresh
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import tools.legacy.pctl_usage_evidence as evidence
+import tools.legacy.package_pctl_capture as capture
+import tools.package_remote as package_remote
+import tools.legacy.pctl_capture as live
+import tools.legacy.pctl_usage_scenarios as scenarios
+import tools.legacy.pctl_mainline_report as mainline_report
+import tools.legacy.pctl_midnight_evidence as midnight
+import tools.legacy.pctl_next_day_usage as next_day
+import tools.legacy.pctl_fresh_takeover as fresh
 
 
 def sample(quota: int, spent: int, tick: int = 1) -> dict:

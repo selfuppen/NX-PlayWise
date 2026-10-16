@@ -78,7 +78,7 @@ UI_STATE_SRCS := companion/nro/ui_state.c companion/nro/ui_plan_state.c companio
 UI_RENDER_SRCS := companion/nro/ui_graphics.c companion/nro/ui_render_primitives.c companion/nro/ui_render_text.c companion/nro/ui_render_core.c companion/nro/ui_render_components.c companion/nro/ui_render_action_card.c companion/nro/ui_render_child.c companion/nro/ui_render_setup.c companion/nro/ui_render_plan.c companion/nro/ui_render_pages.c companion/nro/ui_render_dialogs.c companion/nro/ui_render_dialog_policy.c companion/nro/ui_render_dialog_input.c companion/nro/ui_render_overlay_account.c companion/nro/ui_render_overlay_plan.c companion/nro/ui_render_overlay_support.c companion/nro/ui_render_overlays.c
 UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/ui_language.c companion/file_protocol.c companion/request_client.c companion/result_summary.c companion/policy_status.c platform/calendar_store.c common/crypto/sha256.c common/protocol/activity_history.c common/protocol/redemption_history.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/rules/holiday_calendar_import.c common/time/ptc_time.c common/usage/daily_summary.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
-STAGE_TIMER ?= python3 tools/stage_timer.py
+STAGE_TIMER ?= python3 tools/build/stage_timer.py
 
 .PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test ui-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
 
@@ -86,15 +86,15 @@ all: test
 
 manifest:
 	mkdir -p build/generated
-	$(STAGE_TIMER) playwise manifest -- python3 tools/generate_release_manifest.py --profile release --json build/generated/release-manifest.json --header build/generated/release_manifest.h
+	$(STAGE_TIMER) playwise manifest -- python3 tools/build/generate_release_manifest.py --profile release --json build/generated/release-manifest.json --header build/generated/release_manifest.h
 
 device-lab-manifest:
 	mkdir -p build/device-lab/generated
-	$(STAGE_TIMER) device-lab manifest -- python3 tools/generate_release_manifest.py --profile device-lab --json build/device-lab/generated/release-manifest.json --header build/device-lab/generated/release_manifest.h
+	$(STAGE_TIMER) device-lab manifest -- python3 tools/build/generate_release_manifest.py --profile device-lab --json build/device-lab/generated/release-manifest.json --header build/device-lab/generated/release_manifest.h
 
 eden-test-manifest:
 	mkdir -p build/eden-test/generated
-	$(STAGE_TIMER) eden-test manifest -- python3 tools/generate_release_manifest.py --profile eden-test --json build/eden-test/generated/release-manifest.json --header build/eden-test/generated/release_manifest.h
+	$(STAGE_TIMER) eden-test manifest -- python3 tools/build/generate_release_manifest.py --profile eden-test --json build/eden-test/generated/release-manifest.json --header build/eden-test/generated/release_manifest.h
 
 $(HOST_BUILD_DIR):
 	mkdir -p $(HOST_BUILD_DIR)
@@ -163,7 +163,7 @@ ui-previews: $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview
 	mkdir -p build/ui-previews
 	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
 	$(STAGE_TIMER) playwise overlay-previews -- $(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
-	$(STAGE_TIMER) playwise convert-previews -- python3 tools/convert_ui_previews.py
+	$(STAGE_TIMER) playwise convert-previews -- python3 tools/build/convert_ui_previews.py
 
 test-python:
 	$(STAGE_TIMER) global test-python -- python3 tools/test.py
@@ -191,11 +191,11 @@ sysmodule-nsp: manifest
 	$(STAGE_TIMER) playwise sysmodule -- sh -c '$(MAKE) -C sysmodule && mkdir -p build/switch && cp sysmodule/pctc-sysmodule.nsp build/switch/exefs.nsp && $(DEVKITA64)/bin/aarch64-none-elf-objcopy -O binary sysmodule/pctc-sysmodule.elf build/switch/pctc-sysmodule.bin'
 
 package-playwise: sysmodule-nsp companion-nro companion-overlay
-	$(STAGE_TIMER) playwise package-zip -- python3 tools/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PLAYWISE_VERSION).zip --manifest build/generated/release-manifest.json --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/playwise.ovl --emoji-font third_party/fonts/noto-emoji/NotoEmoji-Regular.ttf --boot2
+	$(STAGE_TIMER) playwise package-zip -- python3 tools/build/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PLAYWISE_VERSION).zip --manifest build/generated/release-manifest.json --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/playwise.ovl --emoji-font third_party/fonts/noto-emoji/NotoEmoji-Regular.ttf --boot2
 
 package-complete: package-playwise
-	$(STAGE_TIMER) playwise-complete offline-html -- python3 tools/build_ptc_standalone.py --check
-	$(STAGE_TIMER) playwise-complete package-zip -- python3 tools/package_delivery.py --standard-package build/packages/playwise-$(PLAYWISE_VERSION).zip --offline-html tools/ptc_frontend/playwise-offline.html --output build/packages/playwise-complete-$(PLAYWISE_VERSION).zip
+	$(STAGE_TIMER) playwise-complete offline-html -- python3 tools/build/build_ptc_standalone.py --check
+	$(STAGE_TIMER) playwise-complete package-zip -- python3 tools/build/package_delivery.py --standard-package build/packages/playwise-$(PLAYWISE_VERSION).zip --offline-html tools/ptc_frontend/playwise-offline.html --output build/packages/playwise-complete-$(PLAYWISE_VERSION).zip
 
 packages: package-complete device-lab-package
 
@@ -215,7 +215,7 @@ device-lab-overlay: device-lab-manifest
 	cp device_lab/overlay/playwise-device-lab.ovl build/device-lab/switch/playwise-device-lab.ovl
 
 device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
-	$(STAGE_TIMER) device-lab package-zip -- python3 tools/package_device_lab.py --out build/packages/playwise-device-lab --zip build/packages/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
+	$(STAGE_TIMER) device-lab package-zip -- python3 tools/build/package_device_lab.py --out build/packages/playwise-device-lab --zip build/packages/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
 
 clean:
 	$(STAGE_TIMER) global clean -- sh -c 'rm -rf build/host build/generated build/switch build/packages build/device-lab build/ui-previews || true && if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi && $(MAKE) -C companion/nro clean || true && rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp && $(MAKE) -C companion/overlay clean || true && $(MAKE) -C sysmodule clean || true && $(MAKE) -C device_lab/nro clean || true && $(MAKE) -C device_lab/overlay clean || true'
@@ -230,13 +230,13 @@ $(HOST_BUILD_DIR)/test_usage_probe_policy: tests/c/test_usage_probe_policy.c usa
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
 
 usage-probe-package: test-usage-probe-policy
-	python3 tools/package_usage_probe.py prepare
+	python3 tools/legacy/package_usage_probe.py prepare
 	$(MAKE) -C usage_probe
-	python3 tools/package_usage_probe.py package
+	python3 tools/legacy/package_usage_probe.py package
 
 .PHONY: pctl-capture-package
 pctl-capture-package: manifest
-	python3 tools/package_pctl_capture.py prepare
-	python3 tools/package_pctl_capture.py host-test
-	python3 tools/package_pctl_capture.py build
-	python3 tools/package_pctl_capture.py package
+	python3 tools/legacy/package_pctl_capture.py prepare
+	python3 tools/legacy/package_pctl_capture.py host-test
+	python3 tools/legacy/package_pctl_capture.py build
+	python3 tools/legacy/package_pctl_capture.py package

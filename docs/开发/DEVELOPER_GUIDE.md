@@ -114,7 +114,7 @@ Bedtime is included in standard releases, but disabled by default on new install
 
 ## Standard Release Builds, Support, and Device Lab
 
-Standard distribution builds use the `release` profile, driven by paired versions in `common/version.h` and `common/version.mk`. Python manifest generation and package validation read both files via `tools/playwise_version.py`; any mismatch immediately fails the build. Support is an intrinsic feature of standard releases, not a separate package.
+Standard distribution builds use the `release` profile, driven by paired versions in `common/version.h` and `common/version.mk`. Python manifest generation and package validation read both files via `tools/build/playwise_version.py`; any mismatch immediately fails the build. Support is an intrinsic feature of standard releases, not a separate package.
 
 Public artifacts are divided into two tiers: `playwise-<version>.zip` is the standard Switch installation package containing only runtime directories; `playwise-complete-<version>.zip` is the recommended full delivery bundle for end users, strictly embedding the standard package and generated `playwise-offline.html`. Aggregation wrappers must never alter or unwrap the standard package, nor attach Device Lab, install scripts, or extra notes.
 
@@ -219,8 +219,8 @@ python tools/test.py
 The standalone parent web app is compiled deterministically from modular frontend sources; after modifying `tools/ptc_frontend`:
 
 ```text
-python tools/build_ptc_standalone.py
-python tools/build_ptc_standalone.py --check
+python tools/build/build_ptc_standalone.py
+python tools/build/build_ptc_standalone.py --check
 ```
 
 Commits must include updated `tools/ptc_frontend/playwise-offline.html`; Pages deployment and full package builds use `--check` to reject stale artifacts. End users open the generated HTML directly without Python.

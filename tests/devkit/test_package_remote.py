@@ -15,10 +15,10 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-import package_remote  # noqa: E402
-import sync_doc_previews  # noqa: E402
+import tools.package_remote as package_remote  # noqa: E402
+import tools.build.sync_doc_previews as sync_doc_previews  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -103,7 +103,7 @@ def test_container_command() -> None:
     require("/ws/playwise" in command, "container command must use the mounted repository")
     require("make -j test && make -j package-playwise eden-test-nro" in command,
             "container command must run fast tests before building default targets")
-    require("python3 tools/sync_doc_previews.py" not in command,
+    require("python3 tools/build/sync_doc_previews.py" not in command,
             "default container command must omit preview synchronization")
     require("packages: package-complete device-lab-package" in makefile,
             "packages target must verify the isolated Device Lab target")
@@ -116,7 +116,7 @@ def test_container_command() -> None:
     release = package_remote.container_command(only="all")
     require("packages" in release and "eden-test-nro" in release,
             "release build must target all packages and Eden")
-    require("python3 tools/sync_doc_previews.py" in release,
+    require("python3 tools/build/sync_doc_previews.py" in release,
             "release build must synchronize previews before packaging")
 
     clean = package_remote.container_command(clean=True)
@@ -142,7 +142,7 @@ def test_container_command() -> None:
 
     only_previews = package_remote.container_command(only="previews")
     require("ui-previews" in only_previews, "only=previews must target ui-previews")
-    require("python3 tools/sync_doc_previews.py" in only_previews,
+    require("python3 tools/build/sync_doc_previews.py" in only_previews,
             "only=previews must synchronize selected documentation scenes")
     require("make -j test &&" not in only_previews, "only=previews must skip redundant make test")
     require("packages" not in only_previews, "only=previews must omit package targets")

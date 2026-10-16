@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 import zipfile
 
-from playwise_version import read_playwise_version
+from tools.build.playwise_version import read_playwise_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +69,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_pctl_production_midnight.py",
         "tests/devkit/test_pctl_standard_evidence.py",
         "tests/devkit/test_package_remote.py",
+        "tests/devkit/test_tools_layout.py",
         "tests/devkit/test_delivery_package.py",
         "tests/devkit/test_install_script.py",
         "tests/devkit/test_switch_ipc_lifecycle.py",
@@ -153,7 +158,7 @@ def verify_playwise_package() -> None:
         run(
             [
                 PYTHON,
-                "tools/package_sdmc.py",
+                "tools/build/package_sdmc.py",
                 "--out",
                 str(out),
                 "--zip",
@@ -281,7 +286,7 @@ def verify_playwise_package() -> None:
         invalid = run(
             [
                 PYTHON,
-                "tools/package_sdmc.py",
+                "tools/build/package_sdmc.py",
                 "--out",
                 str(invalid_out),
                 "--manifest",

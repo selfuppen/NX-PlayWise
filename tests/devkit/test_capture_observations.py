@@ -7,11 +7,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-import capture_device_observations as cap  # noqa: E402
-import verify_device_qualification as vq  # noqa: E402
-import make_eye_care_qualification_template as make_eye_care  # noqa: E402
+import tools.lab.capture_device_observations as cap  # noqa: E402
+import tools.qualification.verify_device_qualification as vq  # noqa: E402
+import tools.qualification.make_eye_care_qualification_template as make_eye_care  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:

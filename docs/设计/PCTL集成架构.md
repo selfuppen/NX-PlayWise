@@ -105,7 +105,7 @@ Enforce、跨日、启动恢复、未来规则修改和今日规则未变化都�
 
 ### 能力探测证据（capability_probe，2026-10-11）
 
-以下为 `tools/capability_probe.py` 在一台绑定测试机（Nintendo Switch OLED / HOS 22.5.0 / Atmosphère 1.11.2）上的探测结果。该工具只采集不判读：经 FTP 把 `lab_*` 请求写入 Lab sysmodule 的 `inbox/pending` 驱动会话，用 sys-botbase `pixelPeek` 抓图，全程不提交 `lab_observation`、不封存判定、不走资格门禁。因此下列为**探测证据**，不等于当前 HEAD 的资格，正式资格仍需 `verify_device_qualification` 的权威流程。
+以下为 `tools/lab/capability_probe.py` 在一台绑定测试机（Nintendo Switch OLED / HOS 22.5.0 / Atmosphère 1.11.2）上的探测结果。该工具只采集不判读：经 FTP 把 `lab_*` 请求写入 Lab sysmodule 的 `inbox/pending` 驱动会话，用 sys-botbase `pixelPeek` 抓图，全程不提交 `lab_observation`、不封存判定、不走资格门禁。因此下列为**探测证据**，不等于当前 HEAD 的资格，正式资格仍需 `verify_device_qualification` 的权威流程。
 
 - **待机停止计时**：同一次 `timer_activation_ab`，`ab_home_awake` 亮屏 90 秒 → `1454` 剩余 −90 秒（1:1 扣时）；`ab_sleep_wake` 睡眠约 90 秒 → 剩余仅 −4 秒（入睡前的亮屏零头）。即待机不累计当日额度，直接支持“无人操作只同步设置、不主动启动计时”的边界。设备二元判据 `sleep_excluded` 要求窗口内严格零变化（`lab_session.c` 的 `remaining_delta==0 && spent_delta==0`），−4 秒会记为 `inconclusive`；结论以原始 `remaining_ns` delta（−4s ≪ −90s）为准，而非该二元标志。
 - **限制生效 = 提示 + 暂停**：`restriction_quick` 向当天写 BLOCKED 后，`1455` 由 false 变 true、`1454` 剩余转负，Nintendo 官方“今日无法继续游戏”遮罩出现，且**游戏音频暂停**（`restriction_visible + paused_or_suspended`）。`1457` 轮询 122 次从未 signaled，再次确认提示与暂停不依赖 `1457`。

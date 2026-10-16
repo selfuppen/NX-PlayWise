@@ -10,8 +10,8 @@ from unittest import mock
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
-import auto_update as update
+sys.path.insert(0, str(ROOT))
+import tools.device.auto_update as update
 
 
 def require(value: object, label: str) -> None:

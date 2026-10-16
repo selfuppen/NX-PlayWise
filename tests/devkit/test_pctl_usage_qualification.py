@@ -9,11 +9,11 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-import pctl_usage_qualification as usage  # noqa: E402
-import promote_qualified_build as promoter  # noqa: E402
-import verify_device_qualification as verifier  # noqa: E402
+import tools.qualification.pctl_usage_qualification as usage  # noqa: E402
+import tools.qualification.promote_qualified_build as promoter  # noqa: E402
+import tools.qualification.verify_device_qualification as verifier  # noqa: E402
 import test_qualification_tools as fixtures  # noqa: E402
 
 
@@ -218,7 +218,7 @@ def test_manifest_binding_and_draft_cli() -> None:
         expect_rejected(packages, reports, "loose manifest must not strip an embedded usage contract")
         build.write_text(content, encoding="utf-8")
         output = root / "draft.json"
-        command = [sys.executable, str(ROOT / "tools/pctl_usage_qualification.py"), "--packages", str(packages), "--output", str(output)]
+        command = [sys.executable, str(ROOT / "tools/qualification/pctl_usage_qualification.py"), "--packages", str(packages), "--output", str(output)]
         run = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
         assert run.returncode == 0, run.stderr
         draft = json.loads(output.read_text(encoding="utf-8"))

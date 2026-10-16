@@ -12,9 +12,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-import stage_timer  # noqa: E402
+import tools.build.stage_timer as stage_timer  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -106,7 +106,7 @@ def test_cli_execution() -> None:
         timing_file = Path(tmp_dir) / "build_timing.json"
         cmd = [
             sys.executable,
-            str(TOOLS / "stage_timer.py"),
+            str(TOOLS / "build" / "stage_timer.py"),
             "playwise",
             "test-stage",
             "--",
@@ -121,7 +121,7 @@ def test_cli_execution() -> None:
 
         fail_cmd = [
             sys.executable,
-            str(TOOLS / "stage_timer.py"),
+            str(TOOLS / "build" / "stage_timer.py"),
             "playwise",
             "fail-stage",
             "--",

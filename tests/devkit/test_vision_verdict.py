@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/vision_verdict.py (no real device).
+"""Host regression for tools/automation/vision_verdict.py (no real device).
 
 Verifies that sealing binds the AI verdict to the exact screenshot bytes the
 driver captured: a changed or missing frame, a bad enum, or a single-frame
@@ -13,9 +13,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import vision_verdict as vv  # noqa: E402
+import tools.automation.vision_verdict as vv  # noqa: E402
 
 FAILURES = 0
 

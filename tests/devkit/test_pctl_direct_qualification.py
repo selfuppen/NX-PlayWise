@@ -10,10 +10,10 @@ import tempfile
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
-import pctl_usage_qualification as usage
-import promote_qualified_build as promoter
-import verify_device_qualification as verifier
+sys.path.insert(0, str(ROOT))
+import tools.qualification.pctl_usage_qualification as usage
+import tools.qualification.promote_qualified_build as promoter
+import tools.qualification.verify_device_qualification as verifier
 import test_qualification_tools as fixtures
 from test_pctl_usage_qualification import sample, set_contract
 

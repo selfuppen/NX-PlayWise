@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/vision_capture_driver.py (no real device).
+"""Host regression for tools/automation/vision_capture_driver.py (no real device).
 
 Exercises the testable core: the sampling-window capture loop keyed on
 session.json state, pending.json writing with wire-log + screenshot hashes, the
@@ -16,11 +16,11 @@ from pathlib import Path
 
 DEVKIT = Path(__file__).resolve().parent
 sys.path.insert(0, str(DEVKIT))
-sys.path.insert(0, str(DEVKIT.parents[1] / "tools"))
+sys.path.insert(0, str(DEVKIT.parents[1]))
 
-import vision_capture_driver as vcd  # noqa: E402
+import tools.automation.vision_capture_driver as vcd  # noqa: E402
 from test_sys_botbase_client import FakeSysBotBase  # noqa: E402
-import sys_botbase_client as sbb  # noqa: E402
+import tools.automation.sys_botbase_client as sbb  # noqa: E402
 
 FAILURES = 0
 
@@ -132,7 +132,7 @@ def test_drive_slot_produces_pending_bundle() -> None:
               "overlay is opened with the launch combo")
         check("click B" in fake.commands, "overlay is closed before sampling")
         # The sidecar can then be sealed from this very bundle.
-        import vision_verdict as vv  # noqa: E402
+        import tools.automation.vision_verdict as vv  # noqa: E402
         verdict = vv.seal(reports, Path(result["pending"]), observation="restriction_visible",
                           runtime_effect="paused_or_suspended", context_confirmed=True,
                           confidence="high", reasoning="frames show the prompt and a suspended game")

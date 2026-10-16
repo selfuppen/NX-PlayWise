@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/input_smoke_harness.py (no device, no FTP).
+"""Host regression for tools/automation/input_smoke_harness.py (no device, no FTP).
 
 Injects a recording fake client into the harness and asserts the exact wire
 actions a scenario produces -- in particular that the dangerous-confirm scenario
@@ -13,9 +13,9 @@ from pathlib import Path
 import sys
 import tempfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import input_smoke_harness as harness  # noqa: E402
+import tools.automation.input_smoke_harness as harness  # noqa: E402
 
 FAILURES = 0
 

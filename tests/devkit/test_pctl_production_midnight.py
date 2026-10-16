@@ -10,10 +10,10 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
-import pctl_production_midnight as midnight
-import pctl_standard_evidence as evidence
-import pctl_usage_qualification as usage
+sys.path.insert(0, str(ROOT))
+import tools.device.pctl_production_midnight as midnight
+import tools.device.pctl_standard_evidence as evidence
+import tools.qualification.pctl_usage_qualification as usage
 
 CONFIG = {"commit":"a"*40,"release_id":"playwise-fixture","run_id":"b"*32,"duration_s":600}
 MIDNIGHT = int(datetime(2026,10,17,tzinfo=timezone(timedelta(hours=8))).timestamp())
@@ -112,7 +112,7 @@ def test_cli() -> None:
         root=Path(directory)
         (root/'raw.jsonl').write_bytes(encode(rows(True,True)))
         (root/'config.json').write_text(json.dumps(CONFIG),encoding='utf-8')
-        command=[sys.executable,str(ROOT/'tools/pctl_production_midnight.py'),
+        command=[sys.executable,str(ROOT/'tools/device/pctl_production_midnight.py'),
                  '--raw',str(root/'raw.jsonl'),'--config',str(root/'config.json'),
                  '--before-day',str(DAY),'--output',str(root/'result.json')]
         completed=subprocess.run(command,capture_output=True,text=True,encoding='utf-8')

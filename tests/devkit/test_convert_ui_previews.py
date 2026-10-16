@@ -11,9 +11,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-import convert_ui_previews  # noqa: E402
+import tools.build.convert_ui_previews as convert_ui_previews  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:

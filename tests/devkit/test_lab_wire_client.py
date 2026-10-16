@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regression for tools/lab_wire_client.py.
+"""Host regression for tools/lab/lab_wire_client.py.
 
 Drives the wire client against an in-memory fake FTP (no real device) and pins:
 the stage-then-rename submit (a request appears only as a complete <id>.json),
@@ -14,9 +14,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import lab_wire_client as lwc  # noqa: E402
+import tools.lab.lab_wire_client as lwc  # noqa: E402
 
 FAILURES = 0
 
@@ -192,7 +192,7 @@ class FakeRawFtp:
 
 
 def test_switchftp_upload_bytes_and_rename() -> None:
-    import install_package_via_ftp as ftp_installer
+    import tools.install.install_package_via_ftp as ftp_installer
     endpoint = ftp_installer.FtpEndpoint(host="h", port=21, user="anonymous", password="", base_path="/")
     client = ftp_installer.SwitchFtpClient(endpoint)
     client.ftp = FakeRawFtp()

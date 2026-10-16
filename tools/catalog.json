@@ -1,8 +1,8 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "reviewed_date": "2026-10-16",
   "scope": "playwise/tools",
-  "script_count": 57,
+  "script_count": 58,
   "scripts": [
     {
       "path": "test.py",
@@ -35,259 +35,315 @@
       "purpose": "版本维护，会修改版本文件／Git状态，按发布流程使用"
     },
     {
-      "path": "auto_update.py",
-      "category": "daily_device",
-      "purpose": "正常PIN有界更新／显式同候选采集重启，禁止重放已开始run"
+      "path": "device/auto_update.py",
+      "category": "device",
+      "purpose": "正常PIN有界更新／显式同候选采集重启，禁止重放已开始run",
+      "legacy_path": "auto_update.py"
     },
     {
-      "path": "pctl_standard_evidence.py",
-      "category": "daily_device",
-      "purpose": "标准候选prepare、stage、只读拉回和原始审计；不授予完整资格"
+      "path": "device/pctl_standard_evidence.py",
+      "category": "device",
+      "purpose": "标准候选prepare、stage、只读拉回和原始审计；不授予完整资格",
+      "legacy_path": "pctl_standard_evidence.py"
     },
     {
-      "path": "pctl_production_midnight.py",
-      "category": "daily_device",
-      "purpose": "新标准raw的自然午夜离线核验；不创建时间窗口或设备采集"
+      "path": "device/pctl_production_midnight.py",
+      "category": "device",
+      "purpose": "新标准raw的自然午夜离线核验；不创建时间窗口或设备采集",
+      "legacy_path": "pctl_production_midnight.py"
     },
     {
-      "path": "bounded_input_batch.py",
-      "category": "daily_device",
-      "purpose": "受限输入辅助库，限制动作／期限并释放detach，不是任意导航脚本"
+      "path": "device/bounded_input_batch.py",
+      "category": "device",
+      "purpose": "受限输入辅助库，限制动作／期限并释放detach，不是任意导航脚本",
+      "legacy_path": "bounded_input_batch.py"
     },
     {
-      "path": "install_package_to_sd.ps1",
-      "category": "maintenance",
-      "purpose": "本地SD目录安装"
+      "path": "install/install_package_to_sd.ps1",
+      "category": "install",
+      "purpose": "本地SD目录安装",
+      "legacy_path": "install_package_to_sd.ps1"
     },
     {
-      "path": "install_package_via_dbi_mtp.ps1",
-      "category": "maintenance",
-      "purpose": "DBI MTP安装"
+      "path": "install/install_package_via_dbi_mtp.ps1",
+      "category": "install",
+      "purpose": "DBI MTP安装",
+      "legacy_path": "install_package_via_dbi_mtp.ps1"
     },
     {
-      "path": "install_package_via_ftp.ps1",
-      "category": "maintenance",
-      "purpose": "FTP安装的PowerShell入口"
+      "path": "install/install_package_via_ftp.ps1",
+      "category": "install",
+      "purpose": "FTP安装的PowerShell入口",
+      "legacy_path": "install_package_via_ftp.ps1"
     },
     {
-      "path": "install_package_via_ftp.py",
-      "category": "maintenance",
-      "purpose": "FTP安装实现与CLI"
+      "path": "install/install_package_via_ftp.py",
+      "category": "install",
+      "purpose": "FTP安装实现与CLI",
+      "legacy_path": "install_package_via_ftp.py"
     },
     {
-      "path": "build_ptc_standalone.py",
-      "category": "build_dependency",
-      "purpose": "离线家长网页生成"
+      "path": "build/build_ptc_standalone.py",
+      "category": "build",
+      "purpose": "离线家长网页生成",
+      "legacy_path": "build_ptc_standalone.py"
     },
     {
-      "path": "convert_ui_previews.py",
-      "category": "build_dependency",
-      "purpose": "PPM转PNG"
+      "path": "build/convert_ui_previews.py",
+      "category": "build",
+      "purpose": "PPM转PNG",
+      "legacy_path": "convert_ui_previews.py"
     },
     {
-      "path": "generate_release_manifest.py",
-      "category": "build_dependency",
-      "purpose": "产物／源码／工具链身份清单"
+      "path": "build/generate_release_manifest.py",
+      "category": "build",
+      "purpose": "产物／源码／工具链身份清单",
+      "legacy_path": "generate_release_manifest.py"
     },
     {
-      "path": "make_audio_fixtures.py",
-      "category": "build_dependency",
-      "purpose": "音效fixture生成"
+      "path": "build/make_audio_fixtures.py",
+      "category": "build",
+      "purpose": "音效fixture生成",
+      "legacy_path": "make_audio_fixtures.py"
     },
     {
-      "path": "make_fixtures.py",
-      "category": "build_dependency",
-      "purpose": "令牌确定性fixture生成"
+      "path": "build/make_fixtures.py",
+      "category": "build",
+      "purpose": "令牌确定性fixture生成",
+      "legacy_path": "make_fixtures.py"
     },
     {
-      "path": "package_delivery.py",
-      "category": "build_dependency",
-      "purpose": "完整交付包"
+      "path": "build/package_delivery.py",
+      "category": "build",
+      "purpose": "完整交付包",
+      "legacy_path": "package_delivery.py"
     },
     {
-      "path": "package_device_lab.py",
-      "category": "build_dependency",
-      "purpose": "独立Device Lab包"
+      "path": "build/package_device_lab.py",
+      "category": "build",
+      "purpose": "独立Device Lab包",
+      "legacy_path": "package_device_lab.py"
     },
     {
-      "path": "package_sdmc.py",
-      "category": "build_dependency",
-      "purpose": "标准SD目录与Zip组织"
+      "path": "build/package_sdmc.py",
+      "category": "build",
+      "purpose": "标准SD目录与Zip组织",
+      "legacy_path": "package_sdmc.py"
     },
     {
-      "path": "playwise_version.py",
-      "category": "build_dependency",
-      "purpose": "版本读取／校验共享库"
+      "path": "build/playwise_version.py",
+      "category": "build",
+      "purpose": "版本读取／校验共享库",
+      "legacy_path": "playwise_version.py"
     },
     {
-      "path": "stage_timer.py",
-      "category": "build_dependency",
-      "purpose": "构建阶段计时与报告"
+      "path": "build/stage_timer.py",
+      "category": "build",
+      "purpose": "构建阶段计时与报告",
+      "legacy_path": "stage_timer.py"
     },
     {
-      "path": "sync_doc_previews.py",
-      "category": "build_dependency",
-      "purpose": "文档预览同步"
+      "path": "build/sync_doc_previews.py",
+      "category": "build",
+      "purpose": "文档预览同步",
+      "legacy_path": "sync_doc_previews.py"
     },
     {
-      "path": "ptc_token_v1.py",
-      "category": "library",
-      "purpose": "v1令牌算法"
+      "path": "lib/ptc_token_v1.py",
+      "category": "lib",
+      "purpose": "v1令牌算法",
+      "legacy_path": "ptc_token_v1.py"
     },
     {
-      "path": "ptc_token_v2.py",
-      "category": "library",
-      "purpose": "v2八位码算法"
+      "path": "lib/ptc_token_v2.py",
+      "category": "lib",
+      "purpose": "v2八位码算法",
+      "legacy_path": "ptc_token_v2.py"
     },
     {
-      "path": "ptc_request_queue.py",
-      "category": "library",
-      "purpose": "标准请求队列参考实现"
+      "path": "lib/ptc_request_queue.py",
+      "category": "lib",
+      "purpose": "标准请求队列参考实现",
+      "legacy_path": "ptc_request_queue.py"
     },
     {
-      "path": "pctl_usage_qualification.py",
+      "path": "qualification/pctl_usage_qualification.py",
       "category": "qualification",
-      "purpose": "v1／v2草稿、原始端点配对及短链核验"
+      "purpose": "v1／v2草稿、原始端点配对及短链核验",
+      "legacy_path": "pctl_usage_qualification.py"
     },
     {
-      "path": "verify_device_qualification.py",
+      "path": "qualification/verify_device_qualification.py",
       "category": "qualification",
-      "purpose": "完整包组与报告门禁"
+      "purpose": "完整包组与报告门禁",
+      "legacy_path": "verify_device_qualification.py"
     },
     {
-      "path": "promote_qualified_build.py",
+      "path": "qualification/promote_qualified_build.py",
       "category": "qualification",
-      "purpose": "通过正式门禁后晋级产物"
+      "purpose": "通过正式门禁后晋级产物",
+      "legacy_path": "promote_qualified_build.py"
     },
     {
-      "path": "assert_device_evidence.py",
+      "path": "lab/assert_device_evidence.py",
       "category": "lab",
-      "purpose": "标准／Lab拉回材料的机器断言"
+      "purpose": "标准／Lab拉回材料的机器断言",
+      "legacy_path": "assert_device_evidence.py"
     },
     {
-      "path": "assert_selfdrive_evidence.py",
+      "path": "lab/assert_selfdrive_evidence.py",
       "category": "lab",
-      "purpose": "Lab自驱动流断言"
+      "purpose": "Lab自驱动流断言",
+      "legacy_path": "assert_selfdrive_evidence.py"
     },
     {
-      "path": "capability_probe.py",
+      "path": "lab/capability_probe.py",
       "category": "lab",
-      "purpose": "Lab能力探测"
+      "purpose": "Lab能力探测",
+      "legacy_path": "capability_probe.py"
     },
     {
-      "path": "capture_device_observations.py",
+      "path": "lab/capture_device_observations.py",
       "category": "lab",
-      "purpose": "不可自动替代观察的采集"
+      "purpose": "不可自动替代观察的采集",
+      "legacy_path": "capture_device_observations.py"
     },
     {
-      "path": "device_lab_roundtrip.py",
+      "path": "lab/device_lab_roundtrip.py",
       "category": "lab",
-      "purpose": "Lab证据往返"
+      "purpose": "Lab证据往返",
+      "legacy_path": "device_lab_roundtrip.py"
     },
     {
-      "path": "lab_wire_client.py",
+      "path": "lab/lab_wire_client.py",
       "category": "lab",
-      "purpose": "Lab FTP wire客户端"
+      "purpose": "Lab FTP wire客户端",
+      "legacy_path": "lab_wire_client.py"
     },
     {
-      "path": "make_bedtime_qualification_template.py",
+      "path": "qualification/make_bedtime_qualification_template.py",
+      "category": "qualification",
+      "purpose": "就寝资格模板",
+      "legacy_path": "make_bedtime_qualification_template.py"
+    },
+    {
+      "path": "qualification/make_eye_care_qualification_template.py",
+      "category": "qualification",
+      "purpose": "护眼资格模板",
+      "legacy_path": "make_eye_care_qualification_template.py"
+    },
+    {
+      "path": "lab/prepare_device_lab_sd.ps1",
       "category": "lab",
-      "purpose": "就寝资格模板"
+      "purpose": "准备Lab SD目录",
+      "legacy_path": "prepare_device_lab_sd.ps1"
     },
     {
-      "path": "make_eye_care_qualification_template.py",
-      "category": "lab",
-      "purpose": "护眼资格模板"
+      "path": "automation/sys_botbase_client.py",
+      "category": "automation",
+      "purpose": "socket客户端；pixelPeek截图与输入是不同能力",
+      "legacy_path": "sys_botbase_client.py"
     },
     {
-      "path": "prepare_device_lab_sd.ps1",
-      "category": "lab",
-      "purpose": "准备Lab SD目录"
+      "path": "automation/input_smoke_harness.py",
+      "category": "automation",
+      "purpose": "输入通道烟测，不直接证明业务／游戏效果",
+      "legacy_path": "input_smoke_harness.py"
     },
     {
-      "path": "sys_botbase_client.py",
-      "category": "specialized",
-      "purpose": "socket客户端；pixelPeek截图与输入是不同能力"
+      "path": "automation/probe_report.py",
+      "category": "automation",
+      "purpose": "能力探测HTML报告",
+      "legacy_path": "probe_report.py"
     },
     {
-      "path": "input_smoke_harness.py",
-      "category": "specialized",
-      "purpose": "输入通道烟测，不直接证明业务／游戏效果"
+      "path": "automation/vision_capture_driver.py",
+      "category": "automation",
+      "purpose": "Lab视觉采集驱动",
+      "legacy_path": "vision_capture_driver.py"
     },
     {
-      "path": "probe_report.py",
-      "category": "specialized",
-      "purpose": "能力探测HTML报告"
+      "path": "automation/vision_verdict.py",
+      "category": "automation",
+      "purpose": "绑定视觉判读附件，保留来源类型和适用门禁",
+      "legacy_path": "vision_verdict.py"
     },
     {
-      "path": "vision_capture_driver.py",
-      "category": "specialized",
-      "purpose": "Lab视觉采集驱动"
+      "path": "legacy/package_pctl_capture.py",
+      "category": "legacy",
+      "purpose": "内部诊断tap暂存包，改变NSP，不授予标准候选资格",
+      "legacy_path": "package_pctl_capture.py"
     },
     {
-      "path": "vision_verdict.py",
-      "category": "specialized",
-      "purpose": "绑定视觉判读附件，保留来源类型和适用门禁"
+      "path": "legacy/package_usage_probe.py",
+      "category": "legacy",
+      "purpose": "独立使用时间实验产物",
+      "legacy_path": "package_usage_probe.py"
     },
     {
-      "path": "package_pctl_capture.py",
-      "category": "historical",
-      "purpose": "内部诊断tap暂存包，改变NSP，不授予标准候选资格"
+      "path": "legacy/pctl_capture.py",
+      "category": "legacy",
+      "purpose": "旧诊断tap暂存／激活／恢复事务",
+      "legacy_path": "pctl_capture.py"
     },
     {
-      "path": "package_usage_probe.py",
-      "category": "historical",
-      "purpose": "独立使用时间实验产物"
+      "path": "legacy/pctl_fresh_takeover.py",
+      "category": "legacy",
+      "purpose": "原新安装隔离与恢复调查，不能从任意现场一键重放",
+      "legacy_path": "pctl_fresh_takeover.py"
     },
     {
-      "path": "pctl_capture.py",
-      "category": "historical",
-      "purpose": "旧诊断tap暂存／激活／恢复事务"
+      "path": "legacy/pctl_mainline_report.py",
+      "category": "legacy",
+      "purpose": "旧主线材料汇总",
+      "legacy_path": "pctl_mainline_report.py"
     },
     {
-      "path": "pctl_fresh_takeover.py",
-      "category": "historical",
-      "purpose": "原新安装隔离与恢复调查，不能从任意现场一键重放"
+      "path": "legacy/pctl_midnight_evidence.py",
+      "category": "legacy",
+      "purpose": "旧午夜报告接口，保留不归零等历史结果",
+      "legacy_path": "pctl_midnight_evidence.py"
     },
     {
-      "path": "pctl_mainline_report.py",
-      "category": "historical",
-      "purpose": "旧主线材料汇总"
+      "path": "legacy/pctl_next_day_usage.py",
+      "category": "legacy",
+      "purpose": "旧次日实际60分钟窗口",
+      "legacy_path": "pctl_next_day_usage.py"
     },
     {
-      "path": "pctl_midnight_evidence.py",
-      "category": "historical",
-      "purpose": "旧午夜报告接口，保留不归零等历史结果"
+      "path": "legacy/pctl_usage_evidence.py",
+      "category": "legacy",
+      "purpose": "旧PCTL主线独立计数对账",
+      "legacy_path": "pctl_usage_evidence.py"
     },
     {
-      "path": "pctl_next_day_usage.py",
-      "category": "historical",
-      "purpose": "旧次日实际60分钟窗口"
+      "path": "legacy/pctl_usage_scenarios.py",
+      "category": "legacy",
+      "purpose": "旧有限主线补充场景",
+      "legacy_path": "pctl_usage_scenarios.py"
     },
     {
-      "path": "pctl_usage_evidence.py",
-      "category": "historical",
-      "purpose": "旧PCTL主线独立计数对账"
+      "path": "legacy/usage_probe.py",
+      "category": "legacy",
+      "purpose": "旧实验驱动及当前部分工具仍导入的Device等基础设施",
+      "legacy_path": "usage_probe.py"
     },
     {
-      "path": "pctl_usage_scenarios.py",
-      "category": "historical",
-      "purpose": "旧有限主线补充场景"
+      "path": "legacy/usage_probe_analysis.py",
+      "category": "legacy",
+      "purpose": "旧时间线重建，派生候选不等于事实",
+      "legacy_path": "usage_probe_analysis.py"
     },
     {
-      "path": "usage_probe.py",
-      "category": "historical",
-      "purpose": "旧实验驱动及当前部分工具仍导入的Device等基础设施"
+      "path": "legacy/usage_probe_autostart.py",
+      "category": "legacy",
+      "purpose": "旧自启动实验协调器；已知旧BD23F1故障路径不得默认重走",
+      "legacy_path": "usage_probe_autostart.py"
     },
     {
-      "path": "usage_probe_analysis.py",
-      "category": "historical",
-      "purpose": "旧时间线重建，派生候选不等于事实"
-    },
-    {
-      "path": "usage_probe_autostart.py",
-      "category": "historical",
-      "purpose": "旧自启动实验协调器；已知旧BD23F1故障路径不得默认重走"
+      "path": "compat/run_archived.py",
+      "category": "compat",
+      "purpose": "显式适配封存Python脚本旧导入；不改原件、不授权设备重放"
     }
   ],
   "directories": [
@@ -295,6 +351,51 @@
       "path": "ptc_frontend",
       "category": "product_source",
       "purpose": "家长网页源码／资源及打包生成的离线页，14个现有跟踪文件，不能作为临时截图删除"
+    },
+    {
+      "path": "build",
+      "category": "build",
+      "purpose": "统一构建内部步骤、资源和fixture生成"
+    },
+    {
+      "path": "lib",
+      "category": "lib",
+      "purpose": "平台无关协议、队列与令牌参考库"
+    },
+    {
+      "path": "device",
+      "category": "device",
+      "purpose": "标准候选更新、取证和有界输入"
+    },
+    {
+      "path": "install",
+      "category": "install",
+      "purpose": "SD、MTP与FTP安装维护"
+    },
+    {
+      "path": "qualification",
+      "category": "qualification",
+      "purpose": "完整资格模板、核验和晋级"
+    },
+    {
+      "path": "lab",
+      "category": "lab",
+      "purpose": "Device Lab采集、断言与会话工具"
+    },
+    {
+      "path": "automation",
+      "category": "automation",
+      "purpose": "专项输入、截图与视觉报告"
+    },
+    {
+      "path": "legacy",
+      "category": "legacy",
+      "purpose": "历史诊断与报告兼容，非默认设备路线"
+    },
+    {
+      "path": "compat",
+      "category": "compat",
+      "purpose": "显式运行封存脚本的旧导入适配"
     }
   ],
   "temporary_patterns": [
