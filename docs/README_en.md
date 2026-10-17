@@ -17,6 +17,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | --- | --- | --- |
 | [User Guide](使用/USER_GUIDE.md) | Time control logic, installation, setup, plans, grants, overlay, troubleshooting and upgrades | [使用指南](使用/使用指南.md) |
 | [Custom Holiday Calendar Format](使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) | Import fields, complete JSON and invalid examples | [自制节假日日历格式](使用/自制节假日日历格式.md) |
+| [Documentation Preview Scene Catalog (Chinese)](images/README.md) | Features, typical states, image sources and synchronization paths | [文档预览场景清单](images/README.md) |
 
 ## Development — `开发/`
 

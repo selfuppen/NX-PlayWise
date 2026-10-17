@@ -78,15 +78,17 @@
 具体页面使用说明与[时间管控核心逻辑](docs/使用/使用指南.md#时间管控核心逻辑)（四级优先级判定与四大独立关卡把关），参见[使用指南](docs/使用/使用指南.md)。
 
 <details>
-<summary>时间安排预览</summary>
+<summary>功能与典型场景预览</summary>
 
-![家长区今日安排预览](docs/images/usage/parent/parent-dark.png)
+| 孩子查看今日余额与规则 | 家长查看全天安排与护眼休息推演 |
+| --- | --- |
+| ![孩子区首页](docs/images/usage/child/child-light.png) | ![深色全天安排预览](docs/images/usage/parent/today-planning-dark.png) |
 
-![当天规划与状态预览](docs/images/usage/parent/today-planning-light.png)
+| 四级额度来源与独立限制 | 多项限制并发时查看具体原因 |
+| --- | --- |
+| ![决策与规则流程预览](docs/images/usage/parent/parent-details-rules-light.png) | ![多项限制并发预览](docs/images/usage/parent/today-multiple-limits-light.png) |
 
-![决策与规则流程预览](docs/images/usage/parent/parent-details-rules-light.png)
-
-![决策与规则限制触发预览](docs/images/usage/parent/parent-details-rules-restricted-light.png)
+图片由当前代码和固定示例数据生成，带 `HOST PREVIEW / SAMPLE DATA` 标识。更多[正常使用、休息、就寝与状态待确认示例](docs/使用/使用指南.md#查看今日详情)，以及[浮窗兑换、家长验证和用量详情](docs/使用/使用指南.md#游戏内浮窗-overlay)见使用指南。
 
 </details>
 

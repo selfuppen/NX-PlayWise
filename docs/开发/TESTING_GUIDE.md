@@ -80,6 +80,8 @@ For hardware A/B, record package hash, HOS/CFW, game, enabled Nintendo Parental 
 
 ## Console Application Visual Refresh Acceptance
 
+Documentation selects normal use, breaks, unlimited quota, overlapping restrictions, stale status and Overlay PIN/usage examples using the [preview scene catalog (Chinese)](../images/README.md). Run `python tools/package_remote.py --with-previews` with the default Eden build, then `python tools/build/sync_doc_previews.py --check` to verify both language image sets match the current render. Check document paths, language and captions; sample minutes are not hardware assertions. Historical review galleries are selection references, not build inputs.
+
 The Companion NRO's light, dark, and follow-system themes use a unified semantic color palette covering both homepages, five parent tabs, secondary settings pages, first-time setup, and all modals. The visual refresh does not alter the web frontend, Overlay, Device Lab, or the control protocol. `python tools/test.py` provides fast local regressions, while authoritative C/Python/UI, text catalog, and package gates are executed via `python tools/package_remote.py`.
 
 - **Palette Testing**: Verify that both light and dark themes maintain at least 4.5:1 text contrast and at least 3:1 focus and control border contrast against all background layers. Focus specifically on primary buttons, the main time card, and success, warning, and error banners.

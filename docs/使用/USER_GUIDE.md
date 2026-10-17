@@ -243,9 +243,46 @@ On the Today's Schedule tab, press controller `+` button or tap "+ View Details"
 - Y refreshes either page. B returns from the nested page to planning with entry focus restored, then back to Today. ZL/ZR or touch dragging scrolls expanded data. Child details remain read-only and hide parent execution data.
 - TV counts toward the total; non-TV counts toward both limits. Non-TV is not extra allowance. TV can use the total left; breaks and bedtime still apply. Unlimited use, extra time and buffers do not waive health rules.
 
-![Decision and rules pipeline preview (two-stage adjudication and four gates)](../images/usage-en/parent/parent-details-rules-light.png)
-![Decision and rules restriction active preview (independent gate blocking)](../images/usage-en/parent/parent-details-rules-restricted-light.png)
-![Today: plan and status preview (24-hour horizon and continuous usage projection)](../images/usage-en/parent/today-planning-light.png)
+These examples cover common daily questions. All images are generated from the current drawing code with `HOST PREVIEW / SAMPLE DATA`; times and quotas are illustrative. Projections assume continued use and do not confirm when a restriction actually ends. Use the preinstalled overlay for console actions while restricted.
+
+<details open>
+<summary>Plan today's play: timeline, eye care breaks and unlimited quota</summary>
+
+| Light: review bedtime windows and available time in the current mode | Dark: review break, resume and handheld quota exhaustion events |
+| --- | --- |
+| ![Light daily plan and status](../images/usage-en/parent/today-planning-light.png) | ![Dark continuous usage projection](../images/usage-en/parent/today-planning-dark.png) |
+
+| During an eye care break: total time remains, but the break must end first | Unlimited today: eye care, bedtime and TV mode rules still apply |
+| --- | --- |
+| ![Today's details during an eye care break](../images/usage-en/parent/parent-details-eye-care-resting-dark.png) | ![Unlimited quota with health rules enabled](../images/usage-en/parent/today-unlimited-tv-dark.png) |
+
+</details>
+
+<details>
+<summary>Find out why play is blocked: bedtime, overlapping limits and stale status</summary>
+
+| Bedtime: remaining quota does not allow play until bedtime is addressed | Overlapping restrictions: check the other causes after lifting one |
+| --- | --- |
+| ![Rules while bedtime is active](../images/usage-en/parent/parent-details-rules-bedtime-active-dark.png) | ![Daily quota bedtime eye care and handheld limits overlap](../images/usage-en/parent/today-multiple-limits-light.png) |
+
+| Stale status: remaining time and projection await confirmation; press Y | The rules page also awaits confirmation; unknown gates do not grant access |
+| --- | --- |
+| ![Today's details with stale status](../images/usage-en/parent/today-stale-light.png) | ![Rules with stale status](../images/usage-en/parent/today-rules-stale-light.png) |
+
+</details>
+
+<details>
+<summary>Understand rule sources and disabled states: quota priority and independent guards</summary>
+
+| Check which quota source wins, from today's adjustment to the weekly plan | Read the rule explanation: grants add quota; health rules apply separately |
+| --- | --- |
+| ![Four quota sources and independent gates](../images/usage-en/parent/parent-details-rules-light.png) | ![Rule priority and independent guards explained](../images/usage-en/parent/today-rules-explanation-light.png) |
+
+| Health rules off and unlimited today: each disabled policy is identified | Control disabled: configured rules do not confirm active protection |
+| --- | --- |
+| ![Health rules off with unlimited quota](../images/usage-en/parent/today-policies-off-light.png) | ![Rules while control is disabled](../images/usage-en/parent/today-rules-control-off-light.png) |
+
+</details>
 
 ### Long-Term & Date Plans
 
@@ -364,6 +401,23 @@ When daily limits expire or bedtime restrictions take effect, Nintendo's native 
 | Parent actions | Bedtime recovery |
 | --- | --- |
 | ![Overlay parent actions](../images/usage-en/overlay/overlay-parent-actions.png) | ![Overlay bedtime recovery](../images/usage-en/overlay/overlay-bedtime.png) |
+
+</details>
+
+<details>
+<summary>Typical overlay scenarios: redemption warnings, PIN checks and unavailable usage</summary>
+
+| High-risk redemption: check the projected remainder and warning, then hold controller A | Restore pre-installation settings: review the impact before holding to confirm |
+| --- | --- |
+| ![Overlay redemption warning with no projected playable time](../images/usage-en/overlay/overlay-code-danger.png) | ![Overlay restore confirmation](../images/usage-en/overlay/overlay-parent-restore-confirm.png) |
+
+| Incorrect PIN: check your input before verifying again | Repeated failures: wait for cooldown; scroll to read long messages |
+| --- | --- |
+| ![Overlay incorrect parent PIN](../images/usage-en/overlay/overlay-parent-pin-error.png) | ![Overlay parent PIN cooldown](../images/usage-en/overlay/overlay-parent-pin-cooldown.png) |
+
+| Usage details: cumulative usage and quota are separate; bedtime still applies | Unknown usage: press Y to refresh; missing readings are not zero |
+| --- | --- |
+| ![Overlay cumulative usage and original capture time](../images/usage-en/overlay/overlay-console-details.png) | ![Overlay usage temporarily unavailable](../images/usage-en/overlay/overlay-console-details-unknown.png) |
 
 </details>
 
@@ -567,6 +621,8 @@ Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP
 - **Parent webpage cannot save configuration**: Open the standalone file in a standard mobile system browser; if the browser restricts local storage, re-import next time. For QR code pairing and desktop installation, use a trusted HTTPS site.
 
 ## Documentation & Screenshot Maintenance
+
+The [documentation preview scene catalog](../images/README.md) lists scene purposes, selection sources and generated paths. `--with-previews`, `--previews` and `--release` share one synchronization list and render from current code. The historical review gallery is a selection reference, not an input to generation.
 
 Documentation images fall into two categories, with paths relative to repository root:
 

@@ -77,15 +77,17 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 For detailed walkthroughs and [core time control logic](docs/使用/USER_GUIDE.md#core-time-control-logic) (four-tier priority pipeline and four independent gates), see the [User Guide](docs/使用/USER_GUIDE.md).
 
 <details>
-<summary>Daily Dispatch Preview</summary>
+<summary>Features and typical scenarios</summary>
 
-![Parent portal daily dispatch preview](docs/images/usage/parent/parent-dark.png)
+| Child checks today's balance and rules | Parent reviews the daily timeline and eye care projection |
+| --- | --- |
+| ![Child home screen](docs/images/usage-en/child/child-light.png) | ![Dark daily schedule preview](docs/images/usage-en/parent/today-planning-dark.png) |
 
-![Today's plan and status preview](docs/images/usage-en/parent/today-planning-light.png)
+| Four quota sources and independent restrictions | Identify the causes when multiple limits overlap |
+| --- | --- |
+| ![Decision and rules preview](docs/images/usage-en/parent/parent-details-rules-light.png) | ![Overlapping restrictions preview](docs/images/usage-en/parent/today-multiple-limits-light.png) |
 
-![Decision and rules preview](docs/images/usage-en/parent/parent-details-rules-light.png)
-
-![Decision and rules restriction active preview](docs/images/usage-en/parent/parent-details-rules-restricted-light.png)
+Images are generated from current code and fixed sample data, marked `HOST PREVIEW / SAMPLE DATA`. See the User Guide for [normal use, breaks, bedtime and unconfirmed status](docs/使用/USER_GUIDE.md#viewing-todays-rule-details), plus [overlay redemption, PIN checks and usage details](docs/使用/USER_GUIDE.md#in-game-overlay-tesla-overlay).
 
 </details>
 
