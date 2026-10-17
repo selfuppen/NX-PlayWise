@@ -351,7 +351,7 @@
         return false;
     }
 
-    bool child_status_fresh(const PtcCompanionResultSummary &summary, int &day, int &second) const
+    bool child_snapshot_usable(const PtcCompanionResultSummary &summary, int &day, int &second) const
     {
         day = second = -1;
         bool clock_fresh = true;
@@ -364,17 +364,22 @@
             ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
         clock_fresh = ptc_policy_snapshot_clock(&summary, age, &day, &second);
 #endif
-        return summary.valid && summary.day_index == day && clock_fresh && has_status_snapshot_ && last_refresh_tick_ != 0 && !status_is_stale() &&
+        return summary.valid && summary.day_index == day && clock_fresh && has_status_snapshot_ && last_refresh_tick_ != 0;
+    }
+
+    bool child_status_fresh(const PtcCompanionResultSummary &summary, int &day, int &second) const
+    {
+        return child_snapshot_usable(summary, day, second) && !status_is_stale() &&
             !(error_ && last_request_kind_ == OverlayRequestKind::Status);
     }
 
     PtcOverlayEyeCareDisplay child_eye_care_status(const PtcCompanionResultSummary &summary) const
     {
         int day, second;
-        const bool fresh = child_status_fresh(summary, day, second);
+        const bool usable = child_snapshot_usable(summary, day, second);
         const auto age = last_refresh_tick_ ? armTicksToNs(armGetSystemTick() - last_refresh_tick_) / 1000000000ULL : 0;
         PtcOverlayEyeCareDisplay eye;
-        ptc_overlay_project_eye_care(&summary, fresh, static_cast<int64_t>(age), &eye);
+        ptc_overlay_project_eye_care(&summary, usable, static_cast<int64_t>(age), &eye);
         return eye;
     }
 
@@ -382,8 +387,9 @@
     {
         int day, second;
         const bool fresh = child_status_fresh(summary, day, second);
+        const bool usable = child_snapshot_usable(summary, day, second);
         PtcPolicyStatus policies;
-        ptc_policy_status_project(&summary, fresh, day, second, &policies);
+        ptc_policy_status_project(usable ? &summary : nullptr, fresh, day, second, &policies);
         return policies;
     }
 

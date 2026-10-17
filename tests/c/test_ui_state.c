@@ -2368,9 +2368,16 @@ static void test_home_redesign(void)
         ptc_ui_format_eye_care_cycle(&state, 1000, text, sizeof(text));
         check_true(strstr(text, "28") != NULL && strstr(text, "约") != NULL,
             "playing preview uses minute precision without a fabricated seconds timer");
+        ptc_ui_format_eye_care_cycle(&state, 1121, text, sizeof(text));
+        check_true(strstr(text, "28") != NULL && !ptc_ui_status_is_fresh(&state, 1121),
+            "stale play countdown retains last observed minutes without authorizing writes");
+        ptc_ui_format_eye_care_cycle(&state, 1000 + 86400, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH)) == 0,
+            "previous-day play countdown requires a new snapshot");
         snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "resting");
         state.eye_care_break_id = 99;
         state.eye_care_rest_remaining_seconds = 90;
+        state.eye_care_policy.rest_minutes = 10;
         state.blocked_today = 1;
         state.restricted_now = 1;
         state.remaining_available = true;
@@ -4120,9 +4127,11 @@ static void test_home_details_status(void)
     m = original; m.home_details_refresh_failed = true;
     ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
     check_true(!s.fresh && !strstr(s.usage, "69"), "failed refresh suppresses even a young cached counter");
+    check_int(s.policies.dock.state, PTC_POLICY_UNKNOWN, "failed refresh cannot revive cached TV state");
     m = original; m.waiting = true;
     ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
     check_true(!s.fresh && !s.usage_available, "pending refresh does not relabel cached data as current");
+    check_int(s.policies.dock.state, PTC_POLICY_UNKNOWN, "pending refresh cannot revive cached TV state");
     m = original;
     ptc_ui_project_home_details_status(&m, 1000, m.day_index + 1, second, &s);
     check_true(!s.fresh && !s.usage_available, "previous-day details cannot become fresh by reopening");
@@ -4134,6 +4143,29 @@ static void test_home_details_status(void)
     m = original; m.eye_care_policy.enabled = true;
     snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "resting");
     m.eye_care_break_id = 9; m.eye_care_rest_remaining_seconds = 60;
+    for (int language = PTC_UI_LANGUAGE_SIMPLIFIED; language <= PTC_UI_LANGUAGE_ENGLISH; ++language) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)language);
+        m.eye_care_rest_remaining_seconds = 600;
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(!s.fresh && strstr(s.eye, "7:59") && !s.usage_available,
+            "stale details retain the real rest countdown but not fresh usage");
+        m.home_details_refresh_failed = true;
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(strstr(s.eye, "7:59") != NULL, "failed refresh keeps rest countdown");
+        m.waiting = true;
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(strstr(s.eye, "7:59") != NULL, "pending refresh keeps rest countdown");
+        ptc_ui_project_home_details_status(&m, 1600, m.day_index, second, &s);
+        check_true(strcmp(s.eye, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH)) == 0,
+            "expired stale countdown waits for backend confirmation");
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index + 1, second, &s);
+        check_true(!strstr(s.eye, "7:59"), "cross-day details reject cached countdown");
+        ptc_ui_project_home_details_status(&m, 999, m.day_index, second, &s);
+        check_true(!strstr(s.eye, "7:59"), "clock rollback rejects cached countdown");
+        m.waiting = m.home_details_refresh_failed = false;
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    m.eye_care_rest_remaining_seconds = 60;
     m.dock_policy.undocked_limit_enabled = true;
     snprintf(m.operation_mode, sizeof(m.operation_mode), "docked");
     ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);

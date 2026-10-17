@@ -35,12 +35,17 @@ static void test_policy_status(void)
             "TV rule preserves limit and estimated use");
         ptc_policy_status_project(&s, true, 2380, 20 * 3600, &p);
         check_int(p.dock.minutes, 18, "TV allowance never decreases with wall time");
+        ptc_policy_status_project(&s, false, 2380, 20 * 3600, &p);
+        check_int(p.bedtime.minutes, 60, "stale bedtime window keeps its countdown in every language");
+        check_int(p.dock.minutes, -1, "stale bedtime display does not revive usage counters");
     }
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
     ptc_policy_status_project(&s, true, 2380, 1260 * 60 - 1, &p);
     check_int(p.bedtime.minutes, 1, "positive sub-minute countdown rounds up");
     ptc_policy_status_project(&s, true, 2380, 1260 * 60, &p);
     check_int(p.bedtime.state, PTC_POLICY_WAITING, "boundary awaits backend confirmation");
+    ptc_policy_status_project(&s, false, 2380, 1260 * 60, &p);
+    check_int(p.bedtime.state, PTC_POLICY_WAITING, "stale boundary also waits for backend");
     s.bedtime_active = true;
     s.bedtime_start_day_index = 2380;
     s.bedtime_start_minute = 1260;
@@ -163,9 +168,11 @@ static void test_policy_status(void)
     check_int(p.bedtime.state, PTC_POLICY_OFF, "fresh disabled bedtime is not pending");
     check_true(ptc_policy_snapshot_clock(&s, 29, &projected_day, &projected_second),
         "29 second policy clock stays fresh");
-    check_true(!ptc_policy_snapshot_clock(&s, 30, &projected_day, &projected_second) &&
-        !ptc_policy_snapshot_clock(&s, UINT64_MAX, &projected_day, &projected_second),
-        "30 seconds or missing monotonic origin invalidates policy clock");
+    check_true(ptc_policy_snapshot_clock(&s, 30, &projected_day, &projected_second) &&
+        ptc_policy_snapshot_clock(&s, 121, &projected_day, &projected_second),
+        "display clock remains usable after freshness expires");
+    check_true(!ptc_policy_snapshot_clock(&s, UINT64_MAX, &projected_day, &projected_second),
+        "missing monotonic origin invalidates policy clock");
     s.local_second_of_day = 86399;
     check_true(!ptc_policy_snapshot_clock(&s, 1, &projected_day, &projected_second),
         "crossing midnight requires a new result");

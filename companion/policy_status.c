@@ -24,7 +24,7 @@ bool ptc_policy_snapshot_clock(const PtcCompanionResultSummary *s,
     if (!day || !second) return false;
     *day = *second = -1;
     if (!s || !s->valid || !s->local_clock_available || s->completed_at <= 0 ||
-        s->day_index < 0 || s->day_index > 65535 || elapsed >= 30 ||
+        s->day_index < 0 || s->day_index > 65535 || elapsed >= 86400 ||
         s->local_second_of_day < 0 || s->local_second_of_day >= 86400 ||
         (uint64_t)s->local_second_of_day + elapsed >= 86400) return false;
     *day = s->day_index;
@@ -158,8 +158,10 @@ void ptc_policy_status_project(const PtcCompanionResultSummary *s,
     message(&out->bedtime, PTC_POLICY_UNKNOWN, PTC_UI_T_TO_BE_CONFIRMED, PTC_UI_T_POLICY_PENDING);
     message(&out->dock, PTC_POLICY_UNKNOWN, PTC_UI_T_TO_BE_CONFIRMED, PTC_UI_T_POLICY_PENDING);
     out->mode = PTC_UI_T_STATUS_TO_CONFIRM;
-    if (!s || !s->valid || !fresh || s->day_index != day || day < 0 || day > 65535 ||
+    if (!s || !s->valid || s->day_index != day || day < 0 || day > 65535 ||
         second < 0 || second >= 86400) return;
-    bedtime_project(s, day, second, &out->bedtime);
-    dock_project(s, out);
+    /* A known window remains useful as a countdown after refresh expires.
+       Its boundary still waits for the backend; usage counters require freshness. */
+    if (fresh || s->bedtime_enabled) bedtime_project(s, day, second, &out->bedtime);
+    if (fresh) dock_project(s, out);
 }

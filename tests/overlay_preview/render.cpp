@@ -125,6 +125,56 @@ static void test_child_cards(tsl::gfx::Renderer &renderer)
     require(view.same_color(view.policy_color(policy), DARK_OVERLAY_PALETTE.text_secondary), "disabled rules stay neutral");
 }
 
+static void test_stale_rest(const char *font_path, const std::filesystem::path &dir)
+{
+    const char *names[] = {"overlay-rest-stale", "overlay-rest-refresh-failed",
+        "overlay-rest-refreshing", "overlay-rest-expired"};
+    for (int i = 0; i < 4; ++i) {
+        tsl::gfx::Renderer renderer(font_path);
+        PtcOverlayBridge bridge{};
+        PtcOverlayInput input{};
+        PreviewView view;
+        view.bridge_ = &bridge; view.input_ = &input;
+        auto &s = view.displayed_summary_;
+        s.valid = s.eye_care_available = s.eye_care_enabled = true;
+        s.day_index = 2469;
+        s.eye_care_play_minutes = 40; s.eye_care_rest_minutes = 10;
+        s.eye_care_rest_remaining_seconds = 600; s.eye_care_break_id = 123;
+        std::snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "resting");
+        view.last_refresh_tick_ -= (i == 3 ? 600ULL : 121ULL) * 1000000000ULL;
+        if (i == 1) { view.error_ = true; view.last_request_kind_ = OverlayRequestKind::Status; }
+        if (i == 2) { bridge.waiting = true; view.active_request_kind_ = OverlayRequestKind::Status; }
+        renderer.text_runs.clear();
+        view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+            PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+        if (view.page_identity() != 21 || view.page_layout_.scroll_max != 0)
+            std::fprintf(stderr, "Rest preview %s: page=%d, overflow=%d\n", names[i],
+                view.page_identity(), view.page_layout_.scroll_max);
+        require(view.page_identity() == 21 && view.page_layout_.scroll_max == 0,
+            "stale rest stays on its one-screen restriction page");
+        bool countdown_visible = false;
+        for (const auto &run : renderer.text_runs) {
+            if (run.text == "07:59" && run.size == PTC_OVERLAY_FONT_HERO) countdown_visible = true;
+        }
+        require(countdown_visible == (i != 3), "stale rest countdown stays visible until its real deadline");
+        const auto refresh_lines = overlay_wrap(&renderer, ptc_ui_text(i == 2 ?
+            PTC_UI_T_REFRESHING : PTC_UI_T_Y_REFRESH), PTC_OVERLAY_FONT_SECONDARY,
+            view.page_layout_.refresh.w - 24);
+        for (const auto &line : refresh_lines) {
+            bool found = false;
+            for (const auto &run : renderer.text_runs)
+                if (run.text == line && run.x >= view.page_layout_.refresh.x &&
+                    run.y <= view.page_layout_.refresh.y + view.page_layout_.refresh.h) found = true;
+            require(found, "countdown retains a visible refresh reminder");
+        }
+        int day, second;
+        require(!view.child_status_fresh(s, day, second),
+            "displaying a countdown never promotes cached status to fresh");
+        renderer.drawString("HOST PREVIEW / SAMPLE DATA", false, 20, 699, 18, WAITING_COLOR);
+        renderer.save((dir / (std::string(names[i]) + ".ppm")).string());
+    }
+}
+
 static void test_parent_cards(tsl::gfx::Renderer &renderer)
 {
     PreviewView view;
@@ -226,6 +276,7 @@ int main(int argc, char **argv) {
             test_text_layout(renderer);
             auto dir = std::filesystem::path(argv[2]) / folders[language] / "overlay";
             std::filesystem::create_directories(dir);
+            test_stale_rest(argv[1], dir);
             for (int scene = 0; scene < static_cast<int>(sizeof(scenes) / sizeof(scenes[0])); ++scene) {
                 PtcOverlayBridge bridge{};
                 PtcOverlayInput input{};
@@ -419,9 +470,11 @@ int main(int argc, char **argv) {
                     const auto eye = view.child_eye_care_status(status);
                     if (scene == 38) require(std::strstr(eye.compact, "25") != nullptr,
                         "ordinary child overview must project eye play countdown");
-                    if (scene == 40 || scene == 41) require(eye.warning && eye.rest_seconds == -1,
-                        "stale or boundary eye snapshot must wait for confirmation");
-                    if (scene >= 46 && scene <= 49) require(eye.warning && eye.rest_seconds == -1 &&
+                    if (scene == 40 || scene == 46) require(std::strstr(eye.compact, "25") != nullptr,
+                        "stale and failed refresh keep the last observed play countdown");
+                    if (scene == 41) require(eye.warning && eye.rest_seconds == -1,
+                        "boundary eye snapshot must wait for confirmation");
+                    if (scene >= 47 && scene <= 49) require(eye.warning && eye.rest_seconds == -1 &&
                         std::strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
                         "failed, cross-day, partial or expired eye status requires confirmation");
                 }
@@ -564,7 +617,7 @@ int main(int argc, char **argv) {
         }
         require(child_overflows == 0, "ordinary child pages must fit on one screen in all three languages");
         std::printf("PASS: %zu production Overlay previews (3 languages, %zu sample states)\n",
-            3 * (sizeof(scenes) / sizeof(scenes[0])), sizeof(scenes) / sizeof(scenes[0]));
+            3 * (sizeof(scenes) / sizeof(scenes[0]) + 4), sizeof(scenes) / sizeof(scenes[0]) + 4);
         return 0;
     } catch (const std::exception &error) {
         std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;

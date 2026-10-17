@@ -8,7 +8,8 @@
 
     bool child_is_restricted() const
     {
-        return has_status_snapshot_ && !status_is_stale() &&
+        int day, second;
+        return child_snapshot_usable(displayed_summary_, day, second) &&
             (bedtime_restricted() || eye_care_restricted() || displayed_summary_.dock_restriction_active);
     }
 

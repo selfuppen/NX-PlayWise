@@ -1402,7 +1402,11 @@ static void test_overlay_eye_care_display(void)
     check_true(eye.rest_seconds == -1 && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
         "rest expiry waits for backend instead of claiming unlocked");
     ptc_overlay_project_eye_care(&s, false, 6, &eye);
-    check_true(eye.rest_seconds == -1 && !eye.detail[0], "stale eye snapshot hides countdown and rule");
+    check_true(eye.rest_seconds == -1 && !eye.detail[0], "unusable eye snapshot hides countdown and rule");
+    s.eye_care_rest_remaining_seconds = 600;
+    ptc_overlay_project_eye_care(&s, true, 121, &eye);
+    check_true(eye.rest_seconds == 479 && strstr(eye.compact, "07:59"),
+        "known rest deadline continues beyond freshness thresholds");
     ptc_overlay_project_eye_care(&s, true, -1, &eye);
     check_true(eye.rest_seconds == -1, "clock rollback cannot manufacture eye countdown");
     s.eye_care_break_id = 0;

@@ -175,8 +175,7 @@
             }
             return true;
         }
-        const bool restricted = has_status_snapshot_ && !status_is_stale() &&
-            (displayed_summary_.dock_restriction_active || bedtime_restricted() || eye_care_restricted());
+        const bool restricted = child_is_restricted();
         if (tapped) {
             if (page_hit(page_layout_.refresh, tx, ty)) {
                 child_overview_focus_ = restricted ? 3 : 4;

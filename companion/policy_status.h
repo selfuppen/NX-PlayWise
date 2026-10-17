@@ -27,11 +27,12 @@ typedef struct {
     char dock_rule[160];
 } PtcPolicyStatus;
 
-/* Callers supply freshness and local civil time, including in deterministic tests. */
+/* Freshness gates usage counters; known bedtime windows keep their countdown. */
 void ptc_policy_status_project(const PtcCompanionResultSummary *summary,
     bool fresh, int local_day_index, int second_of_day, PtcPolicyStatus *out);
 bool ptc_policy_local_clock(long long now, int *day_index, int *second_of_day);
-/* Overlay has no initialized libc wall clock. Request age is a conservative bound. */
+/* Overlay has no initialized libc wall clock. Request age is a conservative bound.
+   Same-day clock projection remains usable after status freshness expires. */
 bool ptc_policy_snapshot_clock(const PtcCompanionResultSummary *summary,
     uint64_t request_elapsed_seconds, int *day_index, int *second_of_day);
 

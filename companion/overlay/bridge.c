@@ -7,14 +7,14 @@
 #include "../../common/protocol/error_code.h"
 
 void ptc_overlay_project_eye_care(const PtcCompanionResultSummary *s,
-    bool fresh, int64_t age_seconds, PtcOverlayEyeCareDisplay *out)
+    bool snapshot_usable, int64_t age_seconds, PtcOverlayEyeCareDisplay *out)
 {
     if (!out) return;
     memset(out, 0, sizeof(*out));
     out->rest_seconds = -1;
     out->warning = true;
     PtcUiTextId text = PTC_UI_T_POLICY_BOUNDARY;
-    if (s && s->valid && s->eye_care_available && fresh && age_seconds >= 0) {
+    if (s && s->valid && s->eye_care_available && snapshot_usable && age_seconds >= 0) {
         if (strcmp(s->eye_care_phase, "off") == 0 && !s->eye_care_enabled) {
             text = PTC_UI_T_CURRENTLY_OFF;
             out->warning = false;

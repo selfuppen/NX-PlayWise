@@ -543,7 +543,9 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 subtitle = dynamic;
             } else subtitle = ptc_ui_text(PTC_UI_T_NOT_AVAILABLE_TODAY);
         } else if (index == 6) {
-            if (unavailable) subtitle = unavailable;
+            if (unavailable && (!model->eye_care_policy.enabled ||
+                (strcmp(model->eye_care_phase, "resting") != 0 &&
+                 strcmp(model->eye_care_phase, "playing") != 0))) subtitle = unavailable;
             else {
                 ptc_ui_format_eye_care_cycle(model, now, dynamic, sizeof(dynamic));
                 subtitle = dynamic;

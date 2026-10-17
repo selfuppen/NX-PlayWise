@@ -137,8 +137,14 @@ void ptc_ui_project_home_details_status(const PtcUiModel *model, int64_t now,
         ptc_ui_text(out->fresh ? PTC_UI_T_UNAVAILABLE : PTC_UI_T_STATUS_TO_CONFIRM));
     snprintf(out->buffer, sizeof(out->buffer), "%s", ptc_ui_text(PTC_UI_T_AUTONOMY_STATUS_PENDING));
     snprintf(out->eye, sizeof(out->eye), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
-    ptc_ui_project_policy_status(out->fresh ? model : NULL, now, day, second, &out->policies);
-    if (!out->fresh) return;
+    bool display_usable = model && day == model->day_index && second >= 0 && second < 86400 &&
+        ptc_ui_status_age_seconds(model, now) >= 0;
+    ptc_ui_project_policy_status(display_usable ? model : NULL, now, day, second, &out->policies);
+    if (!out->fresh) {
+        if (display_usable && model->eye_care_policy.enabled)
+            ptc_ui_format_eye_care_cycle(model, now, out->eye, sizeof(out->eye));
+        return;
+    }
 
     out->usage_available = model->played_minutes_available && model->played_minutes >= 0;
     if (out->usage_available) snprintf(out->usage, sizeof(out->usage),
@@ -333,15 +339,30 @@ void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
     out->total_at_stop = total == INT_MAX ? -1 : total / 60;
 }
 
+static bool countdown_same_day(const PtcUiModel *model, int64_t now)
+{
+    if (ptc_ui_status_age_seconds(model, now) < 0) return false;
+    time_t captured = (time_t)model->status_updated_at;
+    time_t current = (time_t)now;
+    struct tm *local = localtime(&captured);
+    if (!local) return false;
+    int year = local->tm_year, day = local->tm_yday;
+    local = localtime(&current);
+    return local && local->tm_year == year && local->tm_yday == day;
+}
+
 void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
     char *out, size_t out_size)
 {
-    int64_t age;
     PtcUiTextId id;
     PtcUiTextArg arg;
     if (!out || out_size == 0) return;
     out[0] = '\0';
-    if (!ptc_ui_status_is_fresh(model, now)) {
+    /* Expiry and failed refresh do not erase a known countdown. This display
+       does not authorize actions or extrapolate play usage from wall time. */
+    if (!countdown_same_day(model, now) || (!ptc_ui_status_is_fresh(model, now) &&
+        strcmp(model->eye_care_phase, "playing") != 0 &&
+        strcmp(model->eye_care_phase, "resting") != 0)) {
         snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
         return;
     }
@@ -367,9 +388,10 @@ void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
     }
     if (strcmp(model->eye_care_phase, "resting") == 0) {
         int64_t remaining;
-        age = ptc_ui_status_age_seconds(model, now);
+        int64_t age = ptc_ui_status_age_seconds(model, now);
         remaining = (int64_t)model->eye_care_rest_remaining_seconds - age;
-        if (remaining <= 0 || model->eye_care_break_id == 0) {
+        if (remaining <= 0 || model->eye_care_break_id == 0 ||
+            model->eye_care_rest_remaining_seconds > model->eye_care_policy.rest_minutes * 60) {
             snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
             return;
         }
@@ -999,6 +1021,7 @@ void ptc_ui_project_policy_status(const PtcUiModel *model, int64_t now,
         summary.dock_restriction_active = model->dock_restriction_active;
         snprintf(summary.operation_mode, sizeof(summary.operation_mode), "%s", model->operation_mode);
     }
-    ptc_policy_status_project(&summary, ptc_ui_status_is_fresh(model, now),
+    ptc_policy_status_project(ptc_ui_status_age_seconds(model, now) >= 0 ? &summary : NULL,
+        ptc_ui_status_is_fresh(model, now) && !model->waiting && !model->home_details_refresh_failed,
         local_day_index, second_of_day, out);
 }
