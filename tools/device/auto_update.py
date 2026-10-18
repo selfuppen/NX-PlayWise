@@ -558,7 +558,10 @@ class Updater:
                     batch.hold(["A"], settle_s=10)
                 self.foreground(self.plan["forwarder"])
                 with self.controls("authorize", actions=24) as batch:
-                    batch.hold(["MINUS"] if self.capture_restart else ["L", "R"], hold_ms=650, settle_s=1)
+                    # The child page opens PIN on a standalone Minus release.
+                    # L+R uses a separate two-second hold gate; a short chord
+                    # leaves subsequent private digits on the ordinary page.
+                    batch.hold(["MINUS"], settle_s=1)
                     with batch.sensitive_input():
                         for digit in pin:
                             batch.hold([PIN_KEYS[digit]])

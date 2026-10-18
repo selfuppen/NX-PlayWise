@@ -51,6 +51,8 @@ class Console:
         self.no_audit = self.fail_readback = self.fail_sensitive = self.screenshot_fails = False
         self.reconfirm_presses = 0
         self.running = "1"
+        self.parent_pin_open = False
+        self.parent_authorized = False
 
     def setup(self, phase):
         self.files[update.APP + "/setup.json"] = json.dumps({"phase": phase}).encode()
@@ -149,15 +151,21 @@ class Input:
 
     def hold(self, buttons, **kwargs):
         if self.private:
+            require(self.bot.parent_pin_open, "private input requires the parent PIN page")
             if self.bot.fail_sensitive:
                 raise RuntimeError("SECRET_SENTINEL")
+            if buttons == ["PLUS"]:
+                self.bot.parent_authorized = True
             return
         self.bot.actions.append((self.label, buttons))
         if self.label == "close-source":
             self.bot.foreground = ""
         elif self.label == "open-target":
             self.bot.foreground = "0123456789ABCDEF"
+        elif self.label == "authorize" and buttons == ["MINUS"]:
+            self.bot.parent_pin_open = True
         elif self.label == "confirm-handover":
+            require(self.bot.parent_authorized, "handover requires successful parent authorization")
             self.bot.activate()
         elif self.label == "reconfirm":
             self.bot.reconfirm_presses += 1
