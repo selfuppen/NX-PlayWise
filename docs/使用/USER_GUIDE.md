@@ -516,8 +516,7 @@ Always refer to buttons and prompts in your installed version. This guide does n
 - **Album & Capture Restrictions**: Restrict children from directly injecting or launching unrestricted homebrew via the Photo Album applet;
 - **Family Activity History**: Audit the most recent 200 playtime adjustments, offline grants, and protection events on this console;
 - **Offline Grant Redemption History**: View the most recent 100 offline grant redemption records on this console;
-- **Offline Grant Generation Settings**: Manage console device ID, signing secret, and pairing QR code target URL;
-- **Software Information**: Inspect current installed version, build identifier, and live reload status.
+- **Offline Grant Generation Settings**: Manage console device ID, signing secret, and pairing QR code target URL.
 
 <details>
 <summary>View Security & Preferences Previews</summary>
@@ -531,11 +530,14 @@ Always refer to buttons and prompts in your installed version. This guide does n
 ![Family activity history preview](../images/usage-en/settings/settings-activity-dark.png)
 ![Offline grant redemption history preview](../images/usage-en/settings/settings-redemption-dark.png)
 ![Offline grant generation manager preview](../images/usage-en/settings/settings-grant-manager-dark.png)
-![Software info and version check preview](../images/usage-en/settings/settings-software-info-dark.png)
 
 </details>
 
 ## Support & Recovery
+
+**Software information** is the sixth action card under **Parent Zone → Support & Recovery**. It shows the app version, app/backend build IDs and loading status, and provides the [manual hot-update entry](#manual-hot-update-steps).
+
+![Software info and version check preview](../images/usage-en/settings/settings-software-info-dark.png)
 
 > [!IMPORTANT]
 > **If an error occurs, first check whether Nintendo system Parental Controls is enabled and the Switch clock has been synchronized.** Complete the first two checks below. Enable controls if needed; if clock sync is missing or uncertain, you can use DBI / QuickNTP online, then return to PlayWise, press `Y` to refresh and retry. PlayWise does not automatically detect successful clock sync. For counting or expiry restriction issues, also retest actual counting and blocking with a non-critical game.
@@ -585,17 +587,53 @@ Standard installation packages overwrite only program binaries and default templ
 
 > [!WARNING]
 > **Never delete existing PlayWise directories on the SD card while the Switch is powered on!**
-> When the Switch is running, the PlayWise background daemon (sysmodule `4200000000000044`) remains resident in memory. Deleting files directly from a connected PC or mobile device turns the running sysmodule into an orphaned process, causing persistent SD card I/O errors and fatal errors like `0x95B (2347-0004)` when launching the NRO. **Always directly merge and overwrite files during upgrades or reinstallation; do not delete them first.** If a clean wipe is truly required, power off the console completely before removing the SD card. If files were accidentally deleted while running, reboot the console immediately to flush the orphan process.
+> The standard backend (Title ID `4200000000BD2300`) may still be running and accessing data. Merge and overwrite files; do not delete them first or remove an active SD card. Power off completely before uninstalling or wiping data. If a fatal error occurs or recovery is uncertain, preserve diagnostics and stop updating until the situation has been checked.
 
-- **Live Hot-Reload (Upgrade without Rebooting)**:
-  PlayWise natively supports reboot-free live reloading via Atmosphère's `pm:shell` process handover protocol:
-  1. Keep the Switch powered on, and transfer the new standard package's `atmosphere` and `switch` folders directly onto the SD card root via DBI (MTP), FTP, or USB, **merging and overwriting** all files.
-  2. Launch the PlayWise console app (NRO) and enter the Parent Zone. The app automatically detects that files on disk differ from the resident background version and offers to load the new version (or navigate to "Support & Recovery → Software Information").
-  3. Select "Load New Version". The app performs a 4-stage smooth handover: orders the old daemon to persist data and unregister -> terminates the old process -> validates new package integrity -> spawns the new daemon via `pm:shell`.
-  4. Once complete, reopen the overlay to resume normal operation—**no console reboot is required**.
-- **Powered-Off Card Reader Upgrade**: Power off Switch, remove SD card, merge and overwrite both folders on your computer, safely eject, and reboot. Follow prompts on first launch to perform safe re-detection.
+### Manual Hot-Update Steps
 
-If prompted that installation is incomplete, re-copy files from the **same** standard package. If older versions cannot live-load new builds, target environments mismatch, or startup fails, perform a full console reboot; PlayWise does not forcibly terminate running sysmodules or trigger automatic reboots. Do not initiate "Load New Version" while file transfers are still underway.
+Use a standard package with a running backend that supports safe handover. The console must be unrestricted and able to open the NRO. Wait for pending requests and recovery to finish, and allow enough time before quota, bedtime or eye-care restrictions could activate. The Overlay is not a hot-update entry; handle restrictions through existing parent authorization first.
+
+1. **Prepare the complete standard package.** Extract `playwise-<version>.zip`. If you downloaded `playwise-complete-<version>.zip`, first extract the standard ZIP inside it, then unpack that ZIP. Keep all files from the same build.
+2. **Close the frontends.** Exit the PlayWise NRO and Overlay while keeping the console and existing backend running. Do not manually stop the backend or change boot flags.
+3. **Merge onto the SD root.** Transfer both `atmosphere` and `switch` through DBI/MTP, FTP or USB, merging and overwriting. Wait for all transfers to finish and exit the transfer tool. The package includes these program and identity files:
+
+   | SD-relative path | Purpose |
+   | --- | --- |
+   | `switch/playwise/pctc.nro` | Console app |
+   | `switch/.overlays/playwise.ovl` | In-game Overlay |
+   | `atmosphere/contents/4200000000BD2300/exefs.nsp` | Standard backend |
+   | `switch/playwise/build.json` | Installed build information |
+   | `switch/playwise/package-artifacts.json` | Three-component size/SHA-256 checks |
+
+   Also copy the package's `atmosphere/contents/4200000000BD2300/flags/boot2.flag` and default templates. Copy both full directories rather than individual files from this table.
+4. **Reopen the app and authenticate.** Launch PlayWise again from Homebrew Menu, enter the Parent Zone and verify the PlayWise parent PIN. An NRO already open during transfer keeps its old executable; refreshing its page does not load the new app. A different build offers a loading confirmation after parent authentication.
+5. **Open the manual entry.** If you dismissed the automatic prompt, use `L/R` to select **Support & Recovery**, open the sixth card **Software information** with `A` or touch, then select **A Load new version** when the status is pending. Confirm the handover dialog; `B` cancels. Read-only support access cannot start an update.
+6. **Wait for completion.** The app verifies the installed components first, then asks the old backend to stop accepting requests, finish current work and exit voluntarily. It starts the new backend, checks its identity and reconnects. Keep the app open; do not repeat confirmation or continue transferring files. Handover, exit and startup have respective deadlines of 10, 10 and 30 seconds; follow the displayed result if a stage fails.
+7. **Check the result.** Reopen **Support & Recovery → Software information**. The status should be loaded, and the build ID beside the app version should match the current backend ID. If prompted about an environment change, re-detect and confirm control, wait for synchronization and refresh with `Y`. Finally reopen the Overlay and check rules and status.
+
+Successful handover requires no console reboot. Reopening the app, restarting the backend and rebooting the console are separate operations.
+
+### Version and Build Information After Updating
+
+| Field | Source and expected behavior |
+| --- | --- |
+| App version | Compiled into the running NRO. Reopen the app after copying; hot-update does not automatically increment the version. |
+| App build ID (`release_id`) | Embedded in the NRO manifest; includes the version, source commit and source/toolchain fingerprint. |
+| Current backend | The reliably identified running backend build ID. It can remain old after copying until handover succeeds, then should match the app. |
+| Loading status | Different IDs with valid installed components allow pending load; matching IDs show loaded. File transfer alone does not update the running backend. |
+
+Changed source rebuilt under the same version can have a different build ID. Reinstalling a package with the same identity normally does not offer another load. Maintainers update `common/version.h` and `common/version.mk` together when releasing a version; hot-update does not modify them. Do not edit `build.json`, forge IDs or delete backend files to force a reload. Same-build capture restart is a separate bounded maintainer workflow in the [Unattended Update and Testing Guide (Chinese)](../开发/无人值守更新与测试指南.md).
+
+### Missing Load Button or Failed Update
+
+- **Loaded but unchanged version:** Compare complete build IDs. Different builds can share a version. Exit and reopen the NRO, then confirm app/backend IDs match.
+- **Incomplete installation:** Re-copy the same complete standard package. Do not mix components from different builds.
+- **Operation or recovery unfinished:** Wait for the original operation; do not resubmit business requests with unknown outcomes.
+- **Unavailable or recovery required:** Save the details and follow the displayed recovery instructions. If startup still fails after the boot flag is confirmed restored, reboot when instructed. Flag recovery failure, unknown conflicts or fatal errors require preserving the scene first; do not manually delete journals, backups or handover files. PlayWise does not forcibly terminate the old backend or reboot automatically.
+
+### Powered-Off Card Reader Upgrade and Windows Installer
+
+For a card reader, fully power off Switch before removing the SD card. Merge both directories on your computer, safely eject, reinstall the card and power on. Follow any re-detection prompts. Removing the card is not part of the reboot-free workflow.
 
 On Windows, DBI/MTP data-preserving scripts can be previewed before applying:
 

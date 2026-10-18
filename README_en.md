@@ -26,6 +26,8 @@ Fixed schedules provide clear, predictable routines; temporary adjustments allow
 
 See the [User Guide](docs/使用/USER_GUIDE.md) for full instructions on [installation, initial setup, usage, and upgrades](docs/使用/USER_GUIDE.md).
 
+Existing users can follow the [manual hot-update steps](docs/使用/USER_GUIDE.md#manual-hot-update-steps), then load the new backend through **Support & Recovery → Software information**. The guide also explains [versions and build IDs](docs/使用/USER_GUIDE.md#version-and-build-information-after-updating).
+
 ## Grant Code Workflow
 
 ### Redeeming Grant Codes (Children): In-Game Overlay When Restricted
