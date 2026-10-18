@@ -37,7 +37,7 @@
     {
       "path": "device/auto_update.py",
       "category": "device",
-      "purpose": "正常PIN有界更新／显式同候选采集重启，禁止重放已开始run",
+        "purpose": "正常PIN有界更新／显式同候选采集重启，禁止重放已开始run；diagnose独立离线定位封存交接缺口",
       "legacy_path": "auto_update.py"
     },
     {

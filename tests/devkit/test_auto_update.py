@@ -357,6 +357,7 @@ class RestartConsole(Console):
         if self.restart_failure == 'event_binding': rows[2]['capture_run_id'] = '0' * 32
         if self.restart_failure == 'event_order': rows[3], rows[4] = rows[4], rows[3]
         if self.restart_failure == 'no_audit': rows = []
+        if self.restart_failure == 'terminal_gap': rows = rows[:-2]
         self.files[update.EVENTS + '/' + 'e' * 32 + '.jsonl'] = ('\n'.join(json.dumps(row) for row in rows) + '\n').encode() if rows else b''
         from test_pctl_standard_evidence import raw_rows, encode
         config = self.json(update.CAPTURE_CONFIG)
@@ -382,7 +383,7 @@ def test_capture_restart():
             try: run_case(console, out, Clock())
             except update.UpdateError: pass
             else: raise AssertionError('started restart must never replay')
-    for failure in ('restricted', 'remaining', 'event_binding', 'event_order', 'capture_boot', 'no_audit'):
+    for failure in ('restricted', 'remaining', 'event_binding', 'event_order', 'capture_boot', 'no_audit', 'terminal_gap'):
         with tempfile.TemporaryDirectory() as temporary:
             out, files = restart_prepared(Path(temporary)); console = RestartConsole(files)
             console.restart_failure = failure
@@ -444,6 +445,91 @@ def test_capture_restart_prepare_gates():
             require(not (root / 'rejected').exists(), 'unsafe restart creates no output or device transaction')
 
 
+def test_sealed_handover_diagnosis():
+    for failure in (None, 'terminal_gap'):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            out, files = restart_prepared(root)
+            console = RestartConsole(files)
+            console.restart_failure = failure
+            try:
+                run_case(console, out, Clock())
+            except update.UpdateError:
+                require(failure == 'terminal_gap', 'only the injected terminal gap stops this fixture')
+            else:
+                require(failure is None, 'new runtime cannot replace missing terminal events')
+            update.report(out)
+            before = {p.relative_to(out).as_posix(): p.read_bytes() for p in out.rglob('*') if p.is_file()}
+            destination = root / 'independent-diagnosis'
+            with mock.patch.object(update, 'Device', side_effect=AssertionError('offline only')):
+                first = update.diagnose(out, destination)
+                require(update.diagnose(out, destination) == first, 'JSON diagnosis reruns unchanged')
+            require({p.relative_to(out).as_posix(): p.read_bytes() for p in out.rglob('*') if p.is_file()} == before,
+                    'all original files and the source index remain byte-identical')
+            require(first['qualified'] is False and first['authorizes_device_operation'] is False,
+                    'diagnosis never authorizes another operation')
+            snapshot = first['snapshots'][0]
+            require(snapshot['bindings_match'] and snapshot['required_order_matches'], 'original binding is described')
+            require(not snapshot['malformed_complete_lines'] and not snapshot['partial_tail_bytes'], 'complete raw observed')
+            if failure:
+                require(first['source_phase'] == 'stopped' and snapshot['missing_required_events'] ==
+                        ['runtime_ready', 'status_submitted'], 'gap is localized without promoting a stopped run')
+                require(console.json(update.RUNTIME)['pid'] == 2, 'target can actually run despite the audit gap')
+            else:
+                require(first['source_phase'] == 'ready_for_tests' and not snapshot['missing_required_events'],
+                        'complete original chain stays distinct from a gap')
+            changed = destination / 'diagnostics.json'
+            changed.write_bytes(changed.read_bytes() + b' ')
+            try:
+                update.diagnose(out, destination)
+            except update.UpdateError:
+                pass
+            else:
+                raise AssertionError('changed diagnosis must not be overwritten')
+            for destination in (out, out / 'nested', root):
+                try:
+                    update.diagnose(out, destination)
+                except update.UpdateError:
+                    pass
+                else:
+                    raise AssertionError('diagnosis may not overlap the original evidence')
+            (out / 'run.json').write_bytes(b'{}')
+            try:
+                update.diagnose(out, root / 'changed-source')
+            except update.UpdateError:
+                pass
+            else:
+                raise AssertionError('modified sealed source must be rejected')
+            require(not (root / 'changed-source').exists(), 'invalid source creates no derived report')
+
+
+def test_diagnosis_incomplete_and_foreign_rows():
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        out, files = restart_prepared(root)
+        console = RestartConsole(files)
+        console.restart_failure = 'terminal_gap'
+        try:
+            run_case(console, out, Clock())
+        except update.UpdateError:
+            pass
+        original = next((out / 'audit').glob('*.raw'))
+        rows = [json.loads(line) for line in original.read_bytes().splitlines()]
+        rows[0]['source_boot_id'] = 'f' * 16
+        rows.append(rows[1].copy())
+        raw = b''.join((json.dumps(row) + '\n').encode() for row in rows) + b'bad-json\n{"event":"status_submitted"'
+        original.unlink()  # This fixture is not yet sealed.
+        (original.parent / (('e' * 32) + '.jsonl-' + update.digest(raw) + '.raw')).write_bytes(raw)
+        update.report(out)
+        value = update.diagnose(out, root / 'diagnostics')
+        observed = value['snapshots'][0]
+        require(observed['bindings_match'] is False and observed['duplicate_required_events'] == ['capture_request_claimed'],
+                'foreign and duplicate observations are explicit')
+        require(observed['malformed_complete_lines'] and observed['partial_tail_bytes'] > 0,
+                'malformed complete row and partial tail remain distinct')
+        require('status_submitted' in observed['missing_required_events'], 'partial terminal event is not accepted')
+
+
 def main():
     console = Console()
     with mock.patch.object(console, "nlst", side_effect=ftplib.error_temp("450 No such file or directory")):
@@ -471,6 +557,8 @@ def main():
     test_package_boundary()
     test_capture_restart()
     test_capture_restart_prepare_gates()
+    test_sealed_handover_diagnosis()
+    test_diagnosis_incomplete_and_foreign_rows()
     print("PASS bounded auto update, no replay, preimages, PIN privacy and offline evidence")
 
 

@@ -62,7 +62,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 
 | 文件 | 用途 |
 | --- | --- |
-| [device/auto_update.py](device/auto_update.py) | 正常PIN有界更新／显式同候选采集重启，禁止重放已开始run |
+| [device/auto_update.py](device/auto_update.py) | 正常PIN有界更新／显式同候选采集重启，禁止重放已开始run；diagnose独立离线定位封存交接缺口 |
 | [device/pctl_standard_evidence.py](device/pctl_standard_evidence.py) | 标准候选prepare、stage、只读拉回和原始审计；不授予完整资格 |
 | [device/pctl_production_midnight.py](device/pctl_production_midnight.py) | 新标准raw的自然午夜离线核验；不创建时间窗口或设备采集 |
 | [device/bounded_input_batch.py](device/bounded_input_batch.py) | 受限输入辅助库，限制动作／期限并释放detach，不是任意导航脚本 |

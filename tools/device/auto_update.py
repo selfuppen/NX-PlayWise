@@ -690,6 +690,100 @@ def report(out: Path) -> dict:
     return result
 
 
+def diagnose(out: Path, diagnostics_out: Path) -> dict:
+    """Describe sealed handover observations offline, without repairing their verdict."""
+    out, diagnostics_out = out.resolve(), diagnostics_out.resolve()
+    require(out != diagnostics_out and out not in diagnostics_out.parents and
+            diagnostics_out not in out.parents, "diagnostics must be outside the original report")
+    seal_path = out / "verification.json"
+    seal = load(out, "verification.json")
+    files = {p.relative_to(out).as_posix(): p for p in out.rglob("*")
+             if p.is_file() and p != seal_path}
+    require(set(files) == set(seal["files"]), "sealed source file set changed")
+    for name, entry in seal["files"].items():
+        path = files[name]
+        require(out in path.resolve().parents and path.stat().st_size == entry["size"] and
+                digest(path.read_bytes()) == entry["sha256"], "sealed source evidence changed")
+    plan, state, source = load(out, "plan.json"), load(out, "run.json"), load(out, "source-runtime.json")
+    capture = plan.get("operation") == "capture_restart"
+    binding = load(out, "capture-restart-request.json") if capture else None
+    required = CAPTURE_EVENTS if capture else ("status_submitted",)
+    snapshots = []
+    for path in sorted((out / "audit").glob("*.raw")):
+        match = re.fullmatch(r"([0-9a-f]{32})\.jsonl-([0-9a-f]{64})\.raw", path.name)
+        require(match is not None and digest(path.read_bytes()) == match[2], "audit snapshot name/hash differs")
+        raw = path.read_bytes()
+        rows, malformed = [], []
+        for line_number, line in enumerate(raw.splitlines(keepends=True), 1):
+            if not line.endswith(b"\n"):
+                continue
+            try:
+                row = json.loads(line)
+                require(isinstance(row, dict), "event row is not an object")
+            except (ValueError, UpdateError):
+                malformed.append(line_number)
+            else:
+                rows.append(row)
+        observed = [row.get("event") for row in rows]
+        missing = [event for event in required if event not in observed]
+        duplicates = [event for event in required if observed.count(event) > 1]
+        positions = [observed.index(event) for event in required if event in observed]
+        bindings_match = all(
+            row.get("transaction_id") == match[1] and
+            row.get("source_pid") == source["pid"] and
+            row.get("source_boot_id") == source["boot_id"] and
+            row.get("source_release_id") == source["release_id"] and
+            row.get("target_release_id") == plan["target_release_id"] and
+            (not capture or (row.get("purpose") == "usage_evidence" and
+                row.get("capture_request_id") == binding["request_id"] and
+                row.get("capture_run_id") == binding["run_id"] and
+                row.get("capture_config_sha256") == binding["config_sha256"]))
+            for row in rows)
+        snapshots.append({
+            "path": path.relative_to(out).as_posix(), "sha256": digest(raw), "size": len(raw),
+            "transaction_id": match[1], "complete_event_rows": len(rows),
+            "observed_events": observed, "missing_required_events": missing,
+            "duplicate_required_events": duplicates, "required_order_matches": positions == sorted(positions),
+            "bindings_match": bindings_match if rows else None,
+            "malformed_complete_lines": malformed,
+            "partial_tail_bytes": len(raw.rsplit(b"\n", 1)[-1]) if raw and not raw.endswith(b"\n") else 0,
+            "failure_events": [event for event in observed if event in ("failure", "failed", "ipc_unavailable")],
+        })
+    value = {
+        "schema_version": 1, "source_directory": str(out),
+        "source_verification_sha256": digest(seal_path.read_bytes()), "source_run_id": plan["run_id"],
+        "source_phase": state["phase"], "source_stop_reason": state.get("reason"),
+        "operation": plan.get("operation", "update"), "source_runtime": source,
+        "required_events": list(required), "snapshots": snapshots,
+        "snapshot_order": "filename order; not a chronological assertion",
+        "cause": "unknown; missing events do not prove a writer, reader, IPC or lifecycle cause",
+        "authorizes_device_operation": False, "qualified": False,
+    }
+    # Recheck source bytes after analysis. No source file is created or rewritten.
+    require(digest(seal_path.read_bytes()) == value["source_verification_sha256"] and
+            all(digest(files[name].read_bytes()) == entry["sha256"] for name, entry in seal["files"].items()),
+            "source changed during diagnosis")
+    encoded = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    output_index = {"schema_version": 1, "qualified": False, "files": {
+        "diagnostics.json": {"size": len(encoded), "sha256": digest(encoded)}}}
+    if diagnostics_out.exists():
+        require(diagnostics_out.is_dir() and
+                {p.name for p in diagnostics_out.iterdir()} == {"diagnostics.json", "verification.json"},
+                "diagnostics output is not the original two-file result")
+        require((diagnostics_out / "diagnostics.json").read_bytes() == encoded and
+                load(diagnostics_out, "verification.json") == output_index, "diagnostics output changed")
+    else:
+        diagnostics_out.mkdir(parents=True)
+        with (diagnostics_out / "diagnostics.json").open("xb") as stream:
+            stream.write(encoded)
+        with (diagnostics_out / "verification.json").open("x", encoding="utf-8") as stream:
+            json.dump(output_index, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+    require(load(diagnostics_out, "diagnostics.json") == value and
+            load(diagnostics_out, "verification.json") == output_index, "diagnostics JSON round trip differs")
+    return value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -708,6 +802,9 @@ def main() -> int:
     run.add_argument("--apply", action="store_true")
     check = sub.add_parser("report", help="offline evidence index")
     check.add_argument("--out", type=Path, required=True)
+    diagnostic = sub.add_parser("diagnose", help="offline diagnosis into a separate directory; never reconnect or repair")
+    diagnostic.add_argument("--out", type=Path, required=True, help="original sealed update report")
+    diagnostic.add_argument("--diagnostics-out", type=Path, required=True)
     args = parser.parse_args()
     try:
         if args.command == "prepare":
@@ -720,6 +817,10 @@ def main() -> int:
             pin = os.environ.get(args.pin_env, "") if args.pin_env else getpass.getpass("Authorized test PIN (not recorded): ")
             value = Updater(args.out).run(pin)
             print(json.dumps({"phase": value["phase"], "qualified": False}))
+        elif args.command == "diagnose":
+            value = diagnose(args.out, args.diagnostics_out)
+            print(json.dumps({"source_phase": value["source_phase"], "snapshots": len(value["snapshots"]),
+                              "authorizes_device_operation": False, "qualified": False}))
         else:
             value = report(args.out)
             print(json.dumps({"phase": value["phase"], "files": len(value["files"]), "qualified": False}))
