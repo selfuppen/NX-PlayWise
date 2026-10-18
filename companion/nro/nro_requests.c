@@ -16,6 +16,7 @@ void begin_wait(UiState *ui, const char *type, const char *message)
 void submit_transport_empty(UiState *ui, const char *type, const char *ok_message, const char *fail_prefix)
 {
     PtcCompanionStatus status;
+    if (ui->waiting) return;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_empty(&ui->transport, ui->active_request_id, time(NULL), type);
     set_command_name(ui, type);
@@ -34,12 +35,17 @@ void submit_status(UiState *ui)
     if (!ui || ui->waiting) {
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+        ui->model.home_details_refresh_failed = true;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
     set_command_name(ui, "status");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) begin_wait(ui, "status", ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS));
-    else set_message(ui, ptc_ui_text(PTC_UI_T_REFRESH_FAILED), status);
+    else {
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_READ_FAILED);
+        set_message(ui, ptc_ui_text(PTC_UI_T_REFRESH_FAILED), status);
+    }
 }
 
 void activate_parent_status(UiState *ui)
@@ -205,6 +211,21 @@ void load_rule_drafts(UiState *ui)
     const cJSON *override_day;
     unsigned int index;
     ptc_rules_default(&rules);
+    if (ptc_calendar_runtime_load(ui->client.storage, APP_ROOT, ui->model.day_index,
+            &ui->calendar_runtime)) {
+        ui->model.calendar = ui->calendar_runtime.builtin ? NULL : &ui->calendar_runtime.set;
+        ui->model.calendar_builtin = ui->calendar_runtime.builtin;
+        snprintf(ui->model.calendar_option_id, sizeof(ui->model.calendar_option_id), "%s",
+            ui->calendar_runtime.option_id);
+        snprintf(ui->model.calendar_region_name, sizeof(ui->model.calendar_region_name), "%s",
+            ui->calendar_runtime.region_name);
+    } else {
+        memset(&ui->calendar_runtime, 0, sizeof(ui->calendar_runtime));
+        ui->model.calendar = &ui->calendar_runtime.set;
+        ui->model.calendar_builtin = false;
+        ui->model.calendar_option_id[0] = '\0';
+        ui->model.calendar_region_name[0] = '\0';
+    }
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     memcpy(ui->model.current_week, rules.week, sizeof(rules.week));
     ui->model.today_override_present = false;
@@ -218,6 +239,8 @@ void load_rule_drafts(UiState *ui)
     ui->model.draft_scheduled_override = rules.scheduled_override;
     ui->model.autonomy_policy = rules.autonomy_policy;
     ui->model.draft_autonomy_policy = rules.autonomy_policy;
+    ui->model.dock_policy = rules.dock_policy;
+    if (!ui->model.dock_dirty) ui->model.draft_dock_policy = rules.dock_policy;
     ui->model.bedtime_policy = rules.bedtime;
     ui->model.draft_bedtime_policy = rules.bedtime;
     if (!ui->client.storage->vtable->read_text(ui->client.storage, RULES_PATH, text, sizeof(text))) {
@@ -271,6 +294,10 @@ void load_rule_drafts(UiState *ui)
     if (!ptc_scheduled_override_is_valid(&rules.scheduled_override)) {
         rules.scheduled_override.enabled = false;
     }
+    rules.dock_policy.force_docked = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "force_docked"));
+    rules.dock_policy.undocked_limit_enabled = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "undocked_limit_enabled"));
+    int dock_minutes = rule_json_int(root, "undocked_daily_minutes", 30);
+    rules.dock_policy.undocked_daily_minutes = (uint16_t)(dock_minutes >= 0 && dock_minutes <= 1440 ? dock_minutes : 30);
     rules.autonomy_policy.daily_buffer_minutes = (uint16_t)rule_json_int(
         root, "daily_buffer_minutes", 0);
     if (!ptc_autonomy_policy_is_valid(&rules.autonomy_policy)) {
@@ -353,6 +380,8 @@ void load_rule_drafts(UiState *ui)
     ui->model.draft_scheduled_override = rules.scheduled_override;
     ui->model.autonomy_policy = rules.autonomy_policy;
     ui->model.draft_autonomy_policy = rules.autonomy_policy;
+    ui->model.dock_policy = rules.dock_policy;
+    if (!ui->model.dock_dirty) ui->model.draft_dock_policy = rules.dock_policy;
     ui->model.bedtime_policy = rules.bedtime;
     ui->model.draft_bedtime_policy = rules.bedtime;
     ui->model.holiday_dirty = false;

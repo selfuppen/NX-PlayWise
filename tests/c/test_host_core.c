@@ -1,6 +1,9 @@
 #include <stdbool.h>
+#include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include "../../third_party/cjson/cJSON.h"
 #include <sys/stat.h>
 
 #include "../../common/version.h"
@@ -9,6 +12,7 @@
 #include "../../common/protocol/activity_history.h"
 #include "../../common/protocol/redemption_history.h"
 #include "../../common/protocol/result_builder.h"
+#include "../../common/protocol/ipc_protocol.h"
 #include "../../common/support/support_export.h"
 #include "../../common/security/credential_policy.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
@@ -22,6 +26,7 @@
 #include "../../companion/file_protocol.h"
 #include "../../companion/hot_reload_guard.h"
 #include "../../companion/request_client.h"
+#include "../../companion/transport_client.h"
 #include "../../companion/result_summary.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/overlay/input_model.h"
@@ -30,11 +35,13 @@
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
 #include "../../platform/install_defaults.h"
+#include "../../platform/calendar_store.h"
 #include "../../platform/switch/play_timer_settings_layout.h"
 #include "../../platform/switch/usage_stats_adapter.h"
 #include "../../sysmodule/sysmodule_core.h"
 
 static int failures;
+int ptc_test_control_safety(void);
 
 static void check_true(bool value, const char *label)
 {
@@ -92,6 +99,7 @@ static void test_hot_reload_guard(void)
         "build/test-hot-reload-guard/boot2.flag",
         "build/test-hot-reload-guard/boot2.flag.backup",
         "build/test-hot-reload-guard/reload.json",
+        NULL, NULL,
     };
     static const char *const phases[] = {
         "prepared", "boot_disabled", "boot_restored", "target_launched"
@@ -186,6 +194,178 @@ static void test_hot_reload_guard(void)
     (void)remove("build/test-hot-reload-guard");
 }
 
+
+static void test_capture_restart_guard(void)
+{
+    const char *config = "{\"schema_version\":1,\"run_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"commit\":\"cccccccccccccccccccccccccccccccccccccccc\",\"release_id\":\"same-build\",\"duration_s\":900}";
+    const char *request = "{\"schema_version\":1,\"purpose\":\"usage_evidence\",\"request_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"source_boot_id\":\"dddddddddddddddd\",\"release_id\":\"same-build\",\"run_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"config_sha256\":\"57c2e610d3935e0d9ae0074f8185594502a8b056423dfa577f8383054796ec35\"}";
+    const char *commit = "cccccccccccccccccccccccccccccccccccccccc";
+    const char *boot = "dddddddddddddddd";
+    PtcCaptureRestartBinding binding;
+    check_true(ptc_hot_reload_capture_request(request, config, commit, "same-build", boot, &binding),
+        "explicit capture restart binds config bytes, run, release and source boot");
+    const char *keys[] = {"purpose", "source_boot_id", "release_id", "run_id", "config_sha256", "request_id"};
+    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
+        cJSON *root = cJSON_Parse(request);
+        cJSON_ReplaceItemInObjectCaseSensitive(root, keys[i], cJSON_CreateString("changed"));
+        char *changed = cJSON_PrintUnformatted(root);
+        check_true(!ptc_hot_reload_capture_request(changed, config, commit, "same-build", boot, &binding),
+            "capture restart rejects a changed purpose or identity field");
+        cJSON_free(changed); cJSON_Delete(root);
+    }
+    char changed[1024];
+    snprintf(changed, sizeof(changed), "%s ", config);
+    check_true(!ptc_hot_reload_capture_request(request, changed, commit, "same-build", boot, &binding),
+        "semantically equal config with different bytes rejects the prepared hash");
+    snprintf(changed, sizeof(changed), "{\"purpose\":\"usage_evidence\",%s", request + 1);
+    check_true(!ptc_hot_reload_capture_request(changed, config, commit, "same-build", boot, &binding),
+        "duplicate purpose is not an authorization");
+    check_true(!ptc_hot_reload_capture_request(request, config, commit, "same-build", "eeeeeeeeeeeeeeee", &binding),
+        "capture request cannot restart another source boot");
+    check_true(ptc_hot_reload_capture_request(request, config, commit, "same-build", boot, &binding), "restore valid binding");
+    PtcHotReloadJournal journal = {0}, parsed;
+    PtcHotReloadPaths paths = {NULL, NULL, "build/test-capture-restart-journal.json", NULL, NULL};
+    (void)remove(paths.journal); (void)remove("build/test-capture-restart-journal.json.tmp");
+    snprintf(journal.transaction_id, sizeof(journal.transaction_id), "capture-transaction");
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    snprintf(journal.source_release_id, sizeof(journal.source_release_id), "same-build");
+    snprintf(journal.target_release_id, sizeof(journal.target_release_id), "same-build");
+    snprintf(journal.source_boot_id, sizeof(journal.source_boot_id), "%s", boot);
+    journal.source_pid = 41; journal.capture = binding;
+    check_true(ptc_hot_reload_write_journal(&paths, &journal) && ptc_hot_reload_read_journal(&paths, &parsed) &&
+        ptc_hot_reload_capture_binding_equal(&parsed.capture, &binding), "same-candidate recovery retains the capture purpose binding");
+    PtcHotReloadPaths pending = paths;
+    pending.journal = "build/test-capture-restart-journal.json.tmp";
+    journal.capture.config_sha256[0] = journal.capture.config_sha256[0] == '0' ? '1' : '0';
+    check_true(ptc_hot_reload_write_journal(&pending, &journal), "seed contradictory capture generation");
+    check_true(!ptc_hot_reload_read_journal(&paths, &parsed), "recovery refuses a changed config binding across journal generations");
+    (void)remove(paths.journal); (void)remove(pending.journal);
+    memset(&journal.capture, 0, sizeof(journal.capture));
+    check_true(ptc_hot_reload_write_journal(&paths, &journal) && !ptc_hot_reload_read_journal(&paths, &parsed),
+        "same-candidate journal without capture purpose is not recoverable authorization");
+    (void)remove(paths.journal);
+}
+
+typedef struct {
+    int failures;
+    unsigned int calls;
+    unsigned int waits;
+    uint32_t commit_result;
+} ReloadFault;
+
+static int reload_fault_remove(void *ctx, const char *path)
+{
+    ReloadFault *fault = ctx;
+    ++fault->calls;
+    if (fault->failures != 0) {
+        if (fault->failures > 0) --fault->failures;
+        errno = EBUSY;
+        return -1;
+    }
+    return remove(path);
+}
+
+static uint32_t reload_fault_commit(void *ctx)
+{
+    return ((ReloadFault *)ctx)->commit_result;
+}
+
+static void reload_fault_wait(void *ctx, unsigned int milliseconds)
+{
+    ReloadFault *fault = ctx;
+    check_int(milliseconds, 10, "sharing retry uses a bounded ten millisecond interval");
+    ++fault->waits;
+}
+
+static void test_hot_reload_io(void)
+{
+    ReloadFault fault = {0};
+    const PtcHotReloadIo io = {&fault, reload_fault_remove, NULL, reload_fault_commit, reload_fault_wait};
+    PtcHotReloadIoError error;
+    PtcHotReloadPaths paths = {NULL, NULL, "build/test-hot-reload-io.json", &io, &error};
+    PtcHotReloadJournal journal = {0}, recovered;
+    (void)remove(paths.journal);
+    (void)remove("build/test-hot-reload-io.json.tmp");
+    snprintf(journal.transaction_id, sizeof(journal.transaction_id), "io-case");
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    snprintf(journal.source_release_id, sizeof(journal.source_release_id), "old");
+    snprintf(journal.target_release_id, sizeof(journal.target_release_id), "new");
+    journal.source_pid = 41;
+    check_true(ptc_hot_reload_write_journal(&paths, &journal), "seed journal for injected sharing errors");
+    fault.failures = 2;
+    snprintf(journal.phase, sizeof(journal.phase), "boot_disabled");
+    check_true(ptc_hot_reload_write_journal(&paths, &journal), "transient reader sharing failure recovers");
+    check_int(fault.waits, 2, "only failed mutations are retried");
+    check_int(error.retries, 2, "successful recovery retains retry evidence");
+    fault.failures = -1;
+    unsigned int previous_calls = fault.calls;
+    snprintf(journal.phase, sizeof(journal.phase), "boot_restored");
+    check_true(!ptc_hot_reload_write_journal(&paths, &journal), "persistent reader cannot block indefinitely");
+    check_int(fault.calls - previous_calls, 51, "persistent sharing failure has a finite attempt limit");
+    check_int(error.system_errno, EBUSY, "native sharing errno is retained");
+    check_true(host_file_exists(paths.journal) && host_file_exists("build/test-hot-reload-io.json.tmp"),
+        "old and complete pending journals survive a failed replacement");
+    fault.failures = 0;
+    check_true(ptc_hot_reload_read_journal(&paths, &recovered) && strcmp(recovered.phase, "boot_restored") == 0,
+        "reopening promotes the same owned interrupted transaction");
+    fault.commit_result = 7;
+    check_true(!ptc_hot_reload_write_journal(&paths, &journal), "failed commit cannot report durable success");
+    check_int(error.result, 7, "native commit Result is retained");
+    fault.commit_result = 0;
+    check_true(ptc_hot_reload_read_journal(&paths, &recovered), "commit failure leaves a recoverable pending generation");
+    paths.boot_flag = "build/test-hot-reload-io.flag";
+    paths.boot_flag_backup = "build/test-hot-reload-io.flag.backup";
+    (void)remove(paths.boot_flag);
+    (void)remove(paths.boot_flag_backup);
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    check_true(ptc_hot_reload_write_journal(&paths, &journal), "seed flag transaction before commit failure");
+    check_true(write_host_file(paths.boot_flag, ""), "seed original empty flag");
+    fault.commit_result = 7;
+    check_int(ptc_hot_reload_disable_boot(&paths, &journal), PTC_HOT_RELOAD_FLAG_IO_ERROR,
+        "commit failure after flag rename is not reported as success");
+    check_true(host_file_exists(paths.boot_flag_backup) && !host_file_exists(paths.boot_flag),
+        "post-rename commit failure retains the original flag for recovery");
+    fault.commit_result = 0;
+    check_true(ptc_hot_reload_read_journal(&paths, &recovered), "post-rename failure keeps owned journal");
+    check_int(ptc_hot_reload_restore_boot(&paths, &recovered), PTC_HOT_RELOAD_FLAG_OK,
+        "recovery restores the original flag after a post-rename commit failure");
+    (void)remove(paths.boot_flag);
+    (void)remove(paths.boot_flag_backup);
+    (void)remove(paths.journal);
+    (void)remove("build/test-hot-reload-io.json.tmp");
+}
+
+static int transport_connect_calls;
+static bool suspended_transport_connect(void *ctx)
+{
+    (void)ctx;
+    ++transport_connect_calls;
+    return false;
+}
+
+static void test_suspended_transport(void)
+{
+    static PtcMemStorage mem;
+    PtcCompanionTransportClient client;
+    const PtcCompanionIpcBackend ipc = {suspended_transport_connect, NULL, NULL, NULL, NULL, NULL};
+    ptc_mem_storage_init(&mem);
+    ptc_companion_transport_init(&client, "/transport", &mem.storage, &ipc, NULL);
+    transport_connect_calls = 0;
+    ptc_companion_transport_set_suspended(&client, true);
+    check_int(ptc_companion_transport_submit_status(&client, "reload-status", 1000), PTC_COMPANION_QUIESCING,
+        "lifecycle suspension refuses status without connecting or enqueuing");
+    check_int(transport_connect_calls, 0, "suspension never queries a missing service");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "/transport/inbox/pending/reload-status.json"),
+        "suspension cannot downgrade to SD queue");
+    check_true(!ptc_companion_transport_notify_storage_changed(&client), "suspended notify does not reconnect");
+    ptc_companion_transport_set_suspended(&client, false);
+    check_int(ptc_companion_transport_submit_status(&client, "reload-status", 1000), PTC_COMPANION_OK,
+        "verified lifecycle completion restores normal submission");
+    check_int(transport_connect_calls, 1, "resumption permits one connection attempt");
+    check_true(mem.storage.vtable->exists(&mem.storage, "/transport/inbox/pending/reload-status.json"),
+        "ordinary missing IPC can still use the supported durable queue");
+}
+
 static bool fixed_random(uint8_t *out, size_t out_size, void *ctx)
 {
     size_t index;
@@ -277,6 +457,42 @@ static void test_release_request_contract(void)
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
         PTC_ERR_BAD_REQUEST, "blocked weekly rule is rejected");
+    /* A single-day LIMIT quota must be 1..1440; out-of-range or zero is rejected
+       at the inbox so it can never be persisted and then fail every enforce. */
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"limit-max\",\"type\":\"set_today_limit\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":1440}}", &request),
+        PTC_ERR_OK, "set_today_limit of 1440 is accepted");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"limit-zero\",\"type\":\"set_today_limit\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":0}}", &request),
+        PTC_ERR_BAD_REQUEST, "set_today_limit of 0 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"limit-over\",\"type\":\"set_today_limit\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":1441}}", &request),
+        PTC_ERR_BAD_REQUEST, "set_today_limit above 1440 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"add-over\",\"type\":\"add_today_minutes\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":5000}}", &request),
+        PTC_ERR_BAD_REQUEST, "add_today_minutes above 1440 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"weekly-ok\",\"type\":\"set_weekly_template\",\"created_at\":1,"
+        "\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
+        PTC_ERR_OK, "valid weekly template is accepted");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"weekly-zero\",\"type\":\"set_weekly_template\",\"created_at\":1,"
+        "\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":0},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
+        PTC_ERR_BAD_REQUEST, "weekly LIMIT day of 0 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"weekly-over\",\"type\":\"set_weekly_template\",\"created_at\":1,"
+        "\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":1441},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
+        PTC_ERR_BAD_REQUEST, "weekly LIMIT day above 1440 is rejected");
 }
 
 static void test_holiday_calendar_and_priority(void)
@@ -551,13 +767,13 @@ static void test_daily_summary_and_read_only_stats_boundary(void)
     char line[PTC_DAILY_SUMMARY_LINE_SIZE];
 
     memset(records, 0, sizeof(records));
-    records[0] = (PtcDailySummaryRecord){2380, 1000, "weekly", true, 60, true, 40, true, 20, 0};
-    records[1] = (PtcDailySummaryRecord){2374, 900, "weekly", true, 60, true, 30, true, 30, 0};
-    records[2] = (PtcDailySummaryRecord){2373, 800, "weekly", true, 60, true, 20, true, 40, 0};
-    records[3] = (PtcDailySummaryRecord){2380, 1100, "today_override", true, 75, true, 35, true, 40, 15};
-    records[4] = (PtcDailySummaryRecord){2381, 1200, "weekly", true, 60, true, 60, true, 0, 0};
-    records[5] = (PtcDailySummaryRecord){2379, 950, "weekly", true, 60, false, 0, false, 0, 0};
-    records[6] = (PtcDailySummaryRecord){2380, 1050, "weekly", true, 60, true, 30, true, 30, 0};
+    records[0] = (PtcDailySummaryRecord){2380, 1000, "weekly", true, 60, true, 40, true, 20, 0, false, 0, 0, false};
+    records[1] = (PtcDailySummaryRecord){2374, 900, "weekly", true, 60, true, 30, true, 30, 0, false, 0, 0, false};
+    records[2] = (PtcDailySummaryRecord){2373, 800, "weekly", true, 60, true, 20, true, 40, 0, false, 0, 0, false};
+    records[3] = (PtcDailySummaryRecord){2380, 1100, "today_override", true, 75, true, 35, true, 40, 15, false, 0, 0, false};
+    records[4] = (PtcDailySummaryRecord){2381, 1200, "weekly", true, 60, true, 60, true, 0, 0, false, 0, 0, false};
+    records[5] = (PtcDailySummaryRecord){2379, 950, "weekly", true, 60, false, 0, false, 0, 0, false, 0, 0, false};
+    records[6] = (PtcDailySummaryRecord){2380, 1050, "weekly", true, 60, true, 30, true, 30, 0, false, 0, 0, false};
 
     check_true(ptc_daily_summary_format_line(line, sizeof(line), &records[3]),
         "daily summary with reliable remaining time formats");
@@ -941,6 +1157,38 @@ static void test_overlay_parent_actions_and_input(void)
     check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
         PTC_OVERLAY_PARENT_ADD_MINUTES) != NULL,
         "quick add cannot replace an unlimited day with a limit");
+    summary.unrestricted_today = 0;
+    summary.eye_care_enabled = true;
+    snprintf(summary.eye_care_phase, sizeof(summary.eye_care_phase), "resting");
+    summary.eye_care_break_id = 123;
+    summary.eye_care_rest_remaining_seconds = 59;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_SKIP_EYE_CARE) == NULL &&
+        ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_ADD_MINUTES) != NULL,
+        "PIN-authorized eye care skip is available only during the break and grants stay blocked");
+    summary.eye_care_break_id = 0;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_SKIP_EYE_CARE) != NULL,
+        "overlay never offers a skip without the current break instance");
+
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) != NULL, "overlay TV waiver requires dock status");
+    summary.dock_available = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) != NULL, "overlay TV waiver explains disabled policy");
+    summary.force_docked = true;
+    summary.disable_flag_present = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) == NULL,
+        "overlay TV recovery remains available alongside other restrictions and disable flag");
+    summary.force_docked = false;
+    summary.undocked_limit_enabled = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) == NULL, "overlay can waive the non-TV quota alone");
+    summary.dock_waived_today = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) != NULL, "overlay TV waiver cannot be repeated");
 
     ptc_overlay_input_init(&code);
     ptc_overlay_input_init(&pin);
@@ -1035,71 +1283,179 @@ static void test_pending_redemption_recovery_marker(void)
 
 static void test_overlay_layout_geometry(void)
 {
-    PtcOverlayRect submit = ptc_overlay_submit_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    PtcOverlayRect collapsed = ptc_overlay_status_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, false, false);
-    PtcOverlayRect normal = ptc_overlay_status_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, false);
-    PtcOverlayRect detail = ptc_overlay_status_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, true);
-    PtcOverlayRect buffer = ptc_overlay_child_buffer_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y);
-    PtcOverlayRect parent = ptc_overlay_child_parent_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    int slot_group_width = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
+    unsigned visited = 0;
+    int action = PTC_OVERLAY_PARENT_ADD_MINUTES;
+    for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
+        check_true(!(visited & (1u << action)), "overlay traversal visits each action once");
+        visited |= 1u << action;
+        int next = ptc_overlay_parent_action_move(action, 1);
+        check_int(ptc_overlay_parent_action_move(next, -1), action, "overlay up reverses down in visual order");
+        action = next;
+    }
+    check_int(visited, 255, "all eight overlay actions remain reachable");
+    check_int(action, PTC_OVERLAY_PARENT_ADD_MINUTES, "overlay action traversal wraps");
+    check_int(ptc_overlay_parent_action_move(PTC_OVERLAY_PARENT_WAIVE_DOCK, 1),
+        PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, "TV waiver precedes dangerous recovery group");
+    PtcOverlayRect viewport = ptc_overlay_rect(16, 104, 416, 452);
+    PtcOverlayRect first = ptc_overlay_rect(20, 104, 404, 104);
+    PtcOverlayRect last = ptc_overlay_rect(20, 1004, 404, 156);
+    int maximum = ptc_overlay_scroll_max(last.y + last.h - viewport.y, viewport.h);
+    check_int(maximum, 604, "scroll maximum comes from actual content height");
+    check_int(ptc_overlay_scroll_max(104, 452), 0, "short content needs no scrolling");
+    PtcOverlayGesture gesture = {0};
+    PtcOverlayGestureEvent touch = ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    check_true(!touch.clicked, "touch-down never executes an action");
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 1, viewport);
+    check_true(touch.clicked && touch.x == 30 && touch.y == 300,
+        "a stationary touch clicks its original location on release");
+    (void)ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    touch = ptc_overlay_gesture_update(&gesture, true, 30, 260, 1, viewport);
+    check_int(touch.scroll_delta, 40, "upward drag scrolls the content down");
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 1, viewport);
+    check_true(!touch.clicked, "drag release cannot activate a card or confirmation");
+    (void)ptc_overlay_gesture_update(&gesture, true, 30, 580, 1, viewport);
+    touch = ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    check_int(touch.scroll_delta, 0, "drag beginning on a fixed button cannot scroll content");
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 1, viewport);
+    check_true(!touch.clicked, "drag from a fixed button cannot become a click");
+    (void)ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 2, viewport);
+    check_true(!touch.clicked, "page transition cancels a pending touch");
+    check_int(ptc_overlay_scroll_to_rect(viewport, first, maximum, maximum), 0,
+        "navigation to the first card restores the top");
+    check_int(ptc_overlay_scroll_to_rect(viewport, last, 0, maximum), maximum,
+        "navigation to the last card reveals its full height");
+    check_true(ptc_overlay_scrolled_hit(viewport, last, maximum, 30, 500),
+        "scrolled touch maps to the visible card");
+    check_true(!ptc_overlay_scrolled_hit(viewport, last, maximum, 30, 560),
+        "clipped card cannot intercept the fixed footer");
+    check_true(!ptc_overlay_scrolled_hit(viewport, first, maximum, 30, 110),
+        "offscreen card cannot receive a touch");
+    check_true(!ptc_overlay_scrolled_hit(viewport, first, 0, 30, 103),
+        "card cannot intercept the fixed heading");
+    check_int(PTC_OVERLAY_FONT_SECONDARY, 24, "overlay supporting text uses large type");
+    check_int(PTC_OVERLAY_FONT_BODY_LG, 32, "confirmation explanations approach twice the old size");
+    check_int(PTC_OVERLAY_FONT_CODE, 40, "code slot digits use their own large token");
+    int slots_width = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
         (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
-    int slot_left = PTC_OVERLAY_CONTENT_X + (PTC_OVERLAY_CONTENT_W - slot_group_width) / 2;
-
-    check_int(PTC_OVERLAY_CONTENT_Y, 90, "overlay content reclaims title whitespace");
-    check_int(slot_group_width, 348, "overlay enlarged code slots fit as one group");
-    check_int(slot_left - PTC_OVERLAY_CONTENT_X, 7, "overlay code slots are centered on the left");
-    check_int(PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W - (slot_left + slot_group_width), 8,
-        "overlay code slots are centered on the right");
-    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H, 242,
-        "overlay enlarged code slots end above input count");
-    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 282,
-        "overlay keypad leaves room below input count");
-    check_int(ptc_overlay_key_rect(0, 0, 1).w, 105, "overlay keypad keys are wider");
-    check_int(ptc_overlay_key_rect(0, 0, 1).h, 44, "overlay keypad rows have no dead vertical gap");
-    check_int(ptc_overlay_refresh_rect(0, 0).h, 36, "overlay refresh target is easier to touch");
-    check_true(ptc_overlay_rect_contains(submit, submit.x + submit.w - 1, submit.y + submit.h - 1),
-        "overlay submit touch covers its visible right and bottom edges");
-    check_true(!ptc_overlay_rect_contains(submit, submit.x + submit.w, submit.y),
-        "overlay submit touch stops at its visible edge");
-    check_true(!ptc_overlay_rect_contains(collapsed, collapsed.x + 1, collapsed.y + collapsed.h),
-        "collapsed status has no invisible touch area");
-    check_int(normal.h, PTC_OVERLAY_STATUS_NORMAL_H, "normal status drops duplicate detail rows");
-    check_int(detail.y + detail.h, 646, "expanded error and success details fill the content area");
-    check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
-        "expanded overlay status remains inside content bounds");
-    check_true(buffer.x + buffer.w < parent.x &&
-        parent.x + parent.w == PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W &&
-        buffer.y == parent.y && parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
-        "buffer and parent touch targets fit below collapsed status");
+    check_int(slots_width, 387, "all eight code slots fit the sidebar");
+    check_int(PTC_OVERLAY_SLOT_H, 64, "code slots have room for 40px digits");
+    check_true(PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H < PTC_OVERLAY_KEYPAD_Y,
+        "input count and date fit between slots and keypad");
+    for (unsigned i = 0; i < PTC_OVERLAY_KEY_COUNT; ++i) {
+        PtcOverlayRect key = ptc_overlay_key_rect(16, 40, i);
+        check_int(key.w, 124, "keypad key width stays comfortable");
+        check_int(key.h, 56, "keypad key height grows with the font");
+        check_true(key.y + key.h <= 40 + PTC_OVERLAY_SUBMIT_Y,
+            "all ten digit keys end above submit");
+        check_true(ptc_overlay_rect_contains(key, key.x + key.w - 1, key.y + key.h - 1),
+            "visible key edges receive touches");
+        check_true(!ptc_overlay_rect_contains(key, key.x + key.w, key.y),
+            "key touch target ends at the visible edge");
+    }
+    PtcOverlayRect submit = ptc_overlay_submit_rect(16, 40, 416);
+    PtcOverlayRect back = ptc_overlay_keypad_nav_back_rect(16, 40);
+    PtcOverlayRect parent = ptc_overlay_keypad_nav_parent_rect(16, 40, 416);
+    check_true(submit.y + submit.h < back.y, "submit does not overlap navigation");
+    check_true(back.x + back.w < parent.x, "navigation buttons remain separate");
+    check_true(parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
+        "fixed keypad buttons stay above the Tesla footer");
     check_true(ptc_overlay_remaining_refresh_pending(true, true),
-        "submitted overlay code uses a pending remaining-time presentation");
-    check_true(!ptc_overlay_remaining_refresh_pending(true, false),
-        "ordinary status refresh preserves the last remaining-time snapshot");
-    check_true(!ptc_overlay_remaining_refresh_pending(false, true),
-        "completed code result leaves the pending remaining-time presentation");
-    check_int(ptc_overlay_preview_visual_level(true, 30, false, false),
-        PTC_OVERLAY_PREVIEW_NEUTRAL, "ordinary overlay preview uses neutral styling");
-    check_int(ptc_overlay_preview_visual_level(true, 30, true, false),
-        PTC_OVERLAY_PREVIEW_WARNING, "capped overlay preview uses warning styling");
-    check_int(ptc_overlay_preview_visual_level(false, 0, false, false),
-        PTC_OVERLAY_PREVIEW_DANGER, "unknown overlay preview result uses danger styling");
-    check_int(ptc_overlay_preview_visual_level(true, 0, false, false),
-        PTC_OVERLAY_PREVIEW_DANGER, "zero overlay preview result uses danger styling");
-    check_int(ptc_overlay_preview_visual_level(true, 30, false, true),
-        PTC_OVERLAY_PREVIEW_DANGER, "unlimited conversion uses danger styling");
-    check_int(ptc_overlay_preview_visual_level(true, 0, true, false),
-        PTC_OVERLAY_PREVIEW_DANGER, "danger styling takes priority over a capped warning");
+        "submitted code never displays stale remaining time as final");
+    check_true(!ptc_overlay_remaining_refresh_pending(true, false), "ordinary refresh keeps its status behavior");
+    check_int(ptc_overlay_preview_visual_level(true, 30, false, false), PTC_OVERLAY_PREVIEW_NEUTRAL,
+        "normal redemption preview remains neutral");
+    check_int(ptc_overlay_preview_visual_level(true, 30, true, false), PTC_OVERLAY_PREVIEW_WARNING,
+        "capped redemption preview remains a warning");
+    check_int(ptc_overlay_preview_visual_level(false, 0, false, false), PTC_OVERLAY_PREVIEW_DANGER,
+        "unknown redemption still requires a hold");
+    check_int(ptc_overlay_preview_visual_level(true, 0, false, false), PTC_OVERLAY_PREVIEW_DANGER,
+        "zero redemption still requires a hold");
+    check_int(ptc_overlay_preview_visual_level(true, 30, false, true), PTC_OVERLAY_PREVIEW_DANGER,
+        "unlimited to limited redemption still requires a hold");
+}
+
+static void test_overlay_eye_care_display(void)
+{
+    PtcCompanionResultSummary s = {0};
+    PtcOverlayEyeCareDisplay eye;
+    s.valid = s.eye_care_available = s.eye_care_enabled = true;
+    s.eye_care_play_minutes = 40;
+    s.eye_care_rest_minutes = 10;
+    s.eye_care_used_minutes = 15;
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "playing");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strstr(eye.compact, "25") && strstr(eye.detail, "40") && strstr(eye.detail, "10"),
+        "overlay shows confirmed play minutes and configured cycle");
+    char before[160];
+    snprintf(before, sizeof(before), "%s", eye.compact);
+    ptc_overlay_project_eye_care(&s, true, 29, &eye);
+    check_true(strcmp(before, eye.compact) == 0 && !eye.warning,
+        "overlay never decrements play usage with wall clock");
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "resting");
+    s.eye_care_break_id = 123;
+    s.eye_care_rest_remaining_seconds = 65;
+    ptc_overlay_project_eye_care(&s, true, 6, &eye);
+    check_true(eye.rest_seconds == 59 && strstr(eye.compact, "00:59") && eye.warning,
+        "overlay rest countdown subtracts confirmed snapshot age");
+    ptc_overlay_project_eye_care(&s, true, 65, &eye);
+    check_true(eye.rest_seconds == -1 && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "rest expiry waits for backend instead of claiming unlocked");
+    ptc_overlay_project_eye_care(&s, false, 6, &eye);
+    check_true(eye.rest_seconds == -1 && !eye.detail[0], "unusable eye snapshot hides countdown and rule");
+    s.eye_care_rest_remaining_seconds = 600;
+    ptc_overlay_project_eye_care(&s, true, 121, &eye);
+    check_true(eye.rest_seconds == 479 && strstr(eye.compact, "07:59"),
+        "known rest deadline continues beyond freshness thresholds");
+    ptc_overlay_project_eye_care(&s, true, -1, &eye);
+    check_true(eye.rest_seconds == -1, "clock rollback cannot manufacture eye countdown");
+    s.eye_care_break_id = 0;
+    ptc_overlay_project_eye_care(&s, true, 6, &eye);
+    check_true(eye.rest_seconds == -1, "missing rest instance cannot show countdown");
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "paused");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strcmp(eye.compact, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_PAUSED)) == 0,
+        "higher priority limits show paused eye cycle");
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "playing");
+    s.eye_care_used_minutes = 40;
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "play boundary needs refresh, not a fabricated rest instance");
+    s.eye_care_enabled = false;
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "off");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strcmp(eye.compact, ptc_ui_text(PTC_UI_T_CURRENTLY_OFF)) == 0 && !eye.warning,
+        "confirmed disabled eye care is explicit");
+    s.eye_care_phase[0] = '\0';
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(eye.warning && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "legacy missing eye fields are unknown, not disabled");
+
+    PtcResultState state;
+    char json[8192];
+    ptc_result_state_default(&state, 2380);
+    state.day_index = 2380;
+    state.eye_care_enabled = true;
+    state.eye_care_phase = "playing";
+    check_true(ptc_result_ok_json(json, sizeof(json), "eye-display", "status", "release",
+        false, &state, 1000) == 0 && ptc_companion_result_summary_parse(json, &s) && s.eye_care_available,
+        "wire parser records complete eye-care fields");
+    cJSON *root = cJSON_Parse(json);
+    cJSON *wire = cJSON_GetObjectItemCaseSensitive(root, "state");
+    cJSON *cycle = cJSON_GetObjectItemCaseSensitive(wire, "eye_care");
+    cJSON_DeleteItemFromObjectCaseSensitive(cycle, "used_minutes");
+    check_true(cJSON_PrintPreallocated(root, json, sizeof(json), false) &&
+        ptc_companion_result_summary_parse(json, &s) && !s.eye_care_available,
+        "missing cycle usage cannot be treated as zero minutes");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(eye.warning && !eye.detail[0] && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "partial wire cycle suppresses fabricated play countdown");
+    cJSON_Delete(root);
 }
 
 static void test_overlay_child_quota_and_restriction_details(void)
 {
-    char label[32], val[32], note[32], line[128];
+    char label[32], val[32], note[128], line[128];
     PtcCompanionResultSummary summary;
 
     /* 1. 规则来源友好标签映射 */
@@ -1131,12 +1487,28 @@ static void test_overlay_child_quota_and_restriction_details(void)
         "unrestricted today shows 不限时 with played note");
 
     summary.unrestricted_today = 0;
+    summary.eye_care_unlimited_capped = true;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "不限时") == 0 && strstr(note, "24 小时") != NULL,
+        "eye care temporary 1440-minute target retains original unlimited label");
+    summary.eye_care_unlimited_capped = false;
+
+    summary.unrestricted_today = 0;
     summary.remaining_available = true;
     summary.remaining_minutes = 45;
     summary.played_minutes = 15;
+    summary.daily_rule_available = true;
+    summary.daily_rule_minutes = 60;
     ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
     check_true(strcmp(val, "60 分钟") == 0 && strstr(note, "15") != NULL,
-        "total quota derives from remaining plus played minutes");
+        "total quota uses authoritative daily rule");
+    summary.remaining_minutes = 0;
+    summary.played_minutes = 100;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "60 分钟") == 0, "excess consumption does not inflate displayed quota");
+    summary.dock_unlimited_capped = true;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "不限时") == 0, "dock-only proxy remains unlimited in Overlay");
 
     /* 3. 受限时间与护眼提醒 (用于 cy + 94 引导行) */
     memset(&summary, 0, sizeof(summary));
@@ -1149,6 +1521,20 @@ static void test_overlay_child_quota_and_restriction_details(void)
         "bedtime active shows prominent restriction guidance");
 
     summary.bedtime_active = false;
+    summary.eye_care_enabled = true;
+    summary.eye_care_rest_remaining_seconds = 119;
+    snprintf(summary.eye_care_phase, sizeof(summary.eye_care_phase), "resting");
+    ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
+    check_true(strstr(line, "正在护眼休息") != NULL && strstr(line, "2 分钟") != NULL,
+        "eye care break guidance shows rounded remaining time");
+    summary.remaining_available = true;
+    summary.remaining_minutes = 0;
+    ptc_overlay_format_child_restriction_detail(&summary, line, sizeof(line));
+    check_true(strstr(line, "正在护眼休息") != NULL && strstr(line, "今日额度") == NULL,
+        "eye care restriction detail does not mislabel a blocked PCTL day as daily exhaustion");
+    summary.eye_care_enabled = false;
+    summary.remaining_available = false;
+
     summary.bedtime_skipped = true;
     ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
     check_true(strstr(line, "今晚就寝限制已跳过") != NULL,
@@ -1326,18 +1712,18 @@ static void test_daily_buffer_transactions(void)
         "{\"version\":1,\"request_id\":\"buffer-cap\",\"type\":\"claim_daily_buffer\","
         "\"created_at\":4,\"payload\":{}}"), "queue capped buffer claim");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "capped buffer claim is processed");
-    check_int(pctl.last_target.minutes, 1440, "buffer target is capped at 1440 minutes");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
-        strstr(text, "\"buffer_claimed\":true") && strstr(text, "\"buffer_claim_day_index\":2380") &&
-        strstr(text, "\"buffer_claimed_minutes\":0"),
-        "zero-effective capped claim still persists the claimed day");
+    check_int(pctl.apply_target_calls, 0, "zero-effective buffer performs no PCTL write");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/state.json") ||
+        (mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
+         strstr(text, "\"buffer_claimed\":false")),
+        "zero-effective capped claim preserves daily eligibility");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-cap-repeat.json",
         "{\"version\":1,\"request_id\":\"buffer-cap-repeat\",\"type\":\"claim_daily_buffer\","
         "\"created_at\":5,\"payload\":{}}"), "queue repeated capped claim");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "repeated capped claim is processed");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-cap-repeat.json", text, sizeof(text)) &&
-        strstr(text, "\"reason\":\"daily_buffer_already_claimed\""),
-        "a capped claim cannot be repeated to bypass once-per-day semantics");
+        strstr(text, "\"reason\":\"minutes_exceed_limit\""),
+        "repeat at the ceiling still rejects without consuming eligibility");
 
     seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 0, true);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-disabled.json",
@@ -1505,7 +1891,7 @@ static void test_setup_preflight_and_recovery(void)
     PtcPctlStub pctl;
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
-    char text[4096];
+    char text[PTC_IPC_MAX_RESULT_SIZE];
     char install_snapshot[4096];
     unsigned int apply_calls_after_activation;
 
@@ -1520,6 +1906,7 @@ static void test_setup_preflight_and_recovery(void)
     pctl.status.remaining_minutes = 120;
     pctl.status.play_timer_enabled = true;
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    check_int(fake_time.snapshot.second_of_minute, 0, "fake civil clock initializes seconds");
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     seed_release_setup(&mem);
 
@@ -1685,6 +2072,79 @@ static void test_setup_refuses_unknown_handover_total(void)
     check_int((int)pctl.apply_target_calls, 0, "unknown total leaves the current PCTL allowance untouched");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
         strstr(text, "\"phase\":\"protection\""), "unknown total enters retryable protection mode");
+}
+
+static void test_setup_takes_over_unconfigured_today_when_restriction_enabled(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    /* Parental control is ON, but today's native play-timer slot is cleanly
+       unconfigured -- the common CFW case where no numeric limit can be set. */
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = false;
+    pctl.status.blocked_today = false;
+    pctl.status.today_unconfigured = true;
+    pctl.status.remaining_available = false;
+    pctl.status.restricted_now = false;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-unconfigured.json",
+        "{\"version\":1,\"request_id\":\"setup-unconfigured\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}"),
+        "queue setup over a cleanly unconfigured today slot");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unconfigured-today setup is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-unconfigured.json", text, sizeof(text)) &&
+        !strstr(text, "\"reason\":\"handover_state_unavailable\""),
+        "enabled-but-unconfigured today no longer refuses takeover");
+    check_true(pctl.apply_target_calls >= 1 && pctl.last_target.mode == PTC_PCTL_TARGET_UNLIMITED,
+        "takeover applies an unlimited baseline for the unconfigured day");
+    check_true(pctl.status.unrestricted_today, "today is left unrestricted after the unlimited-baseline handover");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"released\"") && strstr(text, "\"restriction_cleared\":true"),
+        "unconfigured-today takeover reaches released (then activates after the grace)");
+}
+
+static void test_setup_refuses_unknown_handover_when_slot_not_unconfigured(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    /* Restriction is enabled but today's slot is unreadable AND not the clean
+       all-zero case: the guard must still refuse, never clobber it as unlimited. */
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = false;
+    pctl.status.blocked_today = false;
+    pctl.status.today_unconfigured = false;
+    pctl.status.remaining_available = false;
+    pctl.status.restricted_now = false;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-malformed.json",
+        "{\"version\":1,\"request_id\":\"setup-malformed\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}"),
+        "queue setup over an unreadable, non-unconfigured today slot");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "malformed-today setup is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-malformed.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"handover_state_unavailable\""),
+        "an unreadable, non-unconfigured today still refuses takeover");
+    check_int((int)pctl.apply_target_calls, 0, "unreadable today leaves the current PCTL allowance untouched");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"protection\""), "unreadable today stays in retryable protection");
 }
 
 static void test_live_enforce_recovery_is_not_startup_recovery(void)
@@ -1889,6 +2349,7 @@ static void test_setup_direct_takeover_recovers_exhausted_failed_release(void)
         &mem.storage, "app/flags/disable.flag", "setup_release_failed\n"),
         "restore the failed release circuit breaker");
     pctl.status.remaining_minutes = 3;
+    pctl.played_minutes_today = 28; /* Keep the simulated ns counter consistent with 31 - 3. */
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-expired-changed.json",
         "{\"version\":1,\"request_id\":\"setup-expired-changed\",\"type\":\"complete_setup\",\"created_at\":3,\"payload\":{}}"),
         "queue retry after the observed allowance changed");
@@ -2406,6 +2867,174 @@ static void test_album_restriction_transaction(void)
                "forced restore never overwrites an existing conflict rescue file");
 }
 
+static void test_eye_care_cycle_and_stale_skip(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime clock;
+    PtcSysmodule sysmodule;
+    char request[512];
+    char result[8192];
+    PtcEyeCarePolicy invalid = {true, 0, 10};
+    unsigned long long current_break_id = 0;
+
+    check_true(!ptc_eye_care_policy_is_valid(&invalid), "eye care rejects zero play minutes");
+    invalid.play_minutes = 40;
+    invalid.rest_minutes = 61;
+    check_true(!ptc_eye_care_policy_is_valid(&invalid), "eye care rejects rest over 60 minutes");
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.status.limited_today = true;
+    pctl.status.unrestricted_today = false;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 60;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&clock, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &clock.provider);
+    seed_release_setup(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\","
+        "\"restriction_cleared\":true,\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"),
+        "seed active setup for eye care");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60}],\"eye_care_enabled\":true,"
+        "\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
+        "seed eye care rule");
+    for (int sample = 0; sample < 4; ++sample) {
+        PtcCompanionResultSummary summary;
+        char pending[128], completed[128];
+        pctl.status.remaining_available = sample != 1;
+        pctl.status.play_timer_enabled = sample != 2;
+        pctl.configured_minutes = sample == 3 ? 90 : 60;
+        snprintf(pending, sizeof(pending), "app/inbox/pending/eye-first-%d.json", sample);
+        snprintf(completed, sizeof(completed), "app/results/eye-first-%d.json", sample);
+        snprintf(request, sizeof(request),
+            "{\"version\":1,\"request_id\":\"eye-first-%d\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}",
+            sample);
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage, pending, request),
+            "queue first eye care status before scheduler baseline");
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process first eye care status");
+        check_true(mem.storage.vtable->read_text(&mem.storage, completed, result, sizeof(result)) &&
+            ptc_companion_result_summary_parse(result, &summary) &&
+            strcmp(summary.eye_care_phase, sample == 0 ? "playing" : "unknown") == 0 &&
+            summary.eye_care_used_minutes == 0,
+            "first refresh projects reliable usage; missing or mismatched reads stay unknown");
+        check_int((int)pctl.apply_target_calls, 0, "status projection never applies PCTL targets");
+        check_int((int)pctl.start_timer_calls, 0, "status projection never starts the timer");
+    }
+    pctl.status.remaining_available = true;
+    pctl.status.play_timer_enabled = true;
+    pctl.configured_minutes = 60;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    {
+        PtcCompanionResultSummary summary;
+        char baseline[8192];
+        unsigned int writes = pctl.apply_target_calls;
+        check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", baseline,
+            sizeof(baseline)), "capture established eye care baseline");
+        pctl.played_minutes_today = 1;
+        pctl.status.remaining_minutes = 59;
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/inbox/pending/eye-fresh-delta.json",
+            "{\"version\":1,\"request_id\":\"eye-fresh-delta\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+            "queue fresh usage before the next scheduler tick");
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "fresh usage status is processed");
+        check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/eye-fresh-delta.json",
+            result, sizeof(result)) && ptc_companion_result_summary_parse(result, &summary) &&
+            strcmp(summary.eye_care_phase, "playing") == 0 && summary.eye_care_used_minutes == 1,
+            "fresh result includes the usage delta before the scheduler persists it");
+        check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", result,
+            sizeof(result)) && strcmp(result, baseline) == 0,
+            "status projection preserves the persisted cycle baseline");
+        check_int((int)pctl.apply_target_calls, (int)writes,
+            "fresh usage projection does not apply a control target");
+    }
+    pctl.played_minutes_today = 2;
+    pctl.status.remaining_minutes = 58;
+    clock.snapshot.unix_seconds += 120;
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(!pctl.status.blocked_today, "failed eye care write keeps previous target");
+    pctl.write_error = PTC_ERR_OK;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.blocked_today && pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED,
+        "eye care blocks after configured host usage");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/eye-rest-status.json",
+        "{\"version\":1,\"request_id\":\"eye-rest-status\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+        "queue eye care rest status");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "eye care rest status is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/eye-rest-status.json", result, sizeof(result)) &&
+        strstr(result, "\"daily_allowance\":false") && strstr(result, "\"eye_care\":true"),
+        "eye care break is not reported as exhausted daily allowance");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", result, sizeof(result)) &&
+        strstr(result, "\"eye_care_resting\":true"), "eye care break persists across restart");
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &clock.provider);
+    check_true(ptc_companion_skip_eye_care_break_request_json(request, sizeof(request),
+        "stale-eye-skip", clock.snapshot.unix_seconds, 999) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/stale-eye-skip.json", request),
+        "queue stale eye care skip");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "stale eye care skip is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/stale-eye-skip.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"error\""), "stale eye care skip is rejected");
+    check_true(pctl.status.blocked_today, "stale skip never releases restriction");
+    clock.snapshot.unix_seconds += 60;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.limited_today && !pctl.status.blocked_today &&
+        pctl.last_target.minutes == 60, "elapsed rest restores daily target");
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    clock.snapshot.unix_seconds += 600;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(!pctl.status.blocked_today,
+        "sleep without PCTL usage change does not consume eye care play time");
+    pctl.played_minutes_today = 4;
+    pctl.status.remaining_minutes = 56;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.blocked_today, "eye care starts the next break after more usage");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", result, sizeof(result)) &&
+        strstr(result, "\"eye_care_break_id\":") &&
+        sscanf(strstr(result, "\"eye_care_break_id\":"),
+            "\"eye_care_break_id\":%llu", &current_break_id) == 1 && current_break_id != 0,
+        "new eye care break has a persisted nonzero instance id");
+    check_true(ptc_companion_skip_eye_care_break_request_json(request, sizeof(request),
+        "current-eye-skip", clock.snapshot.unix_seconds, current_break_id) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/current-eye-skip.json", request),
+        "queue current eye care skip");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "current eye care skip is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/current-eye-skip.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "current eye care skip succeeds once");
+    check_true(pctl.status.limited_today && !pctl.status.blocked_today,
+        "successful eye care skip begins a new play cycle");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0}],"
+        "\"eye_care_enabled\":true,\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
+        "change original rule to unlimited while eye care is active");
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.unrestricted_today && pctl.last_target.mode == PTC_PCTL_TARGET_UNLIMITED,
+        "unlimited rule remains truly unlimited during eye care");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0}],"
+        "\"eye_care_enabled\":false,\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
+        "disable eye care on original unlimited rule");
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.unrestricted_today && pctl.last_target.mode == PTC_PCTL_TARGET_UNLIMITED,
+        "disabling eye care restores original unlimited target");
+}
+
 static void test_daily_enforce_does_not_start_play_timer(void)
 {
     PtcMemStorage mem;
@@ -2492,6 +3121,77 @@ static void test_daily_enforce_does_not_start_play_timer(void)
         strstr(text, "\"status\":\"ok\"") &&
         strstr(text, "\"remaining_minutes\":45"),
         "result JSON immediately reflects updated remaining minutes for today");
+}
+
+static void test_overlay_handshake_large_manifest(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char manifest[4097];
+    char request[1024];
+    char result[8192];
+    char ready[512], after[512];
+    char fingerprint[65];
+    size_t length;
+    unsigned int writes, starts;
+    static const char ENVIRONMENT[] =
+        "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\","
+        "\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"}";
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, true);
+    ptc_sysmodule_set_boot_id(&sysmodule, "manifest-capacity-boot");
+    sha256_hex(ENVIRONMENT, fingerprint);
+    writes = pctl.apply_target_calls;
+    starts = pctl.start_timer_calls;
+    snprintf(manifest, sizeof(manifest),
+        "{\"playwise_version\":\"" PLAYWISE_VERSION "\",\"profile\":\"release\","
+        "\"release_id\":\"playwise-" PLAYWISE_VERSION "+test\","
+        "\"build\":{\"source_fingerprint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"source_dirty\":false}}");
+    length = strlen(manifest);
+    /* A valid JSON manifest at preflight's maximum, beyond the old 1 KiB cap. */
+    memset(manifest + length, ' ', 4095U - length);
+    manifest[4095] = '\0';
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/build.json", manifest),
+        "seed maximum supported source-identity manifest");
+    check_true(ptc_companion_overlay_ready_request_json(request, sizeof(request),
+        "large-ready", 1, "playwise-" PLAYWISE_VERSION "+test", "overlay-large", fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/large-ready.json", request),
+        "queue matching Overlay handshake with a manifest larger than 1 KiB");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "large-manifest handshake is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/large-ready.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\"") && strstr(result, "\"overlay_verified\":true"),
+        "large manifest is accepted by both handshake and persisted readiness validation");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/overlay/ready.json", ready, sizeof(ready)),
+        "save successful large-manifest readiness preimage");
+
+    check_true(ptc_companion_overlay_ready_request_json(request, sizeof(request),
+        "large-wrong-release", 2, "other-release", "overlay-wrong", fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/large-wrong-release.json", request),
+        "queue mismatched release with a readable large manifest");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "mismatched large-manifest handshake is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/large-wrong-release.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"overlay_unverified\""),
+        "larger read capacity does not bypass release identity binding");
+
+    manifest[4095] = ' ';
+    manifest[4096] = '\0';
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/build.json", manifest),
+        "seed manifest beyond the preflight capacity");
+    check_true(ptc_companion_overlay_ready_request_json(request, sizeof(request),
+        "large-overflow", 3, "playwise-" PLAYWISE_VERSION "+test", "overlay-overflow", fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/large-overflow.json", request),
+        "queue handshake with an oversized manifest");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "oversized manifest handshake is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/large-overflow.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"overlay_unverified\"") && strstr(result, "\"overlay_verified\":false"),
+        "oversized reads fail closed instead of accepting a truncated release field");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/overlay/ready.json", after, sizeof(after)) &&
+        strcmp(ready, after) == 0, "refused handshakes preserve the successful readiness preimage");
+    check_int(pctl.apply_target_calls, writes, "handshake capacity checks never apply PCTL targets");
+    check_int(pctl.start_timer_calls, starts, "handshake capacity checks never start the timer");
 }
 
 static void test_bedtime_enforcement_and_overlay_recovery(void)
@@ -2985,6 +3685,20 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
         strstr(text, "\"today_override_present\":false"),
         "runtime reconfirmation preserves the configured rules without recapturing today");
 
+    /* Prime the scheduler while setup is still in its grace. The activation
+       happens five seconds later within the same minute, with no queue work,
+       notification, reload or disable transition to trigger Enforce. */
+    (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
+    unsigned int before_activation = pctl.apply_target_calls;
+    fake_time.snapshot.unix_seconds += 5;
+    check_true(ptc_sysmodule_scheduler_tick(&sysmodule, false) > 0,
+        "setup grace activation creates scheduler work without a minute change");
+    check_true(pctl.apply_target_calls > before_activation &&
+        pctl.last_target.mode == PTC_PCTL_TARGET_LIMIT && pctl.last_target.minutes == 60,
+        "setup activation applies the configured weekly policy in the same tick");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"active\""), "same-tick policy application leaves setup active");
+
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
         "{\"version\":1,\"phase\":\"protection\",\"compatibility_status\":\"protection\","
         "\"restriction_cleared\":false,\"snapshot_available\":true,\"activate_after\":0,"
@@ -3001,14 +3715,445 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
         "unrelated protection reason remains disabled");
 }
 
+static void test_eden_simulated_usage_clock(void)
+{
+    PtcPctlStub pctl;
+    uint64_t carry_ns = 0;
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 32;
+    pctl.played_minutes_today = 30;
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.play_timer_enabled = true;
+    pctl.status.remaining_minutes = 2;
+
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 30000000000ULL, &carry_ns) &&
+        pctl.status.remaining_minutes == 2, "Eden partial minute does not spend allowance early");
+    check_true(ptc_pctl_stub_advance_usage_ns(&pctl, 30000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 31 && pctl.status.remaining_minutes == 1,
+        "Eden elapsed minute updates played and remaining time");
+    check_true(ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 32 && pctl.status.remaining_minutes == 0 &&
+        pctl.status.restricted_now, "Eden timer reaches the daily limit");
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 32, "Eden exhausted timer stops advancing");
+
+    ptc_pctl_stub_reset_daily_usage(&pctl);
+    check_true(pctl.played_minutes_today == 0 && pctl.status.remaining_minutes == 32 &&
+        !pctl.status.restricted_now, "Eden next day restores the available allowance");
+    pctl.status.play_timer_enabled = false;
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 0, "Eden stopped timer does not consume allowance");
+    pctl.status.play_timer_enabled = true;
+    pctl.status.temporary_unlocked = true;
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 0, "Eden temporary unlock does not consume allowance");
+    pctl.status.temporary_unlocked = false;
+    pctl.status.limited_today = false;
+    pctl.status.unrestricted_today = true;
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 0, "Eden unlimited day does not consume allowance");
+}
+
+static void test_imported_region_calendar(void)
+{
+    static const char *jp =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"Leap day\",\"from\":\"2028-02-29\","
+        "\"to\":\"2028-02-29\"}],\"workdays\":[\"2028-03-01\"]}";
+    static const char *jp_updated =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"Leap day\",\"from\":\"2028-02-29\","
+        "\"to\":\"2028-03-01\"}],\"workdays\":[]}";
+    static const char *empty =
+        "{\"format_version\":1,\"region_id\":\"US-CA\",\"region_name\":\"California\","
+        "\"year\":2028,\"holidays\":[],\"workdays\":[]}";
+    static const char *invalid_date =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2027,\"holidays\":[{\"name\":\"Bad\",\"from\":\"2027-02-29\","
+        "\"to\":\"2027-02-29\"}],\"workdays\":[]}";
+    static const char *overlap =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"A\",\"from\":\"2028-01-01\","
+        "\"to\":\"2028-01-03\"},{\"name\":\"B\",\"from\":\"2028-01-03\","
+        "\"to\":\"2028-01-04\"}],\"workdays\":[]}";
+    PtcImportedCalendarYear *parsed = malloc(sizeof(*parsed));
+    PtcCalendarRuntime *runtime = malloc(sizeof(*runtime));
+    PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
+    PtcCalendarIndex *selected = malloc(sizeof(*selected));
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcRules rules;
+    PtcEffectiveRule quota;
+    PtcEffectiveBedtime bedtime;
+    uint16_t leap = 0, workday = 0, uncovered = 0;
+    char hash[65], original_hash[65], path[320];
+    bool covered = false;
+    if (!parsed || !runtime || !catalog || !selected || !mem) {
+        check_true(false, "allocate region calendar fixtures");
+        goto done;
+    }
+    check_true(ptc_holiday_calendar_parse_import(jp, strlen(jp), parsed), "accept valid leap-year region calendar");
+    check_int(parsed->holiday_day_count, 1, "count inclusive holiday range");
+    check_int(parsed->workday_count, 1, "count special workday");
+    check_true(ptc_holiday_calendar_parse_import(empty, strlen(empty), parsed), "accept empty date lists");
+    check_true(!ptc_holiday_calendar_parse_import(invalid_date, strlen(invalid_date), parsed),
+        "reject nonexistent leap date");
+    check_true(!ptc_holiday_calendar_parse_import(overlap, strlen(overlap), parsed),
+        "reject overlapping holidays");
+    {
+        static const char *bad_utf8 =
+            "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"\xc0\xaf\","
+            "\"year\":2028,\"holidays\":[],\"workdays\":[]}";
+        check_true(!ptc_holiday_calendar_parse_import(bad_utf8, strlen(bad_utf8), parsed),
+            "reject malformed UTF-8 in otherwise valid calendar");
+    }
+    check_true(!ptc_holiday_calendar_parse_import(
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan\",\"year\":2028,"
+        "\"holidays\":[{\"name\":\"Conflict\",\"from\":\"2028-01-01\",\"to\":\"2028-01-01\"}],"
+        "\"workdays\":[\"2028-01-01\"]}",
+        strlen("{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan\",\"year\":2028,"
+        "\"holidays\":[{\"name\":\"Conflict\",\"from\":\"2028-01-01\",\"to\":\"2028-01-01\"}],"
+        "\"workdays\":[\"2028-01-01\"]}"), parsed), "reject holiday/workday conflict");
+    ptc_mem_storage_init(mem);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", jp), "stage region calendar");
+    ptc_calendar_sha256_hex(jp, strlen(jp), hash);
+    snprintf(original_hash, sizeof(original_hash), "%s", hash);
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, NULL) &&
+        ptc_calendar_import_file(&mem->storage, "app", "JP-2028.json", hash, catalog) &&
+        ptc_calendar_index_save(&mem->storage, "app", false, catalog), "import region calendar");
+    check_true(ptc_calendar_build_selection(catalog, "JP", selected) &&
+        ptc_calendar_index_save(&mem->storage, "app", true, selected), "apply imported region snapshot");
+    check_true(ptc_day_index_from_date(2028, 2, 29, &leap) &&
+        ptc_day_index_from_date(2028, 3, 1, &workday) &&
+        ptc_day_index_from_date(2027, 2, 28, &uncovered), "convert region calendar dates");
+    check_true(ptc_calendar_runtime_load(&mem->storage, "app", leap, runtime), "load applied region with hash check");
+    check_int(ptc_holiday_calendar_classify_in(&runtime->set, leap, &covered),
+        PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, "classify imported holiday");
+    check_true(covered, "imported year is covered");
+    check_int(ptc_holiday_calendar_classify_in(&runtime->set, workday, &covered),
+        PTC_CALENDAR_DAY_MAKEUP_WORKDAY, "classify imported special workday");
+    (void)ptc_holiday_calendar_classify_in(&runtime->set, uncovered, &covered);
+    check_true(!covered, "missing selected year is explicitly uncovered");
+    ptc_rules_default(&rules);
+    rules.calendar = &runtime->set;
+    rules.holiday_enabled = true;
+    rules.holiday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 45};
+    rules.makeup_workday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 75};
+    rules.bedtime.enabled = true;
+    rules.bedtime.calendar_enabled = true;
+    rules.bedtime.holiday_rule.mode = PTC_BEDTIME_OVERRIDE_DISABLED;
+    rules.bedtime.makeup_workday_rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    rules.bedtime.makeup_workday_rule.window = (PtcBedtimeWindow){true, 21 * 60, 7 * 60};
+    quota = ptc_rules_resolve(&rules, leap, ptc_weekday_from_day_index(leap));
+    bedtime = ptc_bedtime_resolve_start_day(&rules, leap, ptc_weekday_from_day_index(leap));
+    check_int(quota.rule.minutes, 45, "holiday quota uses imported classification");
+    check_true(!bedtime.window.enabled, "holiday bedtime uses same classification");
+    quota = ptc_rules_resolve(&rules, workday, ptc_weekday_from_day_index(workday));
+    bedtime = ptc_bedtime_resolve_start_day(&rules, workday, ptc_weekday_from_day_index(workday));
+    check_int(quota.rule.minutes, 75, "workday quota uses imported classification");
+    check_true(bedtime.window.enabled && bedtime.window.start_minute == 21 * 60,
+        "workday bedtime uses same classification");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", jp_updated), "stage same-year replacement");
+    ptc_calendar_sha256_hex(jp_updated, strlen(jp_updated), hash);
+    check_true(ptc_calendar_import_file(&mem->storage, "app", "JP-2028.json", hash, catalog) &&
+        ptc_calendar_index_save(&mem->storage, "app", false, catalog), "replace catalog entry without format bump");
+    check_true(strcmp(selected->entries[0].sha256, original_hash) == 0 &&
+        strcmp(catalog->entries[0].sha256, hash) == 0,
+        "catalog replacement does not change applied manifest");
+    snprintf(path, sizeof(path), "app/calendars/library/JP-2028-%s.json", original_hash);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, "{}"),
+        "simulate corruption of applied content-addressed file");
+    check_true(!ptc_calendar_runtime_load(&mem->storage, "app", leap, runtime),
+        "corrupt active file fails closed instead of selecting latest catalog entry");
+done:
+    free(mem);
+    free(selected);
+    free(catalog);
+    free(runtime);
+    free(parsed);
+}
+
+static void queue_calendar_import(PtcMemStorage *mem, const char *request_id,
+    const char *file_name, const char *hash)
+{
+    char request[640], path[320];
+    snprintf(path, sizeof(path), "app/inbox/pending/%s.json", request_id);
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"import_holiday_calendar\","
+        "\"created_at\":1,\"payload\":{\"file_name\":\"%s\",\"sha256\":\"%s\"}}",
+        request_id, file_name, hash);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, request),
+        "queue calendar import request");
+}
+
+static void queue_calendar_activation(PtcMemStorage *mem, const char *request_id,
+    const char *option_id, const char *digest)
+{
+    char request[640], path[320];
+    snprintf(path, sizeof(path), "app/inbox/pending/%s.json", request_id);
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"activate_holiday_calendar\","
+        "\"created_at\":1,\"payload\":{\"option_id\":\"%s\",\"catalog_sha256\":\"%s\"}}",
+        request_id, option_id, digest);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, request),
+        "queue calendar activation request");
+}
+
+static void test_calendar_import_activation_transactions(void)
+{
+    static const char *first =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"Leap\",\"from\":\"2028-02-29\","
+        "\"to\":\"2028-02-29\"}],\"workdays\":[]}";
+    static const char *second =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[],\"workdays\":[\"2028-02-29\"]}";
+    static const char *us =
+        "{\"format_version\":1,\"region_id\":\"US-CA\",\"region_name\":\"California\","
+        "\"year\":2028,\"holidays\":[],\"workdays\":[]}";
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule *sysmodule = malloc(sizeof(*sysmodule));
+    PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
+    PtcCalendarIndex *active = malloc(sizeof(*active));
+    uint16_t leap = 0;
+    char first_hash[65], second_hash[65], us_hash[65], digest[65], result[8192];
+    if (!mem || !sysmodule || !catalog || !active) {
+        check_true(false, "allocate calendar transaction fixtures");
+        goto done;
+    }
+    seed_active_buffer_fixture(mem, &pctl, &fake_time, sysmodule, 120, 0, true);
+    check_true(ptc_day_index_from_date(2028, 2, 29, &leap), "convert transaction day");
+    fake_time.snapshot.day_index = leap;
+    fake_time.snapshot.unix_seconds = 1835395200;
+    pctl.played_minutes_today = 20;
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120}],"
+        "\"holiday_enabled\":true,\"holiday_mode\":\"limit\",\"holiday_minutes\":10,"
+        "\"makeup_workday_mode\":\"limit\",\"makeup_workday_minutes\":75}"),
+        "seed calendar transaction rules");
+    ptc_calendar_sha256_hex(first, strlen(first), first_hash);
+    ptc_calendar_sha256_hex(second, strlen(second), second_hash);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", first), "stage first transaction calendar");
+    queue_calendar_import(mem, "cal-import-one", "JP-2028.json", first_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "calendar import processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-import-one.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "calendar import result succeeds");
+    check_true(!mem->storage.vtable->exists(&mem->storage, "app/calendars/active.json") &&
+        pctl.apply_target_calls == 0, "import does not apply PCTL or active calendar");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest),
+        "load catalog digest for activation");
+    queue_calendar_activation(mem, "cal-activate-one", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "calendar activation processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-activate-one.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "calendar activation succeeds");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->option_id, "JP") == 0 &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "activation pins imported digest");
+    check_true(pctl.apply_target_calls > 0 && pctl.last_target.minutes == 10,
+        "activation immediately applies today's holiday quota");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", second), "stage current-region update");
+    queue_calendar_import(mem, "cal-import-two", "JP-2028.json", second_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "current-region update imported");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest) &&
+        ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(catalog->entries[0].sha256, second_hash) == 0 &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "current-region import remains pending until separately applied");
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    queue_calendar_activation(mem, "cal-activate-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "failed calendar activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "PCTL write failure rolls back active manifest");
+    pctl.write_error = PTC_ERR_OK;
+    mem->fail_write_path_contains_once = "activity/history.jsonl";
+    queue_calendar_activation(mem, "cal-activity-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "activity failure activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "activity failure rolls back active manifest");
+    mem->fail_write_path_contains_once = "results/cal-result-fail.json";
+    queue_calendar_activation(mem, "cal-result-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "result failure activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "result failure rolls back active manifest");
+    mem->fail_write_path_contains_once = "calendars/active.json";
+    queue_calendar_activation(mem, "cal-file-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "active file failure processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "active file failure retains previous selection");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/flags/disable.flag", "parent_disabled\n"), "set disabled flag for calendar test");
+    queue_calendar_activation(mem, "cal-disabled", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "disabled activation processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-disabled.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"disabled\""), "disabled flag rejects activation");
+    check_true(mem->storage.vtable->remove_path(&mem->storage, "app/flags/disable.flag"),
+        "clear disabled flag for region switch");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/US-CA-2028.json", us), "stage second region");
+    ptc_calendar_sha256_hex(us, strlen(us), us_hash);
+    mem->fail_write_path_contains_once = "calendars/catalog.json";
+    queue_calendar_import(mem, "cal-import-file-fail", "US-CA-2028.json", us_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "catalog write failure import processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, NULL) &&
+        catalog->count == 1, "catalog write failure preserves previous catalog");
+    queue_calendar_import(mem, "cal-import-us", "US-CA-2028.json", us_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "second region import processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest),
+        "load catalog with both regions");
+    queue_calendar_activation(mem, "cal-activate-us", "US-CA", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "cross-region activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->option_id, "US-CA") == 0 && active->count == 1 &&
+        strcmp(active->entries[0].sha256, us_hash) == 0 &&
+        pctl.last_target.minutes == 120,
+        "cross-region switch applies selected year and weekly fallback");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json",
+        "{\"version\":2,\"week\":[{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120}],"
+        "\"holiday_enabled\":true,\"holiday_mode\":\"limit\",\"holiday_minutes\":10,"
+        "\"makeup_workday_mode\":\"limit\",\"makeup_workday_minutes\":75,"
+        "\"bedtime_enabled\":true,\"bedtime_week\":["
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0}],"
+        "\"bedtime_calendar_enabled\":true,\"bedtime_holiday_mode\":\"inherit\","
+        "\"bedtime_makeup_mode\":\"custom\",\"bedtime_makeup_enabled\":true,"
+        "\"bedtime_makeup_start_minute\":1260,\"bedtime_makeup_end_minute\":420,"
+        "\"bedtime_scheduled_present\":false}"),
+        "seed selected-calendar bedtime window");
+    fake_time.snapshot.minute_of_day = 1380;
+    queue_calendar_activation(mem, "cal-bedtime-jp", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "calendar bedtime switch processed");
+    check_true(pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED &&
+        mem->storage.vtable->exists(&mem->storage, "app/backups/bedtime_pctl_snapshot.json"),
+        "switching into selected workday starts bedtime restriction with snapshot");
+    queue_calendar_activation(mem, "cal-activate-builtin", "builtin-cn", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "builtin activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->option_id, "builtin-cn") == 0 && active->count == 0 &&
+        pctl.last_target.mode == PTC_PCTL_TARGET_LIMIT &&
+        !mem->storage.vtable->exists(&mem->storage, "app/backups/bedtime_pctl_snapshot.json"),
+        "built-in calendar remains independent and ends changed bedtime window");
+done:
+    free(active);
+    free(catalog);
+    free(sysmodule);
+    free(mem);
+}
+
+static void test_calendar_activation_dock_unlimited_timer(void)
+{
+    /* Calendar activation must compose existing dock restrictions while keeping
+       the underlying unlimited rule free of counting-only quotas. */
+    static const char *empty =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2026,\"holidays\":[],\"workdays\":[]}";
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule *sysmodule = malloc(sizeof(*sysmodule));
+    PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
+    char hash[65], digest[65], result[8192];
+    if (!mem || !sysmodule || !catalog) {
+        check_true(false, "allocate dock-unlimited calendar fixtures");
+        goto done;
+    }
+    seed_active_buffer_fixture(mem, &pctl, &fake_time, sysmodule, 120, 0, true);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"},"
+        "{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"},"
+        "{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"}],"
+        "\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":30}"),
+        "seed unlimited week with dock policy");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2026.json", empty), "stage empty dock calendar");
+    ptc_calendar_sha256_hex(empty, strlen(empty), hash);
+    queue_calendar_import(mem, "cal-dock-import", "JP-2026.json", hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "dock calendar import processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest),
+        "load catalog digest for dock activation");
+    queue_calendar_activation(mem, "cal-dock-activate", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "dock calendar activation processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-dock-activate.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "dock calendar activation succeeds");
+    check_true(pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED,
+        "calendar activation preserves dock restriction when mode is unknown");
+done:
+    free(catalog);
+    free(sysmodule);
+    free(mem);
+}
+
+ #include "test_config_backup.inc"
+ #include "test_result_capacity.inc"
+
+static void test_quiescing_scheduler(void)
+{
+    static PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime clock;
+    PtcSysmodule sysmodule;
+    seed_active_buffer_fixture(&mem, &pctl, &clock, &sysmodule, 60, 5, true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/quiesce-status.json",
+        "{\"version\":1,\"request_id\":\"quiesce-status\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+        "queue a durable request at the quiesce boundary");
+    sysmodule.quiescing = true;
+    unsigned int calls = pctl.apply_target_calls;
+    check_int(ptc_sysmodule_scheduler_tick(&sysmodule, true), 0, "quiescing stops scheduler work");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/quiesce-status.json") &&
+        !mem.storage.vtable->exists(&mem.storage, "app/results/quiesce-status.json"),
+        "quiescing preserves the original pending request without acknowledging it");
+    check_int(pctl.apply_target_calls, calls, "quiescing cannot autonomously write PCTL");
+    sysmodule.quiescing = false;
+    check_true(ptc_sysmodule_scheduler_tick(&sysmodule, true) > 0, "cancelled handoff resumes normal work");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/results/quiesce-status.json") &&
+        !mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/quiesce-status.json"),
+        "resumption processes the same ID instead of inventing a new request");
+}
+
 int main(void)
 {
+    test_result_capacity_and_complete_recent_events();
+    test_result_builder_refuses_small_receipts();
+    test_config_backup();
+    failures += ptc_test_control_safety();
+    test_eden_simulated_usage_clock();
     test_hot_reload_guard();
+    test_capture_restart_guard();
+    test_hot_reload_io();
+    test_suspended_transport();
+    test_quiescing_scheduler();
     test_result_summary_unlimited_state();
     test_result_summary_access_recovery();
     test_tokens();
     test_release_request_contract();
     test_holiday_calendar_and_priority();
+    test_imported_region_calendar();
+    test_calendar_import_activation_transactions();
+    test_calendar_activation_dock_unlimited_timer();
     test_bedtime_rules_and_protocol();
     test_daily_summary_and_read_only_stats_boundary();
     test_support_redaction();
@@ -3022,14 +4167,19 @@ int main(void)
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_overlay_child_quota_and_restriction_details();
+    test_overlay_eye_care_display();
     test_setup_preflight_and_recovery();
     test_daily_buffer_transactions();
     test_daily_buffer_failure_rollbacks();
     test_activity_history_retention_and_clear_rollback();
     test_setup_direct_takeover_recovers_exhausted_failed_release();
     test_setup_refuses_unknown_handover_total();
+    test_setup_takes_over_unconfigured_today_when_restriction_enabled();
+    test_setup_refuses_unknown_handover_when_slot_not_unconfigured();
     test_runtime_fingerprint_change_can_be_reconfirmed();
+    test_eye_care_cycle_and_stale_skip();
     test_daily_enforce_does_not_start_play_timer();
+    test_overlay_handshake_large_manifest();
     test_bedtime_enforcement_and_overlay_recovery();
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();

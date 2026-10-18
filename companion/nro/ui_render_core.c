@@ -32,6 +32,33 @@ uint16_t ptc_ui_render_minute_of_day(int64_t now)
 }
 
 
+void ptc_ui_render_policy_status(const PtcUiModel *model, PtcPolicyStatus *out)
+{
+    int day = -1, second = -1;
+#ifdef PTC_UI_PREVIEW_MINUTE_OF_DAY
+    day = model ? model->day_index : -1;
+    second = PTC_UI_PREVIEW_MINUTE_OF_DAY * 60;
+#else
+    (void)ptc_policy_local_clock(ptc_ui_render_now(), &day, &second);
+#endif
+    ptc_ui_project_policy_status(model, ptc_ui_render_now(), day, second, out);
+}
+
+uint32_t policy_display_color(PtcPolicyDisplayState state)
+{
+    switch (state) {
+    case PTC_POLICY_ACTIVE: return UI_DANGER;
+    case PTC_POLICY_PENDING:
+    case PTC_POLICY_WAITING:
+    case PTC_POLICY_EXHAUSTED: return UI_WARNING;
+    case PTC_POLICY_SKIPPED:
+    case PTC_POLICY_WAIVED: return UI_SUCCESS;
+    case PTC_POLICY_AVAILABLE:
+    case PTC_POLICY_TV_ONLY: return UI_ACCENT;
+    default: return UI_MUTED;
+    }
+}
+
 bool is_docked_mode(void)
 {
 #if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
@@ -120,12 +147,16 @@ static UiActiveRuleBadge get_active_rule_badge(const PtcUiModel *model)
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     PtcUiTimeProjection status;
-    UiRect box = to_uirect(ptc_ui_time_status_bar_rect());
+    UiRect box = to_uirect(ptc_ui_time_status_bar_for_model(model));
     char fitted_fresh[64];
+    bool show_eye_cycle = model && model->eye_care_policy.enabled;
     uint32_t color;
     UiActiveRuleBadge badge;
 
     ptc_ui_project_time_status(model, ptc_ui_render_now(), &status);
+    bool show_bedtime = model && (model->bedtime_policy.enabled || model->bedtime_status_enabled);
+    bool show_dock = model && (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled);
+    bool show_policy = show_bedtime || show_dock;
     color = time_projection_color(status.state);
     badge = get_active_rule_badge(model);
     if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
@@ -169,6 +200,27 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     fit_text(fitted_badge, sizeof(fitted_badge), badge.label, 11, max_badge_w);
     draw_text(pixels, stride, pill.x + 15, box.y + 21, fitted_badge, 11, badge.color);
 
+    /* 4b. 屏幕形态胶囊徽章 (电视模式 / 掌机桌面) */
+    if (model && model->dock_available && ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+        bool is_tv = (strcmp(model->operation_mode, "docked") == 0);
+        bool is_undocked = (strcmp(model->operation_mode, "undocked") == 0);
+        const char *m_label = is_tv ? ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE) :
+            (is_undocked ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_BADGE) : NULL);
+        if (m_label) {
+            uint32_t m_color = is_tv ? UI_SUCCESS : (model->dock_restriction_active ? UI_DANGER : UI_ACCENT);
+            uint32_t m_bg = is_tv ? UI_SUCCESS_SOFT : (model->dock_restriction_active ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
+            int m_tw = measure_text(m_label, 11);
+            int m_pw = m_tw + 16;
+            if (m_pw < 48) m_pw = 48;
+            UiRect m_rect = {pill.x + pill.width + 8, box.y + 7, m_pw, 19};
+            if (m_rect.x + m_rect.width <= right_limit) {
+                fill_round_rect(pixels, stride, m_rect, 5, m_bg);
+                draw_rect_outline(pixels, stride, m_rect, 5, 1, m_color);
+                draw_text_center(pixels, stride, m_rect, m_label, 11, m_color);
+            }
+        }
+    }
+
     /* 5. 数据更新时效 (右对齐) */
     fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
     int fresh_w = measure_text(fitted_fresh, 12);
@@ -202,7 +254,32 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     }
 
     /* --- 第三层：全宽精致圆角额度进度槽 (置于卡片下沿基线) --- */
-    UiRect track = {box.x + 14, box.y + 53, box.width - 28, 5};
+    if (show_eye_cycle) {
+        char cycle[128], fitted_cycle[128];
+        ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
+        fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 11, box.width - 28);
+        draw_text(pixels, stride, box.x + 14, box.y + 61, fitted_cycle, 11,
+                  strcmp(model->eye_care_phase, "resting") == 0 ? UI_DANGER : UI_ACCENT);
+    }
+    if (show_policy) {
+        PtcPolicyStatus policies;
+        ptc_ui_render_policy_status(model, &policies);
+        int width = box.width - 28;
+        int column_width = show_bedtime && show_dock ? (width - 10) / 2 : width;
+        int text_y = box.y + (show_eye_cycle ? 77 : 61);
+        int column_x = box.x + 14;
+        for (int index = 0; index < 2; ++index) {
+            if ((index == 0 && !show_bedtime) || (index == 1 && !show_dock)) continue;
+            const PtcPolicyDisplay *policy = index == 0 ? &policies.bedtime : &policies.dock;
+            char text[256], fitted[256];
+            snprintf(text, sizeof(text), "%s: %s", ptc_ui_text(index == 0 ?
+                PTC_UI_T_POLICY_BED_LABEL : PTC_UI_T_POLICY_DOCK_LABEL), policy->compact);
+            fit_text(fitted, sizeof(fitted), text, 11, column_width);
+            draw_text(pixels, stride, column_x, text_y, fitted, 11, policy_display_color(policy->state));
+            column_x += column_width + 10;
+        }
+    }
+    UiRect track = {box.x + 14, box.y + (show_eye_cycle ? 69 : 53) + (show_policy ? 16 : 0), box.width - 28, 5};
     fill_round_rect(pixels, stride, track, 2, UI_RAISED);
     if (status.progress_available && status.progress_per_mille > 0) {
         int width = track.width * status.progress_per_mille / 1000;
@@ -377,6 +454,37 @@ void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char
         return;
     }
 
+    /* 匹配单肩键 "L  ", "R  " 或 "L ", "R " */
+    if ((label[0] == 'L' || label[0] == 'R') && label[1] == ' ') {
+        char key_buf[2] = {label[0], '\0'};
+        int pfx_len = (label[2] == ' ') ? 3 : 2;
+        const char *rest = label + pfx_len;
+        int key_w = 24 + 8;
+        int cur_size = size;
+        int rest_w = measure_text(rest, cur_size);
+        int total_w = key_w + rest_w;
+        while (total_w > box.width - 8 && cur_size > 11) {
+            cur_size--;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        char fitted_rest[128];
+        if (total_w > box.width - 6) {
+            fit_text(fitted_rest, sizeof(fitted_rest), rest, cur_size, box.width - key_w - 6);
+            rest = fitted_rest;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        int start_x = box.x + (box.width - total_w) / 2;
+        if (start_x < box.x + 2) start_x = box.x + 2;
+        int gly_y = box.y + (box.height - 20) / 2;
+        int baseline = box.y + (box.height + cur_size - 4) / 2;
+
+        draw_shoulder_key_glyph(pixels, stride, start_x, gly_y, 24, 20, key_buf, disabled);
+        draw_text(pixels, stride, start_x + key_w, baseline, rest, cur_size, color);
+        return;
+    }
+
     /* 匹配单字符圆键 "A  ", "B  ", "X  ", "Y  ", "+  ", "-  " 或单空格 "A ", "B ", ... */
     if ((label[0] == 'A' || label[0] == 'B' || label[0] == 'X' || label[0] == 'Y' ||
          label[0] == '+' || label[0] == '-') && label[1] == ' ') {
@@ -441,13 +549,14 @@ void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     fill_round_rect(pixels, stride, box, 12,
         color == UI_WARNING ? UI_WARNING_SOFT : UI_DANGER_SOFT);
-    draw_rect_outline(pixels, stride, box, 12, 1, color);
+    draw_rect_outline(pixels, stride, box, 12, 1,
+        color == UI_WARNING ? UI_WARNING_BORDER : UI_DANGER_BORDER);
     if (model->parent_footer_focused && model->parent_footer_selection == 1) {
         fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(focus)));
         fill_round_rect(pixels, stride, (UiRect){box.x + 3, box.y + 3, box.width - 6, box.height - 6},
             9, UI_RGB(UI_BLENDED(surface_raised)));
     }
-    draw_text_center(pixels, stride, box, summary, 17, color);
+    draw_text_center(pixels, stride, box, summary, 17, color == UI_WARNING ? UI_WARNING_TEXT : color);
 }
 
 UiRect to_uirect(PtcUiRect rect)
@@ -467,6 +576,9 @@ void draw_dialog_button(
 {
     UiRect box = to_uirect(rect);
     fill_round_rect(pixels, stride, box, 12, outline ? UI_RGB(UI_BLENDED(surface_raised)) : background);
+    if (outline) {
+        draw_rect_outline(pixels, stride, box, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+    }
     draw_button_label(pixels, stride, box, label, 21, foreground);
 }
 
@@ -580,7 +692,7 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     int radius = box.height / 2;
     draw_round_rect_shadow(pixels, stride, box, radius, 12, 40, 3);
     fill_round_rect(pixels, stride, box, radius, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_SURFACE));
-    draw_rect_outline(pixels, stride, box, radius, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_BORDER));
+    draw_rect_outline(pixels, stride, box, radius, 1, danger ? UI_DANGER_BORDER : (warning ? UI_WARNING_BORDER : UI_BORDER));
 
     PtcUiRect icon_rect = ptc_ui_notice_status_icon_rect(n_rect.y);
     int icon_cx = icon_rect.x + icon_rect.w / 2;
@@ -589,8 +701,8 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
     if (notice.has_details) {
         UiRect detail_btn = to_uirect(ptc_ui_notice_details_rect());
-        fill_round_rect(pixels, stride, detail_btn, 8, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT_SOFT));
-        draw_rect_outline(pixels, stride, detail_btn, 8, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT));
+        fill_round_rect(pixels, stride, detail_btn, 8, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_ACCENT_SOFT));
+        draw_rect_outline(pixels, stride, detail_btn, 8, 1, danger ? UI_DANGER_BORDER : (warning ? UI_WARNING_BORDER : UI_ACCENT));
         draw_text_center(pixels, stride, detail_btn, ptc_ui_text(PTC_UI_T_X_DETAILS), 13, (danger || warning) ? UI_ON_ACCENT : UI_ACCENT);
     }
 

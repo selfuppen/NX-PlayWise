@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import argparse
 from datetime import date, datetime
 import json
-from pathlib import Path
 import secrets
 
-from ptc_token_v1 import (
+from tools.lib.ptc_token_v1 import (
     MAX_NONCE,
     TOKEN_ACTION_ADD_TODAY_MINUTES,
     TOKEN_VERSION,
     TokenPayload,
     encode_token,
 )
-from ptc_token_v2 import MAX_NONCE as V2_MAX_NONCE, encode_token as encode_token_v2, tier_for_minutes
+from tools.lib.ptc_token_v2 import MAX_NONCE as V2_MAX_NONCE, encode_token as encode_token_v2, tier_for_minutes
 
 
 def parse_int(value: str) -> int:

@@ -94,20 +94,51 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
 {
     size_t used = 0;
     unsigned int i;
+    char eye_usage[256] = "";
+    char dock_usage[224] = "";
+    char history[400] = "";
+    char clock[160] = "";
+    if (state->local_clock_available)
+        (void)snprintf(clock, sizeof(clock),
+            "\"clock\":{\"day_index\":%u,\"second_of_day\":%lu,\"captured_at\":%lld},",
+            state->day_index, (unsigned long)state->local_second_of_day,
+            (long long)state->local_clock_captured_at);
+    if (state->usage_direct_present)
+        (void)snprintf(history, sizeof(history),
+            ",\"direct\":{\"source\":\"pctl_1952\",\"scope\":\"console_usable_time\",\"coverage\":\"partial\","
+            "\"known_days_7\":%u,\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu,"
+            "\"last_captured_at\":%lld,\"last_observed_at\":%lld,\"latest_available\":%s}",
+            state->usage_direct_days_7, (unsigned long)state->usage_direct_minutes_7,
+            state->usage_direct_days_30, (unsigned long)state->usage_direct_minutes_30,
+            (long long)state->usage_last_captured_at, (long long)state->usage_last_observed_at,
+            json_bool(state->usage_latest_available));
+    if (state->eye_care_usage_source && strcmp(state->eye_care_usage_source, "pctl_1952") == 0)
+        (void)snprintf(eye_usage, sizeof(eye_usage),
+            ",\"usage_source\":\"pctl_1952\",\"usage_quality\":\"%s\","
+            "\"used_ns\":\"%llu\",\"usage_captured_at\":%lld",
+            state->eye_care_usage_quality ? state->eye_care_usage_quality : "unknown",
+            (unsigned long long)state->eye_care_used_ns, (long long)state->eye_care_usage_captured_at);
+    if (state->dock_usage_source && strcmp(state->dock_usage_source, "pctl_1952") == 0)
+        (void)snprintf(dock_usage, sizeof(dock_usage),
+            ",\"usage_source\":\"pctl_1952\",\"usage_quality\":\"%s\",\"usage_captured_at\":%lld",
+            state->dock_usage_quality ? state->dock_usage_quality : "unknown",
+            (long long)state->dock_usage_captured_at);
     while (out[used] != '\0' && used < out_size) {
         ++used;
     }
     (void)snprintf(
         out + used,
         out_size > used ? out_size - used : 0,
-        "\"state\":{\"day_index\":%u,\"restriction_enabled_available\":%s,\"restriction_enabled\":%s,"
+        "\"state\":{\"day_index\":%u,%s\"restriction_enabled_available\":%s,\"restriction_enabled\":%s,"
         "\"temporary_unlocked_available\":%s,\"temporary_unlocked\":%s,"
         "\"limited_today\":%d,\"blocked_today\":%d,"
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"played_minutes_available\":%s,\"played_minutes\":%lld,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,"
-        "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s,",
+        "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s,"
+        "\"calendar_option_id\":\"%s\",\"calendar_source\":\"%s\",",
         state->day_index,
+        clock,
         json_bool(state->restriction_enabled_available),
         json_bool(state->restriction_enabled),
         json_bool(state->temporary_unlocked_available),
@@ -123,8 +154,20 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->restricted_now,
         state->rule_source ? state->rule_source : "weekly",
         json_bool(state->calendar_covered),
-        json_bool(state->calendar_update_warning));
+        json_bool(state->calendar_update_warning),
+        state->calendar_option_id ? state->calendar_option_id : "builtin-cn",
+        state->calendar_source ? state->calendar_source : "builtin");
     used = strlen(out);
+    if (state->usage_supported) {
+        (void)snprintf(out + used, out_size > used ? out_size - used : 0,
+            "\"usage\":{\"source\":\"pctl_1952\",\"scope\":\"console_usable_time\","
+            "\"available\":%s,\"total_ns\":\"%llu\",\"captured_at\":%lld,\"ipc_result\":%lu},"
+            "\"signed_remaining_ns_available\":%s,\"signed_remaining_ns\":\"%lld\",",
+            json_bool(state->usage_available), (unsigned long long)state->usage_ns,
+            (long long)state->usage_captured_at, (unsigned long)state->usage_result,
+            json_bool(state->signed_remaining_ns_available), (long long)state->signed_remaining_ns);
+        used = strlen(out);
+    }
     (void)snprintf(out + used, out_size > used ? out_size - used : 0, "\"forecast\":[");
     for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
         used = strlen(out);
@@ -142,7 +185,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "],\"autonomy\":{\"daily_buffer_minutes\":%u,\"claimed_today\":%s,"
         "\"available\":%s,\"reason\":\"%s\"},"
         "\"usage_summary\":{\"available\":%s,\"known_days_7\":%u,"
-        "\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu},"
+        "\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu%s},"
         "\"bedtime\":{\"enabled\":%s,\"active\":%s,\"skipped\":%s,"
         "\"window_instance_id\":%llu,\"start_day_index\":%u,\"start_minute\":%u,"
         "\"end_minute\":%u,\"source\":\"%s\",\"next_available\":%s,"
@@ -152,7 +195,14 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"start_day_index\":%u,\"start_minute\":%u,\"end_minute\":%u,\"source\":\"%s\"},"
         "\"official_setting_confirmed\":%s,"
         "\"overlay_verified\":%s,\"recovery_phase\":\"%s\"},"
-        "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s}}",
+        "\"eye_care\":{\"enabled\":%s,\"play_minutes\":%u,\"rest_minutes\":%u,"
+        "\"phase\":\"%s\",\"used_minutes\":%u,\"rest_remaining_seconds\":%lld,"
+        "\"break_id\":%llu,\"unlimited_capped\":%s%s},"
+        "\"dock\":{\"available\":%s,\"force_docked\":%s,\"undocked_limit_enabled\":%s,"
+        "\"undocked_daily_minutes\":%u,\"operation_mode\":\"%s\","
+        "\"dock_supported_available\":%s,\"dock_supported\":%s,\"usage_available\":%s,"
+        "\"used_minutes\":%u,\"remaining_minutes\":%u,\"waived_today\":%s,\"unlimited_capped\":%s%s},"
+        "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s,\"eye_care\":%s,\"dock\":%s}}",
         state->daily_buffer_minutes,
         json_bool(state->daily_buffer_claimed),
         json_bool(state->daily_buffer_available),
@@ -162,6 +212,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         (unsigned long)state->usage_consumed_minutes_7,
         state->usage_known_days_30,
         (unsigned long)state->usage_consumed_minutes_30,
+        history,
         json_bool(state->bedtime_enabled), json_bool(state->bedtime_active),
         json_bool(state->bedtime_skipped), (unsigned long long)state->bedtime_window_instance_id,
         state->bedtime_start_day_index, state->bedtime_start_minute, state->bedtime_end_minute,
@@ -177,14 +228,33 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         json_bool(state->bedtime_official_setting_confirmed),
         json_bool(state->bedtime_overlay_verified),
         state->bedtime_recovery_phase ? state->bedtime_recovery_phase : "idle",
+        json_bool(state->eye_care_enabled), state->eye_care_play_minutes,
+        state->eye_care_rest_minutes, state->eye_care_phase ? state->eye_care_phase : "off",
+        state->eye_care_used_minutes, (long long)state->eye_care_rest_remaining_seconds,
+        (unsigned long long)state->eye_care_break_id,
+        json_bool(state->eye_care_unlimited_capped),
+        eye_usage,
+        json_bool(state->dock_available), json_bool(state->force_docked),
+        json_bool(state->undocked_limit_enabled), state->undocked_daily_minutes,
+        state->operation_mode ? state->operation_mode : "unknown",
+        json_bool(state->dock_supported_available), json_bool(state->dock_supported),
+        json_bool(state->undocked_usage_available), state->undocked_used_minutes,
+        state->undocked_remaining_minutes, json_bool(state->dock_waived_today),
+        json_bool(state->dock_unlimited_capped),
+        dock_usage,
         json_bool(state->bedtime_active && !state->bedtime_skipped),
-        json_bool(state->daily_restriction_active));
+        json_bool(state->daily_restriction_active),
+        json_bool(state->eye_care_enabled && state->eye_care_phase && strcmp(state->eye_care_phase, "resting") == 0),
+        json_bool(state->dock_restriction_active));
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
 {
     unsigned int i;
     state->day_index = day_index;
+    state->local_clock_available = false;
+    state->local_second_of_day = 0;
+    state->local_clock_captured_at = 0;
     state->restriction_enabled_available = false;
     state->restriction_enabled = false;
     state->temporary_unlocked_available = false;
@@ -196,11 +266,20 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->remaining_minutes = -1;
     state->played_minutes_available = false;
     state->played_minutes = -1;
+    state->usage_supported = false;
+    state->usage_available = false;
+    state->usage_ns = 0;
+    state->usage_captured_at = 0;
+    state->usage_result = 0;
+    state->signed_remaining_ns_available = false;
+    state->signed_remaining_ns = 0;
     state->play_timer_enabled = -1;
     state->restricted_now = -1;
     state->rule_source = "weekly";
     state->calendar_covered = false;
     state->calendar_update_warning = false;
+    state->calendar_option_id = "builtin-cn";
+    state->calendar_source = "builtin";
     for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
         state->forecast[i].day_index = (uint16_t)(day_index + i);
         state->forecast[i].mode = 1;
@@ -217,6 +296,11 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->usage_consumed_minutes_7 = 0;
     state->usage_known_days_30 = 0;
     state->usage_consumed_minutes_30 = 0;
+    state->usage_direct_present = false;
+    state->usage_direct_days_7 = state->usage_direct_days_30 = 0;
+    state->usage_direct_minutes_7 = state->usage_direct_minutes_30 = 0;
+    state->usage_last_captured_at = state->usage_last_observed_at = 0;
+    state->usage_latest_available = false;
     state->bedtime_enabled = false;
     state->bedtime_active = false;
     state->bedtime_skipped = false;
@@ -240,6 +324,34 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->bedtime_overlay_verified = false;
     state->bedtime_recovery_phase = "idle";
     state->daily_restriction_active = false;
+    state->eye_care_enabled = false;
+    state->eye_care_play_minutes = 40;
+    state->eye_care_rest_minutes = 10;
+    state->eye_care_phase = "off";
+    state->eye_care_used_minutes = 0;
+    state->eye_care_rest_remaining_seconds = 0;
+    state->eye_care_break_id = 0;
+    state->eye_care_unlimited_capped = false;
+    state->eye_care_usage_source = "allowance_remaining";
+    state->eye_care_usage_quality = "legacy_estimate";
+    state->eye_care_used_ns = 0;
+    state->eye_care_usage_captured_at = 0;
+    state->dock_available = false;
+    state->force_docked = false;
+    state->undocked_limit_enabled = false;
+    state->undocked_daily_minutes = 30;
+    state->operation_mode = "unknown";
+    state->dock_supported_available = false;
+    state->dock_supported = false;
+    state->undocked_usage_available = false;
+    state->undocked_used_minutes = 0;
+    state->undocked_remaining_minutes = 0;
+    state->dock_waived_today = false;
+    state->dock_restriction_active = false;
+    state->dock_unlimited_capped = false;
+    state->dock_usage_source = "allowance_remaining";
+    state->dock_usage_quality = "legacy_estimate";
+    state->dock_usage_captured_at = 0;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)
@@ -314,8 +426,9 @@ int ptc_result_ok_json(
         return -1;
     }
     append_state(out, out_size, state);
-    written = (int)snprintf(out + strlen(out), out_size - strlen(out), ",\"completed_at\":%lld}\n", (long long)completed_at);
-    return written < 0 ? -1 : 0;
+    size_t used = strlen(out);
+    written = (int)snprintf(out + used, out_size - used, ",\"completed_at\":%lld}\n", (long long)completed_at);
+    return written < 0 || (size_t)written >= out_size - used ? -1 : 0;
 }
 
 int ptc_result_preview_ok_json(
@@ -383,6 +496,7 @@ int ptc_result_error_json(
         return -1;
     }
     append_state(out, out_size, state);
-    written = (int)snprintf(out + strlen(out), out_size - strlen(out), ",\"completed_at\":%lld}\n", (long long)completed_at);
-    return written < 0 ? -1 : 0;
+    size_t used = strlen(out);
+    written = (int)snprintf(out + used, out_size - used, ",\"completed_at\":%lld}\n", (long long)completed_at);
+    return written < 0 || (size_t)written >= out_size - used ? -1 : 0;
 }

@@ -1,4 +1,5 @@
 #include "eden_runtime.h"
+#include "eden_timer.h"
 
 #ifdef PLAYWISE_EDEN
 
@@ -12,6 +13,7 @@
 
 #include "../../common/time/ptc_time.h"
 #include "../../common/version.h"
+#include "../../platform/host/operation_mode_file.h"
 #include "release_manifest.h"
 
 /* The emulator has no reliable time service wrapper for the sysmodule path, but
@@ -42,6 +44,13 @@ static const PtcTimeProviderVTable EDEN_TIME_VTABLE = {
     eden_now,
     eden_sleep_ms,
 };
+
+static PtcOperationModeStatus eden_operation_mode(void *ctx)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    PtcFileOperationMode provider = {runtime->sysmodule.storage, PLAYWISE_EDEN_SD_ROOT};
+    return ptc_file_operation_mode_read(&provider);
+}
 
 static bool eden_ipc_connect(void *ctx)
 {
@@ -194,31 +203,48 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     if (!runtime || !storage || !seed_files(storage)) return false;
     memset(runtime, 0, sizeof(*runtime));
     ptc_pctl_stub_init(&runtime->pctl);
-    /* Model allowance consumption so 额度已耗（估算）/还可玩 are not trivially zero and the
-       expiry path can be exercised without waiting a real day. */
-    runtime->pctl.model_elapsed_time = true;
-    runtime->pctl.played_minutes_today = 30;
-    runtime->pctl.status.played_minutes_available = true;
-    runtime->pctl.status.played_minutes = 30;
-    runtime->pctl.status.play_timer_enabled = true;
     runtime->time_provider.vtable = &EDEN_TIME_VTABLE;
     runtime->time_provider.ctx = runtime;
+    runtime->usage_day_index = eden_now(&runtime->time_provider).day_index;
+    runtime->last_usage_tick = armGetSystemTick();
     ptc_sysmodule_init(&runtime->sysmodule, PLAYWISE_EDEN_SD_ROOT, storage,
         ptc_pctl_stub_as_pctl(&runtime->pctl), &runtime->time_provider);
+    if (!ptc_eden_restore_timer(&runtime->sysmodule, &runtime->pctl,
+            eden_now(&runtime->time_provider), &runtime->usage_carry_ns)) return false;
     snprintf(boot_id, sizeof(boot_id), "eden-%08llx",
         (unsigned long long)(randomGet64() & 0xffffffffULL));
     ptc_sysmodule_set_boot_id(&runtime->sysmodule, boot_id);
     (void)ptc_sysmodule_bootstrap_setup(&runtime->sysmodule);
+    runtime->operation_mode_provider.read = eden_operation_mode;
+    runtime->operation_mode_provider.ctx = runtime;
+    runtime->sysmodule.operation_mode_provider = &runtime->operation_mode_provider;
     (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
     runtime->initialized = true;
     return true;
 }
 
-void ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
+bool ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
 {
-    if (runtime && runtime->initialized) {
-        (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
+    PtcClockSnapshot now;
+    uint64_t tick;
+    bool usage_changed = false;
+    if (!runtime || !runtime->initialized) return false;
+    now = eden_now(&runtime->time_provider);
+    tick = armGetSystemTick();
+    if (now.day_index != runtime->usage_day_index) {
+        runtime->usage_day_index = now.day_index;
+        runtime->usage_carry_ns = 0;
+        ptc_pctl_stub_reset_daily_usage(&runtime->pctl);
+        usage_changed = true;
+    } else if (tick >= runtime->last_usage_tick) {
+        usage_changed = ptc_pctl_stub_advance_usage_ns(&runtime->pctl,
+            armTicksToNs(tick - runtime->last_usage_tick), &runtime->usage_carry_ns);
     }
+    runtime->last_usage_tick = tick;
+    runtime->pctl.status.usage_day_index = now.day_index;
+    runtime->pctl.status.usage_captured_at = now.unix_seconds;
+    (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
+    return usage_changed;
 }
 
 const PtcCompanionIpcBackend *ptc_eden_runtime_ipc_backend(void)

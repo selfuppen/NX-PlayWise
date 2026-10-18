@@ -1,4 +1,5 @@
 #include "sysmodule_internal.h"
+#include "../common/protocol/ipc_protocol.h"
 
 static int64_t result_remaining_minutes(const PtcPctlStatus *status)
 {
@@ -40,6 +41,20 @@ void result_state_from_pctl(
     state->remaining_minutes = result_remaining_minutes(status);
     state->played_minutes = result_played_minutes(status);
     state->played_minutes_available = state->played_minutes >= 0;
+    state->usage_supported = status->usage_supported;
+    state->usage_available = status->usage_available && status->usage_day_index == day_index;
+    state->usage_ns = state->usage_available ? status->usage_ns : 0;
+    state->usage_captured_at = state->usage_available ? status->usage_captured_at : 0;
+    state->usage_result = status->usage_result;
+    state->signed_remaining_ns_available = status->signed_remaining_ns_available;
+    state->signed_remaining_ns = status->signed_remaining_ns;
+    if (status->usage_supported) {
+        /* Display uses the independent counter; grants, health policies and
+           history validate their own precision, freshness and epoch contracts. */
+        state->played_minutes_available = state->usage_available;
+        state->played_minutes = state->usage_available
+            ? (int64_t)(state->usage_ns / UINT64_C(60000000000)) : -1;
+    }
     state->play_timer_enabled = result_observed_bool(
         status->play_timer_enabled_available, status->play_timer_enabled);
     state->restricted_now = result_observed_bool(
@@ -62,20 +77,23 @@ static bool write_result_with_setup(
 {
     PtcSetupState setup;
     PtcRuntimeState runtime_state;
-    char json[6144];
+    char json[PTC_IPC_MAX_RESULT_SIZE];
     char path[320];
     char text[1024];
     char disable_reason[48] = "";
     char hos[32] = "";
+    char atmosphere_version[32] = "";
     char model[32] = "";
     bool atmosphere = false;
     bool environment_available = false;
     bool recovery_active;
+    bool disable_present;
     char recent[4096] = "";
-    char recent_json[4096] = "";
+    char recent_json[4098] = "";
     const char *completed_at;
     if (!load_setup_state(sysmodule, &setup) || !load_state(sysmodule, &runtime_state)) return false;
     join_path(path, sizeof(path), sysmodule->app_root, "flags/disable.flag");
+    disable_present = sysmodule->storage->vtable->exists(sysmodule->storage, path);
     if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
         size_t length = strcspn(text, "\r\n");
         if (length >= sizeof(disable_reason)) length = sizeof(disable_reason) - 1;
@@ -88,6 +106,7 @@ static bool write_result_with_setup(
         (void)json_string(text, "hos", hos, sizeof(hos));
         (void)json_string(text, "model", model, sizeof(model));
         (void)json_bool_value(text, "atmosphere", &atmosphere);
+        (void)json_string(text, "atmosphere_version", atmosphere_version, sizeof(atmosphere_version));
     }
     join_path(path, sizeof(path), sysmodule->app_root, "recovery/active/meta.json");
     recovery_active = sysmodule->storage->vtable->exists(sysmodule->storage, path);
@@ -104,7 +123,9 @@ static bool write_result_with_setup(
         snprintf(recent_json, sizeof(recent_json), "[");
         while (*cursor) {
             char *newline = strchr(cursor, '\n');
-            if (newline) *newline = '\0';
+            /* A cut JSONL tail is not a complete event and cannot enter JSON. */
+            if (!newline) break;
+            *newline = '\0';
             if (*cursor) {
                 strncat(recent_json, first ? "" : ",", sizeof(recent_json) - strlen(recent_json) - 1);
                 strncat(recent_json, cursor, sizeof(recent_json) - strlen(recent_json) - 1);
@@ -117,12 +138,12 @@ static bool write_result_with_setup(
     } else snprintf(recent_json, sizeof(recent_json), "[]");
     completed_at = strstr(base, "\"completed_at\"");
     if (!completed_at) return false;
-    snprintf(json, sizeof(json),
+    int written = snprintf(json, sizeof(json),
         "%.*s\"setup\":{\"phase\":\"%s\",\"compatibility_status\":\"%s\",\"restriction_cleared\":%s,"
         "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\","
         "\"apply_status\":\"%s\",\"apply_pending_confirmation\":%s,\"recovery_active\":%s,"
-        "\"disable_reason\":\"%s\"},"
-        "\"environment\":{\"available\":%s,\"hos\":\"%s\",\"model\":\"%s\",\"atmosphere\":%s},"
+        "\"disable_reason\":\"%s\",\"disable_flag_present\":%s},"
+        "\"environment\":{\"available\":%s,\"hos\":\"%s\",\"model\":\"%s\",\"atmosphere\":%s,\"atmosphere_version\":\"%s\"},"
         "\"recent_events\":%s,%s",
         (int)(completed_at - base), base,
         setup.phase,
@@ -135,12 +156,16 @@ static bool write_result_with_setup(
         runtime_state.apply_pending_confirmation ? "true" : "false",
         recovery_active ? "true" : "false",
         disable_reason,
+        disable_present ? "true" : "false",
         environment_available ? "true" : "false",
         hos,
         model,
         atmosphere ? "true" : "false",
+        atmosphere_version,
         recent_json,
         completed_at);
+    /* A truncated receipt must never become the durable commit record. */
+    if (written < 0 || (size_t)written >= sizeof(json)) return false;
     return write_result(sysmodule, request_id, json);
 }
 
@@ -148,29 +173,35 @@ static bool load_daily_summary_aggregate(PtcSysmodule *sysmodule, uint16_t today
     PtcDailySummaryAggregate *aggregate)
 {
     char path[320];
-    char text[PTC_DAILY_SUMMARY_FILE_SIZE];
+    char *text = calloc(1, PTC_DAILY_SUMMARY_FILE_SIZE);
     PtcDailySummaryRecord records[PTC_DAILY_SUMMARY_MAX_RECORDS];
     char *cursor;
     size_t count = 0;
+    bool ok = false;
+    if (!text) return false;
     join_path(path, sizeof(path), sysmodule->app_root, "stats/daily-summaries.jsonl");
-    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) return false;
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, PTC_DAILY_SUMMARY_FILE_SIZE)) goto done;
     cursor = text;
-    while (*cursor && count < PTC_DAILY_SUMMARY_MAX_RECORDS) {
+    while (*cursor) {
         char *newline = strchr(cursor, '\n');
         if (newline) *newline = '\0';
-        if (*cursor && !ptc_daily_summary_parse_line(cursor, &records[count++])) return false;
+        if (*cursor && (count == PTC_DAILY_SUMMARY_MAX_RECORDS ||
+            !ptc_daily_summary_parse_line(cursor, &records[count++]))) goto done;
         if (!newline) break;
         cursor = newline + 1;
     }
     ptc_daily_summary_aggregate(records, count, today, aggregate);
-    return true;
+    ok = true;
+done:
+    free(text);
+    return ok;
 }
 
 bool bedtime_overlay_verified(PtcSysmodule *sysmodule)
 {
     char path[320];
     char text[512];
-    char build[1024];
+    char build[4096];
     char boot_id[65];
     char ready_release_id[96];
     char build_release_id[96];
@@ -215,9 +246,10 @@ static void fill_bedtime_result_state(PtcSysmodule *sysmodule, PtcResultState *s
         strcmp(fingerprint, rules->bedtime.confirmed_environment) == 0;
     state->bedtime_overlay_verified = bedtime_overlay_verified(sysmodule);
     state->bedtime_recovery_phase = runtime_state->bedtime_enforced ? "restricted" : "idle";
-    state->daily_restriction_active = (!evaluation.active || state->bedtime_skipped) &&
+    state->daily_restriction_active = !runtime_state->eye_care_resting &&
+        (!evaluation.active || state->bedtime_skipped) &&
         pctl_status->limited_today &&
-        pctl_status->remaining_available && pctl_status->remaining_minutes == 0u;
+        ptc_pctl_remaining_exhausted(pctl_status);
     if (!rules->bedtime.enabled) return;
     if (runtime_state->bedtime_skipped_instance_id != 0) {
         if (evaluation.active &&
@@ -272,6 +304,10 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
 {
     unsigned int i;
     PtcDailySummaryAggregate aggregate;
+    state->local_clock_available = now.unix_seconds > 0 && now.minute_of_day < 1440 &&
+        now.second_of_minute < 60;
+    state->local_second_of_day = (uint32_t)now.minute_of_day * 60u + now.second_of_minute;
+    state->local_clock_captured_at = now.unix_seconds;
     for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
         uint16_t forecast_day = (uint16_t)(now.day_index + i);
         PtcEffectiveRule forecast = ptc_rules_resolve(
@@ -300,8 +336,114 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         state->usage_consumed_minutes_7 = aggregate.consumed_minutes_7;
         state->usage_known_days_30 = aggregate.known_days_30;
         state->usage_consumed_minutes_30 = aggregate.consumed_minutes_30;
+        state->usage_direct_present = aggregate.direct_present;
+        state->usage_direct_days_7 = aggregate.direct_days_7;
+        state->usage_direct_days_30 = aggregate.direct_days_30;
+        state->usage_direct_minutes_7 = (uint32_t)(aggregate.direct_ns_7 / PTC_USAGE_MINUTE_NS);
+        state->usage_direct_minutes_30 = (uint32_t)(aggregate.direct_ns_30 / PTC_USAGE_MINUTE_NS);
+        state->usage_last_captured_at = aggregate.last_captured_at;
+        state->usage_last_observed_at = aggregate.last_observed_at;
+        state->usage_latest_available = aggregate.latest_available;
     }
     fill_bedtime_result_state(sysmodule, state, rules, runtime_state, pctl_status, now);
+    {
+        PtcOperationModeStatus mode = ptc_read_operation_mode(sysmodule);
+        PtcRuntimeState projected = *runtime_state;
+        bool direct = pctl_status->usage_supported ||
+            runtime_state->dock_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952;
+        if (direct && dock_policy_enabled(rules)) dock_sample_direct(&projected,
+            pctl_status, usage_sample_clock(sysmodule, now), mode.mode, !sysmodule->dock_boot_sampled);
+        const PtcRuntimeState *dock_view = &projected;
+        uint64_t limit_ns = (uint64_t)rules->dock_policy.undocked_daily_minutes * 60000000000ULL;
+        state->dock_available = true;
+        state->force_docked = rules->dock_policy.force_docked;
+        state->undocked_limit_enabled = rules->dock_policy.undocked_limit_enabled;
+        state->undocked_daily_minutes = rules->dock_policy.undocked_daily_minutes;
+        state->operation_mode = mode.mode == PTC_OPERATION_MODE_DOCKED ? "docked" :
+            mode.mode == PTC_OPERATION_MODE_UNDOCKED ? "undocked" : "unknown";
+        state->dock_supported_available = mode.dock_supported_available;
+        state->dock_supported = mode.dock_supported;
+        state->undocked_usage_available = dock_view->dock_usage_known && dock_view->dock_day_index == now.day_index;
+        state->undocked_used_minutes = (uint16_t)(dock_view->undocked_used_ns / 60000000000ULL);
+        state->undocked_remaining_minutes = dock_view->undocked_used_ns < limit_ns
+            ? (uint16_t)((limit_ns - dock_view->undocked_used_ns) / 60000000000ULL) : 0;
+        if (direct && dock_policy_enabled(rules)) {
+            state->dock_usage_source = "pctl_1952";
+            state->dock_usage_quality = state->undocked_usage_available ? "conservative_mode_split" : "unknown";
+            state->dock_usage_captured_at = dock_view->dock_usage_counter.captured_at;
+        }
+        state->dock_waived_today = runtime_state->dock_waived && runtime_state->dock_waived_day_index == now.day_index;
+        state->dock_restriction_active = dock_policy_blocks(sysmodule, rules, dock_view, now);
+        state->dock_unlimited_capped = false;
+        if (runtime_state->dock_enforced) {
+            PtcDayRule base = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+            state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT && dock_view->dock_baseline_known &&
+                dock_view->dock_day_index == now.day_index &&
+                dock_view->dock_last_used_ns >= (uint64_t)base.minutes * 60000000000ULL;
+        }
+        if (state->dock_restriction_active) {
+            state->daily_buffer_available = false;
+            state->daily_buffer_reason = "dock_active";
+        }
+    }
+    state->eye_care_enabled = rules->eye_care.enabled;
+    state->eye_care_play_minutes = rules->eye_care.play_minutes;
+    state->eye_care_rest_minutes = rules->eye_care.rest_minutes;
+    state->eye_care_unlimited_capped = false;
+    state->eye_care_used_minutes = runtime_state->eye_care_accumulated_minutes;
+    PtcRuntimeState eye_projected = *runtime_state;
+    bool eye_direct = pctl_status->usage_supported ||
+        runtime_state->eye_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952;
+    state->eye_care_break_id = runtime_state->eye_care_resting ? runtime_state->eye_care_break_id : 0;
+    state->eye_care_rest_remaining_seconds = runtime_state->eye_care_resting &&
+        runtime_state->eye_care_rest_deadline > now.unix_seconds
+        ? runtime_state->eye_care_rest_deadline - now.unix_seconds : 0;
+    if (!rules->eye_care.enabled) state->eye_care_phase = "off";
+    else if (runtime_state->eye_care_resting) state->eye_care_phase = "resting";
+    else if (state->bedtime_active && !state->bedtime_skipped) state->eye_care_phase = "paused";
+    else {
+        PtcDayRule day_rule = ptc_rules_today_rule(rules, now.day_index,
+            ptc_weekday_from_day_index(now.day_index));
+        uint16_t base_minutes = day_rule.minutes;
+        state->eye_care_phase = "unknown";
+        if (eye_direct) {
+            if (!runtime_state->apply_pending_confirmation)
+                (void)eye_care_sample_direct(rules, &eye_projected, pctl_status,
+                    usage_sample_clock(sysmodule, now), state->dock_restriction_active);
+            state->eye_care_used_minutes = eye_projected.eye_care_accumulated_minutes;
+            if (state->dock_restriction_active ||
+                (pctl_status->temporary_unlocked_available && pctl_status->temporary_unlocked)) state->eye_care_phase = "paused";
+            else if (eye_projected.eye_care_usage_known && !eye_projected.eye_usage_boundary_gap &&
+                !runtime_state->apply_pending_confirmation) state->eye_care_phase = "playing";
+        } else {
+            /* Status precedes the scheduler tick. Project this read without
+               persisting a new baseline or triggering any control writes. */
+            if (!runtime_state->apply_pending_confirmation && pctl_status->limited_today &&
+                pctl_status->configured_minutes_available &&
+                pctl_status->configured_minutes == base_minutes &&
+                pctl_status->remaining_available && pctl_status->remaining_minutes <= base_minutes &&
+                pctl_status->play_timer_enabled_available && pctl_status->play_timer_enabled) {
+                uint16_t used = (uint16_t)(base_minutes - pctl_status->remaining_minutes);
+                uint32_t accumulated = runtime_state->eye_care_accumulated_minutes;
+                if (runtime_state->eye_care_day_index != now.day_index)
+                    accumulated += used;
+                if (runtime_state->eye_care_day_index == now.day_index &&
+                    runtime_state->eye_care_usage_known && used >= runtime_state->eye_care_last_used_minutes)
+                    accumulated += used - runtime_state->eye_care_last_used_minutes;
+                state->eye_care_used_minutes = accumulated > 240u ? 240u : (uint16_t)accumulated;
+                if (day_rule.mode == PTC_RULE_MODE_UNLIMITED || used < day_rule.minutes)
+                    state->eye_care_phase = "playing";
+            }
+        }
+    }
+    if (eye_direct && rules->eye_care.enabled) {
+        state->eye_care_usage_source = "pctl_1952";
+        state->eye_care_usage_quality = !eye_projected.eye_care_usage_known ? "unknown" :
+            eye_projected.eye_usage_boundary_gap ? "boundary_gap" :
+            eye_projected.eye_usage_migrated ? "legacy_migrated" : "observed";
+        state->eye_care_used_ns = eye_projected.eye_cycle_used_ns;
+        state->eye_care_usage_captured_at = eye_projected.eye_usage_counter.captured_at;
+    }
 }
 
 bool write_current_status_result(
@@ -319,32 +461,40 @@ bool write_current_status_result(
     char json[6144];
     PtcErrorCode err;
     PtcEffectiveRule effective;
-    const PtcHolidayCalendarInfo *calendar_info;
-    uint16_t year = 0;
-    uint8_t month = 0;
-    uint8_t day = 0;
+    uint32_t check_day;
     if (!load_rules(sysmodule, &rules)) {
-        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index);
+        (void)finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index);
+        return false;
     }
     if (!load_state(sysmodule, &runtime_state)) {
-        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_BAD_REQUEST, now.day_index);
+        (void)finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_BAD_REQUEST, now.day_index);
+        return false;
     }
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    if (err == PTC_ERR_OK) err = grant_clock_error(sysmodule, request, now);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index);
+        /* An error result is not a successful commit. In particular, callers
+           must retain recovery materials when rollback itself failed. */
+        (void)finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index);
+        return false;
     }
     result_state_from_pctl(&state, now.day_index, &pctl_status);
     effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     state.rule_source = ptc_rule_source_name(effective.source);
     state.calendar_covered = effective.calendar_covered;
-    calendar_info = ptc_holiday_calendar_info();
-    if (ptc_date_from_day_index(now.day_index, &year, &month, &day)) {
-        state.calendar_update_warning = rules.holiday_enabled &&
-            (year > calendar_info->last_year ||
-                (year == calendar_info->last_year && month == 12 && day >= 2));
+    state.calendar_option_id = sysmodule->calendar_runtime.option_id;
+    state.calendar_source = sysmodule->calendar_runtime.builtin ? "builtin" : "user_import";
+    if (rules.holiday_enabled || (rules.bedtime.enabled && rules.bedtime.calendar_enabled)) {
+        for (check_day = now.day_index; check_day <= (uint32_t)now.day_index + 30u &&
+             check_day <= UINT16_MAX; ++check_day) {
+            bool covered = false;
+            (void)ptc_holiday_calendar_classify_in(rules.calendar, (uint16_t)check_day, &covered);
+            if (!covered) { state.calendar_update_warning = true; break; }
+        }
     }
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
-    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
+    if (ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text,
+            mode, dry_run, &state, now.unix_seconds) != 0) return false;
     append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
     return write_result_with_setup(sysmodule, request->request_id, json, commits_recovery);
 }

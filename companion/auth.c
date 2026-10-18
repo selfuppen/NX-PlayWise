@@ -305,3 +305,15 @@ PtcAuthStatus ptc_companion_auth_verify_pin(
     if (status != PTC_AUTH_OK) return status;
     return record.cooldown_until ? PTC_AUTH_COOLDOWN : PTC_AUTH_DENIED;
 }
+
+bool ptc_companion_auth_backup_pin_matches(const char *json, const char *pin)
+{
+    AuthRecord record;
+    uint8_t salt[PTC_AUTH_SALT_LEN]; char actual[65];
+    if (!valid_pin(pin) || parse_auth_json(json, &record) != PTC_AUTH_OK ||
+        !hex_to_bytes(record.salt, salt, sizeof(salt))) return false;
+    pin_hash_hex(pin, salt, actual);
+    bool matches = fixed_time_equal(record.hash, actual);
+    memset(salt, 0, sizeof(salt)); memset(actual, 0, sizeof(actual));
+    return matches;
+}

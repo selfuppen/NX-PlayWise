@@ -35,6 +35,7 @@ typedef struct {
     PtcHotReloadPhase phase;
     PtcHotReloadJournal journal;
     char source_boot_id[32];
+    char target_boot_id[32];
     char detail[192];
     u64 deadline_tick;
     unsigned int absent_samples;
@@ -50,5 +51,7 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller);
 void ptc_hot_reload_confirm_ipc_closed(PtcHotReloadController *controller);
 void ptc_hot_reload_tick(PtcHotReloadController *controller);
 void ptc_hot_reload_exit(PtcHotReloadController *controller);
+void ptc_hot_reload_record_event(PtcHotReloadController *controller, const char *event,
+    const char *request_id, uint32_t result);
 
 #endif

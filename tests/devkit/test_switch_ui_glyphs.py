@@ -14,6 +14,10 @@ SOURCE_SUFFIXES = {".c", ".cpp", ".h", ".hpp"}
 OVERLAY_TEXT_FILES = [
     ROOT / "companion" / "overlay" / "bridge.c",
     ROOT / "companion" / "overlay" / "source" / "main.cpp",
+    ROOT / "companion" / "overlay" / "source" / "render_types.hpp",
+    ROOT / "companion" / "overlay" / "source" / "render_methods.hpp",
+    ROOT / "companion" / "overlay" / "source" / "render_pages.hpp",
+    ROOT / "companion" / "overlay" / "source" / "input_pages.hpp",
 ]
 FORBIDDEN = {
     "−": "use ASCII '-'",

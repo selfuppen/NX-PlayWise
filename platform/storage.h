@@ -8,9 +8,26 @@
 typedef struct PtcStorage PtcStorage;
 
 typedef enum {
+    PTC_STORAGE_APPEND_NONE = 0,
+    PTC_STORAGE_APPEND_OPEN,
+    PTC_STORAGE_APPEND_WRITE,
+    PTC_STORAGE_APPEND_CLOSE,
+} PtcStorageAppendStage;
+
+/* Optional diagnostics; errno/result never determine storage success. */
+typedef struct {
+    PtcStorageAppendStage stage;
+    int system_errno;
+    uint32_t platform_result;
+    unsigned open_attempts;
+} PtcStorageAppendDiagnostics;
+typedef PtcStorageAppendDiagnostics (*PtcStorageAppendDiagnosticsReader)(void *ctx);
+
+typedef enum {
     PTC_STORAGE_ENTRY_UNKNOWN = 0,
     PTC_STORAGE_ENTRY_FILE = 1,
     PTC_STORAGE_ENTRY_DIRECTORY = 2,
+    PTC_STORAGE_ENTRY_MISSING = 3,
 } PtcStorageEntryType;
 
 typedef struct {
@@ -26,6 +43,8 @@ typedef struct {
     bool modified_time_valid;
 } PtcStorageMetadata;
 
+typedef bool (*PtcStorageLineVisitor)(const char *line, void *ctx);
+
 typedef struct {
     bool (*read_text)(PtcStorage *storage, const char *path, char *out, size_t out_size);
     bool (*write_text_atomic)(PtcStorage *storage, const char *path, const char *text);
@@ -37,6 +56,9 @@ typedef struct {
     bool (*metadata)(PtcStorage *storage, const char *path, PtcStorageMetadata *out);
     bool (*list_entries)(PtcStorage *storage, const char *dir, PtcStorageEntry *entries, size_t max, size_t *count);
     bool (*remove_tree)(PtcStorage *storage, const char *path);
+    /* Reject oversized lines and read errors; visit the entire file. */
+    bool (*read_lines)(PtcStorage *storage, const char *path, char *line, size_t line_size,
+                       PtcStorageLineVisitor visit, void *ctx);
 } PtcStorageVTable;
 
 struct PtcStorage {

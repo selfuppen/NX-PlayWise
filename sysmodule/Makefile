@@ -18,9 +18,11 @@ SOURCES := \
 	../common/crypto \
 	../common/protocol \
 	../common/rules \
+	../common/security \
 	../common/time \
 	../common/token \
 	../common/usage \
+	../third_party/cjson \
 	../platform \
 	../platform/switch
 DATA :=
@@ -49,17 +51,22 @@ SYSMODULE_CFILES := \
 	ipc_server.c \
 	lab_session.c \
 	lab_session_report.c \
+	lab_selfdrive.c \
 	sysmodule_storage.c \
 	sysmodule_audit.c \
+	usage_evidence.c \
 	sysmodule_history.c \
 	sysmodule_results.c \
 	sysmodule_control.c \
 	sysmodule_setup.c \
 	sysmodule_requests.c \
+	sysmodule_calendar.c \
+	sysmodule_config_backup.c \
 	sysmodule_request_grants.c \
 	sysmodule_request_recovery.c \
+	sysmodule_dock.c \
 	sysmodule_core.c
-CFILES := $(foreach dir,$(filter-out .,$(SOURCES)),$(notdir $(wildcard $(dir)/*.c))) $(SYSMODULE_CFILES)
+CFILES := $(foreach dir,$(filter-out .,$(SOURCES)),$(notdir $(wildcard $(dir)/*.c))) $(SYSMODULE_CFILES) $(EXTRA_CFILES)
 SFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES := $(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
 

@@ -1,5 +1,35 @@
 #include "nro_app_internal.h"
 
+bool handle_parent_auth_error_input(UiState *ui, u64 down)
+{
+    if (!ui || ui->model.overlay != PTC_UI_OVERLAY_AUTH_ERROR || !ui->model.auth_error_parent_entry) return false;
+    refresh_auth_error_cooldown(ui);
+    if (down & HidNpadButton_B) {
+        close_auth_error(ui, true);
+    } else if ((down & (HidNpadButton_A | HidNpadButton_Plus)) && ui->model.auth_cooldown_seconds <= 0) {
+        close_auth_error(ui, false);
+        ui->model.result_status[0] = '\0';
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        enter_parent_area(ui);
+    } else if (down & HidNpadButton_X) {
+        close_auth_error(ui, true);
+        ui->model.parent_support_only = true;
+        ui->setup_parent_authorized = false;
+        enter_support_area(ui);
+    }
+    return true;
+}
+
+bool handle_parent_auth_error_touch(UiState *ui, int x, int y)
+{
+    if (!ui || ui->model.overlay != PTC_UI_OVERLAY_AUTH_ERROR || !ui->model.auth_error_parent_entry) return false;
+    PtcUiHit hit = ptc_ui_hit_test(&ui->model, x, y);
+    if (hit.kind == PTC_UI_HIT_OVERLAY_CONFIRM) handle_parent_auth_error_input(ui, HidNpadButton_A);
+    else if (hit.kind == PTC_UI_HIT_OVERLAY_CANCEL) handle_parent_auth_error_input(ui, HidNpadButton_B);
+    else if (hit.kind == PTC_UI_HIT_SUPPORT_GUIDE) handle_parent_auth_error_input(ui, HidNpadButton_X);
+    return true;
+}
+
 bool verify_sensitive_pin(UiState *ui, const char *action)
 {
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
@@ -81,6 +111,12 @@ void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     case AUTH_RETRY_CLEAR_ACTIVITY_HISTORY: request_clear_activity_history(ui); break;
     case AUTH_RETRY_SKIP_BEDTIME:
         handle_today_action_ready(ui, PTC_UI_OPERATION_SKIP_BEDTIME);
+        break;
+    case AUTH_RETRY_WAIVE_DOCK:
+        request_dock_waiver(ui);
+        break;
+    case AUTH_RETRY_SKIP_EYE_CARE:
+        handle_today_action_ready(ui, PTC_UI_OPERATION_SKIP_EYE_CARE);
         break;
     case AUTH_RETRY_CLEAR_BEDTIME_SKIP:
         request_clear_bedtime_skip(ui);

@@ -1,4 +1,5 @@
 #include "request_client.h"
+#include "../common/protocol/request_schema.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -112,6 +113,27 @@ int ptc_companion_set_autonomy_policy_request_json(char *out, size_t out_size,
         request_id, (long long)created_at, policy->daily_buffer_minutes);
 }
 
+int ptc_companion_set_eye_care_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcEyeCarePolicy *policy)
+{
+    if (!policy || !ptc_eye_care_policy_is_valid(policy)) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_eye_care_policy\","
+        "\"created_at\":%lld,\"payload\":{\"enabled\":%s,\"play_minutes\":%u,"
+        "\"rest_minutes\":%u}}\n", request_id, (long long)created_at,
+        policy->enabled ? "true" : "false", policy->play_minutes, policy->rest_minutes);
+}
+
+int ptc_companion_skip_eye_care_break_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint64_t break_id)
+{
+    if (!break_id) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"skip_eye_care_break\","
+        "\"created_at\":%lld,\"payload\":{\"break_id\":%llu}}\n",
+        request_id, (long long)created_at, (unsigned long long)break_id);
+}
+
 int ptc_companion_set_bedtime_policy_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately)
 {
@@ -200,4 +222,25 @@ int ptc_companion_overlay_ready_request_json(char *out, size_t out_size,
         "\"environment_fingerprint\":\"%s\"}}\n",
         request_id, (long long)created_at, release_id ? release_id : "",
         boot_id ? boot_id : "", environment_fingerprint ? environment_fingerprint : "");
+}
+
+int ptc_companion_set_dock_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcDockPolicy *policy)
+{
+    if (!out || !ptc_request_id_is_valid(request_id) || !policy || policy->undocked_daily_minutes > 1440u) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_dock_policy\","
+        "\"created_at\":%lld,\"payload\":{\"force_docked\":%s,\"undocked_limit_enabled\":%s,\"undocked_daily_minutes\":%u}}\n",
+        request_id, (long long)created_at, policy->force_docked ? "true" : "false",
+        policy->undocked_limit_enabled ? "true" : "false", policy->undocked_daily_minutes);
+}
+
+int ptc_companion_waive_dock_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint16_t day_index)
+{
+    if (!out || !ptc_request_id_is_valid(request_id)) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"waive_dock_policy_today\","
+        "\"created_at\":%lld,\"payload\":{\"expected_day_index\":%u}}\n",
+        request_id, (long long)created_at, day_index);
 }

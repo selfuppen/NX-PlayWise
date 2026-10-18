@@ -39,6 +39,24 @@ bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held,
     return true;
 }
 
+bool ptc_ui_single_button_release_update(
+    bool *pending, uint64_t button, uint64_t down, uint64_t held, bool eligible)
+{
+    if (!pending || button == 0) return false;
+    /* A chord must never fall back to the standalone action when its members
+     * are released in different frames, even if the modifier is released first. */
+    if (!eligible || (held & ~button) != 0) {
+        *pending = false;
+        return false;
+    }
+    if ((down & button) != 0 && (held & button) != 0) *pending = true;
+    if (*pending && (held & button) == 0) {
+        *pending = false;
+        return true;
+    }
+    return false;
+}
+
 bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int64_t now_ms, int required_ms)
 {
     int64_t elapsed;
@@ -102,6 +120,7 @@ bool ptc_ui_overlay_primary_uses_plus(PtcUiOverlay overlay)
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
     case PTC_UI_OVERLAY_SCHEDULED:
     case PTC_UI_OVERLAY_AUTONOMY:
+    case PTC_UI_OVERLAY_EYE_CARE:
     case PTC_UI_OVERLAY_BEDTIME:
     case PTC_UI_OVERLAY_BEDTIME_WINDOW:
     case PTC_UI_OVERLAY_BEDTIME_SPECIAL:
@@ -213,7 +232,9 @@ static bool duration_purpose(PtcUiNumpadPurpose purpose)
         purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES ||
         purpose == PTC_UI_NUMPAD_SCHEDULED_MINUTES ||
         purpose == PTC_UI_NUMPAD_GRANT_MINUTES ||
-        purpose == PTC_UI_NUMPAD_BEDTIME_TIME;
+        purpose == PTC_UI_NUMPAD_BEDTIME_TIME ||
+        purpose == PTC_UI_NUMPAD_EYE_CARE_PLAY ||
+        purpose == PTC_UI_NUMPAD_EYE_CARE_REST || purpose == PTC_UI_NUMPAD_DOCK_MINUTES;
 }
 
 static bool parse_duration_component(const char *text, unsigned int maximum, unsigned int *out)

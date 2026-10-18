@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* Small, UI-safe projection of the result contract. It intentionally omits
    request payloads, secrets, paths and diagnostic evidence. */
@@ -21,6 +22,15 @@ typedef struct {
     bool temporary_unlocked;
     bool remaining_available;
     bool played_minutes_available;
+    bool usage_present;
+    int64_t usage_captured_at;
+    int64_t completed_at;
+    bool local_clock_available;
+    int local_second_of_day;
+    uint64_t usage_ns;
+    bool daily_rule_available;
+    bool daily_rule_unlimited;
+    int daily_rule_minutes;
     bool preview_available;
     int grant_minutes;
     bool remaining_after_available;
@@ -30,6 +40,7 @@ typedef struct {
     bool converts_unlimited_to_limited;
     bool calendar_covered;
     bool calendar_update_warning;
+    bool bedtime_available;
     bool bedtime_enabled;
     bool bedtime_active;
     bool bedtime_skipped;
@@ -51,6 +62,30 @@ typedef struct {
     bool bedtime_official_setting_confirmed;
     bool bedtime_overlay_verified;
     bool daily_restriction_active;
+    bool disable_flag_present;
+    bool eye_care_available;
+    bool eye_care_enabled;
+    int eye_care_play_minutes;
+    int eye_care_rest_minutes;
+    int eye_care_used_minutes;
+    int eye_care_rest_remaining_seconds;
+    unsigned long long eye_care_break_id;
+    bool eye_care_unlimited_capped;
+    bool dock_available;
+    bool dock_policy_available;
+    bool force_docked;
+    bool undocked_limit_enabled;
+    int undocked_daily_minutes;
+    char operation_mode[16];
+    bool dock_supported_available;
+    bool dock_supported;
+    bool undocked_usage_available;
+    int undocked_used_minutes;
+    int undocked_remaining_minutes;
+    bool dock_waived_today;
+    bool dock_restriction_active;
+    bool dock_unlimited_capped;
+    char eye_care_phase[20];
     bool access_recovery_required;
     char bedtime_source[32];
     char bedtime_recovery_phase[32];
@@ -67,5 +102,11 @@ typedef struct {
 
 bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionResultSummary *out);
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size);
+/* Expires consumption only; keep runtime flags and the observation timestamp. */
+void ptc_companion_result_summary_expire_usage(PtcCompanionResultSummary *summary, int64_t now);
+/* No client wall clock: combine backend capture age with elapsed request time.
+   UINT64_MAX means the current request's monotonic origin is unavailable. */
+void ptc_companion_result_summary_expire_usage_elapsed(PtcCompanionResultSummary *summary,
+    uint64_t request_elapsed_seconds);
 
 #endif

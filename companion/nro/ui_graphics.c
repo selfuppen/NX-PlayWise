@@ -1,5 +1,39 @@
 #include "ui_render_internal.h"
 
+static void ptc_ui_load_emoji_font(void)
+{
+    const char *paths[] = {
+        "sdmc:/switch/playwise/fonts/emoji.ttf",
+        "sdmc:/switch/playwise/emoji.ttf",
+        "sdmc:/switch/playwise/fonts/NotoEmoji-Regular.ttf",
+        "sdmc:/switch/playwise/fonts/NotoColorEmoji.ttf",
+        "romfs:/fonts/emoji.ttf",
+        "fonts/emoji.ttf"
+    };
+    for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); ++i) {
+        FILE *f = fopen(paths[i], "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long sz = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            if (sz > 0 && sz < 32 * 1024 * 1024) {
+                uint8_t *buf = (uint8_t *)malloc((size_t)sz);
+                if (buf && fread(buf, 1, (size_t)sz, f) == (size_t)sz) {
+                    if (FT_New_Memory_Face(g_ui.library, (const FT_Byte *)buf, (FT_Long)sz, 0, &g_ui.emoji_face) == 0) {
+                        g_ui.emoji_buffer = buf;
+                        g_ui.emoji_buffer_size = (size_t)sz;
+                        g_ui.emoji_ready = true;
+                        fclose(f);
+                        return;
+                    }
+                }
+                free(buf);
+            }
+            fclose(f);
+        }
+    }
+}
+
 bool ptc_ui_graphics_init(void)
 {
     PlFontData font_data;
@@ -35,6 +69,7 @@ bool ptc_ui_graphics_init(void)
         (void)FT_New_Memory_Face(g_ui.library, (const FT_Byte *)font_data.address,
             (FT_Long)font_data.size, 0, &g_ui.traditional_face);
     }
+    ptc_ui_load_emoji_font();
     result = framebufferCreate(
         &g_ui.framebuffer,
         nwindowGetDefault(),
@@ -75,6 +110,15 @@ void ptc_ui_graphics_exit(void)
     }
     if (g_ui.standard_face) FT_Done_Face(g_ui.standard_face);
     if (g_ui.traditional_face) FT_Done_Face(g_ui.traditional_face);
+    if (g_ui.emoji_face) {
+        FT_Done_Face(g_ui.emoji_face);
+        g_ui.emoji_face = NULL;
+    }
+    if (g_ui.emoji_buffer) {
+        free(g_ui.emoji_buffer);
+        g_ui.emoji_buffer = NULL;
+    }
+    g_ui.emoji_ready = false;
     if (g_ui.library) {
         FT_Done_FreeType(g_ui.library);
     }

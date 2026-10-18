@@ -22,12 +22,22 @@ typedef enum {
 } PtcUiView;
 
 typedef enum {
-    PTC_UI_SETUP_SHORTCUT = 1,
-    PTC_UI_SETUP_PIN = 2,
-    PTC_UI_SETUP_THEME = 3,
-    PTC_UI_SETUP_TAKEOVER = 4,
-    PTC_UI_SETUP_ZONE = 5
+    PTC_UI_SETUP_PREPARE = 1,
+    PTC_UI_SETUP_PARENT = 2,
+    PTC_UI_SETUP_CONFIRM = 3
 } PtcUiSetupStep;
+
+typedef enum {
+    PTC_UI_SETUP_ISSUE_LANGUAGE = 0,
+    PTC_UI_SETUP_ISSUE_PIN,
+    PTC_UI_SETUP_ISSUE_THEME,
+    PTC_UI_SETUP_ISSUE_SHORTCUT,
+    PTC_UI_SETUP_ISSUE_PROGRESS,
+    PTC_UI_SETUP_ISSUE_STATUS,
+    PTC_UI_SETUP_ISSUE_ACTIVATION,
+    PTC_UI_SETUP_ISSUE_DEFAULTS,
+    PTC_UI_SETUP_ISSUE_COUNT
+} PtcUiSetupIssueKind;
 
 typedef enum {
     PTC_UI_SHORTCUT_PRESET_LR = 0,
@@ -47,7 +57,9 @@ typedef enum {
     PTC_UI_PLAN_PAGE_ROOT = 0,
     PTC_UI_PLAN_PAGE_WEEKLY = 1,
     PTC_UI_PLAN_PAGE_HOLIDAY = 2,
-    PTC_UI_PLAN_PAGE_BEDTIME = 3
+    PTC_UI_PLAN_PAGE_BEDTIME = 3,
+    PTC_UI_PLAN_PAGE_EYE_CARE = 4,
+    PTC_UI_PLAN_PAGE_DOCK = 5
 } PtcUiPlanPage;
 
 typedef enum {
@@ -95,7 +107,14 @@ typedef enum {
     PTC_UI_OVERLAY_NOTICE_DETAILS = 35,
     PTC_UI_OVERLAY_DAY_DECISION = 36,
     PTC_UI_OVERLAY_LANGUAGE = 37,
-    PTC_UI_OVERLAY_PARENT_EXPORT_RESULT = 38
+    PTC_UI_OVERLAY_PARENT_EXPORT_RESULT = 38,
+    PTC_UI_OVERLAY_EYE_CARE = 39,
+    PTC_UI_OVERLAY_CALENDAR_MANAGER = 40,
+    PTC_UI_OVERLAY_CALENDAR_FORMAT = 41,
+    PTC_UI_OVERLAY_SETUP_PCTL_HELP = 42,
+    PTC_UI_OVERLAY_SUPPORT_GUIDE = 43,
+    PTC_UI_OVERLAY_CONFIG_BACKUP = 44,
+    PTC_UI_OVERLAY_DOCK_RULES = 45
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -162,7 +181,10 @@ typedef enum {
     PTC_UI_NUMPAD_MAKEUP_MINUTES = 5,
     PTC_UI_NUMPAD_SCHEDULED_MINUTES = 6,
     PTC_UI_NUMPAD_GRANT_MINUTES = 7,
-    PTC_UI_NUMPAD_BEDTIME_TIME = 8
+    PTC_UI_NUMPAD_BEDTIME_TIME = 8,
+    PTC_UI_NUMPAD_EYE_CARE_PLAY = 9,
+    PTC_UI_NUMPAD_EYE_CARE_REST = 10,
+    PTC_UI_NUMPAD_DOCK_MINUTES = 11
 } PtcUiNumpadPurpose;
 
 typedef enum {
@@ -247,8 +269,24 @@ typedef enum {
     PTC_UI_OPERATION_SKIP_BEDTIME = 24,
     PTC_UI_OPERATION_SAVE_HOLIDAY = 25,
     PTC_UI_OPERATION_SAVE_BEDTIME = 26,
-    PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP = 27
+    PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP = 27,
+    PTC_UI_OPERATION_SKIP_EYE_CARE = 28,
+    PTC_UI_OPERATION_IMPORT_CALENDAR = 29,
+    PTC_UI_OPERATION_ACTIVATE_CALENDAR = 30,
+    PTC_UI_OPERATION_SAVE_DOCK = 31,
+    PTC_UI_OPERATION_WAIVE_DOCK = 32,
+    PTC_UI_OPERATION_LEAVE_DOCK = 33,
+    PTC_UI_OPERATION_CONFIRM_DOCK = 34,
+    PTC_UI_OPERATION_CREATE_CONFIG_BACKUP = 35,
+    PTC_UI_OPERATION_RESTORE_CONFIG_BACKUP = 36,
+    PTC_UI_OPERATION_CONFIG_REQUIREMENTS = 37
 } PtcUiOperation;
+
+typedef struct {
+    char id[81];
+    char title[96];
+    char detail[112];
+} PtcUiCalendarRow;
 
 typedef enum {
     PTC_UI_DECISION_UNKNOWN = 0,
@@ -278,6 +316,46 @@ typedef struct {
 } PtcUiTodayDecision;
 
 typedef enum {
+    PTC_UI_CONDITION_UNKNOWN, PTC_UI_CONDITION_PASS, PTC_UI_CONDITION_BLOCK,
+    PTC_UI_CONDITION_OFF, PTC_UI_CONDITION_WAIVED
+} PtcUiCondition;
+
+enum {
+    PTC_UI_STOP_DAILY = 1, PTC_UI_STOP_BEDTIME = 2,
+    PTC_UI_STOP_EYE = 4, PTC_UI_STOP_DOCK = 8, PTC_UI_STOP_DAY_END = 16
+};
+
+typedef struct {
+    int start_second, end_second;
+    bool resting;
+} PtcUiUsageSegment;
+
+typedef struct {
+    int start_second, end_second;
+    bool skipped;
+} PtcUiSleepInterval;
+
+/* At most one transition per minute plus the initial partial rest. */
+#define PTC_UI_USAGE_SEGMENTS_MAX 1442
+typedef enum {
+    PTC_UI_ESTIMATE_READINGS, PTC_UI_ESTIMATE_STALE, PTC_UI_ESTIMATE_DATE,
+    PTC_UI_ESTIMATE_REFRESH, PTC_UI_ESTIMATE_RECOVERY, PTC_UI_ESTIMATE_READBACK,
+    PTC_UI_ESTIMATE_RUNTIME
+} PtcUiEstimatePending;
+typedef struct {
+    bool fresh, total_known, total_unlimited, undocked_known, undocked_unlimited;
+    bool simulation_available;
+    int total_remaining, undocked_remaining, continuous_seconds;
+    int now_second, stop_second, total_at_stop;
+    unsigned active_reasons, stop_reasons;
+    PtcUiEstimatePending pending_reason;
+    PtcUiCondition conditions[4]; /* total, bedtime, eye care, dock */
+    PtcUiSleepInterval sleep[2];
+    int sleep_count, segment_count;
+    PtcUiUsageSegment segments[PTC_UI_USAGE_SEGMENTS_MAX];
+} PtcUiTodayProjection;
+
+typedef enum {
     PTC_UI_ACTION_AVAILABLE = 0,
     PTC_UI_ACTION_RECOMMENDED = 1,
     PTC_UI_ACTION_DISABLED = 2
@@ -287,11 +365,16 @@ typedef struct {
     PtcUiView view;
     PtcUiParentPage parent_page;
     PtcUiPlanPage plan_page;
+    bool today_settings_origin;
+    int today_settings_selection;
     PtcUiBedtimeSection bedtime_section;
     int selected_index;
     bool waiting;
     bool status_loaded;
     int64_t status_updated_at;
+    bool usage_present;
+    int64_t usage_captured_at;
+    uint64_t usage_ns;
     bool restriction_enabled_available;
     bool restriction_enabled;
     bool temporary_unlocked_available;
@@ -320,6 +403,7 @@ typedef struct {
     char apply_status[48];
     char disable_reason[48];
     char environment_hos[32];
+    char environment_atmosphere_version[32];
     char environment_model[32];
     bool environment_available;
     bool environment_atmosphere;
@@ -351,8 +435,44 @@ typedef struct {
     PtcScheduledOverride draft_scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
     PtcAutonomyPolicy draft_autonomy_policy;
+    PtcDockPolicy dock_policy;
+    PtcDockPolicy draft_dock_policy;
+    bool dock_available;
+    bool dock_status_available;
+    bool dock_dirty;
+    int dock_field_focus;
+    bool eden_mode_controls;
+    bool config_backup_ready;
+    bool config_today_available;
+    bool config_pin_available;
+    bool config_needs_confirmation;
+    uint16_t config_groups;
+    int config_backup_tab;
+    char config_metadata[128];
+    char config_preview[512];
+    bool dock_supported_available;
+    bool dock_supported;
+    char operation_mode[16];
+    bool undocked_usage_available;
+    int undocked_used_minutes;
+    int undocked_remaining_minutes;
+    bool dock_waived_today;
+    bool dock_restriction_active;
+    bool dock_unlimited_capped;
+    uint16_t pending_dock_waiver_day;
+    PtcEyeCarePolicy eye_care_policy;
+    PtcEyeCarePolicy draft_eye_care_policy;
+    char eye_care_phase[20];
+    uint16_t eye_care_used_minutes;
+    int eye_care_rest_remaining_seconds;
+    uint64_t eye_care_break_id;
+    uint64_t pending_eye_care_break_id;
+    bool eye_care_unlimited_capped;
+    bool daily_restriction_active;
     PtcBedtimePolicy bedtime_policy;
     PtcBedtimePolicy draft_bedtime_policy;
+    bool bedtime_status_available;
+    bool bedtime_status_enabled;
     bool bedtime_active;
     bool bedtime_skipped;
     uint64_t bedtime_window_instance_id;
@@ -378,6 +498,12 @@ typedef struct {
     uint32_t usage_consumed_minutes_7;
     uint16_t usage_known_days_30;
     uint32_t usage_consumed_minutes_30;
+    bool usage_direct_present;
+    uint16_t usage_direct_days_7;
+    uint16_t usage_direct_days_30;
+    uint32_t usage_direct_minutes_7;
+    uint32_t usage_direct_minutes_30;
+    bool usage_latest_available;
     uint16_t day_index;
     char mode[24];
     char request_id[80];
@@ -388,11 +514,25 @@ typedef struct {
     char result_status[24];
     char result_type[48];
     int setup_step;
+    bool setup_wizard_completed;
+    bool setup_completion_known;
+    bool setup_legacy_completed_candidate;
+    bool setup_more;
+    bool setup_time_help;
+    int support_guide_page;
+    bool setup_pin_ready;
+    bool parent_support_only;
+    bool setup_activation_pending;
+    int setup_focus;
+    unsigned setup_issue_mask;
+    int setup_issue_steps[PTC_UI_SETUP_ISSUE_COUNT];
+    int setup_issue_codes[PTC_UI_SETUP_ISSUE_COUNT];
     int setup_shortcut_index;
     int setup_theme_index;
+    bool setup_eye_care_enabled;
+    bool setup_bedtime_enabled;
     PtcUiLanguagePreference language_preference;
     bool parent_export_succeeded;
-    int setup_zone_index;
     uint64_t custom_shortcut_mask;
     bool custom_shortcut_enabled;
     uint64_t shortcut_draft_mask;
@@ -431,8 +571,27 @@ typedef struct {
     int holiday_leave_selection;
     bool calendar_covered;
     bool calendar_update_warning;
+    const PtcHolidayCalendarSet *calendar;
+    char calendar_option_id[PTC_CALENDAR_REGION_ID_SIZE];
+    char calendar_region_name[PTC_CALENDAR_REGION_NAME_SIZE];
+    bool calendar_builtin;
     int holiday_calendar_page;
+    const PtcImportedCalendarYear *holiday_calendar_data;
+    uint16_t holiday_calendar_year;
+    bool holiday_calendar_has_previous_year;
+    bool holiday_calendar_has_next_year;
     int holiday_last_rule;
+    int calendar_manager_tab;
+    int calendar_manager_count;
+    int calendar_manager_selected;
+    int calendar_manager_page;
+    PtcUiCalendarRow calendar_manager_rows[96];
+    char calendar_preview_lines[12][144];
+    int calendar_preview_count;
+    char calendar_pending_file[81];
+    char calendar_pending_sha256[65];
+    char calendar_pending_option_id[17];
+    char calendar_pending_catalog_sha256[65];
     bool bedtime_dirty;
     bool bedtime_switch_pending;
     bool bedtime_section_focused;
@@ -445,11 +604,22 @@ typedef struct {
     uint16_t pending_bedtime_skip_start_day_index;
     uint16_t pending_bedtime_skip_start_minute;
     uint16_t pending_bedtime_skip_end_minute;
+    bool eye_care_dirty;
+    int eye_care_field_focus;
     int album_restriction_state;
     bool album_backup_valid;
     char album_restriction_detail[160];
     char rule_source[32];
     int home_details_page;
+    int home_details_entry_page;
+    int home_details_focus;
+    bool home_details_data_expanded;
+    int home_details_scroll;
+    bool home_details_refresh_failed;
+    bool rules_dialog_open;
+#ifdef PTC_UI_PREVIEW_ANIM_CLOCK_MS
+    int home_details_preview_second;
+#endif
     int forecast_detail_day_offset;
     int editor_index;
     char overlay_title[64];
@@ -487,6 +657,7 @@ typedef struct {
     char auth_error_title[64];
     char auth_error_message[192];
     int auth_cooldown_seconds;
+    bool auth_error_parent_entry;
     char pending_code[9];
     int code_grant_minutes;
     bool code_preview_after_available;
@@ -528,6 +699,7 @@ typedef struct {
     char backend_release_id[96];
     char hot_reload_detail[192];
     int hot_reload_status;
+    bool hot_reload_capture_restart;
     char repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];

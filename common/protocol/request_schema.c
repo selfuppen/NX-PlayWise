@@ -271,6 +271,13 @@ static bool parse_week_template(const char *text, PtcDayRule week[7])
         if (!json_u16(item, "minutes", &week[i].minutes)) {
             week[i].minutes = 0;
         }
+        /* A LIMIT day must carry 1..1440 minutes (same bound as parse_named_rule);
+           UNLIMITED ignores minutes. Reject out-of-range so a template cannot
+           persist a day that later fails enforce. */
+        if (week[i].mode == PTC_RULE_MODE_LIMIT &&
+            (week[i].minutes < 1u || week[i].minutes > 1440u)) {
+            return false;
+        }
         days = obj_end + 1;
     }
     return true;
@@ -404,6 +411,8 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "set_holiday_policy") == 0) {
         return PTC_REQUEST_SET_HOLIDAY_POLICY;
     }
+    if (strcmp(value, "import_holiday_calendar") == 0) return PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR;
+    if (strcmp(value, "activate_holiday_calendar") == 0) return PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR;
     if (strcmp(value, "clear_redemption_history") == 0) {
         return PTC_REQUEST_CLEAR_REDEMPTION_HISTORY;
     }
@@ -425,6 +434,12 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "disable_bedtime") == 0) return PTC_REQUEST_DISABLE_BEDTIME;
     if (strcmp(value, "confirm_bedtime_requirements") == 0) return PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS;
     if (strcmp(value, "overlay_ready") == 0) return PTC_REQUEST_OVERLAY_READY;
+    if (strcmp(value, "create_config_backup") == 0) return PTC_REQUEST_CREATE_CONFIG_BACKUP;
+    if (strcmp(value, "restore_config_backup") == 0) return PTC_REQUEST_RESTORE_CONFIG_BACKUP;
+    if (strcmp(value, "set_dock_policy") == 0) return PTC_REQUEST_SET_DOCK_POLICY;
+    if (strcmp(value, "waive_dock_policy_today") == 0) return PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY;
+    if (strcmp(value, "set_eye_care_policy") == 0) return PTC_REQUEST_SET_EYE_CARE_POLICY;
+    if (strcmp(value, "skip_eye_care_break") == 0) return PTC_REQUEST_SKIP_EYE_CARE_BREAK;
     if (strcmp(value, "complete_setup") == 0) {
         return PTC_REQUEST_COMPLETE_SETUP;
     }
@@ -443,6 +458,7 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "lab_campaign_start") == 0) return PTC_REQUEST_LAB_CAMPAIGN_START;
     if (strcmp(value, "lab_campaign_status") == 0) return PTC_REQUEST_LAB_CAMPAIGN_STATUS;
     if (strcmp(value, "lab_campaign_abandon") == 0) return PTC_REQUEST_LAB_CAMPAIGN_ABANDON;
+    if (strcmp(value, "lab_selfdrive_start") == 0) return PTC_REQUEST_LAB_SELFDRIVE_START;
 #endif
     return PTC_REQUEST_UNKNOWN;
 }
@@ -468,6 +484,10 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "set_weekly_template";
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
         return "set_holiday_policy";
+    case PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR:
+        return "import_holiday_calendar";
+    case PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR:
+        return "activate_holiday_calendar";
     case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
         return "clear_redemption_history";
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
@@ -484,6 +504,12 @@ const char *ptc_request_type_name(PtcRequestType type)
     case PTC_REQUEST_DISABLE_BEDTIME: return "disable_bedtime";
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS: return "confirm_bedtime_requirements";
     case PTC_REQUEST_OVERLAY_READY: return "overlay_ready";
+    case PTC_REQUEST_CREATE_CONFIG_BACKUP: return "create_config_backup";
+    case PTC_REQUEST_RESTORE_CONFIG_BACKUP: return "restore_config_backup";
+    case PTC_REQUEST_SET_DOCK_POLICY: return "set_dock_policy";
+    case PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY: return "waive_dock_policy_today";
+    case PTC_REQUEST_SET_EYE_CARE_POLICY: return "set_eye_care_policy";
+    case PTC_REQUEST_SKIP_EYE_CARE_BREAK: return "skip_eye_care_break";
     case PTC_REQUEST_COMPLETE_SETUP:
         return "complete_setup";
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
@@ -507,6 +533,8 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "lab_campaign_status";
     case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
         return "lab_campaign_abandon";
+    case PTC_REQUEST_LAB_SELFDRIVE_START:
+        return "lab_selfdrive_start";
 #endif
     case PTC_REQUEST_UNKNOWN:
     default:
@@ -545,7 +573,12 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return json_string(text, "code", out->code, sizeof(out->code)) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_TODAY_LIMIT:
     case PTC_REQUEST_ADD_TODAY_MINUTES:
-        return json_u16(text, "minutes", &out->minutes) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+        /* Today's quota is a single-day LIMIT: reject 0 and anything the PCTL
+           0x44 day slot cannot hold (>1440). Caught at the inbox, a bad value
+           can no longer be persisted to today_override and then fail every
+           later enforce (LIMIT 0 decodes as BLOCKED; >1440 fails the write). */
+        return json_u16(text, "minutes", &out->minutes) &&
+            out->minutes >= 1u && out->minutes <= 1440u ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
         return parse_week_template(text, out->week) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
@@ -553,6 +586,16 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
             parse_named_rule(text, "holiday_rule", &out->holiday_rule) &&
             parse_named_rule(text, "makeup_workday_rule", &out->makeup_workday_rule)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR:
+        return json_string(text, "file_name", out->calendar_file_name,
+            sizeof(out->calendar_file_name)) &&
+            json_string(text, "sha256", out->calendar_sha256,
+            sizeof(out->calendar_sha256)) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR:
+        return json_string(text, "option_id", out->calendar_option_id,
+            sizeof(out->calendar_option_id)) &&
+            json_string(text, "catalog_sha256", out->calendar_catalog_sha256,
+            sizeof(out->calendar_catalog_sha256)) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
         if (!json_bool_required(text, "enabled", &out->scheduled_override.enabled)) {
             return PTC_ERR_BAD_REQUEST;
@@ -572,6 +615,31 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
         return json_u16(text, "daily_buffer_minutes", &out->autonomy_policy.daily_buffer_minutes) &&
             ptc_autonomy_policy_is_valid(&out->autonomy_policy)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_CREATE_CONFIG_BACKUP:
+        return PTC_ERR_OK;
+    case PTC_REQUEST_RESTORE_CONFIG_BACKUP:
+        return json_u16(text, "groups", &out->config_groups) && out->config_groups > 0 && out->config_groups <= 2047 &&
+            json_string(text, "stage_id", out->config_stage_id, sizeof(out->config_stage_id)) &&
+            ptc_request_id_is_valid(out->config_stage_id) &&
+            json_string(text, "sha256", out->config_sha256, sizeof(out->config_sha256)) && strlen(out->config_sha256) == 64
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_DOCK_POLICY:
+        return json_bool_required(text, "force_docked", &out->dock_policy.force_docked) &&
+            json_bool_required(text, "undocked_limit_enabled", &out->dock_policy.undocked_limit_enabled) &&
+            json_u16(text, "undocked_daily_minutes", &out->dock_policy.undocked_daily_minutes) &&
+            out->dock_policy.undocked_daily_minutes <= 1440u ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY:
+        return json_u16(text, "expected_day_index", &out->dock_expected_day_index)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_EYE_CARE_POLICY:
+        return json_bool_required(text, "enabled", &out->eye_care_policy.enabled) &&
+            json_u16(text, "play_minutes", &out->eye_care_policy.play_minutes) &&
+            json_u16(text, "rest_minutes", &out->eye_care_policy.rest_minutes) &&
+            ptc_eye_care_policy_is_valid(&out->eye_care_policy)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SKIP_EYE_CARE_BREAK:
+        return json_u64(text, "break_id", &out->eye_care_break_id) && out->eye_care_break_id != 0
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_BEDTIME_POLICY: {
         char activation[16];
@@ -650,6 +718,15 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         if (find_key(text, "runtime_effect") &&
             (!json_string(text, "runtime_effect", out->runtime_effect, sizeof(out->runtime_effect)) ||
              !lab_runtime_effect_is_valid(out->runtime_effect))) return PTC_ERR_BAD_REQUEST;
+        return PTC_ERR_OK;
+    case PTC_REQUEST_LAB_SELFDRIVE_START:
+        /* The self-driver only covers machine-decidable scenarios; default to
+           the fully autonomous timer-activation A/B mode. A campaign context is
+           never accepted here -- authoritative campaigns stay human-attested. */
+        snprintf(out->lab_mode, sizeof(out->lab_mode), "timer_activation_ab");
+        if (find_key(text, "mode") &&
+            (!json_string(text, "mode", out->lab_mode, sizeof(out->lab_mode)) ||
+             !lab_mode_is_valid(out->lab_mode))) return PTC_ERR_BAD_REQUEST;
         return PTC_ERR_OK;
 #endif
     case PTC_REQUEST_UNKNOWN:

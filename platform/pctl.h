@@ -22,10 +22,30 @@ typedef struct {
     bool limited_today;
     bool blocked_today;
     bool unrestricted_today;
+    /* Today's play-timer slot is cleanly unconfigured (no native limit set):
+       there is no in-progress Nintendo allowance to preserve. Distinct from the
+       three classified modes above and from an unreadable/garbage slot. */
+    bool today_unconfigured;
     bool remaining_available;
     uint32_t remaining_minutes;
+    bool remaining_ns_available;
+    int64_t remaining_ns;
+    /* Unclamped 1454 wire value. Legacy remaining_ns stays nonnegative until
+       the policy baselines have been migrated independently. */
+    bool signed_remaining_ns_available;
+    int64_t signed_remaining_ns;
+    /* Direct total consumption. Never aliases the legacy policy baselines. */
+    bool usage_supported;
+    bool usage_available;
+    uint64_t usage_ns;
+    uint16_t usage_day_index;
+    int64_t usage_captured_at;
+    uint32_t usage_result;
     bool played_minutes_available;
     uint32_t played_minutes;
+    /* Explicit simulated counter for Host/Eden; never inferred from quota. */
+    bool played_ns_available;
+    uint64_t played_ns;
     bool configured_minutes_available;
     uint16_t configured_minutes;
     bool play_timer_enabled_available;
@@ -33,6 +53,13 @@ typedef struct {
     bool restricted_now_available;
     bool restricted_now;
 } PtcPctlStatus;
+
+static inline bool ptc_pctl_remaining_exhausted(const PtcPctlStatus *status)
+{
+    return status->signed_remaining_ns_available
+        ? status->signed_remaining_ns <= 0
+        : status->remaining_available && status->remaining_minutes == 0;
+}
 
 typedef struct {
     PtcPctlTargetMode mode;
@@ -119,6 +146,8 @@ typedef struct {
     PtcErrorCode (*public_parity)(PtcPctl *pctl, PtcPctlPublicParity *out);
     PtcErrorCode (*arm_suspend_event)(PtcPctl *pctl);
     PtcErrorCode (*poll_suspend_event)(PtcPctl *pctl, PtcPctlSuspendEventEvidence *out);
+    /* Fresh consumption for a grant; must bypass the display cache. */
+    PtcErrorCode (*read_grant_status)(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out);
 } PtcPctlVTable;
 
 struct PtcPctl {

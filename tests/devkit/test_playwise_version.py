@@ -8,9 +8,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-from playwise_version import (  # noqa: E402
+from tools.build.playwise_version import (  # noqa: E402
     read_playwise_version,
     validate_playwise_version,
     write_playwise_version,

@@ -4,10 +4,22 @@
 #include <switch.h>
 
 #include "../pctl.h"
+#include "../usage_evidence.h"
 
 typedef struct {
     PtcPctl pctl;
     Result last_result;
+    uint64_t start_timer_calls;
+    bool usage_sampled;
+    bool usage_available;
+    uint64_t usage_sample_tick;
+    uint64_t usage_ns;
+    uint16_t usage_day_index;
+    int64_t usage_captured_at;
+    Result usage_result;
+    bool usage_high_water_available;
+    uint16_t usage_high_water_day;
+    uint64_t usage_high_water_ns;
 #ifdef PLAYWISE_DEVICE_LAB
     Handle suspend_event;
     bool suspend_event_signaled;
@@ -19,5 +31,7 @@ typedef struct {
 void ptc_switch_pctl_init(PtcSwitchPctl *adapter);
 void ptc_switch_pctl_exit(PtcSwitchPctl *adapter);
 PtcPctl *ptc_switch_pctl_as_pctl(PtcSwitchPctl *adapter);
+/* Fresh read-only group; does not alter the UI cache or last transaction Result. */
+bool ptc_switch_pctl_read_evidence(void *ctx, PtcUsageEvidenceSample *out);
 
 #endif

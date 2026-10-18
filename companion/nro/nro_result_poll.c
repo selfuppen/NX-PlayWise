@@ -63,29 +63,13 @@ static void open_code_preview_confirm(UiState *ui, bool refreshed)
 
 static void sync_setup_wizard(UiState *ui)
 {
-    bool active;
-    if (!ui) {
-        return;
-    }
-    active = strcmp(ui->model.setup_phase, "active") == 0;
-    if (!active) {
-        if (strcmp(ui->model.setup_phase, "restored") == 0) {
-            if (ui->model.setup_step != PTC_UI_SETUP_TAKEOVER) {
-                (void)save_setup_step(ui, PTC_UI_SETUP_TAKEOVER);
-            }
-        } else if (ui->model.setup_step == 0) {
-            (void)save_setup_step(ui, PTC_UI_SETUP_SHORTCUT);
-        }
-        ui->model.view = PTC_UI_SETUP;
-    } else if (ui->model.setup_step > 0) {
-        ui->model.view = PTC_UI_SETUP;
-    } else if (ui->model.view == PTC_UI_SETUP) {
-        ui->model.view = PTC_UI_CHILD;
-    }
+    if (!ui) return;
+    ptc_ui_setup_sync(&ui->model);
 }
 
 void poll_result(UiState *ui, bool force)
 {
+    if (!ui || ui->transport.suspended) return;
     PtcCompanionStatus status;
     PtcDayRule saved_draft[7];
     bool preserve_weekly_draft;
@@ -97,6 +81,8 @@ void poll_result(UiState *ui, bool force)
     bool preserve_scheduled_draft;
     PtcBedtimePolicy saved_bedtime_draft;
     bool preserve_bedtime_draft;
+    PtcAutonomyPolicy saved_autonomy_draft;
+    bool preserve_autonomy_draft;
     if (!ui->waiting) {
         if (force) {
             submit_status(ui);
@@ -115,17 +101,38 @@ void poll_result(UiState *ui, bool force)
     status = ptc_companion_transport_poll(
         &ui->transport,
         BACKGROUND_POLL_INTERVAL_MS,
-        REQUEST_TIMEOUT_MS,
+        ui->model.setup_activation_pending ? -1 : REQUEST_TIMEOUT_MS,
         ui->last_result,
         sizeof(ui->last_result));
     sync_transport_label(ui);
     if (status == PTC_COMPANION_PENDING) {
+        if (ui->model.setup_activation_pending && ui->elapsed_ms >= REQUEST_TIMEOUT_MS) {
+            if (!(ui->model.setup_issue_mask & (1U << PTC_UI_SETUP_ISSUE_ACTIVATION)))
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_SETUP_PENDING);
+            if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+            return;
+        }
         snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_BEING_PROCESSED_PLEASE_WAIT));
         return;
     }
     ui->waiting = false;
     if (status == PTC_COMPANION_OK) {
+        if (ui->model.setup_activation_pending) {
+            cJSON *result = cJSON_Parse(ui->last_result);
+            const cJSON *type = cJSON_GetObjectItemCaseSensitive(result, "type");
+            bool activation_result = cJSON_IsString(type) && strcmp(type->valuestring, "complete_setup") == 0;
+            cJSON_Delete(result);
+            if (!activation_result) {
+                ui->waiting = true;
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_BAD_REQUEST);
+                if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+                return;
+            }
+        }
         saved_scheduled_draft = ui->model.draft_scheduled_override;
+        saved_autonomy_draft = ui->model.draft_autonomy_policy;
+        preserve_autonomy_draft = ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
+            saved_autonomy_draft.daily_buffer_minutes != ui->model.autonomy_policy.daily_buffer_minutes;
         preserve_scheduled_draft = ptc_ui_scheduled_dirty(&ui->model);
         saved_bedtime_draft = ui->model.draft_bedtime_policy;
         preserve_bedtime_draft = ui->model.bedtime_dirty ||
@@ -140,24 +147,44 @@ void poll_result(UiState *ui, bool force)
         saved_holiday_rule = ui->model.draft_holiday_rule;
         saved_makeup_rule = ui->model.draft_makeup_workday_rule;
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
+            if (ui->model.setup_activation_pending) {
+                ui->waiting = true;
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_BAD_REQUEST);
+                if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+                return;
+            }
+            ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_BAD_REQUEST);
             cancel_bedtime_navigation(ui);
             set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), PTC_COMPANION_RESULT_INVALID);
             if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
             if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
-            if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
+            if (ui->request_view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS)
+                ui->model.view = PTC_UI_ERROR;
             return;
         }
         if (strcmp(ui->model.result_type, "status") == 0 &&
             ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
             ui->model.grant_status_refresh_failed = strcmp(ui->model.result_status, "ok") != 0;
         }
-        if (strcmp(ui->model.result_type, "complete_setup") == 0 &&
-            strcmp(ui->model.result_status, "ok") == 0) {
-            ui->model.setup_zone_index = 1;
-            (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
+        if (ui->model.setup_activation_pending && strcmp(ui->model.result_type, "complete_setup") == 0) {
+            ui->model.setup_activation_pending = false;
+            cJSON *result = cJSON_Parse(ui->last_result);
+            const cJSON *setup = cJSON_GetObjectItemCaseSensitive(result, "setup");
+            const cJSON *phase = cJSON_GetObjectItemCaseSensitive(setup, "phase");
+            bool activated = strcmp(ui->model.result_status, "ok") == 0 && cJSON_IsString(phase) &&
+                strcmp(phase->valuestring, "active") == 0 && !ui->model.disable_flag_present;
+            cJSON_Delete(result);
+            if (!activated) ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION,
+                ui->model.error_code ? ui->model.error_code : PTC_ERR_SETUP_PENDING);
+            if (!ui->model.setup_wizard_completed) finish_setup(ui, activated);
+            /* If already in Support, keep its current focus and diagnostic result. */
         }
+        if (strcmp(ui->model.result_type, "status") == 0 && strcmp(ui->model.result_status, "ok") != 0)
+            ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, ui->model.error_code);
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
+        if (preserve_autonomy_draft && strcmp(ui->model.result_type, "status") == 0)
+            ui->model.draft_autonomy_policy = saved_autonomy_draft;
         if (strcmp(ui->model.result_status, "ok") == 0 &&
             strcmp(ui->model.result_type, "restore_today_policy") == 0) {
             ui->model.today_override_cleared_in_session = true;
@@ -177,6 +204,7 @@ void poll_result(UiState *ui, bool force)
         }
         if (ui->model.status_loaded && strcmp(ui->model.result_status, "ok") == 0) {
             ptc_ui_mark_status_updated(&ui->model, (int64_t)time(NULL));
+            ui->model.home_details_refresh_failed = false;
         }
         if (preserve_weekly_draft &&
             !(strcmp(ui->model.result_type, "set_weekly_template") == 0 &&
@@ -192,7 +220,10 @@ void poll_result(UiState *ui, bool force)
             ui->model.draft_makeup_workday_rule = saved_makeup_rule;
             update_holiday_dirty(ui);
         }
+        config_backup_result(ui);
         refresh_disable_flag(ui);
+        if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER)
+            calendar_manager_refresh(ui);
         if (strcmp(ui->model.result_type, "clear_redemption_history") == 0) {
             bool cleared = strcmp(ui->model.result_status, "ok") == 0;
             open_redemption_history(ui);
@@ -286,6 +317,7 @@ void poll_result(UiState *ui, bool force)
             }
         }
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0 &&
+            ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS &&
             strcmp(ui->model.result_type, "preview_offline_code") != 0 &&
             strcmp(ui->model.result_type, "offline_code") != 0) {
             ui->model.view = PTC_UI_ERROR;
@@ -318,6 +350,28 @@ void poll_result(UiState *ui, bool force)
                 section >= 0 && section < 3 ? NAMES[section] : ptc_ui_text(PTC_UI_T_BEDTIME));
         }
         if (strcmp(ui->model.result_type, "confirm_bedtime_requirements") == 0) {
+            if (ui->pending_config_restore) {
+                ui->pending_config_restore = false;
+                ui->model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+                if (strcmp(ui->model.result_status, "ok") == 0) request_config_restore(ui);
+                return;
+            }
+            if (ui->pending_dock_save) {
+                ui->pending_dock_save = false;
+                if (strcmp(ui->model.result_status, "ok") == 0) {
+                    ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                    save_dock_from_page(ui);
+                }
+                return;
+            }
+            if (ui->pending_eye_care_save) {
+                ui->pending_eye_care_save = false;
+                if (strcmp(ui->model.result_status, "ok") == 0) {
+                    ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                    submit_eye_care_policy(ui);
+                }
+                return;
+            }
             if (strcmp(ui->model.result_status, "ok") == 0 && ui->model.bedtime_dirty) {
                 /* Re-enter the common save gate after the environment
                  * acknowledgement. The current minute may now be inside the
@@ -344,6 +398,13 @@ void poll_result(UiState *ui, bool force)
             snprintf(ui->model.message, sizeof(ui->model.message),
                 ptc_ui_text(PTC_UI_T_THE_BEDTIME_WINDOW_HAS_CHANGED_AND_IS));
         }
+        if (strcmp(ui->model.result_type, "skip_eye_care_break") == 0 &&
+            strcmp(ui->model.result_status, "error") == 0 && ui->model.error_code == 322) {
+            ui->model.pending_eye_care_break_id = 0;
+            submit_status(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CHANGED));
+        }
         if (ui->quota_recheck_pending && strcmp(ui->model.result_type, "status") == 0) {
             finish_quota_recheck(ui, strcmp(ui->model.result_status, "ok") == 0);
         }
@@ -363,8 +424,16 @@ void poll_result(UiState *ui, bool force)
         show_pending_redemption(ui);
         return;
     }
+    if (ui->model.setup_activation_pending) {
+        ui->waiting = true;
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_SETUP_PENDING);
+        if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+        return;
+    }
+    ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_READ_FAILED);
     set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), status);
     if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
     if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
-    if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
+    if (ui->request_view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS)
+        ui->model.view = PTC_UI_ERROR;
 }

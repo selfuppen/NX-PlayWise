@@ -10,9 +10,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-from ptc_token_v2 import MAX_VALUE, TokenError, decode_token, encode_token, tier_for_minutes, verify_token
+from tools.lib.ptc_token_v2 import MAX_VALUE, TokenError, decode_token, encode_token, tier_for_minutes, verify_token
 
 
 def assert_reason(reason: str, fn) -> None:

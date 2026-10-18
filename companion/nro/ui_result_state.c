@@ -19,6 +19,14 @@ static int64_t json_int64(const cJSON *object, const char *name, int64_t fallbac
     return cJSON_IsNumber(item) ? (int64_t)item->valuedouble : fallback;
 }
 
+static int history_int(const cJSON *object, const char *name, int max)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    if (!cJSON_IsNumber(item) || !(item->valuedouble >= 0 && item->valuedouble <= max) ||
+        item->valuedouble != (int)item->valuedouble) return -1;
+    return (int)item->valuedouble;
+}
+
 static const char *event_label(const char *event)
 {
     if (strcmp(event, "result_ok") == 0) return ptc_ui_text(PTC_UI_T_OPERATION_COMPLETED);
@@ -129,7 +137,7 @@ static const char *request_success_guidance(const char *type)
         return "";
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return ptc_ui_text(PTC_UI_T_NEXT_GO_TO_STEP_5_TO_SELECT);
+        return ptc_ui_text(PTC_UI_T_SETUP_CHECK_NOTICE);
     }
     if (strcmp(type, "retry_setup_release") == 0) {
         return ptc_ui_text(PTC_UI_T_NEXT_REFRESH_STATUS_DISPLAYING_NORMAL_OPERATION_MEANS);
@@ -339,7 +347,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (status_context && cJSON_IsObject(state)) {
         bool preserve_played_minutes = model->played_minutes_available &&
-            !summary.played_minutes_available;
+            !model->usage_present && !summary.usage_present &&
+            !summary.played_minutes_available && type && strcmp(type, "status") != 0 &&
+            model->day_index == (uint16_t)json_int(state, "day_index", 0);
 
         model->status_loaded = true;
         model->restriction_enabled_available = json_bool(state, "restriction_enabled_available", false);
@@ -352,14 +362,20 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->unrestricted_today = json_int(state, "unrestricted_today", -1);
         model->remaining_available = summary.remaining_available;
         model->remaining_minutes = summary.remaining_minutes;
-        /* Management results may carry the compatibility fields as unavailable;
-         * retain the last status snapshot instead of displaying a false reset. */
+        /* Same-day management replies may omit compatibility readings. A status
+         * read must replace them, including unknown values, so a refreshed or
+         * next-day estimate cannot inherit consumption from an older snapshot. */
         if (!preserve_played_minutes) {
             model->played_minutes_available = summary.played_minutes_available;
             model->played_minutes = summary.played_minutes;
+            model->usage_present = summary.usage_present;
+            model->usage_captured_at = summary.usage_captured_at;
+            model->usage_ns = summary.usage_ns;
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
+        model->bedtime_status_available = summary.bedtime_available;
+        model->bedtime_status_enabled = summary.bedtime_enabled;
         model->bedtime_active = summary.bedtime_active;
         model->bedtime_skipped = summary.bedtime_skipped;
         model->bedtime_window_instance_id = summary.bedtime_window_instance_id;
@@ -381,6 +397,31 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             summary.bedtime_skipped_source);
         model->bedtime_official_setting_confirmed = summary.bedtime_official_setting_confirmed;
         model->bedtime_overlay_verified = summary.bedtime_overlay_verified;
+        model->dock_available = summary.dock_available;
+        model->dock_status_available = summary.dock_policy_available;
+        model->dock_policy.force_docked = summary.force_docked;
+        model->dock_policy.undocked_limit_enabled = summary.undocked_limit_enabled;
+        model->dock_policy.undocked_daily_minutes = (uint16_t)summary.undocked_daily_minutes;
+        model->dock_supported_available = summary.dock_supported_available;
+        model->dock_supported = summary.dock_supported;
+        snprintf(model->operation_mode, sizeof(model->operation_mode), "%s", summary.operation_mode);
+        model->undocked_usage_available = summary.undocked_usage_available;
+        model->undocked_used_minutes = summary.undocked_used_minutes;
+        model->undocked_remaining_minutes = summary.undocked_remaining_minutes;
+        model->dock_waived_today = summary.dock_waived_today;
+        model->dock_restriction_active = summary.dock_restriction_active;
+        model->dock_unlimited_capped = summary.dock_unlimited_capped;
+        if (strcmp(summary.type, "set_dock_policy") == 0 && summary.ok) model->dock_dirty = false;
+        if (!model->dock_dirty) model->draft_dock_policy = model->dock_policy;
+        model->eye_care_policy.enabled = summary.eye_care_enabled;
+        model->eye_care_policy.play_minutes = (uint16_t)summary.eye_care_play_minutes;
+        model->eye_care_policy.rest_minutes = (uint16_t)summary.eye_care_rest_minutes;
+        model->eye_care_used_minutes = (uint16_t)summary.eye_care_used_minutes;
+        model->eye_care_rest_remaining_seconds = summary.eye_care_rest_remaining_seconds;
+        model->eye_care_break_id = summary.eye_care_break_id;
+        model->eye_care_unlimited_capped = summary.eye_care_unlimited_capped;
+        model->daily_restriction_active = summary.daily_restriction_active;
+        snprintf(model->eye_care_phase, sizeof(model->eye_care_phase), "%s", summary.eye_care_phase);
         model->calendar_covered = summary.calendar_covered;
         model->calendar_update_warning = summary.calendar_update_warning;
         snprintf(model->rule_source, sizeof(model->rule_source), "%s", summary.rule_source);
@@ -427,6 +468,30 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 ? (uint16_t)json_int(usage, "known_days_30", 0) : 0;
             model->usage_consumed_minutes_30 = cJSON_IsObject(usage)
                 ? (uint32_t)json_int64(usage, "consumed_minutes_30", 0) : 0;
+            const cJSON *direct = cJSON_GetObjectItemCaseSensitive(usage, "direct");
+            model->usage_direct_present = cJSON_IsObject(direct) &&
+                strcmp(json_string(direct, "source"), "pctl_1952") == 0 &&
+                strcmp(json_string(direct, "scope"), "console_usable_time") == 0 &&
+                strcmp(json_string(direct, "coverage"), "partial") == 0;
+            model->usage_direct_days_7 = model->usage_direct_days_30 = 0;
+            model->usage_direct_minutes_7 = model->usage_direct_minutes_30 = 0;
+            model->usage_latest_available = false;
+            if (model->usage_direct_present) {
+                int days7 = history_int(direct, "known_days_7", 7);
+                int days30 = history_int(direct, "known_days_30", 30);
+                int minutes7 = history_int(direct, "consumed_minutes_7", 10080);
+                int minutes30 = history_int(direct, "consumed_minutes_30", 43200);
+                if (days7 < 0 || days7 > 7 || days30 < days7 || days30 > 30 ||
+                    minutes7 < 0 || minutes7 > days7 * 1440 || minutes30 < minutes7 || minutes30 > days30 * 1440) {
+                    model->usage_direct_present = false;
+                } else {
+                    model->usage_direct_days_7 = (uint16_t)days7;
+                    model->usage_direct_days_30 = (uint16_t)days30;
+                    model->usage_direct_minutes_7 = (uint32_t)minutes7;
+                    model->usage_direct_minutes_30 = (uint32_t)minutes30;
+                    model->usage_latest_available = json_bool(direct, "latest_available", false);
+                }
+            }
         }
     }
     if (strcmp(status, "ok") == 0 && type && strcmp(type, "preview_offline_code") == 0 &&
@@ -439,6 +504,10 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->code_preview_converts_unlimited = summary.converts_unlimited_to_limited;
     }
     setup = cJSON_GetObjectItemCaseSensitive(root, "setup");
+    if (status_context && type && strcmp(type, "complete_setup") == 0 && !cJSON_IsObject(setup)) {
+        /* A success envelope without setup evidence cannot confirm activation. */
+        model->setup_phase[0] = '\0';
+    }
     if (status_context && cJSON_IsObject(setup)) {
         bool setup_was_waiting = strcmp(model->setup_phase, "released") == 0 &&
             model->setup_activate_after > 0;
@@ -449,13 +518,15 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->apply_pending_confirmation = json_bool(setup, "apply_pending_confirmation", false);
         model->recovery_active = json_bool(setup, "recovery_active", false);
         snprintf(model->disable_reason, sizeof(model->disable_reason), "%s", json_string(setup, "disable_reason"));
+        if (cJSON_HasObjectItem(setup, "disable_flag_present"))
+            model->disable_flag_present = json_bool(setup, "disable_flag_present", false);
         model->setup_restriction_cleared = json_bool(setup, "restriction_cleared", false);
         model->setup_snapshot_available = json_bool(setup, "snapshot_available", false);
         model->setup_activate_after = json_int(setup, "activate_after", 0);
-        if (type && strcmp(type, "complete_setup") == 0 &&
+        if (!model->setup_wizard_completed && type && strcmp(type, "complete_setup") == 0 &&
             strcmp(model->setup_phase, "released") == 0 && model->setup_activate_after > 0) {
             model->view = PTC_UI_SETUP;
-        } else if (strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
+        } else if (!model->setup_wizard_completed && strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
             model->view = PTC_UI_SETUP;
         } else if (strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP &&
                    model->setup_step == 0) {
@@ -470,6 +541,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             snprintf(model->environment_hos, sizeof(model->environment_hos), "%s", json_string(environment, "hos"));
             snprintf(model->environment_model, sizeof(model->environment_model), "%s", json_string(environment, "model"));
             model->environment_atmosphere = json_bool(environment, "atmosphere", false);
+            snprintf(model->environment_atmosphere_version, sizeof(model->environment_atmosphere_version), "%s",
+                     json_string(environment, "atmosphere_version"));
         }
     }
     {
@@ -504,7 +577,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     if (status && strcmp(status, "error") == 0) {
         ptc_audio_play(PTC_SE_ERROR);
-        const char *message = summary.message[0] ? summary.message : NULL;
+        const char *message = summary.error_code == 325 ? ptc_ui_text(PTC_UI_T_CONTROL_BUSY) :
+            (summary.message[0] ? summary.message : NULL);
         snprintf(model->message, sizeof(model->message), "%s", message ? message : ptc_ui_text(PTC_UI_T_THE_BACKGROUND_REJECTED_THIS_OPERATION));
         if (summary.error_code > 0) {
             model->error_code = summary.error_code;
@@ -549,6 +623,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                      ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_3));
             snprintf(model->feedback_detail, sizeof(model->feedback_detail),
                      ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
+        } else if (type && strcmp(type, "complete_setup") == 0 &&
+                   strcmp(model->setup_phase, "active") != 0) {
+            snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_SETUP_CONTROLS_INACTIVE));
         } else {
             snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
         }

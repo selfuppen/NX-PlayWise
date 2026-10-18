@@ -42,6 +42,7 @@ typedef struct {
     int next_file_poll_ms;
     int file_poll_delay_ms;
     PtcCompanionTransportRoute route;
+    bool suspended;
 } PtcCompanionTransportClient;
 
 void ptc_companion_transport_init(PtcCompanionTransportClient *client, const char *app_root, PtcStorage *storage,
@@ -51,6 +52,7 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
 PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *client, int elapsed_ms,
     int timeout_ms, char *out, size_t out_size);
 void ptc_companion_transport_cancel(PtcCompanionTransportClient *client);
+void ptc_companion_transport_set_suspended(PtcCompanionTransportClient *client, bool suspended);
 bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient *client);
 PtcCompanionTransportRoute ptc_companion_transport_route(const PtcCompanionTransportClient *client);
 const char *ptc_companion_transport_route_label_zh(PtcCompanionTransportRoute route);
@@ -68,6 +70,10 @@ PtcCompanionStatus ptc_companion_transport_submit_set_scheduled_override(PtcComp
     const char *request_id, int64_t created_at, const PtcScheduledOverride *scheduled_override);
 PtcCompanionStatus ptc_companion_transport_submit_set_autonomy_policy(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, const PtcAutonomyPolicy *policy);
+PtcCompanionStatus ptc_companion_transport_submit_set_eye_care_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcEyeCarePolicy *policy);
+PtcCompanionStatus ptc_companion_transport_submit_skip_eye_care_break(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint64_t break_id);
 PtcCompanionStatus ptc_companion_transport_submit_set_bedtime_policy(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately);
 PtcCompanionStatus ptc_companion_transport_submit_skip_bedtime(PtcCompanionTransportClient *client,
@@ -80,5 +86,11 @@ PtcCompanionStatus ptc_companion_transport_submit_confirm_bedtime_requirements(P
 PtcCompanionStatus ptc_companion_transport_submit_overlay_ready(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, const char *release_id,
     const char *boot_id, const char *environment_fingerprint);
+
+PtcCompanionStatus ptc_companion_transport_submit_set_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcDockPolicy *policy);
+
+PtcCompanionStatus ptc_companion_transport_submit_waive_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint16_t day_index);
 
 #endif

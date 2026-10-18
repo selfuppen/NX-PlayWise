@@ -11,6 +11,8 @@ typedef struct {
     bool timer_started;
     bool timer_stopped;
     PtcErrorCode read_error;
+    unsigned int read_status_calls;
+    unsigned int read_status_fail_on_call;
     bool read_fails_after_apply;
     PtcErrorCode backup_error;
     PtcErrorCode write_error;
@@ -23,9 +25,11 @@ typedef struct {
     PtcErrorCode restore_error;
     bool runtime_effect_succeeds;
     bool model_elapsed_time;
+    bool direct_usage_model;
     bool hide_restricted_now;
     uint16_t configured_minutes;
     uint32_t played_minutes_today;
+    uint64_t usage_fraction_ns;
     bool expiry_observed;
     bool restore_called;
     int64_t forensic_remaining_ns;
@@ -45,5 +49,8 @@ typedef struct {
 
 void ptc_pctl_stub_init(PtcPctlStub *stub);
 PtcPctl *ptc_pctl_stub_as_pctl(PtcPctlStub *stub);
+/* Advances the Eden-only simulated timer; carry_ns holds a partial minute. */
+bool ptc_pctl_stub_advance_usage_ns(PtcPctlStub *stub, uint64_t elapsed_ns, uint64_t *carry_ns);
+void ptc_pctl_stub_reset_daily_usage(PtcPctlStub *stub);
 
 #endif

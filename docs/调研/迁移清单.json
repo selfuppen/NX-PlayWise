@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "reviewed_date": "2026-10-16",
+  "source_head": "b7a8662586d1c7c849e3ce4dd4f00ced834f0fa1",
+  "records": [
+    {
+      "from": "docs/调研/开启系统家长控制功能调研.md",
+      "to": "docs/调研/开启系统家长控制功能调研.md",
+      "category": "长期参考",
+      "original_sha256": "16fb392589e9c1e6ace1aefdb41c6026e16683ee48913d9922e18728dc28c8fd"
+    },
+    {
+      "from": "docs/调研/非PCTL暂停与浮窗能力调研.md",
+      "to": "docs/调研/非PCTL暂停与浮窗能力调研.md",
+      "category": "长期参考",
+      "original_sha256": "5038e6ff33b97d6fbfe7d65bffd91f404624169b920b8ba4e4dba297c5755ef8"
+    },
+    {
+      "from": "docs/调研/Overlay内存与死机风险自查.md",
+      "to": "docs/调研/Overlay内存与死机风险自查.md",
+      "category": "长期参考",
+      "original_sha256": "5ce2cb075d3e1d226bb221d9f7cfc4451ffe494d2d93bf003f41a525df0e1375"
+    },
+    {
+      "from": "docs/调研/PCTL1952功能影响分析.md",
+      "to": "docs/调研/专题分析/PCTL1952功能影响分析.md",
+      "category": "专题分析",
+      "original_sha256": "27873397983fbe27c6dfa9b4dd7f231bae4f8b63a549b7b52b40f5b7f4d8a7e1"
+    },
+    {
+      "from": "docs/调研/PCTL1952主线探测计划.md",
+      "to": "docs/调研/历史调查/2026-10/PCTL1952主线探测计划.md",
+      "category": "历史调查",
+      "original_sha256": "4a3866bac394ca345062026772941706d4d7d9a744f5e87499bed003ceb7eb08"
+    },
+    {
+      "from": "docs/调研/PCTL1952功能影响分析交接.md",
+      "to": "docs/调研/历史调查/2026-10/PCTL1952功能影响分析交接.md",
+      "category": "历史交接",
+      "original_sha256": "aec1e4882d3085ecad0aea1a469a971eb815dbf27da82a6364f6210df2f6f992"
+    },
+    {
+      "from": "docs/调研/免系统重启更新与自动化测试-20261015.md",
+      "to": "docs/调研/历史调查/2026-10/免系统重启更新与自动化测试-20261015.md",
+      "category": "历史调查",
+      "original_sha256": "dae5a741df3d77db41d1122cd3bd70ad868252a32a6ee3a48fba4a6dca8ff874"
+    },
+    {
+      "from": "docs/调研/就寝恢复误启动计时诊断-2026-10-08.md",
+      "to": "docs/调研/历史调查/2026-10/就寝恢复误启动计时诊断-2026-10-08.md",
+      "category": "历史诊断",
+      "original_sha256": "1ab5e75aa5fdd599b4e00de2fa3912baca9a71610a15e4d8f2bbe843b2a16887"
+    },
+    {
+      "from": "docs/调研/独立使用时间能力探测.md",
+      "to": "docs/调研/历史调查/2026-10/独立使用时间能力探测.md",
+      "category": "历史实验流程",
+      "original_sha256": "07e6468a487bb959f9335d188be7e15e02b5d993387fd941475a438af54ba7f3"
+    }
+  ]
+}

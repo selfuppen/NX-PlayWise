@@ -40,9 +40,11 @@ void sync_hot_reload_model(UiState *ui)
 {
     if (!ui) return;
     ui->model.hot_reload_status = (int)ui->hot_reload.status;
+    ui->model.hot_reload_capture_restart = ui->hot_reload.journal.capture.request_id[0] != '\0';
     snprintf(ui->model.app_release_id, sizeof(ui->model.app_release_id), "%s", PLAYWISE_BUILD_RELEASE_ID);
     snprintf(ui->model.backend_release_id, sizeof(ui->model.backend_release_id), "%s",
-        ui->hot_reload.journal.source_release_id);
+        ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_COMPLETE
+            ? ui->hot_reload.journal.target_release_id : ui->hot_reload.journal.source_release_id);
     snprintf(ui->model.hot_reload_detail, sizeof(ui->model.hot_reload_detail), "%s",
         ui->hot_reload.detail);
 }
@@ -50,12 +52,15 @@ void sync_hot_reload_model(UiState *ui)
 void open_hot_reload_confirmation(UiState *ui)
 {
     char body[320];
-    if (!ui || ui->model.view != PTC_UI_PARENT ||
-        ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting) return;
-    snprintf(body, sizeof(body),
+    if (!ui || ui->model.view != PTC_UI_PARENT || ui->model.parent_support_only ||
+        ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting || ui->recovering_redemption) return;
+    if (ui->model.hot_reload_capture_restart) {
+        snprintf(body, sizeof(body), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_BODY));
+    } else snprintf(body, sizeof(body),
         ptc_ui_text(PTC_UI_T_CURRENT_BACKEND_88S_TO_LOAD_88S_REQUESTS),
         ui->hot_reload.journal.source_release_id, PLAYWISE_BUILD_RELEASE_ID);
-    open_confirm_overlay(ui, PTC_UI_OPERATION_HOT_RELOAD, ptc_ui_text(PTC_UI_T_LOADS_THE_NEW_INSTALLED_VERSION), body);
+    open_confirm_overlay(ui, PTC_UI_OPERATION_HOT_RELOAD, ptc_ui_text(ui->model.hot_reload_capture_restart
+        ? PTC_UI_T_CAPTURE_RESTART_TITLE : PTC_UI_T_LOADS_THE_NEW_INSTALLED_VERSION), body);
 }
 
 void poll_hot_reload(UiState *ui)
@@ -79,10 +84,14 @@ void poll_hot_reload(UiState *ui)
         ui->waiting = false;
         ui->model.waiting = false;
         if (ptc_switch_ipc_client_probe(&ui->ipc)) {
+            ptc_companion_transport_set_suspended(&ui->transport, false);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
+                ptc_ui_text(ui->model.hot_reload_capture_restart ? PTC_UI_T_CAPTURE_RESTART_DONE :
+                    PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
             submit_status(ui);
+            ptc_hot_reload_record_event(&ui->hot_reload, "status_submitted", ui->active_request_id, 0);
         } else {
+            ptc_hot_reload_record_event(&ui->hot_reload, "ipc_unavailable", NULL, 0);
             ui->hot_reload.status = PTC_HOT_RELOAD_UNAVAILABLE;
             snprintf(ui->hot_reload.detail, sizeof(ui->hot_reload.detail),
                 ptc_ui_text(PTC_UI_T_THE_BACKGROUND_HAS_BEEN_STARTED_BUT_IPC));
@@ -93,16 +102,15 @@ void poll_hot_reload(UiState *ui)
         ui->hot_reload_terminal_handled = true;
         ui->waiting = false;
         ui->model.waiting = false;
-        if (ui->hot_reload_ipc_closed) {
-            ptc_switch_ipc_client_init(&ui->ipc);
-            (void)ptc_switch_ipc_client_probe(&ui->ipc);
-            ui->hot_reload_ipc_closed = false;
-        }
+        /* A missing service can defer smGetService indefinitely. Keep this
+           client's submissions suspended until a normal reopen/recovery. */
+        ptc_companion_transport_set_suspended(&ui->transport, true);
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
     }
     if (ui->hot_reload.status == PTC_HOT_RELOAD_PENDING &&
         ui->model.view == PTC_UI_CHILD && !ui->waiting &&
-        ui->model.overlay == PTC_UI_OVERLAY_NONE && !ui->hot_reload_child_notice_shown) {
+        ui->model.overlay == PTC_UI_OVERLAY_NONE && !ui->hot_reload_child_notice_shown &&
+        !ui->model.hot_reload_capture_restart) {
         ui->hot_reload_child_notice_shown = true;
         snprintf(ui->model.message, sizeof(ui->model.message),
             ptc_ui_text(PTC_UI_T_A_NEW_VERSION_HAS_BEEN_INSTALLED_PLEASE));
@@ -251,14 +259,13 @@ void set_message(UiState *ui, const char *prefix, PtcCompanionStatus status)
     ui->model.feedback_detail[0] = '\0';
     snprintf(ui->model.message, sizeof(ui->model.message), "%s：%s", prefix, companion_status_zh(status));
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
-    if (ui->model.view == PTC_UI_CHILD) {
+    if (ui->model.view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS) {
         ui->model.view = PTC_UI_ERROR;
     }
 }
 
-void show_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after)
+static void open_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after)
 {
-    if (!ui) return;
     ui->auth_return_overlay = ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR
         ? ui->auth_return_overlay : ui->model.overlay;
     ui->model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
@@ -272,6 +279,51 @@ void show_auth_error(UiState *ui, const char *title, const char *message, int64_
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
 }
 
+void show_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after)
+{
+    if (!ui) return;
+    ui->model.auth_error_parent_entry = false;
+    if (ui->auth_retry_action == AUTH_RETRY_ENTER_PARENT && ui->model.view != PTC_UI_SETUP) {
+        ui->model.parent_support_only = true;
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        enter_support_area(ui);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", message ? message : title);
+        return;
+    }
+    if (ui->model.view == PTC_UI_SETUP) {
+        ui->model.overlay = PTC_UI_OVERLAY_NONE;
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_PIN, PTC_ERR_SETUP_PENDING);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", message ? message : title);
+        return;
+    }
+    open_auth_error(ui, title, message, retry_after);
+}
+
+void show_parent_pin_error(UiState *ui, int64_t retry_after)
+{
+    if (!ui) return;
+    if (ui->model.view == PTC_UI_SETUP) {
+        show_auth_error(ui, ptc_ui_text(retry_after > 0 ? PTC_UI_T_PIN_TEMPORARILY_LOCKED : PTC_UI_T_PIN_VERIFICATION_FAILED),
+                        ptc_ui_text(retry_after > 0 ? PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR : PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN), retry_after);
+        return;
+    }
+    /* Only wrong entry PINs and cooldown use this choice; credential/storage
+     * failures retain the existing read-only support fallback. */
+    ui->model.auth_error_parent_entry = true;
+    ui->setup_parent_authorized = false;
+    open_auth_error(ui, ptc_ui_text(retry_after > 0 ? PTC_UI_T_PIN_TEMPORARILY_LOCKED : PTC_UI_T_PIN_IS_INCORRECT),
+                    ptc_ui_text(retry_after > 0 ? PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR : PTC_UI_T_PARENT_PIN_ERROR_CHOICE), retry_after);
+}
+
+void refresh_auth_error_cooldown(UiState *ui)
+{
+    if (ui && ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && ui->auth_cooldown_until > 0) {
+        int64_t remaining = ui->auth_cooldown_until - (int64_t)time(NULL);
+        ui->model.auth_cooldown_seconds = remaining > 0 ? (int)remaining : 0;
+    }
+}
+
 void close_auth_error(UiState *ui, bool cancelled)
 {
     if (!ui) return;
@@ -279,6 +331,7 @@ void close_auth_error(UiState *ui, bool cancelled)
     ui->auth_return_overlay = PTC_UI_OVERLAY_NONE;
     ui->auth_cooldown_until = 0;
     ui->model.auth_cooldown_seconds = 0;
+    ui->model.auth_error_parent_entry = false;
     ui->model.auth_error_title[0] = '\0';
     ui->model.auth_error_message[0] = '\0';
     if (cancelled) {

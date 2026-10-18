@@ -6,6 +6,47 @@
 
 #include "../../common/protocol/error_code.h"
 
+void ptc_overlay_project_eye_care(const PtcCompanionResultSummary *s,
+    bool snapshot_usable, int64_t age_seconds, PtcOverlayEyeCareDisplay *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->rest_seconds = -1;
+    out->warning = true;
+    PtcUiTextId text = PTC_UI_T_POLICY_BOUNDARY;
+    if (s && s->valid && s->eye_care_available && snapshot_usable && age_seconds >= 0) {
+        if (strcmp(s->eye_care_phase, "off") == 0 && !s->eye_care_enabled) {
+            text = PTC_UI_T_CURRENTLY_OFF;
+            out->warning = false;
+        } else if (s->eye_care_enabled && s->eye_care_play_minutes > 0 &&
+            s->eye_care_play_minutes <= 240 && s->eye_care_rest_minutes > 0 &&
+            s->eye_care_rest_minutes <= 60) {
+            if (strcmp(s->eye_care_phase, "playing") == 0 &&
+                s->eye_care_used_minutes >= 0 && s->eye_care_used_minutes < s->eye_care_play_minutes) {
+                PtcUiTextArg arg = PTC_UI_TEXT_NUMBER("minutes", s->eye_care_play_minutes - s->eye_care_used_minutes);
+                ptc_ui_text_format(PTC_UI_T_OVERLAY_EYE_PLAY, out->compact, sizeof(out->compact), &arg, 1);
+                out->warning = false;
+            } else if (strcmp(s->eye_care_phase, "resting") == 0 && s->eye_care_break_id &&
+                s->eye_care_rest_remaining_seconds > age_seconds &&
+                s->eye_care_rest_remaining_seconds <= s->eye_care_rest_minutes * 60) {
+                out->rest_seconds = s->eye_care_rest_remaining_seconds - (int)age_seconds;
+                char clock[24];
+                snprintf(clock, sizeof(clock), "%02d:%02d", out->rest_seconds / 60, out->rest_seconds % 60);
+                PtcUiTextArg arg = PTC_UI_TEXT_STRING("time", clock);
+                ptc_ui_text_format(PTC_UI_T_OVERLAY_EYE_REST, out->compact, sizeof(out->compact), &arg, 1);
+            } else if (strcmp(s->eye_care_phase, "paused") == 0) {
+                text = PTC_UI_T_OVERLAY_EYE_PAUSED;
+            } else if (strcmp(s->eye_care_phase, "unknown") == 0) {
+                text = PTC_UI_T_STATUS_TO_CONFIRM;
+            }
+            PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("play", s->eye_care_play_minutes),
+                PTC_UI_TEXT_NUMBER("rest", s->eye_care_rest_minutes)};
+            ptc_ui_text_format(PTC_UI_T_OVERLAY_EYE_RULE, out->detail, sizeof(out->detail), args, 2);
+        }
+    }
+    if (!out->compact[0]) snprintf(out->compact, sizeof(out->compact), "%s", ptc_ui_text(text));
+}
+
 void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, PtcStorage *storage)
 {
     if (!bridge) return;
@@ -140,6 +181,24 @@ PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
             created_at, window_instance_id));
 }
 
+PtcCompanionStatus ptc_overlay_bridge_waive_dock(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint16_t day_index)
+{
+    if (!prepare_request(bridge, created_at, random16)) return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge, ptc_companion_transport_submit_waive_dock_policy(
+        &bridge->transport, bridge->request_id, created_at, day_index));
+}
+
+PtcCompanionStatus ptc_overlay_bridge_skip_eye_care(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint64_t break_id)
+{
+    if (break_id == 0 || !prepare_request(bridge, created_at, random16))
+        return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_skip_eye_care_break(&bridge->transport,
+            bridge->request_id, created_at, break_id));
+}
+
 PtcCompanionStatus ptc_overlay_bridge_clear_bedtime_skip(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16, uint64_t window_instance_id)
 {
@@ -232,6 +291,7 @@ const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
     if (!bridge) return ptc_ui_text(PTC_UI_T_INVALID_REQUEST_PARAMETERS);
     if (bridge->summary.valid) {
         if (!bridge->summary.ok) {
+            if (bridge->summary.error_code == PTC_ERR_CONTROL_BUSY) return ptc_ui_text(PTC_UI_T_CONTROL_BUSY);
             if (bridge->summary.message[0]) return bridge->summary.message;
             if (bridge->summary.error_code > 0)
                 return ptc_error_message_zh((PtcErrorCode)bridge->summary.error_code);
@@ -314,32 +374,36 @@ void ptc_overlay_format_child_quota_parts(
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_MINUTES_3));
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if ((summary->daily_rule_available && summary->daily_rule_unlimited) ||
+        summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped || summary->dock_unlimited_capped) {
         if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
-        if (note_out && note_size > 0 && summary->played_minutes_available && summary->played_minutes >= 0) {
-            snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
+        if (note_out && note_size > 0) {
+            if (summary->eye_care_unlimited_capped)
+                snprintf(note_out, note_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_UNLIMITED_CAP));
+            else if (summary->played_minutes_available && summary->played_minutes >= 0)
+                snprintf(note_out, note_size, ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_ABOUT_D_MIN),
+                    summary->played_minutes);
         }
         return;
     }
-    if (summary->remaining_available && summary->played_minutes_available &&
-        summary->remaining_minutes >= 0 && summary->played_minutes >= 0) {
-        int total = summary->remaining_minutes + summary->played_minutes;
+    if (summary->daily_rule_available) {
+        int total = summary->daily_rule_minutes;
         if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), total);
         if (note_out && note_size > 0) {
-            snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
+            if (summary->played_minutes_available && summary->played_minutes >= 0) {
+                snprintf(note_out, note_size, ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
+            } else if (summary->usage_present) {
+                snprintf(note_out, note_size, "%s %s", ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_POLICY_PENDING));
+            }
         }
         return;
     }
     if (summary->played_minutes_available && summary->played_minutes >= 0) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_USED_QUOTA_EST));
+        if (label_out && label_size > 0) snprintf(label_out, label_size,
+            ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE : PTC_UI_T_USED_QUOTA_EST));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), summary->played_minutes);
-        return;
-    }
-    if (summary->remaining_available && summary->remaining_minutes >= 0) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
-        if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), summary->remaining_minutes);
         return;
     }
     if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
@@ -364,12 +428,31 @@ const char *ptc_overlay_parent_action_unavailable_reason(
     switch (action) {
     case PTC_OVERLAY_PARENT_ADD_MINUTES:
     case PTC_OVERLAY_PARENT_UNLIMITED:
+        if (summary->dock_restriction_active) return ptc_ui_text(PTC_UI_T_DOCK_CONNECT);
+        if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING);
         if (summary->bedtime_active && !summary->bedtime_skipped)
             return ptc_ui_text(PTC_UI_T_PLEASE_DEAL_WITH_BEDTIME_RESTRICTIONS_FIRST);
-        if (summary->unrestricted_today == 1) return ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY);
+        if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped)
+            return ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY);
         return NULL;
     case PTC_OVERLAY_PARENT_SKIP_BEDTIME:
         return ptc_overlay_parent_skip_instance_id(summary) ? NULL : ptc_ui_text(PTC_UI_T_NO_SKIPPABLE_BEDTIME_WINDOW);
+    case PTC_OVERLAY_PARENT_SKIP_EYE_CARE:
+        if (!summary->eye_care_enabled)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_OFF);
+        if (summary->bedtime_active && !summary->bedtime_skipped)
+            return ptc_ui_text(PTC_UI_T_PLEASE_DEAL_WITH_BEDTIME_RESTRICTIONS_FIRST);
+        if (strcmp(summary->eye_care_phase, "resting") != 0)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_NOT_RESTING);
+        if (summary->eye_care_break_id == 0 ||
+            (!summary->disable_flag_present && summary->eye_care_rest_remaining_seconds <= 0))
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH);
+        return NULL;
+    case PTC_OVERLAY_PARENT_WAIVE_DOCK:
+        if (!summary->dock_available) return ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
+        if (summary->dock_waived_today) return ptc_ui_text(PTC_UI_T_DOCK_WAIVED);
+        return summary->force_docked || summary->undocked_limit_enabled ? NULL : ptc_ui_text(PTC_UI_T_DOCK_OFF);
     case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:
         return summary->bedtime_skipped_window_available ? NULL : ptc_ui_text(PTC_UI_T_THIS_BEDTIME_WAS_NOT_SKIPPED);
     case PTC_OVERLAY_PARENT_DISABLE_BEDTIME:
@@ -389,17 +472,37 @@ void ptc_overlay_format_child_restriction_guidance(
         return;
     }
     if (summary->bedtime_active && !summary->bedtime_skipped) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE));
+        if (summary->bedtime_end_minute > 0) {
+            snprintf(out, out_size, "%s (%02d:%02d)",
+                ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE),
+                summary->bedtime_end_minute / 60, summary->bedtime_end_minute % 60);
+        } else {
+            snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE));
+        }
         return;
     }
-    if (summary->daily_restriction_active ||
-        (summary->remaining_available && summary->remaining_minutes == 0)) {
+    if (summary->dock_restriction_active) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_CONNECT));
+        return;
+    }
+    if (summary->daily_restriction_active) {
         if (summary->daily_buffer_available) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_QUOTA_EXHAUSTED_CLAIM_D_MIN_SELF),
                 summary->daily_buffer_minutes);
         } else {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_HAS_BEEN_EXHAUSTED_PLEASE));
         }
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0) {
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING),
+            (summary->eye_care_rest_remaining_seconds + 59) / 60, ptc_ui_text(PTC_UI_T_MIN));
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "playing") == 0) {
+        int remaining = summary->eye_care_play_minutes - summary->eye_care_used_minutes;
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE),
+            remaining > 0 ? remaining : 0, ptc_ui_text(PTC_UI_T_MIN));
         return;
     }
     if (summary->bedtime_skipped) {
@@ -418,7 +521,8 @@ void ptc_overlay_format_child_restriction_guidance(
         }
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if ((summary->daily_rule_available && summary->daily_rule_unlimited) ||
+        summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped || summary->dock_unlimited_capped) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_BEDTIME_RESTRICTIONS));
         return;
     }
@@ -442,13 +546,21 @@ void ptc_overlay_format_child_restriction_summary(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_BEDTIME_ACTIVE_PRESS_FOR_DETAILS));
         return;
     }
-    if (summary->daily_restriction_active ||
-        (summary->remaining_available && summary->remaining_minutes == 0)) {
+    if (summary->dock_restriction_active) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_CONNECT));
+        return;
+    }
+    if (summary->daily_restriction_active) {
         if (summary->daily_buffer_available) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_DAILY_LIMIT_REACHED_BUFFER_READY_PRESS));
         } else {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_DAILY_LIMIT_REACHED_PRESS_FOR_DETAILS));
         }
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0) {
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING),
+            (summary->eye_care_rest_remaining_seconds + 59) / 60, ptc_ui_text(PTC_UI_T_MIN));
         return;
     }
     if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
@@ -461,13 +573,12 @@ void ptc_overlay_format_child_restriction_summary(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_TONIGHT_S_BEDTIME_SKIPPED_PRESS));
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULES_NO_LIMIT_TODAY_NO_BEDTIME_PRESS));
         return;
     }
-    if (summary->remaining_available && summary->played_minutes_available &&
-        summary->remaining_minutes >= 0 && summary->played_minutes >= 0) {
-        int total = summary->remaining_minutes + summary->played_minutes;
+    if (summary->daily_rule_available) {
+        int total = summary->daily_rule_minutes;
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULE_DETAILS_TODAY_QUOTA_D_MIN_PRESS), total);
         return;
     }
@@ -487,14 +598,22 @@ void ptc_overlay_format_child_restriction_detail(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_PLAY_RESTRICTED_EVEN_IF_LIMIT));
         return;
     }
-    if (summary->daily_restriction_active ||
-        (summary->remaining_available && summary->remaining_minutes == 0)) {
+    if (summary->dock_restriction_active) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_CONNECT));
+        return;
+    }
+    if (summary->daily_restriction_active) {
         if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_QUOTA_EXHAUSTED_RESTRICTION_STARTS_TONIGHT_AT_02D),
                 summary->bedtime_next_start_minute / 60, summary->bedtime_next_start_minute % 60);
         } else {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_ENTER_GRANT_CODE_TO));
         }
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0) {
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING),
+            (summary->eye_care_rest_remaining_seconds + 59) / 60, ptc_ui_text(PTC_UI_T_MIN));
         return;
     }
     if (summary->bedtime_skipped) {
@@ -506,7 +625,7 @@ void ptc_overlay_format_child_restriction_detail(
             (summary->bedtime_next_start_day_index == summary->day_index + 1 ? ptc_ui_text(PTC_UI_T_TOMORROW_NIGHT) : ptc_ui_text(PTC_UI_T_NEXT_TIME));
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
-        if (summary->unrestricted_today == 1) {
+        if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_UNLIMITED_RESTRICTION_STARTS_S_02D_02D),
                 prefix, start_h, start_m);
         } else {
@@ -515,7 +634,7 @@ void ptc_overlay_format_child_restriction_detail(
         }
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_DAILY_LIMIT_TODAY_BEDTIME_SCHEDULE_DISABLED));
     } else {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_GAME_SUSPENDS_AFTER_DAILY_LIMIT_BEDTIME_SCHEDULE));
@@ -542,3 +661,31 @@ void ptc_overlay_format_child_buffer_status(
     }
 }
 
+
+void ptc_overlay_format_dock_usage(const PtcCompanionResultSummary *summary,
+    char *out, size_t out_size)
+{
+    char usage[160];
+    const char *mode;
+    if (!out || !out_size) return;
+    if (!summary || !summary->dock_available) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+        return;
+    }
+    mode = strcmp(summary->operation_mode, "docked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_TV) :
+        strcmp(summary->operation_mode, "undocked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) :
+        ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
+    PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("used", summary->undocked_used_minutes),
+        PTC_UI_TEXT_NUMBER("remaining", summary->undocked_remaining_minutes)};
+    if (summary->dock_waived_today)
+        snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_DOCK_WAIVED));
+    else if (summary->dock_restriction_active)
+        snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER));
+    else if (!(summary->force_docked || summary->undocked_limit_enabled))
+        snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_DOCK_OFF));
+    else if (!summary->undocked_usage_available)
+        snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+    else (void)ptc_ui_text_format(summary->undocked_limit_enabled ? PTC_UI_T_DOCK_USAGE_NAMED :
+        PTC_UI_T_DOCK_USAGE_ONLY_NAMED, usage, sizeof(usage), args, 2);
+    snprintf(out, out_size, "%s / %s", mode, usage);
+}

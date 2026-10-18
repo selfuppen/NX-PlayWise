@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 import zipfile
 
-from playwise_version import read_playwise_version
+from tools.build.playwise_version import read_playwise_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,7 +64,12 @@ def run_python_regressions() -> None:
         "tests/devkit/test_release_version.py",
         "tests/devkit/test_release_manifest.py",
         "tests/devkit/test_qualification_tools.py",
+        "tests/devkit/test_pctl_usage_qualification.py",
+        "tests/devkit/test_pctl_direct_qualification.py",
+        "tests/devkit/test_pctl_production_midnight.py",
+        "tests/devkit/test_pctl_standard_evidence.py",
         "tests/devkit/test_package_remote.py",
+        "tests/devkit/test_tools_layout.py",
         "tests/devkit/test_delivery_package.py",
         "tests/devkit/test_install_script.py",
         "tests/devkit/test_switch_ipc_lifecycle.py",
@@ -68,6 +77,23 @@ def run_python_regressions() -> None:
         "tests/devkit/test_ui_text_catalog.py",
         "tests/devkit/test_audio_fixtures.py",
         "tests/devkit/test_eden_bedtime.py",
+        "tests/devkit/test_convert_ui_previews.py",
+        "tests/devkit/test_stage_timer.py",
+        "tests/devkit/test_device_roundtrip.py",
+        "tests/devkit/test_assert_device_evidence.py",
+        "tests/devkit/test_capture_observations.py",
+        "tests/devkit/test_sys_botbase_client.py",
+        "tests/devkit/test_bounded_input_batch.py",
+        "tests/devkit/test_auto_update.py",
+        "tests/devkit/test_input_smoke_harness.py",
+        "tests/devkit/test_assert_selfdrive_evidence.py",
+        "tests/devkit/test_vision_verdict.py",
+        "tests/devkit/test_vision_capture_driver.py",
+        "tests/devkit/test_lab_wire_client.py",
+        "tests/devkit/test_probe_report.py",
+        "tests/devkit/test_capability_probe.py",
+        "tests/devkit/test_usage_probe.py",
+        "tests/devkit/test_pctl_usage_evidence.py",
     ]:
         run([PYTHON, test])
 
@@ -119,10 +145,12 @@ def verify_playwise_package() -> None:
         nro = root / "pctc.nro"
         overlay = root / "playwise.ovl"
         exefs = root / "exefs.nsp"
+        font = root / "emoji.ttf"
         manifest = root / "release-manifest.json"
         nro.write_bytes(b"nro")
         overlay.write_bytes(b"ovl")
         exefs.write_bytes(b"nsp")
+        font.write_bytes(b"emoji_font")
         manifest.write_text(json.dumps({"schema_version": 1, "playwise_version": PLAYWISE_VERSION, "commit": "a" * 40,
             "release_id": f"playwise-{PLAYWISE_VERSION}+aaaaaaaaaaaa", "profile": "release", "protocol_version": 1,
             "recovery_version": 1, "pctl_layout_version": 1, "build": {}, "verified_environment": {}}), encoding="utf-8")
@@ -130,7 +158,7 @@ def verify_playwise_package() -> None:
         run(
             [
                 PYTHON,
-                "tools/package_sdmc.py",
+                "tools/build/package_sdmc.py",
                 "--out",
                 str(out),
                 "--zip",
@@ -143,10 +171,13 @@ def verify_playwise_package() -> None:
                 str(exefs),
                 "--manifest",
                 str(manifest),
+                "--emoji-font",
+                str(font),
                 "--boot2",
             ]
         )
         package_app = out / APP_DIR
+        require((package_app / "fonts" / "emoji.ttf").read_bytes() == b"emoji_font", "playwise package missing emoji font")
         for relative in [
             "defaults/config.json",
             "defaults/auth.json",
@@ -209,6 +240,7 @@ def verify_playwise_package() -> None:
         )), "playwise zip must not overwrite live runtime data")
         require(not any(name.startswith("playwise-install/") for name in names), "playwise zip must not contain installer-only files")
         require("switch/.overlays/playwise.ovl" in names, "playwise package must contain the overlay")
+        require("switch/playwise/fonts/emoji.ttf" in names, "playwise zip missing emoji font")
 
         installed = root / "installed"
         (installed / APP_DIR).mkdir(parents=True)
@@ -243,6 +275,8 @@ def verify_playwise_package() -> None:
                 "direct overlay must replace build.json")
         require(read_json(installed / APP_DIR / "package-artifacts.json") == artifacts,
                 "direct overlay must replace package-artifacts.json")
+        require((installed / APP_DIR / "fonts" / "emoji.ttf").read_bytes() == b"emoji_font",
+                "direct overlay must update emoji font")
         require((installed / CONTENT_DIR / "exefs.nsp").read_bytes() == b"nsp",
                 "direct overlay must replace the sysmodule binary")
         require((installed / "switch" / ".overlays" / "playwise.ovl").read_bytes() == b"ovl",
@@ -252,7 +286,7 @@ def verify_playwise_package() -> None:
         invalid = run(
             [
                 PYTHON,
-                "tools/package_sdmc.py",
+                "tools/build/package_sdmc.py",
                 "--out",
                 str(invalid_out),
                 "--manifest",

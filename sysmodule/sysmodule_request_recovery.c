@@ -35,6 +35,13 @@ static bool process_disable_today_limit(
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_BEDTIME_ACTIVE, now.day_index);
     }
+    if (dock_blocks_grants(sysmodule, now)) {
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
+    }
+    if (eye_care_blocks_grants(sysmodule)) {
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
+    }
     if (!load_rules(sysmodule, &original_rules)) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_RULES_INVALID, now.day_index);
     }
@@ -59,10 +66,12 @@ static bool process_disable_today_limit(
     rules_existed = sysmodule->storage->vtable->exists(sysmodule->storage, rules_path);
 
     pctl_changed = true;
-    err = apply_target(sysmodule, request, now, "release", PTC_PCTL_TARGET_UNLIMITED, 0);
+    uint16_t disable_minutes;
+    PtcPctlTargetMode disable_mode = ptc_compose_base_target(updated_rules.today_override.rule, &disable_minutes);
+    err = apply_target(sysmodule, request, now, "release", disable_mode, disable_minutes);
     if (err == PTC_ERR_OK) {
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            "release", PTC_PCTL_TARGET_UNLIMITED, 0,
+            "release", disable_mode, disable_minutes,
             "disable_today_limit", &observed_status);
     }
     if (err != PTC_ERR_OK) {
@@ -103,6 +112,32 @@ disable_today_rollback:
     return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
 }
 
+/* A bedtime snapshot can contain an enabled timer captured hours ago. An
+   autonomous exit restores only settings; replaying that historical timer state
+   would issue 1451 while the console may be asleep. Exact transaction rollback
+   and explicit parent recovery keep their separate timer-restoration contract. */
+static PtcErrorCode restore_bedtime_settings_only(PtcSysmodule *sysmodule,
+    const PtcPctlSettingsSnapshot *snapshot)
+{
+    PtcPctlSettingsSnapshot restored;
+    PtcPctlDebugSnapshot before;
+    PtcPctlDebugSnapshot after;
+    PtcErrorCode err;
+    if (!sysmodule->pctl->vtable->restore_settings || !sysmodule->pctl->vtable->snapshot_settings)
+        return PTC_ERR_PCTL_RESTORE_FAILED;
+    take_pctl_debug_snapshot(sysmodule, &before);
+    err = sysmodule->pctl->vtable->restore_settings(sysmodule->pctl, snapshot);
+    if (err == PTC_ERR_OK) {
+        err = sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &restored);
+        if (err == PTC_ERR_OK && !ptc_pctl_settings_snapshot_equal(snapshot, &restored))
+            err = PTC_ERR_PCTL_RESTORE_FAILED;
+    }
+    take_pctl_debug_snapshot(sysmodule, &after);
+    append_pctl_debug(sysmodule, NULL, "bedtime_restore_settings", "release", NULL, err,
+        last_pctl_ipc_result(sysmodule), &before, &after);
+    return err;
+}
+
 PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *request,
     const PtcRules *rules,
     PtcRuntimeState *runtime_state, PtcClockSnapshot now)
@@ -118,21 +153,38 @@ PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *req
     PtcErrorCode err;
     if (!runtime_state->bedtime_enforced) return PTC_ERR_OK;
     if (!recovery_begin(sysmodule, request, now)) return PTC_ERR_PCTL_BACKUP_FAILED;
-    if (now.day_index == runtime_state->bedtime_start_day_index &&
+    if (dock_policy_blocks(sysmodule, rules, runtime_state, now) || runtime_state->eye_care_resting) {
+        /* Removing bedtime must not transiently reopen another restriction. */
+        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), &observed);
+        if (err != PTC_ERR_OK || !target_settings_observed(PTC_PCTL_TARGET_BLOCKED, 0, &observed))
+            err = apply_target(sysmodule, request, now, "release", PTC_PCTL_TARGET_BLOCKED, 0);
+        if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        err = observe_target_with_optional_activation(sysmodule, request, now, "release",
+            PTC_PCTL_TARGET_BLOCKED, 0, "bedtime_other_restriction", &observed);
+        if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+    } else if (now.day_index == runtime_state->bedtime_start_day_index &&
         load_bedtime_snapshot(sysmodule, &snapshot, &snapshot_instance, &snapshot_start_day) &&
         snapshot_instance == runtime_state->bedtime_window_instance_id &&
         snapshot_start_day == runtime_state->bedtime_start_day_index) {
-        err = restore_snapshot_exact(sysmodule, &snapshot, &restored, &status,
-            ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored);
-        if (err != PTC_ERR_OK || !raw_restored || !timer_restored) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        if (!request) {
+            err = restore_bedtime_settings_only(sysmodule, &snapshot);
+            if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        } else {
+            err = restore_snapshot_exact(sysmodule, &snapshot, &restored, &status,
+                ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored);
+            if (err != PTC_ERR_OK || !raw_restored || !timer_restored) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        }
     } else {
         PtcDayRule base = ptc_rules_today_rule(
             rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+        uint16_t base_minutes;
+        PtcPctlTargetMode base_mode = ptc_compose_base_target(base, &base_minutes);
         err = apply_target(sysmodule, request, now, "release",
-            target_from_day_rule(base), base.minutes);
+            base_mode, base_minutes);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            "release", target_from_day_rule(base), base.minutes,
+            "release", base_mode, base_minutes,
             "bedtime_restore_base", &observed);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
     }
@@ -200,7 +252,7 @@ static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcR
                 PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
         }
         if (active_window) {
-            int applied = ptc_sysmodule_enforce_tick(sysmodule);
+            int applied = ptc_sysmodule_enforce_request(sysmodule, request);
             bool confirmed = applied > 0 && load_state(sysmodule, &enforced) &&
                 enforced.bedtime_enforced && !enforced.apply_pending_confirmation &&
                 enforced.bedtime_window_instance_id == request->bedtime_window_instance_id;
@@ -263,7 +315,8 @@ static bool process_overlay_ready(PtcSysmodule *sysmodule, const PtcRequest *req
 {
     char path[320];
     char text[512];
-    char build[1024];
+    /* Match release preflight: source/toolchain metadata can exceed 1 KiB. */
+    char build[4096];
     char build_release_id[96];
     char fingerprint[65];
     join_path(path, sizeof(path), sysmodule->app_root, "build.json");

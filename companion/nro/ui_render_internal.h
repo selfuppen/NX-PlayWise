@@ -51,6 +51,13 @@ typedef enum {
     UI_KEY_GLYPH_BORDER = 0x02000000u + 20,
     UI_GAUGE_SLOT = 0x02000000u + 21,
     UI_GAUGE_SLOT_BORDER = 0x02000000u + 22,
+    UI_SUCCESS_BORDER = 0x02000000u + 23,
+    UI_WARNING_BORDER = 0x02000000u + 24,
+    UI_DANGER_BORDER = 0x02000000u + 25,
+    UI_WARNING_TEXT = 0x02000000u + 26,
+    UI_HERO = 0x02000000u + 27,
+    UI_ON_HERO = 0x02000000u + 28,
+    UI_HERO_SECONDARY = 0x02000000u + 29,
 } UiColor;
 
 typedef struct {
@@ -101,8 +108,12 @@ typedef struct {
     FT_Face face;
     FT_Face traditional_face;
     FT_Face standard_face;
+    FT_Face emoji_face;
+    uint8_t *emoji_buffer;
+    size_t emoji_buffer_size;
     bool framebuffer_ready;
     bool font_ready;
+    bool emoji_ready;
     bool pl_ready;
 } UiRuntime;
 
@@ -135,12 +146,15 @@ uint32_t ui_theme_mix(uint32_t from_rgb, uint32_t to_rgb);
 
 bool is_docked_mode(void);
 int64_t ptc_ui_render_now(void);
+void ptc_ui_render_policy_status(const PtcUiModel *model, PtcPolicyStatus *out);
+uint32_t policy_display_color(PtcPolicyDisplayState state);
 uint16_t ptc_ui_render_minute_of_day(int64_t now);
 uint32_t pack_rgb(uint32_t rgb);
 uint32_t ui_mix_rgb(uint32_t base, uint32_t target, int percent);
 uint32_t resolve_color(uint32_t source);
 void blend_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color, uint8_t alpha);
 void fill_rect_packed(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color);
+void ui_set_vertical_clip(int top, int bottom);
 void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color);
 void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color);
 void fill_round_rect_gradient(uint32_t *pixels, uint32_t stride, UiRect rect, int radius,
@@ -266,6 +280,7 @@ void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiMo
 bool draw_account_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 bool draw_plan_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, UiRect card);
 void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void ui_glyph_cache_clear(void);
 void ui_background_rebuild(void);

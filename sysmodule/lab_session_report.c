@@ -10,12 +10,21 @@
 
 void lab_final_report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
 {
-    snprintf(out, size, "%s/reports/%s.json", sysmodule->app_root, state->run_id);
+    /* Self-driven runs are advisory regression evidence, never authoritative
+       qualification. Keep them out of reports/ entirely so they can never be
+       mistaken for a human-attested campaign run. */
+    if (state->self_driven)
+        snprintf(out, size, "%s/lab/selfdrive/%s.selfdrive.json", sysmodule->app_root, state->run_id);
+    else
+        snprintf(out, size, "%s/reports/%s.json", sysmodule->app_root, state->run_id);
 }
 
 void lab_draft_report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
 {
-    snprintf(out, size, "%s/lab/report-%s.draft.json", sysmodule->app_root, state->run_id);
+    if (state->self_driven)
+        snprintf(out, size, "%s/lab/selfdrive/%s.draft.json", sysmodule->app_root, state->run_id);
+    else
+        snprintf(out, size, "%s/lab/report-%s.draft.json", sysmodule->app_root, state->run_id);
 }
 
 unsigned int lab_required_phase_count(const LabState *state)
@@ -135,12 +144,15 @@ bool lab_rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
     }
     int written = snprintf(report, sizeof(report),
         "{\"version\":2,\"schema_version\":2,\"run_id\":\"%s\",\"mode\":\"%s\",\"report_status\":\"draft\","
+        "\"self_driven\":%s,\"advisory\":%s,"
         "\"entry_method\":\"%s\",\"campaign\":%s,"
         "\"baseline\":{\"settings_all_zero\":%s,\"activation_preconditions_met\":%s,"
         "\"remaining_ns\":%lld,\"minimum_remaining_ns\":%lld},"
         "\"environment\":{\"title_id\":\"%s\","
         "\"ipc_service\":\"%s\",\"sd_root\":\"%s\",\"runtime\":",
-        state->run_id, state->mode, entry_method, campaign_fragment,
+        state->run_id, state->mode,
+        state->self_driven ? "true" : "false", state->self_driven ? "true" : "false",
+        entry_method, campaign_fragment,
         state->baseline_all_zero ? "true" : "false",
         state->activation_preconditions_met ? "true" : "false",
         (long long)state->baseline_remaining_ns, (long long)LAB_MINIMUM_REMAINING_NS,

@@ -52,6 +52,11 @@ typedef struct {
     uint32_t gauge_slot;
     uint32_t gauge_slot_border;
     uint32_t shadow_strength;
+    /* 语义边框与状态文本强调色 */
+    uint32_t success_border;
+    uint32_t warning_border;
+    uint32_t danger_border;
+    uint32_t warning_text;
 } PtcUiPalette;
 
 typedef struct {

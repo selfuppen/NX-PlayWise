@@ -82,13 +82,28 @@ uint32_t resolve_color(uint32_t source)
     case UI_KEY_GLYPH_BORDER: return pack_rgb(UI_BLENDED(key_glyph_border));
     case UI_GAUGE_SLOT: return pack_rgb(UI_BLENDED(gauge_slot));
     case UI_GAUGE_SLOT_BORDER: return pack_rgb(UI_BLENDED(gauge_slot_border));
+    case UI_SUCCESS_BORDER: return pack_rgb(UI_BLENDED(success_border));
+    case UI_WARNING_BORDER: return pack_rgb(UI_BLENDED(warning_border));
+    case UI_DANGER_BORDER: return pack_rgb(UI_BLENDED(danger_border));
+    case UI_WARNING_TEXT: return pack_rgb(UI_BLENDED(warning_text));
+    case UI_HERO: return pack_rgb(UI_BLENDED(hero));
+    case UI_ON_HERO: return pack_rgb(UI_BLENDED(on_hero));
+    case UI_HERO_SECONDARY: return pack_rgb(UI_BLENDED(hero_secondary));
     default: return pack_rgb(source);
     }
 }
 
+static int ui_clip_top = 0, ui_clip_bottom = SCREEN_HEIGHT;
+
+void ui_set_vertical_clip(int top, int bottom)
+{
+    ui_clip_top = top < 0 ? 0 : top;
+    ui_clip_bottom = bottom > SCREEN_HEIGHT ? SCREEN_HEIGHT : bottom;
+}
+
 static void set_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color)
 {
-    if ((unsigned int)x >= SCREEN_WIDTH || (unsigned int)y >= SCREEN_HEIGHT) {
+    if ((unsigned int)x >= SCREEN_WIDTH || (unsigned int)y >= SCREEN_HEIGHT || y < ui_clip_top || y >= ui_clip_bottom) {
         return;
     }
     pixels[(uint32_t)y * stride + (uint32_t)x] = color;
@@ -103,7 +118,7 @@ void blend_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color
     uint32_t destination_red;
     uint32_t destination_green;
     uint32_t destination_blue;
-    if ((unsigned int)x >= SCREEN_WIDTH || (unsigned int)y >= SCREEN_HEIGHT || alpha == 0) {
+    if ((unsigned int)x >= SCREEN_WIDTH || (unsigned int)y >= SCREEN_HEIGHT || alpha == 0 || y < ui_clip_top || y >= ui_clip_bottom) {
         return;
     }
     destination = &pixels[(uint32_t)y * stride + (uint32_t)x];
@@ -125,6 +140,8 @@ void fill_rect_packed(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t c
     int y_start = rect.y < 0 ? 0 : rect.y;
     int x_end = rect.x + rect.width > SCREEN_WIDTH ? SCREEN_WIDTH : rect.x + rect.width;
     int y_end = rect.y + rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height;
+    if (y_start < ui_clip_top) y_start = ui_clip_top;
+    if (y_end > ui_clip_bottom) y_end = ui_clip_bottom;
     int y;
     for (y = y_start; y < y_end; ++y) {
         uint32_t *row = pixels + (uint32_t)y * stride;

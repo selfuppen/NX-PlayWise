@@ -9,19 +9,26 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
     PtcPctlStatus observed_status;
     PtcErrorCode err;
     uint16_t grant;
-    uint16_t played;
-    uint16_t base;
     uint16_t target;
     uint16_t effective;
+    PtcGrantPlan plan;
     if (disable_flag) return finish_with_error(sysmodule, request, "release",
         true, PTC_ERR_DISABLED, now.day_index);
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (dock_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
+    if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_RULES_INVALID, now.day_index);
     }
+    if (ptc_rules_today_rule(&rules, now.day_index,
+            ptc_weekday_from_day_index(now.day_index)).mode == PTC_RULE_MODE_UNLIMITED)
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_DAILY_BUFFER_LIMITED_ONLY, now.day_index);
     grant = rules.autonomy_policy.daily_buffer_minutes;
     if (grant == 0u) return finish_with_error(sysmodule, request, "release",
         true, PTC_ERR_AUTONOMY_DISABLED, now.day_index);
@@ -29,26 +36,22 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
         return finish_with_error(sysmodule, request, "release",
             true, PTC_ERR_DAILY_BUFFER_ALREADY_CLAIMED, now.day_index);
     }
-    err = sysmodule->pctl->vtable->read_status(
-        sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    err = read_grant_status(sysmodule, now, &pctl_status);
     if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
         "release", true, err, now.day_index);
     if (!pctl_status.limited_today || pctl_status.unrestricted_today) {
         return finish_with_error(sysmodule, request, "release",
             true, PTC_ERR_DAILY_BUFFER_LIMITED_ONLY, now.day_index);
     }
+    err = plan_grant(&rules, now, &pctl_status, grant, &plan);
+    if (err == PTC_ERR_OK && plan.effective_minutes == 0) err = PTC_ERR_MINUTES_EXCEED_LIMIT;
+    if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
+        "release", true, err, now.day_index);
     if (!recovery_begin(sysmodule, request, now)) return finish_with_error(sysmodule, request,
         "release", false, PTC_ERR_PCTL_BACKUP_FAILED, now.day_index);
-    played = ptc_pctl_played_minutes(&pctl_status);
-    {
-        PtcDayRule active = ptc_rules_today_rule(&rules, now.day_index,
-            ptc_weekday_from_day_index(now.day_index));
-        base = active.mode == PTC_RULE_MODE_LIMIT ? active.minutes : 0u;
-        if (played > base) base = played;
-    }
     target = accumulate_today_limit(&rules, now.day_index,
-        ptc_weekday_from_day_index(now.day_index), grant, played);
-    effective = target >= base ? (uint16_t)(target - base) : 0u;
+        ptc_weekday_from_day_index(now.day_index), grant, plan.played_ceiling_minutes);
+    effective = plan.effective_minutes;
     err = apply_target(sysmodule, request, now, "release",
         PTC_PCTL_TARGET_LIMIT, target);
     if (err == PTC_ERR_OK) err = observe_target_with_optional_activation(sysmodule, request, now,
@@ -130,6 +133,7 @@ static PtcErrorCode verify_offline_code(
     PtcTokenV2Payload token_v2;
     PtcErrorCode err;
     bool is_v2;
+    bool used;
     if (!sysmodule || !request || !config || !runtime_state || !verified) return PTC_ERR_BAD_REQUEST;
     memset(verified, 0, sizeof(*verified));
     verified->day_index = now.day_index;
@@ -144,12 +148,12 @@ static PtcErrorCode verify_offline_code(
             runtime_state->v2_cooldown_until = 0;
         }
         err = ptc_token_v2_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-            config->max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+            config->max_add_minutes, NULL, NULL, &token_v2);
         if (err == PTC_ERR_BAD_SIGNATURE) {
             sysmodule->config_cache_valid = false;
             if (load_config(sysmodule, config)) {
                 err = ptc_token_v2_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-                    config->max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+                    config->max_add_minutes, NULL, NULL, &token_v2);
             }
         }
         if (err == PTC_ERR_BAD_CODE || err == PTC_ERR_BAD_SIGNATURE) {
@@ -160,6 +164,9 @@ static PtcErrorCode verify_offline_code(
             if (!save_state(sysmodule, runtime_state, now.unix_seconds)) return PTC_ERR_STORAGE_WRITE_FAILED;
         }
         if (err == PTC_ERR_OK) {
+            err = check_nonce_used(sysmodule, now.day_index, token_v2.nonce, 2u, &used);
+            if (err != PTC_ERR_OK) return err;
+            if (used) return PTC_ERR_USED_TOKEN;
             verified->minutes = token_v2.minutes;
             verified->nonce = token_v2.nonce;
             verified->version = 2u;
@@ -167,15 +174,18 @@ static PtcErrorCode verify_offline_code(
         return err;
     }
     err = ptc_token_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-        config->max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+        config->max_add_minutes, NULL, NULL, &token_v1);
     if (err == PTC_ERR_BAD_SIGNATURE) {
         sysmodule->config_cache_valid = false;
         if (load_config(sysmodule, config)) {
             err = ptc_token_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-                config->max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+                config->max_add_minutes, NULL, NULL, &token_v1);
         }
     }
     if (err == PTC_ERR_OK) {
+        err = check_nonce_used(sysmodule, token_v1.day_index_since_2020, token_v1.nonce, 1u, &used);
+        if (err != PTC_ERR_OK) return err;
+        if (used) return PTC_ERR_USED_TOKEN;
         verified->day_index = token_v1.day_index_since_2020;
         verified->minutes = token_v1.minutes;
         verified->nonce = token_v1.nonce;
@@ -195,19 +205,19 @@ static bool process_preview_offline_code(
     PtcVerifiedOfflineCode verified;
     PtcPctlStatus pctl_status;
     PtcRules rules;
-    PtcRules preview_rules;
     PtcResultState state;
     PtcOfflineCodePreview preview;
     PtcErrorCode err;
-    int64_t played_minutes;
-    uint16_t played_for_apply;
-    uint16_t base_minutes;
-    uint16_t target_minutes;
-    char json[2304];
+    PtcGrantPlan plan;
+    char json[6144];
 
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (dock_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
+    if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
 
     if (disable_flag) {
         return finish_with_error(sysmodule, request, "release", true,
@@ -218,8 +228,7 @@ static bool process_preview_offline_code(
         return finish_with_error(sysmodule, request, "release", true,
             err, now.day_index);
     }
-    err = sysmodule->pctl->vtable->read_status(
-        sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    err = read_grant_status(sysmodule, now, &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true,
             err, now.day_index);
@@ -232,27 +241,25 @@ static bool process_preview_offline_code(
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_RULES_INVALID, now.day_index);
     }
-    preview_rules = rules;
-    played_for_apply = ptc_pctl_played_minutes(&pctl_status);
-    {
-        PtcDayRule active = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-        base_minutes = active.mode == PTC_RULE_MODE_LIMIT ? active.minutes : 0u;
-        if (played_for_apply > base_minutes) base_minutes = played_for_apply;
-    }
-    target_minutes = accumulate_today_limit(&preview_rules, now.day_index,
-        ptc_weekday_from_day_index(now.day_index), verified.minutes, played_for_apply);
+    if (ptc_rules_today_rule(&rules, now.day_index,
+            ptc_weekday_from_day_index(now.day_index)).mode == PTC_RULE_MODE_UNLIMITED)
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_UNLIMITED_NOT_ALLOWED, now.day_index);
+    err = plan_grant(&rules, now, &pctl_status, verified.minutes, &plan);
+    if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
+        "release", true, err, now.day_index);
     memset(&preview, 0, sizeof(preview));
     preview.grant_minutes = verified.minutes;
-    preview.effective_add_minutes = target_minutes >= base_minutes ? (uint16_t)(target_minutes - base_minutes) : 0u;
+    preview.effective_add_minutes = plan.effective_minutes;
     preview.capped = preview.effective_add_minutes < verified.minutes;
     preview.converts_unlimited_to_limited = pctl_status.unrestricted_today;
-    played_minutes = result_played_minutes(&pctl_status);
-    preview.remaining_after_available = played_minutes >= 0;
-    preview.remaining_after_minutes = preview.remaining_after_available
-        ? ((int64_t)target_minutes > played_minutes ? (int64_t)target_minutes - played_minutes : 0)
-        : -1;
+    preview.remaining_after_available = true;
+    preview.remaining_after_minutes = plan.remaining_after_minutes;
     result_state_from_pctl(&state, now.day_index, &pctl_status);
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
+    err = grant_clock_error(sysmodule, request, now);
+    if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
+        "release", true, err, now.day_index);
     if (ptc_result_preview_ok_json(json, sizeof(json), request->request_id, request->type_text,
             &state, &preview, now.unix_seconds) != 0) {
         append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "preview_json");
@@ -272,11 +279,12 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcResultState state;
-    char json[2048];
+    char json[6144];
     PtcErrorCode err;
     PtcRuntimeConfig active_config;
     PtcVerifiedOfflineCode verified;
     uint16_t effective_add_minutes = 0;
+    PtcGrantPlan plan;
 
     if (config) {
         active_config = *config;
@@ -287,6 +295,10 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (dock_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
+    if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
 
     if (disable_flag) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DISABLED, now.day_index);
@@ -295,7 +307,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
-    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    err = read_grant_status(sysmodule, now, &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
@@ -305,17 +317,20 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     }
     {
         uint16_t new_minutes;
-        uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
-        uint16_t base_minutes;
         PtcDayRule active_rule;
-        (void)load_rules(sysmodule, &rules);
+        if (!load_rules(sysmodule, &rules)) return finish_with_error(sysmodule, request,
+            "release", true, PTC_ERR_RULES_INVALID, now.day_index);
         active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-        base_minutes = active_rule.mode == PTC_RULE_MODE_LIMIT ? active_rule.minutes : 0u;
-        if (played_minutes > base_minutes) base_minutes = played_minutes;
+        if (active_rule.mode == PTC_RULE_MODE_UNLIMITED) return finish_with_error(
+            sysmodule, request, "release", true, PTC_ERR_UNLIMITED_NOT_ALLOWED, now.day_index);
+        err = plan_grant(&rules, now, &pctl_status, verified.minutes, &plan);
+        if (err == PTC_ERR_OK && plan.effective_minutes == 0) err = PTC_ERR_MINUTES_EXCEED_LIMIT;
+        if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
+            "release", true, err, now.day_index);
         /* Stack the granted minutes onto today's existing limit or played time rather than
            overwriting it, matching the add_today_minutes token action. */
-        new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), verified.minutes, played_minutes);
-        effective_add_minutes = new_minutes >= base_minutes ? (uint16_t)(new_minutes - base_minutes) : 0u;
+        new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), verified.minutes, plan.played_ceiling_minutes);
+        effective_add_minutes = plan.effective_minutes;
         /* Apply to PCTL first (idempotent absolute write); persist the override
            only after it succeeds. On failure the nonce is not consumed and the
            same code may be re-entered, so persisting first would double-count. */
@@ -344,9 +359,16 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         }
         append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "offline_code");
     }
-    (void)load_rules(sysmodule, &rules);
-    (void)load_state(sysmodule, &runtime_state);
-    (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    /* The observed target and rules are already validated. Reloading with
+       ignored errors could replace them with an uninitialized result. */
+    if (!load_state(sysmodule, &runtime_state)) {
+        err = PTC_ERR_STORAGE_READ_FAILED;
+        if (!recovery_rollback(sysmodule)) {
+            write_disable_flag(sysmodule, "transaction_restore_failed\n");
+            err = PTC_ERR_RECOVERY_FAILED;
+        }
+        return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
+    }
     result_state_from_pctl(&state, now.day_index, &pctl_status);
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, "release", false, &state, now.unix_seconds);
@@ -409,11 +431,12 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                     err, now.day_index);
             }
         }
-        if (!consume_nonce(sysmodule, request, verified.day_index, verified.nonce, verified.version)) {
+        err = grant_clock_error(sysmodule, request, now);
+        if (err != PTC_ERR_OK || !consume_nonce(sysmodule, request, verified.day_index, verified.nonce, verified.version)) {
             char result_path[320];
             snprintf(result_path, sizeof(result_path), "%s/results/%s.json", sysmodule->app_root, request->request_id);
             (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, result_path);
-            err = PTC_ERR_STORAGE_WRITE_FAILED;
+            if (err == PTC_ERR_OK) err = PTC_ERR_STORAGE_WRITE_FAILED;
             if (!recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
                 err = PTC_ERR_RECOVERY_FAILED;

@@ -11,6 +11,10 @@ void open_offline_code_input(UiState *ui)
                  ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ON_GRANT_CODES_CANNOT));
         return;
     }
+    if (ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) && ui->model.dock_restriction_active) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_DOCK_CONNECT));
+        return;
+    }
     if (ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
         ui->model.unrestricted_today == 1) {
         snprintf(ui->model.message, sizeof(ui->model.message),
@@ -52,7 +56,7 @@ void show_pending_redemption(UiState *ui)
 void poll_pending_redemption(UiState *ui)
 {
     PtcCompanionStatus status;
-    if (!ui || !ui->recovering_redemption) return;
+    if (!ui || !ui->recovering_redemption || ui->transport.suspended) return;
     status = ptc_companion_read_result(
         &ui->client, ui->pending_redemption.request_id, 0, -1,
         ui->last_result, sizeof(ui->last_result));

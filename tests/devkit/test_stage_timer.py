@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import os
+from contextlib import redirect_stderr
+import io
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-import stage_timer  # noqa: E402
+import tools.build.stage_timer as stage_timer  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -36,6 +39,41 @@ def test_write_and_read_records() -> None:
 
         stage_timer.clear_timing_records(timing_file)
         require(not timing_file.is_file(), "clear must remove the file")
+
+
+def test_transient_and_persistent_windows_replace() -> None:
+    with tempfile.TemporaryDirectory(prefix="stage-timer-lock-") as tmp_dir:
+        path = Path(tmp_dir) / "timing.json"
+        stage_timer.write_timing_record("playwise", "before", 1, path=path)
+        original_replace = Path.replace
+        calls = 0
+
+        def replace(source: Path, target: Path) -> Path:
+            nonlocal calls
+            calls += 1
+            if calls <= 2:
+                raise PermissionError("fixture reader holds destination")
+            return original_replace(source, target)
+
+        with mock.patch.object(Path, "replace", replace), mock.patch.object(stage_timer.time, "sleep"):
+            stage_timer.write_timing_record("playwise", "after", 2, path=path)
+        require(calls == 3 and len(stage_timer.read_timing_records(path)) == 2,
+                "transient readers must retry without losing old timing records")
+        original = path.read_bytes()
+        error = io.StringIO()
+        with mock.patch.object(Path, "replace", side_effect=PermissionError("persistent fixture lock")), \
+                mock.patch.object(stage_timer.time, "sleep"), redirect_stderr(error):
+            stage_timer.write_timing_record("playwise", "skipped", 3, path=path)
+        require(path.read_bytes() == original and "WARNING" in error.getvalue(),
+                "diagnostic failure must preserve old records and not abort the build")
+        require(not list(path.parent.glob("*.tmp")) and not path.with_suffix(".lock").exists(),
+                "failed timing replacement cleans only its temporary file and lock")
+        lock = path.with_suffix(".lock")
+        lock.write_text("another writer", encoding="utf-8")
+        with mock.patch.object(stage_timer.time, "sleep"), redirect_stderr(io.StringIO()):
+            stage_timer.write_timing_record("playwise", "busy", 4, path=path)
+        require(path.read_bytes() == original and lock.read_text(encoding="utf-8") == "another writer",
+                "lock timeout must not write unlocked or remove another writer's lock")
 
 
 def test_format_timing_report() -> None:
@@ -68,7 +106,7 @@ def test_cli_execution() -> None:
         timing_file = Path(tmp_dir) / "build_timing.json"
         cmd = [
             sys.executable,
-            str(TOOLS / "stage_timer.py"),
+            str(TOOLS / "build" / "stage_timer.py"),
             "playwise",
             "test-stage",
             "--",
@@ -83,7 +121,7 @@ def test_cli_execution() -> None:
 
         fail_cmd = [
             sys.executable,
-            str(TOOLS / "stage_timer.py"),
+            str(TOOLS / "build" / "stage_timer.py"),
             "playwise",
             "fail-stage",
             "--",
@@ -139,6 +177,7 @@ def test_format_timing_report_with_wall_clock() -> None:
 
 def main() -> int:
     test_write_and_read_records()
+    test_transient_and_persistent_windows_replace()
     test_format_timing_report()
     test_format_timing_report_with_wall_clock()
     test_cli_execution()

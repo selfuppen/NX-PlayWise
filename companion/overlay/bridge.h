@@ -24,9 +24,11 @@ typedef enum {
     PTC_OVERLAY_PARENT_ADD_MINUTES = 0,
     PTC_OVERLAY_PARENT_UNLIMITED,
     PTC_OVERLAY_PARENT_SKIP_BEDTIME,
+    PTC_OVERLAY_PARENT_SKIP_EYE_CARE,
     PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP,
     PTC_OVERLAY_PARENT_DISABLE_BEDTIME,
     PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT,
+    PTC_OVERLAY_PARENT_WAIVE_DOCK,
     PTC_OVERLAY_PARENT_ACTION_COUNT
 } PtcOverlayParentAction;
 
@@ -49,6 +51,10 @@ PtcCompanionStatus ptc_overlay_bridge_submit_overlay_ready(PtcOverlayBridge *bri
     const char *boot_id, const char *environment_fingerprint);
 PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16, uint64_t window_instance_id);
+PtcCompanionStatus ptc_overlay_bridge_waive_dock(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint16_t day_index);
+PtcCompanionStatus ptc_overlay_bridge_skip_eye_care(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint64_t break_id);
 PtcCompanionStatus ptc_overlay_bridge_clear_bedtime_skip(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16, uint64_t window_instance_id);
 PtcCompanionStatus ptc_overlay_bridge_disable_bedtime(PtcOverlayBridge *bridge,
@@ -71,6 +77,16 @@ bool ptc_overlay_bridge_offline_code_succeeded(const PtcOverlayBridge *bridge);
 bool ptc_overlay_bridge_preview_succeeded(const PtcOverlayBridge *bridge);
 
 const char *ptc_overlay_rule_source_label(const char *source);
+typedef struct {
+    char compact[160];
+    char detail[256];
+    int rest_seconds; /* -1 means no confirmed rest countdown. */
+    bool warning;
+} PtcOverlayEyeCareDisplay;
+
+/* Only rest uses elapsed time; play minutes always come from the backend. */
+void ptc_overlay_project_eye_care(const PtcCompanionResultSummary *summary,
+    bool snapshot_usable, int64_t age_seconds, PtcOverlayEyeCareDisplay *out);
 void ptc_overlay_format_child_quota_parts(
     const PtcCompanionResultSummary *summary,
     char *label_out, size_t label_size,
@@ -87,6 +103,8 @@ void ptc_overlay_format_child_restriction_detail(
     char *out, size_t out_size);
 void ptc_overlay_format_child_buffer_status(
     const PtcCompanionResultSummary *summary,
+    char *out, size_t out_size);
+void ptc_overlay_format_dock_usage(const PtcCompanionResultSummary *summary,
     char *out, size_t out_size);
 
 #endif

@@ -26,6 +26,8 @@
 #include <math.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <cstring>
 #include <cwctype>
 #include <string>
@@ -50,6 +52,7 @@
     #define STB_TRUETYPE_IMPLEMENTATION
 #endif
 #include "stb_truetype.h"
+#include "playwise_glyph_cache.hpp"
 
 #pragma GCC diagnostic pop
 
@@ -757,20 +760,11 @@ namespace tsl {
              * @return Dimensions of drawn string
              */
             std::pair<u32, u32> drawString(const char* string, bool monospace, s32 x, s32 y, float fontSize, Color color, ssize_t maxWidth = 0) {
+                if (!string || !std::isfinite(fontSize) || fontSize <= 0 || fontSize > 128)
+                    return { 0, 0 };
                 s32 maxX = x;
                 s32 currX = x;
                 s32 currY = y;
-
-                struct Glyph {
-                    stbtt_fontinfo *currFont;
-                    float currFontSize;
-                    int bounds[4];
-                    int xAdvance;
-                    u8 *glyphBmp;
-                    int width, height;
-                };
-
-                static std::unordered_map<u64, Glyph> s_glyphCache;
 
                 do {
                     if (maxWidth > 0 && maxWidth < (currX - x))
@@ -798,13 +792,10 @@ namespace tsl {
                         (static_cast<u64>(this->m_preferTraditionalChinese) << 30) |
                         static_cast<u64>(fontSize * 16.0f);
 
-                    Glyph *glyph = nullptr;
-
-                    auto it = s_glyphCache.find(key);
-                    if (it == s_glyphCache.end()) {
-                        /* Cache glyph */
-                        glyph = &s_glyphCache.emplace(key, Glyph()).first->second;
-
+                    Glyph measured{};
+                    Glyph *glyph = this->m_glyphCache.find(key);
+                    if (glyph == nullptr) {
+                        glyph = &measured;
                         glyph->currFont = this->fontForCharacter(currCharacter);
 
                         glyph->currFontSize = stbtt_ScaleForPixelHeight(glyph->currFont, fontSize);
@@ -815,10 +806,26 @@ namespace tsl {
                         int yAdvance = 0;
                         stbtt_GetCodepointHMetrics(glyph->currFont, monospace ? 'W' : currCharacter, &glyph->xAdvance, &yAdvance);
 
-                        glyph->glyphBmp = stbtt_GetCodepointBitmap(glyph->currFont, glyph->currFontSize, glyph->currFontSize, currCharacter, &glyph->width, &glyph->height, nullptr, nullptr);
-                    } else {
-                        /* Use cached glyph */
-                        glyph = &it->second;
+                        glyph->width = glyph->bounds[2] - glyph->bounds[0];
+                        glyph->height = glyph->bounds[3] - glyph->bounds[1];
+                        // Transparent draws measure text without allocating any bitmap.
+                        if (color.a != 0 && !std::iswspace(currCharacter) && glyph->width > 0 && glyph->height > 0) {
+                            const size_t bytes = static_cast<size_t>(glyph->width) * static_cast<size_t>(glyph->height);
+                            if (auto *cached = this->m_glyphCache.insert(key, bytes)) {
+                                *cached = std::move(measured);
+                                cached->glyphBmp.reset(stbtt_GetCodepointBitmap(cached->currFont,
+                                    cached->currFontSize, cached->currFontSize, currCharacter,
+                                    &cached->width, &cached->height, nullptr, nullptr));
+                                if (cached->glyphBmp) {
+                                    glyph = cached;
+                                } else {
+                                    // Keep advance/metrics for this frame, and retry on the next draw.
+                                    measured = std::move(*cached);
+                                    this->m_glyphCache.erase(key);
+                                    glyph = &measured;
+                                }
+                            }
+                        }
                     }
 
                     if (glyph->glyphBmp != nullptr && !std::iswspace(currCharacter) && fontSize > 0 && color.a != 0x0) {
@@ -827,7 +834,7 @@ namespace tsl {
                         auto y = currY + glyph->bounds[1];
                         for (s32 bmpY = 0; bmpY < glyph->height; bmpY++) {
                             for (s32 bmpX = 0; bmpX < glyph->width; bmpX++) {
-                                auto bmpColor = glyph->glyphBmp[glyph->width * bmpY + bmpX] >> 4;
+                                auto bmpColor = glyph->glyphBmp.get()[glyph->width * bmpY + bmpX] >> 4;
                                 if (bmpColor == 0xF) {
                                     this->setPixel(x + bmpX, y + bmpY, color);
                                 } else if (bmpColor != 0x0) {
@@ -903,6 +910,8 @@ namespace tsl {
                 if (stbtt_FindGlyphIndex(secondary, character)) return secondary;
                 if (this->m_hasLocalFont && stbtt_FindGlyphIndex(&this->m_localFont, character))
                     return &this->m_localFont;
+                if (this->m_hasEmojiFont && stbtt_FindGlyphIndex(&this->m_emojiFont, character))
+                    return &this->m_emojiFont;
                 return &this->m_stdFont;
             }
             Renderer() {}
@@ -940,9 +949,63 @@ namespace tsl {
 
             std::stack<ScissoringConfig> m_scissoringStack;
 
-            stbtt_fontinfo m_stdFont, m_localFont, m_extFont, m_simplifiedFont, m_traditionalFont;
+            stbtt_fontinfo m_stdFont, m_localFont, m_extFont, m_simplifiedFont, m_traditionalFont, m_emojiFont;
+            std::vector<u8> m_emojiFontData;
             bool m_hasLocalFont = false;
+            bool m_hasEmojiFont = false;
             bool m_preferTraditionalChinese = false;
+
+            struct GlyphBitmapDeleter {
+                void operator()(u8 *bitmap) const { stbtt_FreeBitmap(bitmap, nullptr); }
+            };
+            struct Glyph {
+                stbtt_fontinfo *currFont = nullptr;
+                float currFontSize = 0;
+                int bounds[4]{};
+                int xAdvance = 0;
+                std::unique_ptr<u8, GlyphBitmapDeleter> glyphBmp;
+                int width = 0, height = 0;
+            };
+            detail::GlyphCache<Glyph, 512, 256 * 1024> m_glyphCache;
+
+            Result loadEmojiFont(const u8 *data, size_t size) {
+                if (!data || size == 0) return -1;
+                this->m_emojiFontData.assign(data, data + size);
+                if (!stbtt_InitFont(&this->m_emojiFont, this->m_emojiFontData.data(), stbtt_GetFontOffsetForIndex(this->m_emojiFontData.data(), 0))) {
+                    this->m_emojiFontData.clear();
+                    this->m_hasEmojiFont = false;
+                    return -1;
+                }
+                this->m_hasEmojiFont = true;
+                return 0;
+            }
+
+            Result loadEmojiFontFile(const char *path) {
+                if (!path) return -1;
+                FILE *f = std::fopen(path, "rb");
+                if (!f) return -1;
+                std::fseek(f, 0, SEEK_END);
+                long sz = std::ftell(f);
+                std::fseek(f, 0, SEEK_SET);
+                if (sz <= 0 || sz > 256 * 1024) {
+                    std::fclose(f);
+                    return -1;
+                }
+                this->m_emojiFontData.resize(static_cast<size_t>(sz));
+                size_t read_bytes = std::fread(this->m_emojiFontData.data(), 1, this->m_emojiFontData.size(), f);
+                std::fclose(f);
+                if (read_bytes != this->m_emojiFontData.size()) {
+                    this->m_emojiFontData.clear();
+                    return -1;
+                }
+                if (!stbtt_InitFont(&this->m_emojiFont, this->m_emojiFontData.data(), stbtt_GetFontOffsetForIndex(this->m_emojiFontData.data(), 0))) {
+                    this->m_emojiFontData.clear();
+                    this->m_hasEmojiFont = false;
+                    return -1;
+                }
+                this->m_hasEmojiFont = true;
+                return 0;
+            }
 
             static inline float s_opacity = 1.0F;
 
@@ -1087,6 +1150,9 @@ namespace tsl {
              *
              */
             void exit() {
+                this->m_glyphCache.clear();
+                std::vector<u8>().swap(this->m_emojiFontData);
+                this->m_hasEmojiFont = false;
                 if (!this->m_initialized)
                     return;
 
@@ -1096,6 +1162,7 @@ namespace tsl {
                 viCloseDisplay(&this->m_display);
                 eventClose(&this->m_vsyncEvent);
                 viExit();
+                this->m_initialized = false;
             }
 
             /**
@@ -1149,6 +1216,20 @@ namespace tsl {
 
                 fontBuffer = reinterpret_cast<u8*>(extFontData.address);
                 stbtt_InitFont(&this->m_extFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
+
+                // PlayWise uses shared Nintendo glyphs and forbids emoji in its UI.
+#ifndef TESLA_DISABLE_EMOJI_FONT
+                // Optional custom / monochrome emoji font for overlay on SD card (capped to <= 256KB)
+                const char *emojiPaths[] = {
+                    "sdmc:/switch/.overlays/fonts/emoji.ttf",
+                    "sdmc:/switch/.overlays/emoji.ttf"
+                };
+                for (const char *path : emojiPaths) {
+                    if (this->loadEmojiFontFile(path) == 0) {
+                        break;
+                    }
+                }
+#endif
 
                 return 0;
             }
@@ -3346,11 +3427,12 @@ namespace tsl {
          *
          */
         struct SharedThreadData {
-            bool running = false;
+            std::atomic<bool> running{false};
 
             Event comboEvent = { 0 };
 
-            bool overlayOpen = false;
+            std::atomic<bool> overlayOpen{false};
+            std::atomic<bool> hideRequested{false};
 
             std::mutex dataMutex;
             u64 keysDown = 0;
@@ -3407,9 +3489,6 @@ namespace tsl {
             eventClear(&powerButtonPressEvent);
             hlp::ScopeGuard powerButtonEventGuard([&] { eventClose(&powerButtonPressEvent); });
 
-            // Parse Tesla settings
-            impl::parseOverlaySettings();
-
             // Configure input to take all controllers and up to 8
             padConfigureInput(8, HidNpadStyleSet_NpadStandard | HidNpadStyleTag_NpadSystemExt);
 
@@ -3455,7 +3534,7 @@ namespace tsl {
 
                     if (((shData->keysHeld & tsl::cfg::launchCombo) == tsl::cfg::launchCombo) && shData->keysDown & tsl::cfg::launchCombo) {
                         if (shData->overlayOpen) {
-                            tsl::Overlay::get()->hide();
+                            shData->hideRequested = true;
                             shData->overlayOpen = false;
                         }
                         else
@@ -3470,7 +3549,7 @@ namespace tsl {
                 Result rc = waitObjects(&idx, objects, WaiterObject_Count, 20'000'000ul);
                 if (R_SUCCEEDED(rc)) {
                     if (shData->overlayOpen) {
-                        tsl::Overlay::get()->hide();
+                        shData->hideRequested = true;
                         shData->overlayOpen = false;
                     }
 
@@ -3539,11 +3618,8 @@ namespace tsl {
 
         shData.running = true;
 
-        Thread backgroundThread;
-        threadCreate(&backgroundThread, impl::backgroundEventPoller, &shData, nullptr, 0x1000, 0x2c, -2);
-        threadStart(&backgroundThread);
-
-        eventCreate(&shData.comboEvent, false);
+        ASSERT_FATAL(eventCreate(&shData.comboEvent, false));
+        impl::parseOverlaySettings();
 
         auto& overlay = tsl::Overlay::s_overlayInstance;
         overlay = new TOverlay();
@@ -3553,6 +3629,10 @@ namespace tsl {
         overlay->initScreen();
         overlay->changeTo(overlay->loadInitialGui());
 
+        // Publish a fully initialized overlay/event before starting the poller.
+        Thread backgroundThread;
+        ASSERT_FATAL(threadCreate(&backgroundThread, impl::backgroundEventPoller, &shData, nullptr, 0x1000, 0x2c, -2));
+        ASSERT_FATAL(threadStart(&backgroundThread));
 
         // Argument parsing
         for (u8 arg = 0; arg < argc; arg++) {
@@ -3567,6 +3647,7 @@ namespace tsl {
 
             eventWait(&shData.comboEvent, UINT64_MAX);
             eventClear(&shData.comboEvent);
+            shData.hideRequested = false;
             shData.overlayOpen = true;
 
 
@@ -3577,15 +3658,25 @@ namespace tsl {
 
 
             while (shData.running) {
+                // Only the UI thread may mutate GUI/animation state.
+                if (shData.hideRequested.exchange(false)) overlay->hide();
                 overlay->loop();
 
+                u64 keysDown, keysHeld;
+                HidTouchScreenState touchState;
+                HidAnalogStickState left, right;
                 {
                     std::scoped_lock lock(shData.dataMutex);
-                    if (!overlay->fadeAnimationPlaying()) {
-                        overlay->handleInput(shData.keysDownPending, shData.keysHeld, shData.touchState.count, shData.touchState.touches[0], shData.joyStickPosLeft, shData.joyStickPosRight);
-                    }
+                    keysDown = shData.keysDownPending;
+                    keysHeld = shData.keysHeld;
+                    touchState = shData.touchState;
+                    left = shData.joyStickPosLeft;
+                    right = shData.joyStickPosRight;
                     shData.keysDownPending = 0;
                 }
+                // IPC/SD actions must not hold the background input mutex.
+                if (!overlay->fadeAnimationPlaying())
+                    overlay->handleInput(keysDown, keysHeld, touchState.count, touchState.touches[0], left, right);
 
                 if (overlay->shouldHide())
                     break;
@@ -3603,10 +3694,9 @@ namespace tsl {
             eventClear(&shData.comboEvent);
         }
 
-        eventClose(&shData.comboEvent);
-
         threadWaitForExit(&backgroundThread);
         threadClose(&backgroundThread);
+        eventClose(&shData.comboEvent);
 
         overlay->exitScreen();
         overlay->exitServices();

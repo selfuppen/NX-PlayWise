@@ -5,14 +5,16 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import warnings
 import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-import promote_qualified_build as promoter  # noqa: E402
-import verify_device_qualification as verifier  # noqa: E402
+import tools.qualification.promote_qualified_build as promoter  # noqa: E402
+import tools.qualification.verify_device_qualification as verifier  # noqa: E402
+import tools.qualification.make_eye_care_qualification_template as make_eye_care  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -43,12 +45,14 @@ def prepare_packages(root: Path) -> Path:
     release_build.write_text(json.dumps(release_manifest), encoding="utf-8")
     lab_build.write_text(json.dumps(lab_manifest), encoding="utf-8")
     with zipfile.ZipFile(packages / verifier.STANDARD_ZIP, "w") as archive:
+        archive.writestr("switch/playwise/build.json", json.dumps(release_manifest))
         for index, member in enumerate(verifier.RELEASE_COMPONENTS):
             archive.writestr(member, f"component-{index}".encode())
     with zipfile.ZipFile(packages / verifier.COMPLETE_ZIP, "w") as archive:
-        archive.writestr(verifier.STANDARD_ZIP, b"standard-inner")
+        archive.writestr(verifier.STANDARD_ZIP, (packages / verifier.STANDARD_ZIP).read_bytes())
     with zipfile.ZipFile(packages / verifier.LAB_ZIP, "w") as archive:
         archive.writestr("DEVICE-LAB.txt", "内部取证工具")
+        archive.writestr("switch/playwise-device-lab/build.json", json.dumps(lab_manifest))
     return packages
 
 
@@ -220,6 +224,15 @@ def test_manual_status_can_still_enter_full_qualification() -> None:
         build = json.loads(build_path.read_text(encoding="utf-8"))
         build["qualification"].update({"status": "manual_verified", "method": "manual", "scope": "main_features"})
         build_path.write_text(json.dumps(build), encoding="utf-8")
+        zip_path = packages / verifier.STANDARD_ZIP
+        with zipfile.ZipFile(zip_path) as archive:
+            members = {name: archive.read(name) for name in archive.namelist()}
+        members["switch/playwise/build.json"] = json.dumps(build).encode("utf-8")
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            for name, data in members.items():
+                archive.writestr(name, data)
+        with zipfile.ZipFile(packages / verifier.COMPLETE_ZIP, "w") as archive:
+            archive.writestr(verifier.STANDARD_ZIP, zip_path.read_bytes())
         reports = prepare_reports(root)
         require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
                 "manual status must not block later full qualification")
@@ -328,6 +341,272 @@ def test_multiple_campaigns_require_explicit_selection() -> None:
                 "explicit campaign selection must bind the qualification result")
 
 
+def prepare_vision_sidecars(reports: Path) -> None:
+    """Attach a vision_ai sidecar + screenshot bundle to each restriction_quick
+    run, matching the report's observation fields (as the driver would)."""
+    specs = {
+        "pause-a": ("pause_on_game_a", "restriction_visible", "paused_or_suspended"),
+        "pause-b": ("pause_on_game_b", "restriction_visible", "paused_or_suspended"),
+        "continue-b": ("pause_off_game_b", "restriction_visible", "continued"),
+    }
+    for run_id, (slot, observation, effect) in specs.items():
+        run_dir = reports / "vision" / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        shots = []
+        for index in range(2):
+            shot = run_dir / f"{index:02d}.jpg"
+            shot.write_bytes(b"\xff\xd8" + f"{run_id}-{index}".encode("ascii"))
+            shots.append({"checkpoint": f"f{index}", "path": shot.relative_to(reports).as_posix(),
+                          "sha256": verifier.sha256_file(shot), "captured_at": "t"})
+        (reports / f"{run_id}.vision.json").write_text(json.dumps({
+            "schema_version": 1, "method": "vision_ai", "run_id": run_id,
+            "campaign_id": "campaign-test", "slot": slot,
+            "observation": observation, "runtime_effect": effect, "context_confirmed": True,
+            "confidence": "high", "reasoning": "frames show the prompt and the game state",
+            "sysbotbase_commit": "ae13548", "wire_log_sha256": "deadbeef",
+            "screenshots": shots,
+        }), encoding="utf-8")
+
+
+def test_vision_source_requires_and_binds_sidecars() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        # Default (manual) source must pass without any sidecar...
+        require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
+                "manual observation source must not require vision sidecars")
+        # ...but vision_ai must FAIL closed when the sidecars are absent.
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("视觉旁证" in str(exc), "vision_ai without a sidecar must fail explicitly")
+        else:
+            raise AssertionError("vision_ai mode must require a sidecar per restriction run")
+        prepare_vision_sidecars(reports)
+        result = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                                 observation_source="vision_ai")
+        require(result["status"] == "passed", "valid vision sidecars must qualify")
+        require(result["observation_source"] == "vision_ai", "verification records the observation source")
+        require("vision_attestation" in result["checks"], "vision check is recorded")
+        require(len(result["vision_attestation"]) == 3, "all three restriction slots are attested")
+
+
+def test_vision_rejects_tampered_screenshot() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        prepare_vision_sidecars(reports)
+        (reports / "vision" / "pause-a" / "00.jpg").write_bytes(b"\xff\xd8tampered")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("哈希不符" in str(exc), "a tampered screenshot must fail on hash mismatch")
+        else:
+            raise AssertionError("a tampered screenshot must not qualify")
+
+
+def test_vision_rejects_missing_screenshot() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        prepare_vision_sidecars(reports)
+        (reports / "vision" / "pause-b" / "01.jpg").unlink()
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("截图缺失" in str(exc), "a missing screenshot must fail explicitly")
+        else:
+            raise AssertionError("a missing screenshot must not qualify")
+
+
+def test_vision_rejects_verdict_mismatch() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        prepare_vision_sidecars(reports)
+        sidecar = reports / "continue-b.vision.json"
+        verdict = json.loads(sidecar.read_text(encoding="utf-8"))
+        verdict["runtime_effect"] = "paused_or_suspended"  # disagree with the report
+        sidecar.write_text(json.dumps(verdict), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("不一致" in str(exc), "a verdict that disagrees with the report must fail")
+        else:
+            raise AssertionError("a verdict/report mismatch must not qualify")
+
+
+def eye_care_report_payload(**overrides) -> dict:
+    base = {
+        "schema_version": 1,
+        "report_status": "final",
+        "subject": {"commit": "a" * 40,
+                    "release_id": f"playwise-{verifier.VERSION}+aaaaaaaaaaaa"},
+        "environment": {"model": "mariko-oled", "hos": "22.5.0", "atmosphere": "1.11.2"},
+        "games": ["game-a", "game-b"],
+        "timing": {"rest_start_trigger_seconds": 30, "rest_end_trigger_seconds": 20},
+        "observations": {key: True for key, _ in make_eye_care.OBSERVATION_FIELDS},
+        "pctl": {"settings_exactly_restored": True, "unexpected_raw_offsets": [],
+                 "eye_care_consumed_daily_allowance": False},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_eye_care_gate_passes_when_required() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        (reports / "eye-care-qualification.json").write_text(
+            json.dumps(eye_care_report_payload()), encoding="utf-8")
+        result = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2", require_eye_care=True)
+        require(result["status"] == "passed", "a complete eye-care report must qualify")
+        require("eye_care_rest_cycle" in result["checks"] and "eye_care_isolation" in result["checks"],
+                "eye-care checks are recorded when the report is present")
+        require("eye_care_path" in result["reports"], "verification binds the eye-care report path")
+
+
+def test_eye_care_required_but_missing_is_rejected() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)  # no eye-care report present
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2", require_eye_care=True)
+        except verifier.QualificationError as exc:
+            require("eye-care-qualification.json" in str(exc),
+                    "a missing eye-care report must be named when it is required")
+        else:
+            raise AssertionError("--require-eye-care with no report must not qualify")
+        # ...but with eye-care NOT required, the same reports still qualify (opt-in gate).
+        require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
+                "a missing eye-care report must not block the base qualification")
+
+
+def test_eye_care_present_but_invalid_fails_closed() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        bad = eye_care_report_payload()
+        bad["pctl"]["eye_care_consumed_daily_allowance"] = True  # isolation broken
+        (reports / "eye-care-qualification.json").write_text(json.dumps(bad), encoding="utf-8")
+        # Even without --require-eye-care, a PRESENT report is fail-closed validated.
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        except verifier.QualificationError as exc:
+            require("额度隔离" in str(exc), "a present eye-care report that breaks isolation must fail closed")
+        else:
+            raise AssertionError("an eye-care report that consumes the daily allowance must not qualify")
+
+
+def test_eye_care_incomplete_observation_is_rejected() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        bad = eye_care_report_payload()
+        bad["observations"]["disable_eye_care_restores_unlimited"] = False
+        (reports / "eye-care-qualification.json").write_text(json.dumps(bad), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2", require_eye_care=True)
+        except verifier.QualificationError as exc:
+            require("disable_eye_care_restores_unlimited" in str(exc),
+                    "an incomplete eye-care observation must be named")
+        else:
+            raise AssertionError("an incomplete eye-care observation must not qualify")
+
+
+def test_bundle_identity_and_promotion_rechecks() -> None:
+    def rewrite(path: Path, member: str, data: bytes) -> None:
+        with zipfile.ZipFile(path) as archive:
+            members = {name: archive.read(name) for name in archive.namelist()}
+        members[member] = data
+        with zipfile.ZipFile(path, "w") as archive:
+            for name, value in members.items():
+                archive.writestr(name, value)
+
+    for broken in ("dirty_lab", "stale_lab_zip", "stale_complete", "duplicate_manifest", "duplicate_zip"):
+        with tempfile.TemporaryDirectory(prefix="playwise-bundle-binding-") as tmp:
+            root = Path(tmp)
+            packages = prepare_packages(root)
+            reports = prepare_reports(root)
+            if broken == "dirty_lab":
+                path = packages / "playwise-device-lab/switch/playwise-device-lab/build.json"
+                data = json.loads(path.read_text(encoding="utf-8"))
+                data["build"]["source_dirty"] = True
+                path.write_text(json.dumps(data), encoding="utf-8")
+                rewrite(packages / verifier.LAB_ZIP, "switch/playwise-device-lab/build.json", path.read_bytes())
+            elif broken == "stale_lab_zip":
+                data = manifest("device-lab")
+                data["commit"] = "b" * 40
+                rewrite(packages / verifier.LAB_ZIP, "switch/playwise-device-lab/build.json", json.dumps(data).encode())
+            elif broken == "stale_complete":
+                rewrite(packages / verifier.COMPLETE_ZIP, verifier.STANDARD_ZIP, b"old standard fixture")
+            elif broken == "duplicate_zip":
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    with zipfile.ZipFile(packages / verifier.STANDARD_ZIP, "a") as archive:
+                        archive.writestr("switch/playwise/build.json", json.dumps(manifest("release")))
+                rewrite(packages / verifier.COMPLETE_ZIP, verifier.STANDARD_ZIP, (packages / verifier.STANDARD_ZIP).read_bytes())
+            else:
+                data = json.dumps(manifest("release")).replace('"schema_version": 1', '"schema_version": 1, "schema_version": 1')
+                rewrite(packages / verifier.STANDARD_ZIP, "switch/playwise/build.json", data.encode())
+                rewrite(packages / verifier.COMPLETE_ZIP, verifier.STANDARD_ZIP, (packages / verifier.STANDARD_ZIP).read_bytes())
+            try:
+                verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+            except verifier.QualificationError:
+                pass
+            else:
+                raise AssertionError(f"{broken} bundle must not qualify")
+
+    with tempfile.TemporaryDirectory(prefix="playwise-promotion-binding-") as tmp:
+        root = Path(tmp)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        verified = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        verification_path = root / "verification.json"
+        verification_path.write_text(json.dumps(verified), encoding="utf-8")
+        lab_path = packages / "playwise-device-lab/switch/playwise-device-lab/build.json"
+        original = lab_path.read_bytes()
+        lab = json.loads(original)
+        lab["build"]["source_dirty"] = True
+        lab_path.write_text(json.dumps(lab), encoding="utf-8")
+        try:
+            promoter.promote(packages, verification_path, root / "rejected")
+        except promoter.PromotionError:
+            require(not (root / "rejected").exists(), "bundle recheck must fail before copying any package")
+        else:
+            raise AssertionError("promotion must recheck directory metadata as well as Zip hashes")
+        lab_path.write_bytes(original)
+        verified["subject"]["commit"] = "b" * 40
+        verification_path.write_text(json.dumps(verified), encoding="utf-8")
+        try:
+            promoter.promote(packages, verification_path, root / "wrong-subject")
+        except promoter.PromotionError:
+            require(not (root / "wrong-subject").exists(), "subject mismatch must fail before copying")
+        else:
+            raise AssertionError("unchanged hashes cannot excuse a different verification subject")
+        verified["subject"]["commit"] = "a" * 40
+        duplicate = json.dumps(verified).replace('"status": "passed"', '"status": "passed", "status": "passed"', 1)
+        verification_path.write_text(duplicate, encoding="utf-8")
+        try:
+            promoter.promote(packages, verification_path, root / "duplicate-record")
+        except promoter.PromotionError:
+            require(not (root / "duplicate-record").exists(), "duplicate verification fields fail before copying")
+        else:
+            raise AssertionError("ambiguous verification JSON cannot promote a bundle")
+
+
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_manual_status_can_still_enter_full_qualification()
@@ -337,6 +616,15 @@ def main() -> int:
     test_incomplete_bedtime_timing_is_rejected_cleanly()
     test_misleading_evidence_summary_is_rejected()
     test_multiple_campaigns_require_explicit_selection()
+    test_vision_source_requires_and_binds_sidecars()
+    test_vision_rejects_tampered_screenshot()
+    test_vision_rejects_missing_screenshot()
+    test_vision_rejects_verdict_mismatch()
+    test_eye_care_gate_passes_when_required()
+    test_eye_care_required_but_missing_is_rejected()
+    test_eye_care_present_but_invalid_fails_closed()
+    test_eye_care_incomplete_observation_is_rejected()
+    test_bundle_identity_and_promotion_rechecks()
     print("Qualification verifier and promotion tests passed")
     return 0
 

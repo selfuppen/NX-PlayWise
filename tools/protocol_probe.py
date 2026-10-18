@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
-import json
+import sys
 from pathlib import Path
 
-from ptc_request_queue import create_layout, write_json_atomic, write_request
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import argparse
+import json
+
+from tools.lib.ptc_request_queue import create_layout, write_json_atomic, write_request
 
 
 def init_sdmc(args: argparse.Namespace) -> int:

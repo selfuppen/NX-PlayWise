@@ -75,7 +75,9 @@ void handle_today_action_ready(UiState *ui, int index)
     char remaining[32];
     const char *unavailable = ptc_ui_today_action_unavailable_reason(
         &ui->model, index == PTC_UI_OPERATION_ADD_TODAY_MINUTES ? 1 :
-        (index == PTC_UI_OPERATION_SKIP_BEDTIME ? 4 : -1), (int64_t)time(NULL));
+        (index == PTC_UI_OPERATION_SKIP_BEDTIME ? 4 :
+         (index == PTC_UI_OPERATION_SKIP_EYE_CARE ? 6 :
+          (index == PTC_UI_OPERATION_WAIVE_DOCK ? 7 : -1))), (int64_t)time(NULL));
     if (unavailable) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", unavailable);
         return;
@@ -179,6 +181,17 @@ void handle_today_action_ready(UiState *ui, int index)
         open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_BEDTIME, ptc_ui_text(PTC_UI_T_SKIP_BEDTIME_THIS_TIME), body);
         break;
     }
+    case PTC_UI_OPERATION_WAIVE_DOCK:
+        request_dock_waiver(ui);
+        break;
+    case PTC_UI_OPERATION_SKIP_EYE_CARE:
+        ui->model.pending_eye_care_break_id = ui->model.eye_care_break_id;
+        ui->auth_retry_action = AUTH_RETRY_SKIP_EYE_CARE;
+        if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_VERIFY_PIN))) break;
+        open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_EYE_CARE,
+            ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP),
+            ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY));
+        break;
     default:
         break;
     }
@@ -187,7 +200,18 @@ void handle_today_action_ready(UiState *ui, int index)
 void handle_parent_action(UiState *ui)
 {
     int index = ui->model.selected_index;
-    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+    if (ui->model.parent_support_only && !ptc_ui_parent_read_only_action(&ui->model, index)) {
+        enter_parent_area(ui);
+        return;
+    }
+    if (ptc_ui_open_today_settings(&ui->model, index)) return;
+    if (ui->model.parent_page == PTC_UI_PARENT_TODAY && index == 11) {
+        if (ui->waiting) return;
+        ptc_audio_play(PTC_SE_POPUP);
+        ptc_ui_open_home_details_page(&ui->model, 1);
+        return;
+    }
+    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index != 6 && index != 7) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
         return;
@@ -261,6 +285,13 @@ void handle_parent_action(UiState *ui)
             ui->model.selected_index = 0;
             break;
         case 4:
+            ui->model.draft_eye_care_policy = ui->model.eye_care_policy;
+            ui->model.eye_care_dirty = false;
+            ui->model.eye_care_field_focus = 0;
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
+            ui->model.selected_index = 0;
+            break;
+        case 6:
             ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
             ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
             ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
@@ -268,16 +299,22 @@ void handle_parent_action(UiState *ui)
             ui->model.overlay_body[0] = '\0';
             break;
         case 5:
-        case 6:
+            if (!ui->model.dock_dirty) ui->model.draft_dock_policy = ui->model.dock_policy;
+            ui->model.dock_field_focus = 0;
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+            ui->model.parent_footer_focused = false;
+            break;
         case 7:
         case 8:
         case 9:
         case 10:
         case 11:
+        case 12:
+        case 13:
             if (ui->model.forecast_available) {
-                ui->model.forecast_detail_day_offset = index - 5;
+                ui->model.forecast_detail_day_offset = index - 7;
                 ui->model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
-                ui->model.overlay_selection = index - 5;
+                ui->model.overlay_selection = index - 7;
             }
             break;
         default:
@@ -286,7 +323,7 @@ void handle_parent_action(UiState *ui)
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
-        if (ui->model.disable_flag_present && index != 4 && index != 6) {
+        if (ui->model.disable_flag_present && index != 4 && index != 6 && index != 7) {
             snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
             return;
         }
@@ -339,16 +376,16 @@ void handle_parent_action(UiState *ui)
                 snprintf(makeup_rule, sizeof(makeup_rule), ptc_ui_text(PTC_UI_T_U_MIN),
                          (unsigned int)ui->model.draft_makeup_workday_rule.minutes);
             }
-            ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
-            ui->model.holiday_calendar_page = 0;
-            ui->model.overlay_selection = 2;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_BUILT_IN_HOLIDAY_SCHEDULE));
+            open_holiday_calendar_view(ui);
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      ptc_ui_text(PTC_UI_T_CURRENT_S_STATUTORY_HOLIDAY_S_MAKEUP_WORKDAY),
                      ui->model.draft_holiday_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_NOT_ENABLED),
                      holiday_rule, makeup_rule);
             break;
         }
+        case 7:
+            open_calendar_manager(ui);
+            break;
         case 5:
             save_holiday_from_page(ui);
             break;
@@ -369,25 +406,29 @@ void handle_parent_action(UiState *ui)
     }
     if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
         switch (index) {
-        case 0:
+        case 0: change_parent_pin(ui); break;
+        case 1:
             ui->model.overlay = PTC_UI_OVERLAY_THEME;
             ui->model.overlay_selection = (int)ui->theme_preference;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      ptc_ui_text(PTC_UI_T_ONLY_CHANGES_THE_DRAWING_APPEARANCE_OF_THE));
             break;
-        case 1: change_parent_pin(ui); break;
         case 2: open_shortcut_manager(ui); break;
         case 3:
+            ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+            ui->model.overlay_selection = (int)ui->language_preference;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+            break;
+        case 4:
             refresh_album_restriction(ui);
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
-            break;
-        case 4:
-            open_activity_history(ui);
             break;
         case 5: {
             bool new_state = !ptc_audio_is_enabled();
@@ -400,12 +441,9 @@ void handle_parent_action(UiState *ui)
                      new_state ? ptc_ui_text(PTC_UI_T_BUTTON_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN) : ptc_ui_text(PTC_UI_T_KEYSTROKES_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN));
             break;
         }
+        case 7: open_config_backup(ui); break;
         case 6:
-            ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
-            ui->model.overlay_selection = (int)ui->language_preference;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+            open_activity_history(ui);
             break;
         default: break;
         }
@@ -581,6 +619,11 @@ void finish_quota_recheck(UiState *ui, bool success)
 void confirm_operation(UiState *ui)
 {
     PtcCompanionStatus status;
+    if (ui->model.parent_support_only && ui->model.operation != PTC_UI_OPERATION_EXPORT_DIAGNOSTICS) {
+        ptc_ui_cancel_overlay(&ui->model);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_READ_ONLY_SUPPORT));
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
         quota_operation_needs_recheck(ui->model.operation)) {
         if (ui->quota_recheck_pending || ui->waiting) return;
@@ -594,12 +637,17 @@ void confirm_operation(UiState *ui)
     bool held_danger_confirmation = ui->model.confirm_hold_required;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
+    case PTC_UI_OPERATION_IMPORT_CALENDAR:
+    case PTC_UI_OPERATION_ACTIVATE_CALENDAR:
+        submit_calendar_operation(ui, operation);
+        break;
 #ifndef PLAYWISE_EDEN
     case PTC_UI_OPERATION_HOT_RELOAD:
-        if (ui->waiting || ui->model.recovery_active) {
+        if (ui->waiting || ui->recovering_redemption || ui->model.recovery_active) {
             snprintf(ui->model.message, sizeof(ui->model.message),
                 ptc_ui_text(PTC_UI_T_THE_CURRENT_OPERATION_OR_RECOVERY_HAS_NOT));
         } else if (ptc_hot_reload_begin(&ui->hot_reload)) {
+            ptc_companion_transport_set_suspended(&ui->transport, true);
             ui->hot_reload_terminal_handled = false;
             ui->waiting = true;
             ui->model.waiting = true;
@@ -712,6 +760,31 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_SKIP_BEDTIME:
         submit_bedtime_skip(ui);
         break;
+    case PTC_UI_OPERATION_CREATE_CONFIG_BACKUP: submit_config_backup(ui, false); break;
+    case PTC_UI_OPERATION_RESTORE_CONFIG_BACKUP: submit_config_backup(ui, true); break;
+    case PTC_UI_OPERATION_CONFIG_REQUIREMENTS:
+        ui->pending_config_restore = true; submit_bedtime_confirmation(ui); break;
+    case PTC_UI_OPERATION_SAVE_DOCK:
+        submit_dock_policy(ui);
+        break;
+    case PTC_UI_OPERATION_WAIVE_DOCK:
+        submit_dock_waiver(ui);
+        break;
+    case PTC_UI_OPERATION_CONFIRM_DOCK:
+        ui->pending_dock_save = true;
+        submit_bedtime_confirmation(ui);
+        break;
+    case PTC_UI_OPERATION_LEAVE_DOCK:
+        ui->model.draft_dock_policy = ui->model.dock_policy;
+        ui->model.dock_dirty = false;
+        if (!ptc_ui_return_today_settings(&ui->model)) {
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+            ui->model.selected_index = 5;
+        }
+        break;
+    case PTC_UI_OPERATION_SKIP_EYE_CARE:
+        submit_eye_care_skip(ui);
+        break;
     case PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP:
         submit_clear_bedtime_skip(ui);
         break;
@@ -808,6 +881,15 @@ void accept_numpad(UiState *ui)
         ui->model.draft_scheduled_override.rule.minutes = value;
     } else if (purpose == PTC_UI_NUMPAD_GRANT_MINUTES) {
         ui->model.grant_minutes = value;
+    } else if (purpose == PTC_UI_NUMPAD_DOCK_MINUTES) {
+        ui->model.draft_dock_policy.undocked_daily_minutes = value;
+        ui->model.dock_dirty = ptc_ui_dock_dirty(&ui->model);
+    } else if (purpose == PTC_UI_NUMPAD_EYE_CARE_PLAY) {
+        ui->model.draft_eye_care_policy.play_minutes = value > 240 ? 240 : (value < 1 ? 1 : value);
+        ui->model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui->model);
+    } else if (purpose == PTC_UI_NUMPAD_EYE_CARE_REST) {
+        ui->model.draft_eye_care_policy.rest_minutes = value > 60 ? 60 : (value < 1 ? 1 : value);
+        ui->model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui->model);
     } else if (purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
         PtcBedtimeWindow *window;
         if (ui->model.numpad_return_overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW) {

@@ -4,10 +4,7 @@ __attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_
 
 void draw(UiState *ui)
 {
-    if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && ui->auth_cooldown_until > 0) {
-        int64_t remaining = ui->auth_cooldown_until - (int64_t)time(NULL);
-        ui->model.auth_cooldown_seconds = remaining > 0 ? (int)remaining : 0;
-    }
+    refresh_auth_error_cooldown(ui);
     ui->model.waiting = ui->waiting;
     snprintf(ui->model.request_id, sizeof(ui->model.request_id), "%s", ui->active_request_id);
     ptc_ui_graphics_draw(&ui->model, &ui->theme_view);
@@ -57,6 +54,8 @@ int main(int argc, char **argv)
     PadRepeater direction_repeater;
     HidTouchScreenState touch;
     bool touch_down = false;
+    int details_touch_y = -1;
+    bool details_touch_drag = false;
     bool running = true;
     bool install_defaults_ready;
 #ifndef PLAYWISE_EDEN
@@ -66,6 +65,7 @@ int main(int argc, char **argv)
     /* PtcSysmodule alone is ~10 KiB, far too much for the main thread stack. */
     static PtcEdenRuntime eden_runtime;
     bool eden_runtime_ready;
+    bool eden_status_dirty = false;
 #endif
     AppletHookCookie hook_cookie;
     u64 previous_stick_buttons = 0;
@@ -98,6 +98,8 @@ int main(int argc, char **argv)
     ui.model.view = PTC_UI_CHILD;
     ui.model.parent_page = PTC_UI_PARENT_TODAY;
     ui.model.remaining_minutes = -1;
+    ui.model.eye_care_policy.play_minutes = 40;
+    ui.model.eye_care_policy.rest_minutes = 10;
     ui.model.play_timer_enabled = -1;
     ui.model.restricted_now = -1;
     ptc_ui_set_execution(&ui.model, NULL, NULL);
@@ -111,6 +113,7 @@ int main(int argc, char **argv)
     /* Seeds the live root files, so the materialization below finds them all
        present and succeeds without a packaged defaults/ directory. Keep this
        call ahead of it. */
+    ui.model.eden_mode_controls = true;
     eden_runtime_ready = ptc_eden_runtime_init(&eden_runtime, ptc_fs_storage_as_storage(&fs));
 #endif
     install_defaults_ready = ptc_install_materialize_defaults(ptc_fs_storage_as_storage(&fs), APP_ROOT);
@@ -120,6 +123,10 @@ int main(int argc, char **argv)
     refresh_language(&ui);
     appletHook(&hook_cookie, applet_hook, &ui);
     refresh_disable_flag(&ui);
+    if (!ui.model.setup_wizard_completed) {
+        ui.model.view = PTC_UI_SETUP;
+        if (ui.model.setup_step == 0) ui.model.setup_step = PTC_UI_SETUP_PREPARE;
+    }
 #ifdef PLAYWISE_EDEN
     /* Eden exposes the embedded core through the existing IPC abstraction.
        Its Windows-backed SD implementation cannot reliably claim queue files
@@ -128,28 +135,38 @@ int main(int argc, char **argv)
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
         ptc_eden_runtime_ipc_backend(), &eden_runtime);
 #else
-    backend_expected = standard_backend_expected();
+    backend_expected = standard_backend_expected() && ui.hot_reload.phase != PTC_HOT_RELOAD_PHASE_FAILED &&
+        ui.hot_reload.status != PTC_HOT_RELOAD_RUNNING;
     if (backend_expected) ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
-        backend_expected ? ptc_switch_ipc_backend() : NULL, &ui.ipc);
+        (backend_expected || ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING) ? ptc_switch_ipc_backend() : NULL, &ui.ipc);
+    if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED || ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING)
+        ptc_companion_transport_set_suspended(&ui.transport, true);
     if (ui.hot_reload.status == PTC_HOT_RELOAD_UNKNOWN) ptc_hot_reload_inspect(&ui.hot_reload);
     sync_hot_reload_model(&ui);
 #endif
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
     load_rule_drafts(&ui);
+    ui.model.setup_pin_ready = ptc_companion_auth_state(&ui.auth) == PTC_AUTH_OK;
     if (!install_defaults_ready
 #ifdef PLAYWISE_EDEN
         || !eden_runtime_ready
 #endif
     ) {
+        ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_DEFAULTS, PTC_ERR_STORAGE_WRITE_FAILED);
         snprintf(ui.model.message, sizeof(ui.model.message),
                  ptc_ui_text(PTC_UI_T_THE_INSTALLATION_DATA_INITIALIZATION_FAILED_PLEASE_OVERWRITE));
     }
 #ifndef PLAYWISE_EDEN
     else if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED) {
         snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
+    } else if (ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING) {
+        ui.waiting = true;
+        ui.model.waiting = true;
+        snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
     } else if (!backend_expected) {
+        ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_INIT_FAILED);
         snprintf(ui.model.message, sizeof(ui.model.message),
                  ptc_ui_text(PTC_UI_T_THE_STANDARD_BACKGROUND_STARTUP_FLAG_IS_NOT));
     }
@@ -163,6 +180,7 @@ int main(int argc, char **argv)
         u64 held;
         u64 stick_buttons;
         bool parent_combo_held;
+        bool parent_minus_released;
         bool custom_combo_held;
         bool custom_combo_triggered;
         bool custom_combo_candidate;
@@ -188,6 +206,9 @@ int main(int argc, char **argv)
         }
         padRepeaterUpdate(&direction_repeater, held & DIRECTION_BUTTON_MASK);
         down |= padRepeaterGetButtons(&direction_repeater);
+        parent_minus_released = ptc_ui_single_button_release_update(
+            &ui.minus_pending, HidNpadButton_Minus, down, held,
+            ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_NONE);
         parent_combo_held = hidden_parent_combo_held(held);
         custom_combo_held = custom_parent_combo_held(&ui, held);
         custom_combo_candidate = ui.model.view == PTC_UI_CHILD &&
@@ -323,19 +344,13 @@ int main(int argc, char **argv)
                 ui.model.duration_scroll_anim_ticks = 0;
             }
         } else if (ui.model.view == PTC_UI_CHILD) {
-            if (down & HidNpadButton_Minus) {
-                /* Preserve the fixed Minus-on-release entrance even when Minus
-                 * is also one member of the configured custom chord. */
-                ui.minus_pending = true;
-            }
             if (custom_combo_candidate) {
                 /* Do not let buttons from an in-progress custom chord reach
                  * ordinary child-area actions before its hold decision. */
             } else if (down & HidNpadButton_B) {
                 ptc_audio_play(PTC_SE_CANCEL);
                 running = false;
-            } else if (ui.minus_pending && !(held & HidNpadButton_Minus)) {
-                ui.minus_pending = false;
+            } else if (parent_minus_released) {
                 ptc_audio_play(PTC_SE_CONFIRM);
                 enter_parent_area(&ui);
             } else if (down & HidNpadButton_A) {
@@ -697,6 +712,156 @@ int main(int argc, char **argv)
                     ptc_audio_play(PTC_SE_CANCEL);
                     discard_bedtime_draft(&ui);
                 }
+            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page == PTC_UI_PLAN_PAGE_DOCK) {
+                if (!ui.waiting) {
+                    if (down & HidNpadButton_B) dock_page_action(&ui, 10, 0);
+                    else if (down & HidNpadButton_Y) dock_page_action(&ui, 6, 0);
+                    else if (down & HidNpadButton_X) dock_page_action(&ui, 4, 0);
+                    else if (down & HidNpadButton_Plus) dock_page_action(&ui, 3, 0);
+                    else if (down & HidNpadButton_Up) {
+                        int old_focus = ui.model.dock_field_focus;
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 7 || focus == 8) ui.model.dock_field_focus = focus == 7 ? 3 : 4;
+                        else if (focus == 5) ui.model.dock_field_focus = 4;
+                        else if (focus == 3 || focus == 4) ui.model.dock_field_focus = 2;
+                        else if (focus == 2) ui.model.dock_field_focus = 1;
+                        else if (focus == 1) ui.model.dock_field_focus = 0;
+                        else if (focus == 0) ui.model.dock_field_focus = ui.model.eden_mode_controls ? 7 : 5;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
+                    }
+                    else if (down & HidNpadButton_Down) {
+                        int old_focus = ui.model.dock_field_focus;
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 0) ui.model.dock_field_focus = 1;
+                        else if (focus == 1) ui.model.dock_field_focus = 2;
+                        else if (focus == 2) ui.model.dock_field_focus = 3;
+                        else if (focus == 3 || focus == 4) ui.model.dock_field_focus = 5;
+                        else if (focus == 5) {
+                            if (ui.model.eden_mode_controls) ui.model.dock_field_focus = 7;
+                            else ui.model.dock_field_focus = 0;
+                        }
+                        else if (focus == 7 || focus == 8) ui.model.dock_field_focus = 0;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
+                    }
+                    else if (down & HidNpadButton_Left) {
+                        int old_focus = ui.model.dock_field_focus;
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 2) dock_page_action(&ui, 2, -1);
+                        else if (focus == 4) ui.model.dock_field_focus = 3;
+                        else if (focus == 5) ui.model.dock_field_focus = 4;
+                        else if (focus == 8) ui.model.dock_field_focus = 7;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
+                    }
+                    else if (down & HidNpadButton_Right) {
+                        int old_focus = ui.model.dock_field_focus;
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 2) dock_page_action(&ui, 2, 1);
+                        else if (focus == 3) ui.model.dock_field_focus = 4;
+                        else if (focus == 4) ui.model.dock_field_focus = 5;
+                        else if (focus == 7) ui.model.dock_field_focus = 8;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
+                    }
+                    else if (down & HidNpadButton_A) dock_page_action(&ui, ui.model.dock_field_focus, 0);
+                }
+            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_EYE_CARE) {
+                PtcEyeCarePolicy *draft = &ui.model.draft_eye_care_policy;
+                bool resting = (strcmp(ui.model.eye_care_phase, "resting") == 0);
+                int focus_count = resting ? 5 : 4;
+                if (ui.waiting) {
+                    if (down) {
+                        ptc_audio_play(PTC_SE_ERROR);
+                        snprintf(ui.model.message, sizeof(ui.model.message),
+                                 ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
+                    }
+                } else if (down & HidNpadButton_B) {
+                    ptc_audio_play(PTC_SE_CANCEL);
+                    ui.model.draft_eye_care_policy = ui.model.eye_care_policy;
+                    ui.model.eye_care_dirty = false;
+                    if (!ptc_ui_return_today_settings(&ui.model)) {
+                        ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+                        ui.model.selected_index = 4;
+                    }
+                } else if (down & (HidNpadButton_L | HidNpadButton_R)) {
+                    ptc_audio_play(PTC_SE_CANCEL);
+                    ui.model.draft_eye_care_policy = ui.model.eye_care_policy;
+                    ui.model.eye_care_dirty = false;
+                    if (!ptc_ui_return_today_settings(&ui.model)) {
+                        ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+                        ui.model.selected_index = 4;
+                    }
+                } else if (down & HidNpadButton_Up) {
+                    ptc_audio_play(PTC_SE_FOCUS);
+                    ui.model.eye_care_field_focus = (ui.model.eye_care_field_focus + focus_count - 1) % focus_count;
+                } else if (down & HidNpadButton_Down) {
+                    ptc_audio_play(PTC_SE_FOCUS);
+                    ui.model.eye_care_field_focus = (ui.model.eye_care_field_focus + 1) % focus_count;
+                } else if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_ZL | HidNpadButton_ZR)) {
+                    int delta = 0;
+                    if (down & HidNpadButton_Left) delta = -1;
+                    else if (down & HidNpadButton_Right) delta = 1;
+                    else if (down & HidNpadButton_ZL) delta = -10;
+                    else if (down & HidNpadButton_ZR) delta = 10;
+
+                    if (ui.model.eye_care_field_focus == 0) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
+                        draft->enabled = !draft->enabled;
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    } else if (ui.model.eye_care_field_focus == 1) {
+                        ptc_audio_play(PTC_SE_STEP);
+                        draft->play_minutes = ptc_ui_adjust_minutes(draft->play_minutes, delta, 1, 240);
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    } else if (ui.model.eye_care_field_focus == 2) {
+                        int rest_delta = delta;
+                        if (down & HidNpadButton_ZL) rest_delta = -5;
+                        else if (down & HidNpadButton_ZR) rest_delta = 5;
+                        ptc_audio_play(PTC_SE_STEP);
+                        draft->rest_minutes = ptc_ui_adjust_minutes(draft->rest_minutes, rest_delta, 1, 60);
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    }
+                } else if (down & HidNpadButton_A) {
+                    if (ui.model.eye_care_field_focus == 0) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
+                        draft->enabled = !draft->enabled;
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    } else if (ui.model.eye_care_field_focus == 1) {
+                        ptc_audio_play(PTC_SE_POPUP);
+                        ptc_ui_numpad_open(&ui.model, PTC_UI_NUMPAD_EYE_CARE_PLAY, PTC_UI_OVERLAY_NONE,
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_PLAY),
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_PLAY_SUBTITLE),
+                                           3, 1, 240, draft->play_minutes);
+                    } else if (ui.model.eye_care_field_focus == 2) {
+                        ptc_audio_play(PTC_SE_POPUP);
+                        ptc_ui_numpad_open(&ui.model, PTC_UI_NUMPAD_EYE_CARE_REST, PTC_UI_OVERLAY_NONE,
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_REST),
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_REST_SUBTITLE),
+                                           2, 1, 60, draft->rest_minutes);
+                    } else if (ui.model.eye_care_field_focus == 3) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
+                        submit_eye_care_policy(&ui);
+                    } else if (ui.model.eye_care_field_focus == 4) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
+                        submit_eye_care_skip(&ui);
+                    }
+                } else if (down & HidNpadButton_Minus) {
+                    ptc_audio_play(PTC_SE_TOGGLE);
+                    draft->enabled = !draft->enabled;
+                    ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                } else if (down & HidNpadButton_Plus) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
+                    submit_eye_care_policy(&ui);
+                } else if (down & HidNpadButton_X) {
+                    if (resting) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
+                        submit_eye_care_skip(&ui);
+                    } else {
+                        ptc_audio_play(PTC_SE_ERROR);
+                    }
+                } else if (down & HidNpadButton_Y) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
+                    refresh_disable_flag(&ui);
+                    submit_status(&ui);
+                }
             } else if (ui.waiting && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (down) {
@@ -761,12 +926,16 @@ int main(int argc, char **argv)
                 ui.model.selected_index = 4;
                 discard_holiday_draft(&ui);
             } else if (down & HidNpadButton_A) {
-                if (ui.waiting) {
+                if (ui.waiting && !ptc_ui_parent_read_only_action(&ui.model, ui.model.selected_index)) {
                     ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
                 } else if (ui.model.parent_footer_focused) {
                     ptc_audio_play(PTC_SE_CONFIRM);
                     activate_parent_status(&ui);
+                } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT &&
+                           ui.model.selected_index == 6 + ui.model.recent_event_count) {
+                    ptc_audio_play(PTC_SE_POPUP);
+                    ptc_ui_open_support_guide(&ui.model);
                 } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.selected_index >= 6) {
                     int visible_index = ui.model.selected_index - 6;
                     int event_index = ui.model.recent_event_count - 1 - visible_index;
@@ -787,14 +956,24 @@ int main(int argc, char **argv)
 
         if (touch_active) {
             if (!touch_down) {
+                details_touch_y = -1;
+                details_touch_drag = ui.model.overlay == PTC_UI_OVERLAY_HOME_DETAILS &&
+                    ui.model.home_details_page == 1 && ui.model.home_details_data_expanded &&
+                    ptc_ui_rect_contains(ptc_ui_home_details_body_rect(), touch_x, touch_y) &&
+                    !ptc_ui_rect_contains(ptc_ui_home_details_action_rect(&ui.model, 0), touch_x, touch_y);
+                if (details_touch_drag) details_touch_y = touch_y;
                 touch_down = true;
-                if (!(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required &&
+                if (!details_touch_drag && !(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required &&
                       ptc_ui_rect_contains(ptc_ui_confirm_rect(ui.model.overlay), touch_x, touch_y))) {
                     handle_touch(&ui, touch_x, touch_y);
                 }
+            } else if (details_touch_drag && details_touch_y >= 0) {
+                ptc_ui_home_details_scroll(&ui.model, details_touch_y - touch_y);
+                details_touch_y = touch_y;
             }
         } else {
             touch_down = false;
+            details_touch_drag = false;
         }
 
         if (ui.exit_requested) {
@@ -804,13 +983,20 @@ int main(int argc, char **argv)
         background_poll_elapsed_ms += INPUT_LOOP_MS;
         if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
 #ifdef PLAYWISE_EDEN
-            ptc_eden_runtime_tick(&eden_runtime);
+            if (ptc_eden_runtime_tick(&eden_runtime)) eden_status_dirty = true;
 #else
             poll_hot_reload(&ui);
 #endif
             poll_pending_redemption(&ui);
             poll_result(&ui, false);
             refresh_setup_activation(&ui);
+#ifdef PLAYWISE_EDEN
+            if (eden_status_dirty && !ui.waiting && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
+                ui.model.view != PTC_UI_SETUP) {
+                submit_status(&ui);
+                eden_status_dirty = false;
+            }
+#endif
             background_poll_elapsed_ms = 0;
         }
         draw_elapsed_ms += INPUT_LOOP_MS;
@@ -822,9 +1008,11 @@ int main(int argc, char **argv)
         svcSleepThread(ui.animating ? INPUT_LOOP_SLEEP_FAST_NS : INPUT_LOOP_SLEEP_NS);
     }
 
+    if (!ui.waiting && ui.config_stage_id[0]) config_backup_action(&ui, 15);
     appletUnhook(&hook_cookie);
     ptc_audio_exit();
     ptc_ui_graphics_exit();
+    free(ui.calendar_view_data);
 #ifndef PLAYWISE_EDEN
     ptc_hot_reload_exit(&ui.hot_reload);
     ptc_switch_ipc_client_exit(&ui.ipc);

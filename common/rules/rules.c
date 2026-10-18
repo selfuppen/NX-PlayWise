@@ -7,6 +7,7 @@
 void ptc_rules_default(PtcRules *rules)
 {
     unsigned int i;
+    rules->calendar = NULL;
     for (i = 0; i < 7; ++i) {
         rules->week[i].mode = (i == 0 || i == 6) ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
         rules->week[i].minutes = (i == 0 || i == 6) ? 120 : 60;
@@ -21,6 +22,12 @@ void ptc_rules_default(PtcRules *rules)
     rules->scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
     rules->scheduled_override.rule.minutes = 60;
     rules->autonomy_policy.daily_buffer_minutes = 0;
+    rules->eye_care.enabled = false;
+    rules->eye_care.play_minutes = 40;
+    rules->eye_care.rest_minutes = 10;
+    rules->dock_policy.force_docked = false;
+    rules->dock_policy.undocked_limit_enabled = false;
+    rules->dock_policy.undocked_daily_minutes = 30;
     rules->holiday_enabled = false;
     rules->holiday_rule.mode = PTC_RULE_MODE_UNLIMITED;
     rules->holiday_rule.minutes = 120;
@@ -58,7 +65,7 @@ PtcEffectiveRule ptc_rules_resolve(const PtcRules *rules, uint16_t day_index, ui
 {
     PtcEffectiveRule result;
     bool covered = false;
-    PtcCalendarDayType day_type = ptc_holiday_calendar_classify(day_index, &covered);
+    PtcCalendarDayType day_type = ptc_holiday_calendar_classify_in(rules->calendar, day_index, &covered);
     result.calendar_covered = covered;
     if (rules->today_override.present && rules->today_override.day_index == day_index) {
         result.rule = rules->today_override.rule;
@@ -122,6 +129,12 @@ bool ptc_autonomy_policy_is_valid(const PtcAutonomyPolicy *policy)
     return policy && (policy->daily_buffer_minutes == 0u ||
         policy->daily_buffer_minutes == 5u || policy->daily_buffer_minutes == 10u ||
         policy->daily_buffer_minutes == 15u);
+}
+
+bool ptc_eye_care_policy_is_valid(const PtcEyeCarePolicy *policy)
+{
+    return policy && policy->play_minutes >= 1u && policy->play_minutes <= 240u &&
+        policy->rest_minutes >= 1u && policy->rest_minutes <= 60u;
 }
 
 bool ptc_bedtime_window_is_valid(const PtcBedtimeWindow *window)
@@ -230,7 +243,7 @@ PtcEffectiveBedtime ptc_bedtime_resolve_start_day(
         return effective_from_special(weekly, &rules->bedtime.scheduled_override.rule,
             PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE, false);
     }
-    day_type = ptc_holiday_calendar_classify(start_day_index, &covered);
+    day_type = ptc_holiday_calendar_classify_in(rules->calendar, start_day_index, &covered);
     result.calendar_covered = covered;
     if (!rules->bedtime.calendar_enabled || !covered) return result;
     if (day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY) {

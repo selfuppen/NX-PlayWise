@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "holiday_calendar.h"
+
 typedef enum {
     PTC_RULE_MODE_LIMIT = 1,
     PTC_RULE_MODE_UNLIMITED = 2
@@ -30,6 +32,18 @@ typedef struct {
 typedef struct {
     uint16_t daily_buffer_minutes;
 } PtcAutonomyPolicy;
+
+typedef struct {
+    bool enabled;
+    uint16_t play_minutes;
+    uint16_t rest_minutes;
+} PtcEyeCarePolicy;
+
+typedef struct {
+    bool force_docked;
+    bool undocked_limit_enabled;
+    uint16_t undocked_daily_minutes;
+} PtcDockPolicy;
 
 typedef struct {
     bool enabled;
@@ -95,10 +109,13 @@ typedef struct {
     PtcTodayOverride today_override;
     PtcScheduledOverride scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
+    PtcEyeCarePolicy eye_care;
+    PtcDockPolicy dock_policy;
     bool holiday_enabled;
     PtcDayRule holiday_rule;
     PtcDayRule makeup_workday_rule;
     PtcBedtimePolicy bedtime;
+    const PtcHolidayCalendarSet *calendar;
 } PtcRules;
 
 typedef enum {
@@ -121,6 +138,7 @@ PtcEffectiveRule ptc_rules_resolve(const PtcRules *rules, uint16_t day_index, ui
 const char *ptc_rule_source_name(PtcRuleSource source);
 bool ptc_scheduled_override_is_valid(const PtcScheduledOverride *override_rule);
 bool ptc_autonomy_policy_is_valid(const PtcAutonomyPolicy *policy);
+bool ptc_eye_care_policy_is_valid(const PtcEyeCarePolicy *policy);
 bool ptc_bedtime_window_is_valid(const PtcBedtimeWindow *window);
 bool ptc_bedtime_policy_is_valid(const PtcBedtimePolicy *policy);
 PtcEffectiveBedtime ptc_bedtime_resolve_start_day(

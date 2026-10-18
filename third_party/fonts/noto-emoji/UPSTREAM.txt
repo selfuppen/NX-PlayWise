@@ -1,0 +1,6 @@
+Repository: https://github.com/google/fonts
+Source: ofl/notoemoji/NotoEmoji[wght].ttf
+SHA-256: de6c18832938afc99caf132b39d6a30a19bac7f2e812e28db2535b4608d27551
+License: SIL Open Font License 1.1 (OFL.txt)
+Checked: 2026-10-08
+Use: bundled monochrome emoji font for Switch PlayWise Companion NRO and Tesla Overlay.

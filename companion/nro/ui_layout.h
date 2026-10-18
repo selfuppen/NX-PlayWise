@@ -19,13 +19,17 @@ typedef enum {
     PTC_UI_HIT_CHILD_EXIT,
     PTC_UI_HIT_ERROR_RETRY,
     PTC_UI_HIT_ERROR_BACK,
-    PTC_UI_HIT_SETUP_SHORTCUT_CARD,
+    PTC_UI_HIT_SETUP_LANGUAGE,
+    PTC_UI_HIT_SETUP_TIME_HELP,
+    PTC_UI_HIT_SETUP_MORE,
+    PTC_UI_HIT_SETUP_SHORTCUT,
+    PTC_UI_HIT_SETUP_SKIP,
     PTC_UI_HIT_SETUP_PRIMARY,
     PTC_UI_HIT_SETUP_BACK,
     PTC_UI_HIT_SETUP_PIN,
     PTC_UI_HIT_SETUP_THEME_OPTION,
-    PTC_UI_HIT_SETUP_CHILD_ZONE,
-    PTC_UI_HIT_SETUP_PARENT_ZONE,
+    PTC_UI_HIT_SETUP_EYE_CARE,
+    PTC_UI_HIT_SETUP_BEDTIME,
     PTC_UI_HIT_PARENT_PREV_PAGE,
     PTC_UI_HIT_PARENT_NEXT_PAGE,
     PTC_UI_HIT_PARENT_REFRESH,
@@ -46,6 +50,10 @@ typedef enum {
     PTC_UI_HIT_HOLIDAY_MODE,
     PTC_UI_HIT_HOLIDAY_MINUTES,
     PTC_UI_HIT_HOLIDAY_CALENDAR,
+    PTC_UI_HIT_CALENDAR_MANAGER,
+    PTC_UI_HIT_CALENDAR_MANAGER_TAB,
+    PTC_UI_HIT_CALENDAR_MANAGER_ROW,
+    PTC_UI_HIT_CALENDAR_MANAGER_NAV,
     PTC_UI_HIT_HOLIDAY_PAGE_ACTION,
     PTC_UI_HIT_WEEKLY_MIN_UP,
     PTC_UI_HIT_WEEKLY_MIN_DOWN,
@@ -89,6 +97,7 @@ typedef enum {
     PTC_UI_HIT_HISTORY_NEXT,
     PTC_UI_HIT_SCHEDULED_FIELD,
     PTC_UI_HIT_AUTONOMY_OPTION,
+    PTC_UI_HIT_EYE_CARE_FIELD,
     PTC_UI_HIT_QUICK_ADD_OPTION,
     PTC_UI_HIT_BEDTIME_SECTION,
     PTC_UI_HIT_BEDTIME_FIELD,
@@ -96,10 +105,29 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_MANAGE,
     PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
     PTC_UI_HIT_BEDTIME_PRESET,
+    PTC_UI_HIT_EYE_CARE_PAGE_MASTER,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_PRESET,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_DEC,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_VAL,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_INC,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_PRESET,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_DEC,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_VAL,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_INC,
+    PTC_UI_HIT_EYE_CARE_PAGE_SAVE,
+    PTC_UI_HIT_EYE_CARE_PAGE_SKIP,
     PTC_UI_HIT_HOME_DETAILS,
-    PTC_UI_HIT_HOME_DETAILS_TAB,
+    PTC_UI_HIT_HOME_DETAILS_ACTION,
+    PTC_UI_HIT_HOME_RULES,
     PTC_UI_HIT_NOTICE_DETAILS,
-    PTC_UI_HIT_FORECAST_DAY
+    PTC_UI_HIT_FORECAST_DAY,
+    PTC_UI_HIT_SETUP_PCTL_HELP,
+    PTC_UI_HIT_SUPPORT_GUIDE,
+    PTC_UI_HIT_CONFIG_BACKUP_FIELD,
+    PTC_UI_HIT_DOCK_FIELD,
+    PTC_UI_HIT_DAY_DECISION_REFRESH,
+    PTC_UI_HIT_DAY_DECISION_PREV,
+    PTC_UI_HIT_DAY_DECISION_NEXT
 } PtcUiHitKind;
 
 typedef struct {
@@ -114,31 +142,55 @@ PtcUiRect ptc_ui_child_buffer_rect(void);
 PtcUiRect ptc_ui_child_footer_rect(int index);
 PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
-PtcUiRect ptc_ui_setup_shortcut_card_rect(int index);
+PtcUiRect ptc_ui_setup_language_rect(int index);
+PtcUiRect ptc_ui_setup_time_help_rect(void);
+PtcUiRect ptc_ui_setup_pctl_help_rect(void);
+PtcUiRect ptc_ui_setup_more_rect(void);
+PtcUiRect ptc_ui_setup_shortcut_rect(void);
+PtcUiRect ptc_ui_setup_skip_rect(void);
 PtcUiRect ptc_ui_setup_primary_rect(void);
 PtcUiRect ptc_ui_setup_back_rect(void);
 PtcUiRect ptc_ui_setup_pin_rect(void);
 PtcUiRect ptc_ui_setup_theme_rect(int index);
-PtcUiRect ptc_ui_setup_zone_rect(int index);
+PtcUiRect ptc_ui_setup_eye_care_rect(void);
+PtcUiRect ptc_ui_setup_bedtime_rect(void);
 PtcUiRect ptc_ui_notice_rect(void);
 PtcUiRect ptc_ui_notice_details_rect(void);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_time_status_bar_rect(void);
+PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_settings_card_rect(int index);
 PtcUiRect ptc_ui_qr_export_rect(void);
+PtcUiRect ptc_ui_auth_error_guide_rect(void);
 PtcUiRect ptc_ui_plan_card_rect(int index);
 PtcUiRect ptc_ui_forecast_day_row_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
-PtcUiRect ptc_ui_home_details_tab_rect(int index);
+PtcUiRect ptc_ui_home_details_body_rect(void);
+PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model);
+PtcUiRect ptc_ui_rules_dialog_rect(void);
+PtcUiRect ptc_ui_rules_dialog_close_rect(void);
+PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index);
+PtcUiRect ptc_ui_home_details_data_rect(const PtcUiModel *model, int index);
+void ptc_ui_home_details_activate(PtcUiModel *model, int index);
+void ptc_ui_home_details_move(PtcUiModel *model, int direction);
+void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels);
+void ptc_ui_home_details_back(PtcUiModel *model);
 PtcUiOperation ptc_ui_today_operation(int index);
 bool ptc_ui_open_home_details(PtcUiModel *model);
+bool ptc_ui_open_home_details_page(PtcUiModel *model, int page);
+PtcUiRect ptc_ui_home_rules_rect(void);
+PtcUiRect ptc_ui_today_quota_card_rect(void);
+PtcUiRect ptc_ui_plan_today_rules_rect(void);
+PtcUiRect ptc_ui_day_decision_refresh_rect(void);
+PtcUiRect ptc_ui_day_decision_prev_rect(void);
+PtcUiRect ptc_ui_day_decision_next_rect(void);
 bool ptc_ui_open_notice_details(PtcUiModel *model);
 bool ptc_ui_home_notice_expanded(const PtcUiModel *model);
 PtcUiRect ptc_ui_advanced_back_rect(void);
@@ -148,12 +200,30 @@ PtcUiRect ptc_ui_holiday_enable_rect(void);
 PtcUiRect ptc_ui_holiday_mode_rect(int index);
 PtcUiRect ptc_ui_holiday_minutes_rect(int index);
 PtcUiRect ptc_ui_holiday_calendar_rect(void);
+PtcUiRect ptc_ui_holiday_manage_rect(void);
+PtcUiRect ptc_ui_calendar_manager_tab_rect(int index);
+PtcUiRect ptc_ui_calendar_manager_row_rect(int index);
+PtcUiRect ptc_ui_calendar_manager_nav_rect(int index);
 PtcUiRect ptc_ui_holiday_page_action_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
+PtcUiRect ptc_ui_support_guide_rect(void);
+PtcUiRect ptc_ui_support_guide_nav_rect(int index);
 PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);
 PtcUiRect ptc_ui_autonomy_option_rect(int index);
+PtcUiRect ptc_ui_eye_care_field_rect(int index);
+PtcUiRect ptc_ui_eye_care_page_master_rect(void);
+PtcUiRect ptc_ui_eye_care_play_preset_rect(int index);
+PtcUiRect ptc_ui_eye_care_play_dec_rect(void);
+PtcUiRect ptc_ui_eye_care_play_value_rect(void);
+PtcUiRect ptc_ui_eye_care_play_inc_rect(void);
+PtcUiRect ptc_ui_eye_care_rest_preset_rect(int index);
+PtcUiRect ptc_ui_eye_care_rest_dec_rect(void);
+PtcUiRect ptc_ui_eye_care_rest_value_rect(void);
+PtcUiRect ptc_ui_eye_care_rest_inc_rect(void);
+PtcUiRect ptc_ui_eye_care_page_save_rect(void);
+PtcUiRect ptc_ui_eye_care_page_skip_rect(void);
 PtcUiRect ptc_ui_quick_add_option_rect(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);
@@ -220,6 +290,12 @@ PtcUiRect ptc_ui_shortcut_hint_rect(void);
 PtcUiRect ptc_ui_grant_adjust_rect(int index);
 bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y);
 PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y);
+PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now);
 
+
+PtcUiRect ptc_ui_config_backup_field_rect(int index);
+PtcUiRect ptc_ui_dock_field_rect(int index);
+PtcUiRect ptc_ui_today_status_rect(int index);
+PtcUiRect ptc_ui_config_backup_group_rect(int group);
 
 #endif

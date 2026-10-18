@@ -7,6 +7,7 @@
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/switch/pctl_adapter.h"
 #include "../../platform/switch/time_provider.h"
+#include "../../platform/switch/operation_mode.h"
 #include "../../platform/switch/usage_stats_adapter.h"
 #include "../../platform/install_defaults.h"
 #include "../../common/time/ptc_time.h"
@@ -16,6 +17,15 @@
 #include "../ipc_server.h"
 #include "../../common/protocol/ipc_protocol.h"
 #include "release_manifest.h"
+#include "../usage_evidence.h"
+#ifdef PLAYWISE_PCTL_CAPTURE
+#include "../pctl_usage_tap.h"
+static void capture_tick(PtcSysmodule *sysmodule, const char *stage, bool force)
+{
+    PtcClockSnapshot now=sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    pctl_usage_tap_tick(stage,(long long)now.unix_seconds,now.day_index,force);
+}
+#endif
 
 #define PTC_APP_ROOT PLAYWISE_SD_ROOT
 #define PTC_INNER_HEAP_SIZE 0x80000
@@ -59,6 +69,7 @@ void __appInit(void)
 
 void __appExit(void)
 {
+    ptc_switch_operation_mode_exit();
     timeExit();
     fsdevUnmountAll();
     fsExit();
@@ -197,7 +208,7 @@ static bool handoff_json_string(const char *text, const char *key, char *out, si
     return true;
 }
 
-static void write_runtime_ready(PtcSysmodule *sysmodule)
+static void write_runtime_ready(PtcSysmodule *sysmodule, bool ipc_available)
 {
     uint64_t pid = 0;
     char path[320];
@@ -206,9 +217,9 @@ static void write_runtime_ready(PtcSysmodule *sysmodule)
     snprintf(path, sizeof(path), PTC_APP_ROOT "/handover/runtime-ready.json");
     snprintf(json, sizeof(json),
         "{\"version\":1,\"handover_version\":1,\"profile\":\"%s\",\"title_id\":\"%s\",\"pid\":%llu,"
-        "\"boot_id\":\"%s\",\"release_id\":\"%s\",\"ipc_version\":%u}\n",
+        "\"boot_id\":\"%s\",\"release_id\":\"%s\",\"ipc_version\":%u,\"ipc_available\":%s}\n",
         PLAYWISE_PROFILE_NAME, PLAYWISE_TITLE_ID, (unsigned long long)pid, sysmodule->boot_id,
-        PLAYWISE_BUILD_RELEASE_ID, (unsigned int)PTC_IPC_INTERFACE_VERSION);
+        PLAYWISE_BUILD_RELEASE_ID, (unsigned int)PTC_IPC_INTERFACE_VERSION, ipc_available ? "true" : "false");
     (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
 
@@ -232,11 +243,15 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
         !handoff_json_string(text, "transaction_id", transaction_id, sizeof(transaction_id)) ||
         !handoff_json_string(text, "action", action, sizeof(action)) || strcmp(action, "quiesce") != 0) {
         *quiesce_ticks = 0;
+        sysmodule->quiescing = false;
         if (ipc_available) ipc_server->accepting = true;
         return false;
     }
     if (ipc_available) ipc_server->accepting = false;
     if (sysmodule->storage->vtable->exists(sysmodule->storage, recovery_path)) return false;
+    /* The current serial transaction has finished. Freeze both SD consumption
+       and autonomous writes until this handoff exits or its intent is removed. */
+    sysmodule->quiescing = true;
     (void)svcGetProcessId(&source_pid, CUR_PROCESS_HANDLE);
     snprintf(text, sizeof(text),
         "{\"version\":1,\"handover_version\":1,\"transaction_id\":\"%s\",\"status\":\"ready\","
@@ -256,6 +271,7 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, intent_path);
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, ack_path);
         *quiesce_ticks = 0;
+        sysmodule->quiescing = false;
         if (ipc_available) ipc_server->accepting = true;
     }
     return false;
@@ -271,6 +287,9 @@ int main(int argc, char **argv)
     static PtcSwitchTimeProvider time_provider;
     static PtcSwitchUsageStats usage_stats;
     static PtcSysmodule sysmodule;
+#ifndef PLAYWISE_DEVICE_LAB
+    static PtcUsageEvidence usage_evidence;
+#endif
     static PtcIpcServer ipc_server;
     PtcStorage *storage;
     bool ipc_available;
@@ -306,6 +325,18 @@ int main(int argc, char **argv)
         ptc_switch_time_provider_as_provider(&time_provider));
     snprintf(boot_id, sizeof(boot_id), "%016llx", (unsigned long long)randomGet64());
     ptc_sysmodule_set_boot_id(&sysmodule, boot_id);
+#ifndef PLAYWISE_DEVICE_LAB
+    (void)ptc_usage_evidence_init(&usage_evidence, storage, PTC_APP_ROOT, boot_id,
+        PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, armTicksToNs(armGetSystemTick()),
+        ptc_switch_pctl_read_evidence, &pctl);
+    ptc_usage_evidence_set_append_diagnostics(&usage_evidence,
+        ptc_fs_storage_append_diagnostics, &fs);
+    ptc_usage_evidence_tick(&usage_evidence, armTicksToNs(armGetSystemTick()));
+#endif
+#ifdef PLAYWISE_PCTL_CAPTURE
+    pctl_usage_tap_init(boot_id);
+    capture_tick(&sysmodule,"before_standard_bootstrap",true);
+#endif
 
     (void)ptc_sysmodule_rollover_legacy_logs(&sysmodule);
     append_boot_log(&sysmodule, "playwise sysmodule started");
@@ -315,10 +346,16 @@ int main(int argc, char **argv)
         append_boot_log(&sysmodule, "recovered processing requests");
     }
     (void)ptc_sysmodule_cleanup(&sysmodule);
+    PtcOperationModeProvider operation_mode_provider;
+    ptc_switch_operation_mode_init(&operation_mode_provider);
+    sysmodule.operation_mode_provider = &operation_mode_provider;
     (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
     ipc_available = ptc_ipc_server_start(&ipc_server, &sysmodule);
     if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");
-    write_runtime_ready(&sysmodule);
+    write_runtime_ready(&sysmodule, ipc_available);
+#ifdef PLAYWISE_PCTL_CAPTURE
+    capture_tick(&sysmodule,"after_standard_bootstrap",true);
+#endif
 
     while (!exit_for_handoff) {
         bool notified;
@@ -329,11 +366,20 @@ int main(int argc, char **argv)
         if (!ipc_available) svcSleepThread((int64_t)wait_ms * 1000000LL);
         if (ipc_available) ptc_ipc_server_lock_storage(&ipc_server);
         (void)ptc_sysmodule_scheduler_tick(&sysmodule, notified);
+#ifndef PLAYWISE_DEVICE_LAB
+        ptc_usage_evidence_tick(&usage_evidence, armTicksToNs(armGetSystemTick()));
+#endif
+#ifdef PLAYWISE_PCTL_CAPTURE
+        capture_tick(&sysmodule,"standard_running",false);
+#endif
         exit_for_handoff = handoff_tick(&sysmodule, &ipc_server, ipc_available, &quiesce_ticks);
         if (ipc_available) ptc_ipc_server_unlock_storage(&ipc_server);
         if (ipc_available) ptc_ipc_server_signal_completed(&ipc_server);
     }
 
+#ifndef PLAYWISE_DEVICE_LAB
+    ptc_usage_evidence_stop(&usage_evidence, "process_handoff");
+#endif
     if (ipc_available) ptc_ipc_server_stop(&ipc_server);
     ptc_switch_pctl_exit(&pctl);
     return 0;

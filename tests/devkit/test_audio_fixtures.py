@@ -6,9 +6,9 @@ import math
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-from make_audio_fixtures import (  # noqa: E402
+from tools.build.make_audio_fixtures import (  # noqa: E402
     SAMPLE_RATE,
     generate_focus,
     generate_step,

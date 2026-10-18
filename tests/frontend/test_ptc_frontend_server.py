@@ -15,10 +15,10 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
 STATIC_ROOT = TOOLS / "ptc_frontend"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-from ptc_frontend_server import Handler, STATIC_ASSETS  # noqa: E402
-from build_ptc_standalone import render_standalone  # noqa: E402
+from tools.ptc_frontend_server import Handler, STATIC_ASSETS  # noqa: E402
+from tools.build.build_ptc_standalone import render_standalone  # noqa: E402
 
 
 def assert_equal(actual, expected, label: str) -> None:

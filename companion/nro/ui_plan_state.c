@@ -12,6 +12,63 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
+/* Match the displayed row order; imported workdays follow holiday groups. */
+static void nearest_calendar_row(uint16_t today, uint16_t first, uint16_t last,
+    size_t row, int *best_distance, uint16_t *best_day, int *page)
+{
+    uint16_t nearest = today < first ? first : today > last ? last : today;
+    int distance = abs((int)nearest - today);
+    if (distance < *best_distance ||
+        (distance == *best_distance && nearest > *best_day)) {
+        *best_distance = distance;
+        *best_day = nearest;
+        *page = (int)(row / 4u);
+    }
+}
+
+int ptc_ui_holiday_calendar_nearest_page(const PtcUiModel *model, int *out_distance)
+{
+    int distance = INT_MAX, page = 0;
+    uint16_t best_day = 0, jan1;
+    size_t i;
+    if (out_distance) *out_distance = INT_MAX;
+    if (!model) return 0;
+    if (model->holiday_calendar_data) {
+        const PtcImportedCalendarYear *data = model->holiday_calendar_data;
+        size_t row = data->group_count;
+        for (i = 0; i < data->group_count; ++i)
+            nearest_calendar_row(model->day_index, data->groups[i].first_day_index,
+                data->groups[i].last_day_index, i, &distance, &best_day, &page);
+        if (!ptc_day_index_from_date(data->year, 1, 1, &jan1)) return page;
+        for (i = 0; i < 366u; ++i) {
+            if (data->days[i] != PTC_CALENDAR_DAY_MAKEUP_WORKDAY) continue;
+            nearest_calendar_row(model->day_index, (uint16_t)(jan1 + i),
+                (uint16_t)(jan1 + i), row++, &distance, &best_day, &page);
+        }
+    } else if (model->calendar_builtin) {
+        uint16_t year = ptc_holiday_calendar_info()->last_year;
+        PtcHolidayCalendarMatch match;
+        for (i = 0; i < ptc_holiday_calendar_arrangement_count(year); ++i) {
+            const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(year, i);
+            uint16_t first, last;
+            if (ptc_day_index_from_date(year, entry->start_month, entry->start_day, &first) &&
+                ptc_day_index_from_date(year, entry->end_month, entry->end_day, &last))
+                nearest_calendar_row(model->day_index, first, last, i,
+                    &distance, &best_day, &page);
+        }
+        if (!ptc_day_index_from_date(year, 1, 1, &jan1)) return page;
+        while (ptc_holiday_calendar_find(PTC_CALENDAR_DAY_MAKEUP_WORKDAY, jan1, &match)) {
+            for (i = 0; i < ptc_holiday_calendar_arrangement_count(year); ++i)
+                if (match.arrangement == ptc_holiday_calendar_arrangement(year, i))
+                    nearest_calendar_row(model->day_index, match.day_index, match.day_index,
+                        i, &distance, &best_day, &page);
+            if (match.day_index == UINT16_MAX) break;
+            jan1 = (uint16_t)(match.day_index + 1u);
+        }
+    }
+    if (out_distance) *out_distance = distance;
+    return page;
+}
 static void copy_ui_text(PtcUiTextId id, char *out, size_t size)
 {
     if (out && size) snprintf(out, size, "%s", ptc_ui_text(id));
@@ -232,9 +289,10 @@ void ptc_ui_reconcile_scheduled_result(PtcUiModel *model, const PtcScheduledOver
     if (saved && model->overlay == PTC_UI_OVERLAY_SCHEDULED) model->overlay = PTC_UI_OVERLAY_NONE;
 }
 
-static void build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRules *rules)
+void ptc_ui_build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRules *rules)
 {
     ptc_rules_default(rules);
+    rules->calendar = model->calendar;
     memcpy(rules->week, kind == PTC_UI_PLAN_WEEKLY ? model->draft_week : model->current_week,
            sizeof(rules->week));
     rules->today_override = (PtcTodayOverride){model->day_index, model->today_override_present,
@@ -244,12 +302,16 @@ static void build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRul
     rules->holiday_enabled = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_holiday_enabled : model->holiday_enabled;
     rules->holiday_rule = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_holiday_rule : model->holiday_rule;
     rules->makeup_workday_rule = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_makeup_workday_rule : model->makeup_workday_rule;
+    rules->autonomy_policy = kind != PTC_UI_PLAN_SAVED && model->draft_autonomy_policy.daily_buffer_minutes > 0 ? model->draft_autonomy_policy : model->autonomy_policy;
+    rules->dock_policy = kind != PTC_UI_PLAN_SAVED && model->dock_dirty ? model->draft_dock_policy : model->dock_policy;
+    rules->eye_care = kind != PTC_UI_PLAN_SAVED && model->eye_care_dirty ? model->draft_eye_care_policy : model->eye_care_policy;
+    rules->bedtime = kind != PTC_UI_PLAN_SAVED && model->bedtime_dirty ? model->draft_bedtime_policy : model->bedtime_policy;
 }
 
 PtcEffectiveRule ptc_ui_plan_rule(const PtcUiModel *model, PtcUiPlanKind kind)
 {
     PtcRules rules;
-    build_plan_rules(model, kind, &rules);
+    ptc_ui_build_plan_rules(model, kind, &rules);
     return ptc_rules_resolve(&rules, model->day_index, ptc_weekday_from_day_index(model->day_index));
 }
 
@@ -302,10 +364,10 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
         return;
     }
     is_today = (day_index == model->day_index);
-    build_plan_rules(model, kind, &rules);
+    ptc_ui_build_plan_rules(model, kind, &rules);
     weekday = ptc_weekday_from_day_index(day_index);
     decision->effective = ptc_rules_resolve(&rules, day_index, weekday);
-    day_type = ptc_holiday_calendar_classify(day_index, &calendar_covered);
+    day_type = ptc_holiday_calendar_classify_in(model->calendar, day_index, &calendar_covered);
     scheduled_matches = rules.scheduled_override.enabled &&
         day_index >= rules.scheduled_override.start_day_index &&
         day_index <= rules.scheduled_override.end_day_index;
@@ -390,19 +452,46 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                               sizeof(decision->final_reason), final_args, 1);
 
     if (is_today) {
-        PtcUiTextId bedtime_id;
         if (!model->bedtime_policy.enabled) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_OFF;
+            copy_ui_text(PTC_UI_T_BEDTIME_STATUS_OFF, decision->bedtime, sizeof(decision->bedtime));
         } else if (model->bedtime_active && model->bedtime_skipped) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_SKIPPED;
+            copy_ui_text(PTC_UI_T_BEDTIME_STATUS_SKIPPED, decision->bedtime, sizeof(decision->bedtime));
         } else if (model->bedtime_active) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_ACTIVE;
+            char time_text[64];
+            if (model->bedtime_end_minute < model->bedtime_start_minute) {
+                snprintf(time_text, sizeof(time_text), ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
+                    (unsigned int)(model->bedtime_start_minute / 60),
+                    (unsigned int)(model->bedtime_start_minute % 60),
+                    (unsigned int)(model->bedtime_end_minute / 60),
+                    (unsigned int)(model->bedtime_end_minute % 60));
+            } else {
+                snprintf(time_text, sizeof(time_text), "%02u:%02u ~ %02u:%02u",
+                    (unsigned int)(model->bedtime_start_minute / 60),
+                    (unsigned int)(model->bedtime_start_minute % 60),
+                    (unsigned int)(model->bedtime_end_minute / 60),
+                    (unsigned int)(model->bedtime_end_minute % 60));
+            }
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "%s (%s)",
+                ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_2), time_text);
         } else if (model->bedtime_next_available) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_WAITING;
+            char time_text[64];
+            if (model->bedtime_next_end_minute < model->bedtime_next_start_minute) {
+                snprintf(time_text, sizeof(time_text), ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
+                    (unsigned int)(model->bedtime_next_start_minute / 60),
+                    (unsigned int)(model->bedtime_next_start_minute % 60),
+                    (unsigned int)(model->bedtime_next_end_minute / 60),
+                    (unsigned int)(model->bedtime_next_end_minute % 60));
+            } else {
+                snprintf(time_text, sizeof(time_text), "%02u:%02u ~ %02u:%02u",
+                    (unsigned int)(model->bedtime_next_start_minute / 60),
+                    (unsigned int)(model->bedtime_next_start_minute % 60),
+                    (unsigned int)(model->bedtime_next_end_minute / 60),
+                    (unsigned int)(model->bedtime_next_end_minute % 60));
+            }
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "%s", time_text);
         } else {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_NO_WINDOW;
+            copy_ui_text(PTC_UI_T_BEDTIME_STATUS_NO_WINDOW, decision->bedtime, sizeof(decision->bedtime));
         }
-        copy_ui_text(bedtime_id, decision->bedtime, sizeof(decision->bedtime));
         if (model->daily_buffer_minutes == 0) {
             copy_ui_text(PTC_UI_T_AUTONOMY_STATUS_OFF, decision->autonomy, sizeof(decision->autonomy));
         } else if (model->daily_buffer_claimed) {
@@ -423,10 +512,20 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                 ? PTC_UI_T_BEDTIME_SOURCE_SPECIAL : bt.source == PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY
                 ? PTC_UI_T_BEDTIME_SOURCE_HOLIDAY : bt.source == PTC_BEDTIME_SOURCE_MAKEUP_WORKDAY
                 ? PTC_UI_T_BEDTIME_SOURCE_WORKDAY : PTC_UI_T_BEDTIME_SOURCE_WEEKLY;
-            char time_text[8];
-            snprintf(time_text, sizeof(time_text), "%02u:%02u",
-                (unsigned int)(bt.window.start_minute / 60),
-                (unsigned int)(bt.window.start_minute % 60));
+            char time_text[64];
+            if (bt.window.end_minute < bt.window.start_minute) {
+                snprintf(time_text, sizeof(time_text), ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
+                    (unsigned int)(bt.window.start_minute / 60),
+                    (unsigned int)(bt.window.start_minute % 60),
+                    (unsigned int)(bt.window.end_minute / 60),
+                    (unsigned int)(bt.window.end_minute % 60));
+            } else {
+                snprintf(time_text, sizeof(time_text), "%02u:%02u ~ %02u:%02u",
+                    (unsigned int)(bt.window.start_minute / 60),
+                    (unsigned int)(bt.window.start_minute % 60),
+                    (unsigned int)(bt.window.end_minute / 60),
+                    (unsigned int)(bt.window.end_minute % 60));
+            }
             PtcUiTextArg args[] = {
                 PTC_UI_TEXT_STRING("time", time_text),
                 PTC_UI_TEXT_STRING("source", ptc_ui_text(source_id))
@@ -628,6 +727,7 @@ PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model)
     empty.rule.minutes = 60;
     if (!model) return empty;
     ptc_rules_default(&rules);
+    rules.calendar = model->calendar;
     memcpy(rules.week, model->current_week, sizeof(rules.week));
     rules.today_override.present = false;
     rules.scheduled_override = model->scheduled_override;

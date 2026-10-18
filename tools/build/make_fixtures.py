@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import json
+
+from tools.lib.ptc_token_v1 import (
+    TOKEN_ACTION_ADD_TODAY_MINUTES,
+    TOKEN_VERSION,
+    TokenPayload,
+    encode_token,
+)
+
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / "tests" / "fixtures" / "token_v1_fixture.json"
+
+
+def main() -> int:
+    device_id = "test-device"
+    secret = "test-secret"
+    cases = [
+        {
+            "name": "valid_30min",
+            "minutes": 30,
+            "day_index": 2380,
+            "nonce": 4660,
+            "expect": "ok",
+        },
+        {
+            "name": "over_limit_300min",
+            "minutes": 300,
+            "day_index": 2380,
+            "nonce": 4661,
+            "expect": "minutes_exceed_limit",
+        },
+    ]
+    for case in cases:
+        payload = TokenPayload(
+            version=TOKEN_VERSION,
+            action=TOKEN_ACTION_ADD_TODAY_MINUTES,
+            minutes=case["minutes"],
+            day_index_since_2020=case["day_index"],
+            nonce=case["nonce"],
+        )
+        case["code"] = encode_token(payload, device_id, secret)
+
+    fixture = {
+        "version": 1,
+        "device_id": device_id,
+        "grant_secret": secret,
+        "max_add_minutes": 240,
+        "cases": cases,
+    }
+    rendered = json.dumps(fixture, ensure_ascii=False, indent=2) + "\n"
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    # Tests run in a Linux container against the Windows-mounted checkout. A
+    # byte-for-byte rewrite would turn a CRLF checkout into LF and make Git
+    # report a tracked modification even when the normalized fixture is
+    # unchanged. Preserve the existing file and its checkout line endings.
+    if not OUT.is_file() or OUT.read_text(encoding="utf-8") != rendered:
+        OUT.write_text(rendered, encoding="utf-8", newline="\n")
+    print(OUT)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

@@ -2,6 +2,7 @@
 .idea/
 .vscode/
 .agents/
+.workbuddy-ai/memory/
 *.iml
 *.swp
 *.tmp
@@ -49,6 +50,11 @@ node_modules/
 /companion/overlay/pctc.ovl
 /sysmodule/build/
 /sysmodule/build-device-lab/
+/sysmodule/build-pctl-capture/
+/sysmodule/pctl-capture.elf
+/sysmodule/pctl-capture.npdm
+/sysmodule/pctl-capture.nso
+/sysmodule/pctl-capture.nsp
 /sysmodule/pctc-sysmodule.elf
 /sysmodule/pctc-sysmodule.npdm
 /sysmodule/pctc-sysmodule.nso
@@ -65,3 +71,14 @@ node_modules/
 /device_lab/overlay/playwise-device-lab.elf
 /device_lab/overlay/playwise-device-lab.nacp
 /device_lab/overlay/playwise-device-lab.ovl
+
+# Device Lab evidence pulled from a test console (device_lab_roundtrip pull / input smoke)
+/device-reports/
+
+/usage_probe/build/
+/usage_probe/*.elf
+/usage_probe/*.nro
+/usage_probe/*.nso
+/usage_probe/*.nsp
+/usage_probe/*.npdm
+/usage_probe/*.nacp

@@ -57,6 +57,8 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
     PtcCompanionStatus status;
     bool ipc_connected;
     if (!client || !ptc_request_id_is_valid(request_id) || !json || strlen(json) > 4096) return PTC_COMPANION_BAD_ARGUMENT;
+    /* A lifecycle handoff must not reconnect or fall back into the SD queue. */
+    if (client->suspended) return PTC_COMPANION_QUIESCING;
     ptc_companion_transport_cancel(client);
     snprintf(client->active_request_id, sizeof(client->active_request_id), "%s", request_id);
     ipc_connected = client->ipc && client->ipc->connect && client->ipc->connect(client->ipc_ctx);
@@ -137,9 +139,16 @@ void ptc_companion_transport_cancel(PtcCompanionTransportClient *client)
     client->elapsed_ms = 0;
 }
 
+void ptc_companion_transport_set_suspended(PtcCompanionTransportClient *client, bool suspended)
+{
+    if (!client) return;
+    if (suspended) ptc_companion_transport_cancel(client);
+    client->suspended = suspended;
+}
+
 bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient *client)
 {
-    return client && client->ipc && client->ipc->connect && client->ipc->connect(client->ipc_ctx) &&
+    return client && !client->suspended && client->ipc && client->ipc->connect && client->ipc->connect(client->ipc_ctx) &&
         client->ipc->notify_storage_changed && client->ipc->notify_storage_changed(client->ipc_ctx);
 }
 
@@ -268,6 +277,26 @@ PtcCompanionStatus ptc_companion_transport_submit_set_autonomy_policy(PtcCompani
     return ptc_companion_transport_submit_json(client, request_id, json);
 }
 
+PtcCompanionStatus ptc_companion_transport_submit_set_eye_care_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcEyeCarePolicy *policy)
+{
+    char json[512];
+    int written = ptc_companion_set_eye_care_policy_request_json(
+        json, sizeof(json), request_id, created_at, policy);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_skip_eye_care_break(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint64_t break_id)
+{
+    char json[512];
+    int written = ptc_companion_skip_eye_care_break_request_json(
+        json, sizeof(json), request_id, created_at, break_id);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
 PtcCompanionStatus ptc_companion_transport_submit_set_bedtime_policy(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately)
 {
@@ -317,6 +346,24 @@ PtcCompanionStatus ptc_companion_transport_submit_overlay_ready(PtcCompanionTran
     char json[768];
     int written = ptc_companion_overlay_ready_request_json(
         json, sizeof(json), request_id, created_at, release_id, boot_id, environment_fingerprint);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_set_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcDockPolicy *policy)
+{
+    char json[512];
+    int written = ptc_companion_set_dock_policy_request_json(json, sizeof(json), request_id, created_at, policy);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_waive_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint16_t day_index)
+{
+    char json[512];
+    int written = ptc_companion_waive_dock_policy_request_json(json, sizeof(json), request_id, created_at, day_index);
     if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }

@@ -9,9 +9,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
-sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(ROOT))
 
-from ptc_token_v1 import TokenError, decode_token, verify_token
+from tools.lib.ptc_token_v1 import TokenError, decode_token, verify_token
 
 
 def assert_equal(actual, expected, label: str) -> None:
@@ -32,7 +32,7 @@ def main() -> int:
     fixture_path = ROOT / "tests" / "fixtures" / "token_v1_fixture.json"
     fixture_before = fixture_path.read_bytes()
     fixture_mtime_before = fixture_path.stat().st_mtime_ns
-    subprocess.run([sys.executable, str(TOOLS / "make_fixtures.py")], check=True)
+    subprocess.run([sys.executable, str(TOOLS / "build" / "make_fixtures.py")], check=True)
     assert_equal(fixture_path.read_bytes(), fixture_before, "fixture bytes remain unchanged")
     assert_equal(fixture_path.stat().st_mtime_ns, fixture_mtime_before, "fixture mtime remains unchanged")
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))

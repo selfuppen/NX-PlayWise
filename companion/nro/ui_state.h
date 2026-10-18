@@ -2,7 +2,29 @@
 #define PTC_COMPANION_UI_STATE_H
 
 #include "ui_model.h"
+#include "../policy_status.h"
+
+void ptc_ui_project_policy_status(const PtcUiModel *model, int64_t now,
+    int local_day_index, int second_of_day, PtcPolicyStatus *out);
+
+typedef struct {
+    bool fresh, usage_available;
+    int usage_progress_percent;
+    char quota[96], usage[128], buffer[160], eye[160];
+    PtcUiTextId eye_badge;
+    PtcPolicyDisplayState eye_state;
+    PtcPolicyStatus policies;
+} PtcUiHomeDetailsStatus;
+
+void ptc_ui_project_home_details_status(const PtcUiModel *model, int64_t now,
+    uint16_t local_day_index, int second_of_day, PtcUiHomeDetailsStatus *out);
+
 #include "ui_input_state.h"
+
+void ptc_ui_open_support_guide(PtcUiModel *model);
+void ptc_ui_support_guide_change_page(PtcUiModel *model, int direction);
+
+int ptc_ui_holiday_calendar_nearest_page(const PtcUiModel *model, int *distance);
 
 typedef enum {
     PTC_UI_PLAN_IMPACT_CURRENT = 0,
@@ -50,6 +72,8 @@ typedef enum {
 } PtcUiQuotaRecheckDecision;
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
+bool ptc_ui_eye_care_dirty(const PtcUiModel *model);
+const char *ptc_ui_eye_care_plan_badge_label(const PtcUiModel *model);
 const char *ptc_ui_settings_status_label(const PtcUiModel *model);
 PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model);
 void ptc_ui_format_custom_shortcut_hint(
@@ -67,6 +91,12 @@ PtcBedtimePolicy ptc_ui_bedtime_section_policy(const PtcUiModel *model,
     PtcUiBedtimeSection section);
 void ptc_ui_bedtime_discard_section(PtcUiModel *model, PtcUiBedtimeSection section);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
+void ptc_ui_setup_sync(PtcUiModel *model);
+void ptc_ui_setup_record_issue(PtcUiModel *model, PtcUiSetupIssueKind kind, int code);
+bool ptc_ui_setup_has_issues(const PtcUiModel *model);
+bool ptc_ui_setup_reference_matches(const PtcUiModel *model);
+bool ptc_ui_parent_read_only_action(const PtcUiModel *model, int index);
+bool ptc_ui_setup_diagnostic_json(const PtcUiModel *model, char *out, size_t size);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
 void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint16_t day_index, int64_t now,
                                 PtcUiTodayDecision *decision);
@@ -84,13 +114,20 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
 int ptc_ui_weekday_for_display_slot(int slot);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
+bool ptc_ui_open_today_settings(PtcUiModel *model, int index);
+bool ptc_ui_return_today_settings(PtcUiModel *model);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
+int ptc_ui_preview_effective_add_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
 const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
     int index, int64_t now);
+void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
+    char *out, size_t out_size);
+void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
+    uint16_t local_day_index, int second_of_day, PtcUiTodayProjection *out);
 void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
     PtcUiQuotaRecheckSnapshot *out);
 PtcUiQuotaRecheckDecision ptc_ui_quota_recheck_decide(
@@ -105,6 +142,7 @@ void ptc_ui_project_time_status(
     int64_t now,
     PtcUiTimeProjection *out);
 void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+void ptc_ui_format_usage_history(const PtcUiModel *model, bool direct, char *out, size_t out_size);
 void ptc_ui_match_redemption_result(PtcUiModel *model);
 const char *ptc_ui_code_failure_guidance(int error_code);
 void ptc_ui_format_code(const char *code, char *out, size_t out_size);
@@ -147,9 +185,11 @@ void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertic
 int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
+void ptc_ui_open_setup_pctl_help(PtcUiModel *model);
 bool ptc_ui_scheduled_dirty(const PtcUiModel *model);
 void ptc_ui_discard_scheduled(PtcUiModel *model);
 void ptc_ui_reconcile_scheduled_result(PtcUiModel *model, const PtcScheduledOverride *draft, bool preserve);
+void ptc_ui_build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRules *rules);
 PtcEffectiveRule ptc_ui_plan_rule(const PtcUiModel *model, PtcUiPlanKind kind);
 const char *ptc_ui_effective_rule_label(PtcRuleSource source);
 void ptc_ui_format_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
@@ -169,5 +209,10 @@ void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const cha
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
 bool ptc_ui_safety_action_visible(const PtcUiModel *model, int index);
 const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
+
+bool ptc_ui_dock_dirty(const PtcUiModel *model);
+void ptc_ui_format_dock_usage(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+void ptc_ui_format_dock_preview(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+bool ptc_ui_dock_save_requires_hold(const PtcUiModel *model, int64_t now);
 
 #endif

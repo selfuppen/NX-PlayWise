@@ -7,12 +7,19 @@
 #include "../platform/pctl.h"
 #include "../platform/storage.h"
 #include "../platform/time_provider.h"
+#include "../platform/calendar_store.h"
+#include "../platform/operation_mode.h"
 
 typedef struct {
     char app_root[96];
     PtcStorage *storage;
+    bool (*config_random)(void *ctx, uint8_t *out, size_t size);
+    void *config_random_ctx;
     PtcPctl *pctl;
     PtcTimeProvider *time_provider;
+    PtcOperationModeProvider *operation_mode_provider;
+    int64_t dock_last_sample_at;
+    bool dock_boot_sampled;
     uint32_t scan_backoff_ms;
     uint16_t last_minute_day_index;
     uint16_t last_minute_of_day;
@@ -22,16 +29,18 @@ typedef struct {
     bool startup_recovery_checked;
     bool disable_initialized;
     bool disable_present;
+    bool quiescing;
     char boot_id[24];
     char config_cache_text[4096];
     char rules_cache_text[6144];
-    char state_cache_text[2048];
+    char state_cache_text[4096];
     PtcStorageMetadata config_meta;
     PtcStorageMetadata rules_meta;
     PtcStorageMetadata state_meta;
     bool config_cache_valid;
     bool rules_cache_valid;
     bool state_cache_valid;
+    PtcCalendarRuntime calendar_runtime;
 } PtcSysmodule;
 
 void ptc_sysmodule_init(

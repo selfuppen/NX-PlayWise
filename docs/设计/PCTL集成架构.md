@@ -1,0 +1,143 @@
+[文档索引](../README.md)
+
+<div align="center">
+
+  [English](PCTL_ARCHITECTURE.md) | [简体中文](PCTL集成架构.md)
+
+</div>
+
+# PCTL 集成架构
+
+PCTL 是 Nintendo Switch 的系统家长控制服务。PlayWise 标准分发构建管理 Nintendo 的主机使用额度、系统计时和提醒；它不把私有强制锁屏、暂停或退出作为产品承诺。官方说明明确指出，即使没有运行游戏，只要正在使用主机，时间仍会累计；状态确认以 Nintendo 官方家长控制已开启为准，不要求额外的暂停软件开关；到时限制效果须以真机观察为准。参见[任天堂计时说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)。
+
+## 隔离边界
+
+```text
+主机应用 / 游戏内浮窗
+        │ Release request
+        ▼
+后台服务（sysmodule）安全状态机
+        │ transaction + confirmation
+        ▼
+PCTL adapter
+        │ 短时 pctl / pctl:s session
+        ▼
+Horizon PCTL
+```
+
+- NRO 与 Overlay 不直接访问 PCTL，也不决定 request 是否安全。
+- `common/` 不包含 libnx、SD 路径或 0x44 raw layout。
+- `platform/switch/pctl_adapter.c` 是私有命令和布局的唯一平台边界。
+- host 测试使用 `PtcPctlStub` 注入写入、观察和恢复失败。
+- Release 不持久化 capability matrix，也不提供 probe 请求。
+
+## 启动预检与接管
+
+首次启动在任何 setup 写入前执行只读检查：
+
+1. release manifest 与编译版本一致；
+2. `set:sys` 可读取 HOS、firmware digest 和产品型号；
+3. 能确认是否运行于 Atmosphère；
+4. PCTL service 可初始化并读取状态；
+5. settings snapshot 长度、hash 和 layout 符合当前协议；
+6. 没有无法恢复的启动遗留事务。
+
+只有同时命中 OLED、HOS 22.5.0、Atmosphère 1.11.2 的运行环境基线才记为 `verified`；其他结构正常组合记为 `accepted_unknown`，需要家长确认。Atmosphère 由 `spl:` 读取 Exosphere 配置项 `65000` 并解析版本，环境 JSON 同时保存检测来源、原始值和版本；服务不可用或值非法时只记为未知，不得伪造为 Atmosphère。snapshot、layout、启动遗留事务、PCTL 读取或 manifest 失败进入只读 `protection`，标准分发构建不允许绕过。
+
+家长最终确认后才：
+
+- 原子保存 `backups/install_pctl_snapshot.json`，且永不覆盖现有有效 snapshot；
+- 再次确认当前 `0x44`、timer、今日总额度和剩余时长仍与只读采集结果一致；
+- 把当前今日策略保存为仅当天有效的接管规则，并直接激活自动控制；
+- 不把今日临时改成不限时，也不调用私有命令 `1451`。若验证期间状态发生变化，则保留现状并拒绝接管。
+
+## 普通写入事务
+
+设置今日总额度、快速加时、今日不限时、清除今日额度调整和 Enforce 共用恢复框架：
+
+```mermaid
+flowchart LR
+    A["验证请求与安全门禁"] --> B["持久化 PCTL 与文件前像"]
+    B --> C["应用目标并回读设置"]
+    C --> D["按需单次 1451 fallback 后再回读"]
+    D -->|"确认"| E["提交 state/result/nonce"]
+    D -->|"等待传播"| F["applied_pending_confirmation"]
+    F -->|"30 秒内确认"| E
+    F -->|"超时"| G["精确回滚"]
+    G -->|"无法证明恢复"| H["保护模式 + disable.flag"]
+```
+
+`disable.flag` 只阻止新的 PCTL 控制写入。PCTL status read、诊断和恢复继续工作，因此支持页在故障时仍可用。
+
+Enforce、跨日、启动恢复、未来规则修改和今日规则未变化都不得进入 `1451` fallback。只有家长/孩子正在进行的即时修改，在目标设置已精确生效但限时 timer 仍未运行，或加时/不限时仍未解除瞬时限制时，才允许调用一次；设置不精确、fallback 或再次回读失败均按已有 snapshot 精确回滚。`1455 restricted_now` 只描述系统瞬时限制状态，不能表示提示是否可见，也不能证明软件暂停或退出。
+
+状态读取优先通过低权限 `pctl` 会话获取运行时字段。绑定环境的现场记录显示 `1453/1454` 可用时，`1455` 仍可能只在 `pctl:s` 上可用；因此适配层在低权限查询失败后，只复用本次读取私有设置所需的短时 `pctl:s` 会话补读 `1455`。这不是放宽生效条件：两条通道都不可用时 `restricted_now` 仍为未知，即时写入仍须失败并按 snapshot 精确回滚。
+
+## 私有命令证据
+
+当前本机 libnx 源码不提供 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSpentTimeForTest (1952)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装。不得用“libnx 没有定义”推断参数单位或 0x44 raw 布局。
+
+2026-08-30 对本地 Atmosphère checkout `8e96a489033b8597ec76c0055373642848d93af0`（`1.11.2-1-g8e96a4890`）的已跟踪源码复核显示：boot2 在普通和维护模式启动列表中把 `SystemProgramId::Pctl`（`0x010000000000002E`）作为常规系统程序启动；`stratosphere/` 没有 PCTL sysmodule 重实现，`ams_mitm` 的模块注册表没有 PCTL MITM，`libstratosphere` 也没有 PCTL IPC 接口目录。用于复核的直接入口是 `libraries/libstratosphere/source/boot2/boot2_api.board.nintendo_nx.cpp`、`stratosphere/ams_mitm/source/amsmitm_module_management.cpp` 和 `libraries/libstratosphere/include/stratosphere/ncm/ncm_system_content_meta_id.hpp`。
+
+该源码结论只支持“上述 Atmosphère 版本没有在 CFW 层主动替换或拦截 PCTL”。它不证明 Nintendo PCTL 的私有命令签名、参数单位、0x44 raw 布局、计时语义或限制可见性，也不能证明其他 Atmosphère commit/tag 的行为相同。Atmosphère 源码可用于调查 boot2、SM/PM 和运行环境兼容性，但所有 PCTL 私有行为仍只能依据下述仓库协议、确定性测试和绑定环境的真机 A/B 证据。
+
+`1454` 返回带符号剩余时长。2026-10-13至14日绑定 OLED / HOS22.5.0 / Atmosphère1.11.2 的取证已支持1952作为今日主机正常可用时间累计：游戏、HOME和设置累计，受限不可用及真休眠冻结，正常同日重启和新PlayWise首次接管保留历史，本次自然午夜归零。标准adapter复用短时pctl:s会话限频读取1952用于结果显示，加时另通过fresh接口读取独立累计；原始取证和边界见[主线探测记录](../调研/历史调查/2026-10/PCTL1952主线探测计划.md)，功能迁移风险见[分析报告](../调研/专题分析/PCTL1952功能影响分析.md)。这不是纯游戏前台或所有亮屏时间，也不证明所有写入/回滚、PIN解除、底座切换或各健康功能资格。累计失败保持独立unknown，不回退到钳制剩余估算；快速加时、离线码和缓冲已采用新读累计与向上取整基数，护眼/电视已通过独立来源epoch迁移消费基线，每日历史已按v1估算与v2直接累计分别存储、聚合，保留原始捕获时间、最后可靠下界及最近读取质量；全天覆盖、手动改时钟/时区和1440代理移除仍需独立资格验证。
+
+2026-08-20 的真机诊断暴露了后台在跨日同步时主动调用 `1451 StartPlayTimer` 的风险。标准分发的每日 Enforce 因而只同步并回读当天设置，绝不激活 timer。这里的风险不是“HOME 不应计时”——HOME 等亮屏使用计入额度本来就是 Nintendo 官方语义——而是无人操作、待机或跨日同步时由后台错误开始一轮计时。待机是否排除、唤醒后如何恢复必须由 `timer_activation_ab` 在绑定的硬件/HOS 上单独证明。
+
+2026-08-25 的 Device Lab run `1787669306-5331fd74a2626e81` 沉淀为历史证据：原始报告的六个 phase 项均非空，`restriction_effect.after.1455.value=true`，并且最终 `restoration.proved=true`、`restore_verdict=exact_restore_proved`。原始附件仍保持 `manual_observation:null`；操作者事后补充确认，真机在第六阶段看到时间限制提示，游戏实际暂停或挂起。该人工见证与机器报告分别保存，不回写历史 JSON，也不把旧报告提升为 complete；正式资格仍需当前 HEAD 的聚焦模式重新记录 `restriction_visible + paused_or_suspended`。
+
+同一 run 的 `home_started` 在 `1454` 已保持 0 时仍记录到 `1952` 增长 75 秒，事实性结论应为 `home_usage_counted`，与 Nintendo 的主机使用时间口径一致；它同时说明 `1952` 不能直接解释为游戏前台游玩时长。历史 JSON 中的 `unsafe_for_home_start` 仅保留解析兼容，不再作为新报告结论。旧报告只在限制阶段末尾读取一次 `1457`，结果为 `known=true, signaled=false`，不能用于判断提示或暂停。
+
+2026-08-26 的增强 run `1787681083-b411b3488b91fee0` 使用 `2.0.2-alpha+d1fa4dcdfa11` 完成六个自动阶段并得到 `exact_restore_proved`。限制阶段 `1455=true`，timer 从 true 变为 false，`1952` 和负值 `1454` 均只变化约 1 秒；操作者补充确认提示可见且游戏实际暂停或挂起。原始附件保持 `manual_observation:null`、`complete:false` 且永不回写；该见证可信但位于旧报告之外，正式资格仍以新报告为准。
+
+聚焦 run `1788368835-3e64cea6860e4c1a` 已在报告内正式记录 `restriction_visible + paused_or_suspended`：限制阶段 `1455` 从 false 变为 true，1457 连续检查 131 次未触发，写入只涉及预期头部 offset `0、1、2` 与当天 offset `47、49`，最终得到 `exact_restore_proved`。这补强了限制提示和暂停效果的行为证据，但报告的 `environment.runtime` 为 null，构建身份还带有 `source_dirty:true` 和 unknown 容器，因此不能进入资格矩阵。Device Lab 后续在会话开始前强制读取 runtime/build 身份文件，报告重建不再以 null 代替缺失身份；资格工具也把缺失 runtime 作为明确错误。
+
+该 run 在 15 秒内检查 1457 共 131 次且始终未触发，但系统限制提示仍出现，直接证明 1457 不是提示出现或限制成功的必要条件。它只保留原始 Result、检查次数和首次触发时间，不参与完整性、可见性或产品资格。1458 的 raw/libnx 对照为 `comparable:true, value_equal:true`。原始全零 0x44 写入后变化为头部字节 `0、1、2` 和当日字节 `39、41`：前者与当前适配器显式写入的 `0x0101/0x0001` 完全一致，属于实现预期头初始化而非意外变化，但不据此推断更深层 HOS 语义。由于基线全零，游戏前台、挂起和待机三个静态阶段不足以形成生命周期结论；后续 A/B 模式强制要求非空 Nintendo 周计划。
+
+私有行为只能依据：
+
+- 仓库协议和固定 layout adapter；
+- host 端已知向量与失败注入；
+- 当前候选构建产物在明确记录的机型/HOS 上进行 A/B 真机验证。
+
+版本或 firmware digest 变化时，即使结构预检通过，也只能由家长接受为未知兼容；它不自动成为新的已验证基线。
+
+### 能力探测证据（capability_probe，2026-10-11）
+
+以下为 `tools/lab/capability_probe.py` 在一台绑定测试机（Nintendo Switch OLED / HOS 22.5.0 / Atmosphère 1.11.2）上的探测结果。该工具只采集不判读：经 FTP 把 `lab_*` 请求写入 Lab sysmodule 的 `inbox/pending` 驱动会话，用 sys-botbase `pixelPeek` 抓图，全程不提交 `lab_observation`、不封存判定、不走资格门禁。因此下列为**探测证据**，不等于当前 HEAD 的资格，正式资格仍需 `verify_device_qualification` 的权威流程。
+
+- **待机停止计时**：同一次 `timer_activation_ab`，`ab_home_awake` 亮屏 90 秒 → `1454` 剩余 −90 秒（1:1 扣时）；`ab_sleep_wake` 睡眠约 90 秒 → 剩余仅 −4 秒（入睡前的亮屏零头）。即待机不累计当日额度，直接支持“无人操作只同步设置、不主动启动计时”的边界。设备二元判据 `sleep_excluded` 要求窗口内严格零变化（`lab_session.c` 的 `remaining_delta==0 && spent_delta==0`），−4 秒会记为 `inconclusive`；结论以原始 `remaining_ns` delta（−4s ≪ −90s）为准，而非该二元标志。
+- **限制生效 = 提示 + 暂停**：`restriction_quick` 向当天写 BLOCKED 后，`1455` 由 false 变 true、`1454` 剩余转负，Nintendo 官方“今日无法继续游戏”遮罩出现，且**游戏音频暂停**（`restriction_visible + paused_or_suspended`）。`1457` 轮询 122 次从未 signaled，再次确认提示与暂停不依赖 `1457`。
+- **规避 1451 StartPlayTimer**：`ab_limited/grant/unlimited_settings_only` 三种日常策略均为 settings-only 即 runtime-ready（`fallback.called=false`），无任何一次触发 1451 fallback。
+- `0x44` 同值写入成功并逐字节精确还原；`1006/1031/1035/1457/1458` raw 与 libnx `comparable` 且相等。
+- **就寝/护眼求值（写入+求值探测）**：`--scenario bedtime`/`eye_care` 为写入型探测（会改设备策略，结束自动关闭，不含在 `all`）——确认前置、写 `set_bedtime_policy`/`set_eye_care_policy`、读 `status` 证明被接受并求值（`restriction_reasons.bedtime=true`、`eye_care.phase=playing`）。Lab 构建编译掉自动 `enforce_tick`（`sysmodule_core.c:632`），故**可见拦截/休息浮窗不在 lab 下出现**；二者经与 `restriction_quick` 相同的 PCTL BLOCKED 执行（已证），其可见自动触发只在标准构建上由人工签署门禁验收（bedtime 的 `verify_bedtime_report`、护眼的 `verify_eye_care_report`，见[测试指南](../开发/测试指南.md)）。
+
+## Device Lab
+
+`raw_block`、`suspend`、危险 capability probe、引导式生命周期取证和故障注入位于独立 Device Lab：
+
+- Title ID `4200000000BD23F0`；
+- Lab sysmodule 提供 IPC `pwtl:u`，但当前 Device Lab Overlay 固定通过 SD 请求队列通信，不直接连接该服务；
+- SD 根目录 `sdmc:/switch/playwise-device-lab`；
+- NRO 以中文状态向导提供安全进入与恢复入口；专用 Overlay 默认提供持久化四项资格批次，并保留聚焦、Timer 激活 A/B 和高级六阶段自由模式；
+- package 默认无 `boot2.flag`；
+- 不由标准分发目标 `make packages` 构建。
+
+NRO 启动切换前先只读探测 `pm:shell` 并确认源 PID。可用时，源 sysmodule 进入通用 quiesce、完成当前串行操作且确认没有活跃 recovery，NRO 再提交 boot journal；只有源 PID 消失后才启动目标，并核对新 PID、boot ID、profile、release ID 的 runtime-ready 身份。返回正常后台使用同一流程；标准后台原本未启用时只退出 Lab。任何步骤无法证明安全都会保留 journal 并回退重启，因此理想资格批次首尾均无需重启，回退路径整批最多首尾各一次，且任何时刻不会主动启动第二个 PCTL owner。schema v2 boot journal 继续兼容 v1 及 `.tmp` 代际恢复规则。
+
+NRO 的状态检查只读取现有 flag、journal 与 session；真正切换仍由原事务函数完成。恢复等待必须异步刷新页面，只有 `exact_restore_proved` 或从未创建过会话时才允许恢复正常 boot flag。中文错误页先说明是否发生过更改和下一步，再按需展开结果码、事务阶段、请求 ID 与路径。
+
+专用 Overlay 只通过 Lab SD 根目录的固定请求队列提交状态机请求。默认资格批次固定依次执行 Timer 激活 A/B、旧实验槽位 `pause_on_game_a`、`pause_on_game_b`、`pause_off_game_b`；开始时记录旧字段 `original_pause_state`，结束时提示核对原始设置。这些字段来自旧的暂停开关假设，不代表当前主机存在额外的暂停软件设置，也不属于标准状态确认要求；前置条件无法在真机证明时不得虚填或宣告批次资格通过。每份报告完成后可直接继续下一项或关闭浮窗转 NRO 恢复后台，不再切换 flag。失败观察保留报告并重试当前槽位；关闭 Overlay、睡眠或之后重新进入 Lab 都从 `campaign.json` 恢复。自由 `restriction_quick`、`timer_activation_ab` 与高级 `full` 仍可选择。真实限制阶段只在用户长按确认后执行，并设定独立的 15 秒恢复期限；每次会话都独立保存并逐字节恢复完整 `0x44` 和 timer。
+
+限制阶段自动恢复成功后，会话保持 `awaiting_observation`：恢复请求不能跳过或清除待提交的人工观察，Overlay 在此状态隐藏立即恢复入口，NRO 只引导操作者返回浮窗。人工观察分别记录提示可见性和游戏实际继续、暂停/挂起、退出或无法确定；`restriction_visible` 只证明提示可见。聚焦模式要求 1/1、完整模式要求 6/6，且两层观察与 `exact_restore_proved` 均齐全时才发布正式报告；A/B 模式要求 schema v2 的 7/7 阶段和精确恢复，不要求无关的限制人工观察。报告的 `summary.complete` 只描述流程完整性；A/B 激活证据和完整模式生命周期证据分别由 `activation_evidence_complete` 与 `lifecycle_evidence_complete` 表达，不适用时为 `null`。全零基线的完整报告可以完成采集和恢复，但生命周期证据必须保持 `false`。schema v1 只保留为历史证据，不能晋级当前候选。
+
+Overlay 的普通阶段、观察选项、重试和立即恢复同时支持手柄与触摸；限制阶段的两秒确认不接受触摸。Device Lab 构建固定加载 Switch 简体中文共享字体，不依赖当前系统语言。损坏的 `session.json` 不得按“尚未开始”处理，界面必须停止新阶段并引导保留现场。
+
+报告把命令可调用性、wire shape 与产品语义分开。`1006/1031/1035/1457/1458` 保存 raw/libnx 对照和 `comparable`；任一侧失败时相等判定固定为 false。sysmodule 在采集真实 HOS 版本后初始化 libnx 版本状态，再执行带版本门禁的公开 wrapper。`1451–1455`、`145601/195101`、Lab-only `1952` 保存原始值和 Result；限制阶段每 100 ms 非阻塞检查并锁存 `1457`，保存检查次数和首次触发单调时间，但这些 1457 数据仅作辅助取证。报告还保存阶段前后完整 `0x44` hex、目标星期、预期字节范围、全部变化 offset 与范围外变化 offset，并嵌入实际 `environment.json` 和 Device Lab `build.json`，从而把机型、HOS、固件摘要与候选构建绑定。Release adapter现为显示限频读取1952，并为加时独立新读；Lab原始报告与产品资格仍独立。任何 Lab 证据都不能直接作为标准分发构建的资格结果。
+
+2026-08-30 的源码对照绑定到本机已跟踪版本：libnx `dbcc1beafc6b47b5ffbeb8ba82463a7d45da40bb`、vendored libtesla 上游 `f766e9b607a05e9756843cbd62b3bfb98be1646c`、Atmosphère `8e96a489033b8597ec76c0055373642848d93af0`。构建 manifest 还必须记录 devkitA64、实际安装的 libnx 包版本、容器镜像标签及可得摘要、源码 commit 和 tracked dirty 状态；发布构建无法识别 libnx 时失败。候选默认 `qualification=pending`，只有无 tracked 修改的 commit、匹配报告和原包/二进制 SHA-256 的独立 `qualification.json` 才能晋级，晋级过程不得重新编译。
+
+新标准候选以 manifest `usage_contract:pctl1952_v1_proxy1440` 绑定独立累计与保留代理策略，完整发布门禁自动要求相同契约的 final 使用报告。报告绑定原标准 Zip、三个生产组件、规范化样本及原始附件哈希，晋级前重查证据；门禁同时检查真实超额基数/授权、短链累计连续性、自动恢复无新增1451和剩余原因不被释放。详情见 [PCTL1952候选验收](../开发/PCTL1952候选验收.md)。这是发布证据边界，未改变标准后台的1440策略、NPDM权限或任何真机 qualified 状态。
+
+2026-10-16新增 `pctl1952_v2_direct` 实现，前段v1策略及报告保持历史边界。v2合成真正不限时而不安装1440计数配额，护眼／非电视消费继续使用1952来源epoch；护眼仅在已确认原生不限时且未受限时不依赖timer=true，有限额度／临时解除／未知原生状态保留原保护。Enforce、规则写入、skip、日历及恢复共用基准目标。新门禁独立核对无代理生命周期、已停止标准原始流的端点／完整0x44和恢复行、自动1451及原因交接，不能借v1报告晋级。真实限时最大1440分钟、NPDM及服务权限不变；实际新候选采集前不作真机通过声明，见[分批计划](../开发/验收记录/2026-10/1952去代理/1952去代理与剩余测试分批计划-20261016.md)。

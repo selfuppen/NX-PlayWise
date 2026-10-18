@@ -46,6 +46,113 @@ static int next_bedtime_preset(const PtcBedtimeWindow *window)
 
 void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (handle_parent_auth_error_input(ui, down)) return;
+    if (ui->model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
+        int sel = ui->model.overlay_selection;
+        if (down & HidNpadButton_B) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            config_backup_action(ui, 15);
+        } else if (down & HidNpadButton_Y) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            open_config_backup(ui);
+        } else if (down & (HidNpadButton_L | HidNpadButton_ZL)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.config_backup_tab = 0;
+            if (sel != 15 && sel != 16 && sel != 17) ui->model.overlay_selection = 13;
+        } else if (down & (HidNpadButton_R | HidNpadButton_ZR)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.config_backup_tab = 1;
+            if (sel != 15 && sel != 16 && sel != 17) ui->model.overlay_selection = 14;
+        } else if (down & HidNpadButton_Up) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            if (ui->model.config_backup_tab == 0) {
+                if (sel == 16 || sel == 17) ui->model.overlay_selection = 15;
+                else if (sel == 13) ui->model.overlay_selection = 16;
+                else if (sel == 15) ui->model.overlay_selection = 13;
+                else ui->model.overlay_selection = 13;
+            } else {
+                if (sel == 16 || sel == 17) ui->model.overlay_selection = 15;
+                else if (sel == 0) ui->model.overlay_selection = 16;
+                else if (sel == 1) ui->model.overlay_selection = 17;
+                else if (sel == 2) ui->model.overlay_selection = 0;
+                else if (sel == 3) ui->model.overlay_selection = 1;
+                else if (sel == 4) ui->model.overlay_selection = 2;
+                else if (sel == 5) ui->model.overlay_selection = 3;
+                else if (sel == 6) ui->model.overlay_selection = 4;
+                else if (sel == 7) ui->model.overlay_selection = 5;
+                else if (sel == 8) ui->model.overlay_selection = 6;
+                else if (sel == 9) ui->model.overlay_selection = 8;
+                else if (sel == 10) ui->model.overlay_selection = 7;
+                else if (sel == 11) ui->model.overlay_selection = 9;
+                else if (sel == 12) ui->model.overlay_selection = 10;
+                else if (sel == 14) ui->model.overlay_selection = 11;
+                else if (sel == 15) ui->model.overlay_selection = 14;
+                else ui->model.overlay_selection = 14;
+            }
+        } else if (down & HidNpadButton_Down) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            if (ui->model.config_backup_tab == 0) {
+                if (sel == 16 || sel == 17) ui->model.overlay_selection = 13;
+                else if (sel == 13) ui->model.overlay_selection = 15;
+                else if (sel == 15) ui->model.overlay_selection = 16;
+                else ui->model.overlay_selection = 13;
+            } else {
+                if (sel == 16) ui->model.overlay_selection = 0;
+                else if (sel == 17) ui->model.overlay_selection = 1;
+                else if (sel == 0) ui->model.overlay_selection = 2;
+                else if (sel == 1) ui->model.overlay_selection = 3;
+                else if (sel == 2) ui->model.overlay_selection = 4;
+                else if (sel == 3) ui->model.overlay_selection = 5;
+                else if (sel == 4) ui->model.overlay_selection = 6;
+                else if (sel == 5) ui->model.overlay_selection = 7;
+                else if (sel == 6) ui->model.overlay_selection = 8;
+                else if (sel == 7) ui->model.overlay_selection = 10;
+                else if (sel == 8) ui->model.overlay_selection = 9;
+                else if (sel == 9) ui->model.overlay_selection = 11;
+                else if (sel == 10) ui->model.overlay_selection = 12;
+                else if (sel == 11 || sel == 12) ui->model.overlay_selection = 14;
+                else if (sel == 14) ui->model.overlay_selection = 15;
+                else if (sel == 15) ui->model.overlay_selection = 16;
+                else ui->model.overlay_selection = 14;
+            }
+        } else if (down & HidNpadButton_Left) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            if (sel == 17) ui->model.overlay_selection = 16;
+            else if (ui->model.config_backup_tab == 1) {
+                if (sel == 1) ui->model.overlay_selection = 0;
+                else if (sel == 3) ui->model.overlay_selection = 2;
+                else if (sel == 5) ui->model.overlay_selection = 4;
+                else if (sel == 7) ui->model.overlay_selection = 6;
+                else if (sel == 10) ui->model.overlay_selection = 9;
+                else if (sel == 12) ui->model.overlay_selection = 11;
+                else if (sel == 14) ui->model.overlay_selection = 10;
+            }
+        } else if (down & HidNpadButton_Right) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            if (sel == 16) ui->model.overlay_selection = 17;
+            else if (ui->model.config_backup_tab == 1) {
+                if (sel == 0) ui->model.overlay_selection = 1;
+                else if (sel == 2) ui->model.overlay_selection = 3;
+                else if (sel == 4) ui->model.overlay_selection = 5;
+                else if (sel == 6) ui->model.overlay_selection = 7;
+                else if (sel == 9) ui->model.overlay_selection = 10;
+                else if (sel == 11) ui->model.overlay_selection = 12;
+                else if (sel == 1 || sel == 3 || sel == 5 || sel == 7 || sel == 8 || sel == 10 || sel == 12) ui->model.overlay_selection = 14;
+            }
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            if (sel == 16) {
+                ui->model.config_backup_tab = 0;
+                ui->model.overlay_selection = 13;
+            } else if (sel == 17) {
+                ui->model.config_backup_tab = 1;
+                ui->model.overlay_selection = 14;
+            } else {
+                config_backup_action(ui, sel);
+            }
+        }
+        return;
+    }
     if (down & (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)) {
         ptc_audio_play(PTC_SE_FOCUS);
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
@@ -54,8 +161,23 @@ void handle_overlay_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_CANCEL);
     }
 
-    if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
+        if (down & (HidNpadButton_B | HidNpadButton_A)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & (HidNpadButton_L | HidNpadButton_Left)) {
+            ptc_audio_play(PTC_SE_STEP);
+            ptc_ui_support_guide_change_page(&ui->model, -1);
+        } else if (down & (HidNpadButton_R | HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_STEP);
+            ptc_ui_support_guide_change_page(&ui->model, 1);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+        ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             ui->model.overlay_title[0] = '\0';
             ui->model.overlay_body[0] = '\0';
@@ -203,8 +325,88 @@ void handle_overlay_input(UiState *ui, u64 down)
         else if (down & HidNpadButton_A) ptc_ui_discard_scheduled(&ui->model);
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS || ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
-        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        if (ui->model.rules_dialog_open) {
+            if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_X | HidNpadButton_Plus)) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ui->model.rules_dialog_open = false;
+            }
+            return;
+        }
+        if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_home_details_back(&ui->model);
+        } else if (down & HidNpadButton_X) {
+            if (ui->model.home_details_page == 0) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ptc_ui_home_details_activate(&ui->model, 0);
+            } else if (ui->model.home_details_page == 1) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ui->model.rules_dialog_open = true;
+            }
+        } else if (down & HidNpadButton_Y) {
+            if (!ui->waiting) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                submit_status(ui);
+            }
+        } else if (down & (HidNpadButton_ZL | HidNpadButton_ZR)) {
+            ptc_audio_play(PTC_SE_STEP);
+            ptc_ui_home_details_scroll(&ui->model, down & HidNpadButton_ZR ? 200 : -200);
+        } else if (down & (HidNpadButton_Up | HidNpadButton_Left)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ptc_ui_home_details_move(&ui->model, -1);
+        } else if (down & (HidNpadButton_Down | HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ptc_ui_home_details_move(&ui->model, 1);
+        } else if (down & HidNpadButton_A) {
+            int focus = ui->model.home_details_focus;
+            if (focus == 2) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ptc_ui_home_details_back(&ui->model);
+            } else if (focus == 1) {
+                if (!ui->waiting) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
+                    submit_status(ui);
+                }
+            } else if (focus == 0) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ptc_ui_home_details_activate(&ui->model, 0);
+            }
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+        if (ui->model.rules_dialog_open) {
+            if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_X | HidNpadButton_Plus)) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ui->model.rules_dialog_open = false;
+            }
+            return;
+        }
+        if (down & HidNpadButton_X) {
+            ptc_audio_play(PTC_SE_POPUP);
+            ui->model.rules_dialog_open = true;
+            return;
+        }
+        if (down & (HidNpadButton_Left | HidNpadButton_L | HidNpadButton_ZL)) {
+            if (ui->model.forecast_detail_day_offset > 0) {
+                ui->model.forecast_detail_day_offset--;
+                ui->model.overlay_selection = ui->model.forecast_detail_day_offset;
+                ptc_audio_play(PTC_SE_POPUP);
+            }
+        } else if (down & (HidNpadButton_Right | HidNpadButton_R | HidNpadButton_ZR)) {
+            if (ui->model.forecast_detail_day_offset < (int)PTC_RESULT_FORECAST_DAYS - 1) {
+                ui->model.forecast_detail_day_offset++;
+                ui->model.overlay_selection = ui->model.forecast_detail_day_offset;
+                ptc_audio_play(PTC_SE_POPUP);
+            }
+        } else if (down & HidNpadButton_Y) {
+            if (!ui->waiting) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                submit_status(ui);
+            }
+        } else if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_cancel_overlay(&ui->model);
         }
         return;
@@ -272,6 +474,38 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_Plus) {
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             submit_autonomy_policy(ui);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_EYE_CARE) {
+        uint16_t *minutes = ui->model.overlay_selection == 1
+            ? &ui->model.draft_eye_care_policy.play_minutes
+            : &ui->model.draft_eye_care_policy.rest_minutes;
+        uint16_t maximum = ui->model.overlay_selection == 1 ? 240u : 60u;
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Up) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 2) % 3;
+        } else if (down & HidNpadButton_Down) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+        } else if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_ZL | HidNpadButton_ZR)) {
+            int delta = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 10 : 1;
+            if (down & (HidNpadButton_Left | HidNpadButton_ZL)) delta = -delta;
+            if (ui->model.overlay_selection == 0) {
+                ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;
+            } else {
+                *minutes = ptc_ui_adjust_minutes(*minutes, delta, 1u, maximum);
+            }
+        } else if (down & HidNpadButton_A && ui->model.overlay_selection == 0) {
+            ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;
+        } else if (down & HidNpadButton_Plus) {
+            if (ui->model.draft_eye_care_policy.enabled && !ui->model.bedtime_official_setting_confirmed) {
+                ui->pending_eye_care_save = true;
+                submit_bedtime_confirmation(ui);
+            } else {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                submit_eye_care_policy(ui);
+            }
         }
         return;
     }
@@ -397,39 +631,75 @@ void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus))
+            ptc_ui_cancel_overlay(&ui->model);
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_DOCK_RULES) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_cancel_overlay(&ui->model);
+            ui->model.dock_field_focus = 5;
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
+        if (down & HidNpadButton_B) calendar_manager_nav(ui, 5);
+        else if (down & HidNpadButton_X) calendar_manager_nav(ui, 3);
+        else if (down & HidNpadButton_Y) calendar_manager_nav(ui, 4);
+        else if (down & HidNpadButton_L) calendar_manager_select_tab(ui, 0);
+        else if (down & HidNpadButton_R) calendar_manager_select_tab(ui, 1);
+        else if (down & (HidNpadButton_Left | HidNpadButton_ZL)) calendar_manager_nav(ui, 0);
+        else if (down & (HidNpadButton_Right | HidNpadButton_ZR)) calendar_manager_nav(ui, 1);
+        else if ((down & HidNpadButton_Up) && ui->model.calendar_manager_selected > 0) {
+            --ui->model.calendar_manager_selected;
+            ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+            calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+        } else if ((down & HidNpadButton_Down) &&
+            ui->model.calendar_manager_selected + 1 < ui->model.calendar_manager_count) {
+            ++ui->model.calendar_manager_selected;
+            ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+            calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
-        int pages = (int)((ptc_holiday_calendar_arrangement_count(ptc_holiday_calendar_info()->last_year) + 3u) / 4u);
+        int pages = holiday_calendar_view_pages(&ui->model);
+        bool has_previous = ui->model.holiday_calendar_page > 0 || ui->calendar_view_year_index > 0;
+        bool has_next = ui->model.holiday_calendar_page + 1 < pages ||
+            ui->calendar_view_year_index + 1 < ui->calendar_view_year_count;
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-        else if ((down & HidNpadButton_L) && ui->model.holiday_calendar_page > 0) {
+        else if ((down & HidNpadButton_L) && has_previous) {
             ptc_audio_play(PTC_SE_TAB);
-            --ui->model.holiday_calendar_page;
-        } else if ((down & HidNpadButton_R) && ui->model.holiday_calendar_page + 1 < pages) {
+            holiday_calendar_view_step(ui, -1);
+        } else if ((down & HidNpadButton_R) && has_next) {
             ptc_audio_play(PTC_SE_TAB);
-            ++ui->model.holiday_calendar_page;
+            holiday_calendar_view_step(ui, 1);
         } else if (down & HidNpadButton_Left) {
             do {
                 ui->model.overlay_selection = (ui->model.overlay_selection + 2) % 3;
-            } while ((ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page == 0) ||
-                     (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 >= pages));
+            } while ((ui->model.overlay_selection == 0 && !has_previous) ||
+                     (ui->model.overlay_selection == 1 && !has_next));
         } else if (down & HidNpadButton_Right) {
             do {
                 ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
-            } while ((ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page == 0) ||
-                     (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 >= pages));
+            } while ((ui->model.overlay_selection == 0 && !has_previous) ||
+                     (ui->model.overlay_selection == 1 && !has_next));
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
-            if (ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page > 0) {
+            if (ui->model.overlay_selection == 0 && has_previous) {
                 ptc_audio_play(PTC_SE_TAB);
-                --ui->model.holiday_calendar_page;
-            } else if (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 < pages) {
+                holiday_calendar_view_step(ui, -1);
+            } else if (ui->model.overlay_selection == 1 && has_next) {
                 ptc_audio_play(PTC_SE_TAB);
-                ++ui->model.holiday_calendar_page;
+                holiday_calendar_view_step(ui, 1);
             } else if (ui->model.overlay_selection == 2) ptc_ui_cancel_overlay(&ui->model);
         }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
-            ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING) {
+            ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !ui->model.parent_support_only) {
 #ifndef PLAYWISE_EDEN
             open_hot_reload_confirmation(ui);
 #endif
@@ -468,6 +738,10 @@ void handle_overlay_input(UiState *ui, u64 down)
             close_auth_error(ui, false);
             ui->auth_retry_action = AUTH_RETRY_NONE;
             dispatch_auth_retry(ui, action);
+        } else if (down & HidNpadButton_X) {
+            close_auth_error(ui, true);
+            ui->model.overlay = PTC_UI_OVERLAY_SUPPORT_GUIDE;
+            ui->model.support_guide_page = 0;
         }
         return;
     }

@@ -95,7 +95,7 @@ def main() -> None:
             "risk bypass must remain explicitly scoped to the Eden build")
     require("version->valueint != 1 && version->valueint != 2" in main_source,
             "NRO rule drafts must reload bedtime-capable version 2 rules")
-    package_source = (ROOT / "tools/package_sdmc.py").read_text(encoding="utf-8")
+    package_source = (ROOT / "tools/build/package_sdmc.py").read_text(encoding="utf-8")
     package_gate = (ROOT / "tools/package_remote.py").read_text(encoding="utf-8")
     require('"bedtime_enabled": False' in package_source and '"version": 2' in package_source,
             "new installs must seed a disabled bedtime-capable rules schema")

@@ -6,18 +6,43 @@
 #include <stdint.h>
 
 typedef struct {
+    void *ctx;
+    int (*remove_path)(void *ctx, const char *path);
+    int (*rename_path)(void *ctx, const char *from, const char *to);
+    uint32_t (*commit)(void *ctx);
+    void (*wait_ms)(void *ctx, unsigned int milliseconds);
+} PtcHotReloadIo;
+
+typedef struct {
+    char operation[24];
+    int system_errno;
+    uint32_t result;
+    unsigned int retries;
+} PtcHotReloadIoError;
+
+typedef struct {
     const char *boot_flag;
     const char *boot_flag_backup;
     const char *journal;
+    const PtcHotReloadIo *io;
+    PtcHotReloadIoError *error;
 } PtcHotReloadPaths;
+
+typedef struct {
+    char request_id[33];
+    char run_id[33];
+    char config_sha256[65];
+} PtcCaptureRestartBinding;
 
 typedef struct {
     char transaction_id[48];
     char phase[32];
     char source_release_id[96];
     char target_release_id[96];
+    char source_boot_id[32];
     uint64_t source_pid;
     uint64_t target_pid;
+    PtcCaptureRestartBinding capture;
 } PtcHotReloadJournal;
 
 typedef struct {
@@ -35,6 +60,11 @@ typedef enum {
 } PtcHotReloadFlagResult;
 
 bool ptc_hot_reload_parse_identity(const char *json, PtcHotReloadIdentity *identity);
+bool ptc_hot_reload_capture_request(const char *request_json, const char *config_json,
+    const char *commit, const char *release_id, const char *source_boot_id,
+    PtcCaptureRestartBinding *binding);
+bool ptc_hot_reload_capture_binding_equal(const PtcCaptureRestartBinding *a,
+    const PtcCaptureRestartBinding *b);
 bool ptc_hot_reload_identity_matches(const PtcHotReloadIdentity *identity,
     uint64_t pid, const char *profile, const char *release_id);
 bool ptc_hot_reload_read_journal(const PtcHotReloadPaths *paths, PtcHotReloadJournal *journal);

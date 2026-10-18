@@ -21,6 +21,13 @@ typedef struct {
     PtcDayRule makeup_workday_rule;
     PtcScheduledOverride scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
+    PtcEyeCarePolicy eye_care_policy;
+    PtcDockPolicy dock_policy;
+    uint16_t config_groups;
+    char config_stage_id[80];
+    char config_sha256[65];
+    uint16_t dock_expected_day_index;
+    uint64_t eye_care_break_id;
     PtcBedtimePolicy bedtime_policy;
     uint64_t bedtime_window_instance_id;
     bool bedtime_apply_immediately;
@@ -30,6 +37,10 @@ typedef struct {
     char environment_fingerprint[65];
     char overlay_release_id[65];
     char overlay_boot_id[65];
+    char calendar_file_name[81];
+    char calendar_sha256[65];
+    char calendar_option_id[17];
+    char calendar_catalog_sha256[65];
 #ifdef PLAYWISE_DEVICE_LAB
     char lab_mode[32];
     char phase[32];
@@ -41,6 +52,10 @@ typedef struct {
     char game_slot[8];
     char official_pause_expected[16];
     bool context_confirmed;
+    /* Set only in-process by the lab self-driver when it synthesizes a
+       session_start; never parsed from external request JSON. Redirects the
+       run's report into the advisory lab/selfdrive/ tree. */
+    bool self_driven;
 #endif
 } PtcRequest;
 

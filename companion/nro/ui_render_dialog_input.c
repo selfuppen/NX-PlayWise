@@ -88,7 +88,9 @@ void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
                                               weekly_no_change_reason, sizeof(weekly_no_change_reason));
             }
         } else if (model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
-                   model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
+                   model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES ||
+                   model->numpad_purpose == PTC_UI_NUMPAD_EYE_CARE_PLAY ||
+                   model->numpad_purpose == PTC_UI_NUMPAD_EYE_CARE_REST) {
             snprintf(current, sizeof(current), ptc_ui_text(PTC_UI_T_CURRENT_U_MIN_RANGE_U_TO_U_2),
                      (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
                      (unsigned int)model->numpad_maximum);
@@ -611,7 +613,8 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             ptc_ui_text(PTC_UI_T_THE_TIME_CAN_LOOP_PAST_00_00),
             15, summary.width - 40, 24, 4, UI_MUTED);
     } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
-        draw_time_state_card(pixels, stride, (UiRect){summary.x, summary.y, summary.width, 76}, ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED), played,
+        draw_time_state_card(pixels, stride, (UiRect){summary.x, summary.y, summary.width, 76},
+                             ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE : PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED), played,
                              fresh && model->played_minutes_available ? UI_ACCENT : UI_WARNING);
         if (quota_unchanged) {
             draw_unchanged_quota_card(pixels, stride,

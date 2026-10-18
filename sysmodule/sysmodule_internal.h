@@ -3,6 +3,7 @@
 
 #include "sysmodule_core.h"
 #include "lab_session.h"
+#include "lab_selfdrive.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@
 #include "../common/rules/holiday_calendar.h"
 #include "../common/time/ptc_time.h"
 #include "../common/usage/daily_summary.h"
+#include "../common/usage/usage_counter.h"
 #include "../common/token/token_v1.h"
 #include "../common/token/token_v2.h"
 #include "../common/version.h"
@@ -46,7 +48,50 @@ typedef struct {
     uint64_t bedtime_window_instance_id;
     uint16_t bedtime_start_day_index;
     uint64_t bedtime_skipped_instance_id;
+    uint16_t eye_care_day_index;
+    uint16_t eye_care_accumulated_minutes;
+    uint16_t eye_care_last_used_minutes;
+    bool eye_care_usage_known;
+    bool eye_care_resting;
+    int64_t eye_care_rest_deadline;
+    uint64_t eye_care_break_id;
+    int64_t eye_care_idle_since;
+    PtcUsageCounter eye_usage_counter;
+    uint64_t eye_cycle_used_ns;
+    bool eye_usage_migrated;
+    bool eye_usage_boundary_gap;
+    uint16_t dock_day_index;
+    uint64_t undocked_used_ns;
+    uint64_t dock_last_used_ns;
+    bool dock_baseline_known;
+    bool dock_usage_known;
+    bool dock_tracking_started;
+    bool dock_interval_unknown;
+    PtcOperationMode dock_last_mode;
+    uint16_t dock_waived_day_index;
+    bool dock_waived;
+    bool dock_enforced;
+    PtcUsageCounter dock_usage_counter;
+    bool dock_usage_incomplete;
 } PtcRuntimeState;
+
+PtcOperationModeStatus ptc_read_operation_mode(PtcSysmodule *sysmodule);
+bool dock_policy_enabled(const PtcRules *rules);
+bool dock_policy_blocks(PtcSysmodule *sysmodule, const PtcRules *rules,
+    const PtcRuntimeState *state, PtcClockSnapshot now);
+bool dock_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now);
+void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
+    PtcRuntimeState *state, PtcClockSnapshot now);
+void dock_rebaseline(PtcSysmodule *sysmodule, PtcRuntimeState *state, uint8_t weekday);
+bool direct_usage_sample(const PtcPctlStatus *status, PtcClockSnapshot now, PtcUsageCounter *out);
+PtcClockSnapshot usage_sample_clock(PtcSysmodule *sysmodule, PtcClockSnapshot request_now);
+void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index);
+bool eye_care_sample_direct(const PtcRules *rules, PtcRuntimeState *state,
+    const PtcPctlStatus *status, PtcClockSnapshot now, bool dock_blocked);
+void dock_sample_direct(PtcRuntimeState *state, const PtcPctlStatus *status,
+    PtcClockSnapshot now, PtcOperationMode mode, bool boot_gap);
+bool process_dock_request(PtcSysmodule *sysmodule, const PtcRequest *request,
+    bool disabled, PtcClockSnapshot now);
 
 typedef struct {
     char phase[32];
@@ -87,7 +132,16 @@ bool save_bedtime_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapsho
 bool load_bedtime_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot,
     uint64_t *window_instance_id, uint16_t *start_day_index);
 void clear_bedtime_snapshot(PtcSysmodule *sysmodule);
+bool save_eye_care_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot,
+    int64_t captured_at);
+bool load_eye_care_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot);
+void clear_eye_care_snapshot(PtcSysmodule *sysmodule);
+bool save_dock_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot, int64_t captured_at);
+bool load_dock_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot);
+void clear_dock_snapshot(PtcSysmodule *sysmodule);
 bool recovery_path_exists(PtcSysmodule *sysmodule);
+bool recovery_owned_by(PtcSysmodule *sysmodule, const PtcRequest *request);
+int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request);
 bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now);
 void recovery_clear(PtcSysmodule *sysmodule);
 bool recovery_rollback(PtcSysmodule *sysmodule);
@@ -112,8 +166,9 @@ void append_pctl_debug(
     uint32_t ipc_result,
     const PtcPctlDebugSnapshot *before,
     const PtcPctlDebugSnapshot *after);
-bool nonce_used_v1(uint16_t day_index, uint32_t nonce, void *ctx);
-bool nonce_used_v2(uint16_t day_index, uint32_t nonce, void *ctx);
+PtcErrorCode check_nonce_used(PtcSysmodule *sysmodule, uint16_t day_index, uint32_t nonce,
+                            unsigned int version, bool *used);
+PtcErrorCode compact_nonce_ledger(PtcSysmodule *sysmodule, uint16_t day_index);
 bool consume_nonce(PtcSysmodule *sysmodule, const PtcRequest *request, uint16_t day_index, uint32_t nonce, unsigned int token_version);
 bool save_redemption_history(
     PtcSysmodule *sysmodule,
@@ -167,11 +222,30 @@ bool finish_with_error(
     PtcErrorCode error,
     uint16_t day_index);
 PtcPctlTargetMode target_from_day_rule(PtcDayRule rule);
-uint16_t ptc_pctl_played_minutes(const PtcPctlStatus *status);
+
+/* 1952 consumption is independent of the allowance. Health policies must not
+   replace an unlimited rule with a synthetic LIMIT, including after recovery.
+   Callers compose restriction reasons as BLOCKED/0 over this unchanged base. */
+static inline PtcPctlTargetMode ptc_compose_base_target(PtcDayRule day_rule, uint16_t *minutes)
+{
+    *minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED ? 0u : day_rule.minutes;
+    return target_from_day_rule(day_rule);
+}
+typedef struct {
+    uint16_t played_ceiling_minutes;
+    uint16_t target_minutes;
+    uint16_t effective_minutes;
+    int64_t remaining_after_minutes;
+} PtcGrantPlan;
+PtcErrorCode read_grant_status(PtcSysmodule *sysmodule, PtcClockSnapshot now, PtcPctlStatus *status);
+PtcErrorCode grant_clock_error(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now);
+PtcErrorCode plan_grant(const PtcRules *rules, PtcClockSnapshot now,
+    const PtcPctlStatus *status, uint16_t minutes, PtcGrantPlan *plan);
 uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint8_t weekday, uint16_t add_minutes, uint16_t played_minutes);
 PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now, uint16_t played_minutes);
 void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds);
 bool bedtime_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now);
+bool eye_care_blocks_grants(PtcSysmodule *sysmodule);
 bool target_settings_observed(
     PtcPctlTargetMode mode,
     uint16_t minutes,
@@ -215,5 +289,10 @@ bool process_recovery_request_surface(
     bool disable_flag,
     PtcClockSnapshot now);
 void process_request_text(PtcSysmodule *sysmodule, const char *request_text, const char *expected_request_id);
+bool process_calendar_request(PtcSysmodule *sysmodule, const PtcRequest *request,
+                              bool disable_flag, PtcClockSnapshot now);
+
+bool config_backup_rollback_files(PtcSysmodule *sysmodule);
+bool process_config_backup_request(PtcSysmodule *sysmodule, const PtcRequest *request, bool disabled, PtcClockSnapshot now);
 
 #endif

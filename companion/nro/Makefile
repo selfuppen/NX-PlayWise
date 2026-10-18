@@ -36,6 +36,8 @@ OBJS := \
 	$(BUILD)/nro_input_dialogs.o \
 	$(BUILD)/nro_preferences.o \
 	$(BUILD)/nro_requests.o \
+	$(BUILD)/nro_calendar.o \
+	$(BUILD)/nro_config_backup.o \
 	$(BUILD)/nro_redemption.o \
 	$(BUILD)/nro_result_poll.o \
 	$(BUILD)/nro_setup.o \
@@ -87,9 +89,11 @@ OBJS := \
 	$(BUILD)/switch_ipc_client.o \
 	$(BUILD)/request_client.o \
 	$(BUILD)/result_summary.o \
+	$(BUILD)/policy_status.o \
 	$(BUILD)/sha256.o \
 	$(BUILD)/rules.o \
 	$(BUILD)/holiday_calendar.o \
+	$(BUILD)/holiday_calendar_import.o \
 	$(BUILD)/support_export.o \
 	$(BUILD)/credential_policy.o \
 	$(BUILD)/token_v2.o \
@@ -103,7 +107,9 @@ OBJS := \
 	$(BUILD)/request_schema.o \
 	$(BUILD)/cJSON.o \
 	$(BUILD)/install_defaults.o \
-	$(BUILD)/fs_storage.o
+	$(BUILD)/fs_storage.o \
+	$(BUILD)/calendar_store.o \
+	$(BUILD)/config_backup.o
 
 DEPENDS := $(OBJS:.o=.d)
 
@@ -113,6 +119,8 @@ ifeq ($(EDEN_BUILD),1)
 OBJS := $(filter-out $(BUILD)/switch_ipc_client.o $(BUILD)/hot_reload.o $(BUILD)/hot_reload_guard.o,$(OBJS))
 OBJS += \
 	$(BUILD)/eden_runtime.o \
+	$(BUILD)/eden_timer.o \
+	$(BUILD)/operation_mode_file.o \
 	$(BUILD)/pctl_stub.o \
 	$(BUILD)/sysmodule_storage.o \
 	$(BUILD)/sysmodule_audit.o \
@@ -121,8 +129,11 @@ OBJS += \
 	$(BUILD)/sysmodule_control.o \
 	$(BUILD)/sysmodule_setup.o \
 	$(BUILD)/sysmodule_requests.o \
+	$(BUILD)/sysmodule_calendar.o \
+	$(BUILD)/sysmodule_config_backup.o \
 	$(BUILD)/sysmodule_request_grants.o \
 	$(BUILD)/sysmodule_request_recovery.o \
+	$(BUILD)/sysmodule_dock.o \
 	$(BUILD)/sysmodule_core.o \
 	$(BUILD)/play_timer_settings_layout.o \
 	$(BUILD)/token_v1.o
@@ -150,6 +161,9 @@ $(BUILD)/nro_preferences.o: nro_preferences.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/nro_requests.o: nro_requests.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_calendar.o: nro_calendar.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/nro_redemption.o: nro_redemption.c nro_app_internal.h | $(BUILD)
@@ -302,6 +316,9 @@ $(BUILD)/transport_client.o: ../transport_client.c | $(BUILD)
 $(BUILD)/switch_ipc_client.o: ../switch_ipc_client.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/policy_status.o: ../policy_status.c ../policy_status.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/result_summary.o: ../result_summary.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -312,6 +329,9 @@ $(BUILD)/rules.o: ../../common/rules/rules.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/holiday_calendar.o: ../../common/rules/holiday_calendar.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/holiday_calendar_import.o: ../../common/rules/holiday_calendar_import.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/support_export.o: ../../common/support/support_export.c | $(BUILD)
@@ -356,10 +376,19 @@ $(BUILD)/install_defaults.o: ../../platform/install_defaults.c ../../platform/in
 $(BUILD)/fs_storage.o: ../../platform/switch/fs_storage.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/calendar_store.o: ../../platform/calendar_store.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/eden_runtime.o: eden_runtime.c eden_runtime.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/eden_timer.o: eden_timer.c eden_timer.h ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/pctl_stub.o: ../../platform/host/pctl_stub.c ../../platform/host/pctl_stub.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/operation_mode_file.o: ../../platform/host/operation_mode_file.c ../../platform/host/operation_mode_file.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_core.o: ../../sysmodule/sysmodule_core.c ../../sysmodule/sysmodule_core.h | $(BUILD)
@@ -384,6 +413,9 @@ $(BUILD)/sysmodule_setup.o: ../../sysmodule/sysmodule_setup.c ../../sysmodule/sy
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_requests.o: ../../sysmodule/sysmodule_requests.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_calendar.o: ../../sysmodule/sysmodule_calendar.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_request_grants.o: ../../sysmodule/sysmodule_request_grants.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
@@ -415,3 +447,13 @@ $(TARGET).nro: $(TARGET).elf $(NACP) $(APP_ICON)
 
 clean:
 	rm -rf $(BUILD) $(TARGET).elf $(TARGET).nro $(NACP)
+
+$(BUILD)/sysmodule_dock.o: ../../sysmodule/sysmodule_dock.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_config_backup.o: nro_config_backup.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/config_backup.o: ../../platform/config_backup.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/sysmodule_config_backup.o: ../../sysmodule/sysmodule_config_backup.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@

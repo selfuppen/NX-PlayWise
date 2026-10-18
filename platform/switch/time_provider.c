@@ -29,6 +29,7 @@ static PtcClockSnapshot switch_now(PtcTimeProvider *provider)
         return snapshot;
     }
     snapshot.minute_of_day = (uint16_t)((uint16_t)calendar.hour * 60u + calendar.minute);
+    snapshot.second_of_minute = calendar.second;
     return snapshot;
 }
 

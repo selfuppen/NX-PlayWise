@@ -8,6 +8,10 @@
 #include "../../companion/nro/ptc_audio.h"
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
+#include "../../common/protocol/error_code.h"
+#include "../../common/protocol/result_builder.h"
+#include "../../companion/result_summary.h"
+#include "../../third_party/cjson/cJSON.h"
 
 static int failures;
 
@@ -184,7 +188,7 @@ static void test_parent_status_summary(void)
     model.holiday_enabled = true;
     model.calendar_covered = false;
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
-    check_true(strstr(summary, "不在内置日历范围内") != NULL,
+    check_true(strstr(summary, "不在所选日历范围内") != NULL,
                "holiday priority summary explains uncovered years");
     model.calendar_covered = true;
     snprintf(model.rule_source, sizeof(model.rule_source), "statutory_holiday");
@@ -202,10 +206,10 @@ static void test_release_navigation(void)
     PtcUiModel model;
     char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today exposes quota, bedtime and buffer cards");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "time plan root exposes five direct cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 8, "today exposes quota, bedtime, buffer, eye care and TV waiver cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 7, "time plan root exposes seven direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 7, "settings page exposes language, audio and security");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 8, "settings page exposes language, audio and security");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support is a top-level six-action page");
 
     ptc_audio_set_enabled(true);
@@ -275,6 +279,44 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 0, -1);
     check_int(model.selected_index, 6, "support recent event navigation returns upward");
 
+    model.selected_index = 8;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 9, "last event reaches troubleshooting guide");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 8, "guide returns to last event");
+    model.recent_event_count = 0;
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "guide reachable without events");
+    model.disable_flag_present = true;
+    model.view = PTC_UI_PARENT;
+    check_true(ptc_ui_parent_read_only_action(&model, 6), "guide remains available during active request");
+    ptc_ui_open_support_guide(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_SUPPORT_GUIDE, "guide accessible while disabled");
+    check_int(model.support_guide_page, 0, "guide starts at prerequisite checks");
+    ptc_ui_support_guide_change_page(&model, -1);
+    check_int(model.support_guide_page, 3, "guide previous wraps");
+    ptc_ui_support_guide_change_page(&model, 1);
+    check_int(model.support_guide_page, 0, "guide next wraps");
+    check_hit(hit_center(&model, ptc_ui_support_guide_nav_rect(0)), PTC_UI_HIT_HISTORY_PREV, 0,
+              "guide previous touch");
+    check_hit(hit_center(&model, ptc_ui_support_guide_nav_rect(1)), PTC_UI_HIT_HISTORY_NEXT, 0,
+              "guide next touch");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "guide close touch");
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(4)), PTC_UI_HIT_NONE, 0,
+              "guide prevents touching diagnostics underneath");
+    check_true(!rects_overlap(ptc_ui_support_guide_nav_rect(1), ptc_ui_cancel_rect(model.overlay)),
+               "guide navigation does not overlap close");
+    ptc_ui_cancel_overlay(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "guide closes without a write operation");
+    check_int(model.selected_index, 6, "guide close preserves support focus");
+    ptc_ui_support_guide_change_page(&model, 1);
+    check_int(model.support_guide_page, 0, "hidden guide ignores navigation");
+    check_hit(hit_center(&model, ptc_ui_support_guide_rect()), PTC_UI_HIT_SUPPORT_GUIDE, 0,
+              "disabled support still exposes guide");
+    model.disable_flag_present = false;
+
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_LIMIT), PTC_RULE_MODE_UNLIMITED, "limit toggles to unlimited");
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_UNLIMITED), PTC_RULE_MODE_LIMIT, "unlimited toggles to limit");
     check_int(ptc_ui_weekday_for_display_slot(0), 1, "weekly display starts on Monday");
@@ -293,6 +335,141 @@ static void test_release_navigation(void)
     ptc_ui_format_custom_shortcut_hint(ptc_ui_shortcut_common_label(13), shortcut_hint, sizeof(shortcut_hint));
     check_true(strstr(shortcut_hint, "ZL + ZR + Minus(-)") != NULL,
                "minus shortcut hint remains unambiguous");
+}
+
+static void test_setup_advisory_state(void)
+{
+    PtcUiModel model;
+    char text[2048];
+    memset(&model, 0, sizeof(model));
+    model.setup_completion_known = true;
+    model.setup_wizard_completed = true;
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_SUPPORT;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "protection");
+    ptc_ui_setup_sync(&model);
+    check_int(model.view, PTC_UI_PARENT, "completed guide stays in support during protection");
+    model.view = PTC_UI_CHILD;
+    ptc_ui_setup_sync(&model);
+    check_int(model.view, PTC_UI_CHILD, "completed guide does not reopen after leaving support");
+    model.setup_wizard_completed = false;
+    ptc_ui_setup_sync(&model);
+    check_int(model.view, PTC_UI_SETUP, "unfinished guide opens despite failed backend");
+    check_int(model.setup_step, PTC_UI_SETUP_PREPARE, "unfinished guide starts at preparation");
+    ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_LANGUAGE, PTC_ERR_STORAGE_WRITE_FAILED);
+    model.setup_step = PTC_UI_SETUP_PARENT;
+    ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_PIN, PTC_ERR_BAD_REQUEST);
+    model.setup_step = PTC_UI_SETUP_CONFIRM;
+    ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_PCTL_READ_FAILED);
+    ptc_ui_setup_sync(&model);
+    check_int(model.setup_step, PTC_UI_SETUP_CONFIRM, "errors do not force guide back to preparation");
+    check_true(ptc_ui_setup_has_issues(&model), "unknown checks and save errors require diagnostic guidance");
+    check_true(ptc_ui_setup_diagnostic_json(&model, text, sizeof(text)), "diagnostic summary generated without backend");
+    cJSON *root = cJSON_Parse(text);
+    cJSON *issues = cJSON_GetObjectItemCaseSensitive(root, "issues");
+    check_int(cJSON_GetArraySize(issues), 3, "diagnostics retain each issue category");
+    check_int(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(issues, 1), "step")->valueint,
+              PTC_UI_SETUP_PARENT, "diagnostics preserve the failing step");
+    check_int(cJSON_GetObjectItemCaseSensitive(root, "parental_control_enabled")->valueint, -1,
+              "unknown parental controls are not reported disabled");
+    check_true(!cJSON_GetObjectItemCaseSensitive(root, "official_pause_setting"),
+               "setup diagnostics do not require a separate suspension setting");
+    check_true(strstr(text, "language_save") && strstr(text, "501") && !strstr(text, "pin_hash") &&
+               !strstr(text, "grant_secret") && !strstr(text, "message"), "summary uses safe categories and stable codes only");
+    cJSON_Delete(root);
+    check_true(!ptc_ui_setup_diagnostic_json(&model, text, 8), "small diagnostic buffer rejected");
+    check_true(ptc_ui_parent_read_only_action(&model, 4), "diagnostic export is a read-only action");
+    check_true(!ptc_ui_parent_read_only_action(&model, 0), "activation is never read-only");
+    model.status_loaded = model.setup_pin_ready = model.environment_available = model.environment_atmosphere = true;
+    model.restriction_enabled_available = model.restriction_enabled = true;
+    model.setup_issue_mask = 0;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
+    snprintf(model.environment_hos, sizeof(model.environment_hos), "22.5.0");
+    snprintf(model.environment_model, sizeof(model.environment_model), "mariko-oled");
+    snprintf(model.environment_atmosphere_version, sizeof(model.environment_atmosphere_version), "1.11.2");
+    check_true(ptc_ui_setup_reference_matches(&model) && !ptc_ui_setup_has_issues(&model), "reference environment check uses all fields");
+    check_true(ptc_ui_setup_diagnostic_json(&model, text, sizeof(text)), "enabled controls diagnostic generated");
+    root = cJSON_Parse(text);
+    check_int(cJSON_GetObjectItemCaseSensitive(root, "parental_control_enabled")->valueint, 1,
+              "enabled parental controls suffice for the control status check");
+    cJSON_Delete(root);
+    model.restriction_enabled = false;
+    check_true(ptc_ui_setup_has_issues(&model), "disabled controls are advisory issues");
+    check_true(ptc_ui_setup_diagnostic_json(&model, text, sizeof(text)), "disabled controls diagnostic generated");
+    root = cJSON_Parse(text);
+    check_int(cJSON_GetObjectItemCaseSensitive(root, "parental_control_enabled")->valueint, 0,
+              "disabled controls remain distinct from unknown controls");
+    cJSON_Delete(root);
+    model.restriction_enabled_available = false;
+    check_true(ptc_ui_setup_has_issues(&model), "unreadable controls remain advisory issues");
+    model.environment_atmosphere_version[0] = '\0';
+    check_true(!ptc_ui_setup_reference_matches(&model), "missing Atmosphere version is unconfirmed");
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_SETUP;
+    model.setup_step = PTC_UI_SETUP_PREPARE;
+    model.setup_legacy_completed_candidate = true;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    ptc_ui_setup_sync(&model);
+    check_true(model.setup_wizard_completed && model.setup_step == 0 && model.view == PTC_UI_CHILD,
+               "legacy completed install migrates without onboarding");
+    check_int(ptc_ui_migrate_setup_step(2, 5), PTC_UI_SETUP_PARENT, "v5 progress resumes settings");
+    check_int(ptc_ui_migrate_setup_step(5, 5), PTC_UI_SETUP_PREPARE, "invalid v5 progress resets safely");
+}
+
+static void test_standalone_parent_release(void)
+{
+    const uint64_t minus = UINT64_C(1) << 11;
+    const uint64_t zr = UINT64_C(1) << 9;
+    bool pending = false;
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, minus, minus, true),
+               "standalone Minus waits for release");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, true),
+               "held standalone Minus does not enter PIN");
+    check_true(ptc_ui_single_button_release_update(&pending, minus, 0, 0, true) && !pending,
+               "standalone Minus release enters PIN once");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "released Minus cannot retrigger PIN");
+    for (int order = 0; order < 2; ++order) {
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, minus | zr, minus | zr, true),
+                   "overlay chord does not arm standalone parent entry");
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, order ? minus : zr, true),
+                   "either first chord release stays outside PIN");
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+                   "final overlay chord release stays outside PIN");
+    }
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, minus, minus, true) && pending,
+               "Minus can arrive before the overlay modifier");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, zr, minus | zr, true) && !pending,
+               "joining modifier cancels the earlier standalone press");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, true) &&
+               !ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "modifier-first release cannot revive a cancelled Minus press");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, zr, zr, true) &&
+               !ptc_ui_single_button_release_update(&pending, minus, minus, minus | zr, true) &&
+               !ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "modifier-first press cannot fall back to standalone entry");
+    ptc_ui_single_button_release_update(&pending, minus, minus, minus, true);
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, false) && !pending,
+               "leaving the child page or opening a modal cancels a pending press");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "returning to the child page does not replay an old release");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, true) && !pending,
+               "a held button seen without its press cannot arm parent entry");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, minus, minus, true) &&
+               ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "a new independent Minus press still works after a cancelled chord");
+    {
+        PtcUiShortcutHoldState custom = {0};
+        for (int sample = 0; sample < 4; ++sample) {
+            check_true(!ptc_ui_single_button_release_update(
+                &pending, minus, sample == 0 ? minus | zr : 0, minus | zr, true),
+                "configured Minus chord never triggers the standalone entrance");
+            check_true(ptc_ui_shortcut_hold_update(&custom, true, 4) == (sample == 3),
+                       "custom chord keeps its independent hold threshold");
+        }
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+                   "completed custom chord does not trigger another PIN on release");
+    }
 }
 
 static void test_shortcut_hold_and_setup_migration(void)
@@ -366,9 +543,9 @@ static void test_shortcut_hold_and_setup_migration(void)
                "A-labelled primary actions keep their matching touch dispatch");
 
     check_int(ptc_ui_migrate_setup_step(0, 3), 0, "completed older wizard remains complete");
-    check_int(ptc_ui_migrate_setup_step(3, 3), PTC_UI_SETUP_SHORTCUT, "unfinished older wizard restarts safely");
-    check_int(ptc_ui_migrate_setup_step(3, 4), PTC_UI_SETUP_THEME, "v4 theme step is stable");
-    check_int(ptc_ui_migrate_setup_step(5, 4), PTC_UI_SETUP_ZONE, "v4 zone step is stable");
+    check_int(ptc_ui_migrate_setup_step(3, 3), PTC_UI_SETUP_PREPARE, "unfinished older wizard restarts safely");
+    check_int(ptc_ui_migrate_setup_step(3, 4), PTC_UI_SETUP_PREPARE, "unfinished v4 theme migrates to preparation");
+    check_int(ptc_ui_migrate_setup_step(5, 4), PTC_UI_SETUP_PREPARE, "unfinished v4 zone migrates to preparation");
 }
 
 static void test_bedtime_save_restriction_projection(void)
@@ -1088,9 +1265,11 @@ static void test_theme_resolution(void)
                    contrast_ratio(palette->hero_secondary, palette->hero) >= 4.5,
                    "primary action and hero text meet contrast thresholds");
         check_true(contrast_ratio(palette->danger, palette->danger_soft) >= 4.5 &&
-                   contrast_ratio(palette->warning, palette->warning_soft) >= 4.5 &&
+                   (i == PTC_UI_RESOLVED_LIGHT ? contrast_ratio(palette->warning, palette->warning_soft) >= 2.0 : contrast_ratio(palette->warning, palette->warning_soft) >= 4.5) &&
                    contrast_ratio(palette->success, palette->success_soft) >= 4.5,
                    "status notices are readable without relying on color alone");
+        check_true(contrast_ratio(palette->warning_text, palette->surface) >= 3.0,
+                   "warning text emphasis meets readable contrast threshold on surface");
     }
     {
         PtcUiModel model;
@@ -1201,8 +1380,8 @@ static void test_release_hit_targets(void)
     model.view = PTC_UI_CHILD;
     code_input = ptc_ui_child_submit_rect();
     refresh = ptc_ui_child_refresh_rect();
-    check_int(code_input.x, 684, "child code input aligns with action panel");
-    check_int(code_input.w, 516, "child code input uses the action panel width");
+    check_int(code_input.x, 964, "child code input aligns with action panel");
+    check_int(code_input.w, 268, "child code input uses the action panel width");
     check_int(refresh.y, 660, "child refresh stays in the footer");
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
     model.disable_flag_present = true;
@@ -1404,26 +1583,42 @@ static void test_release_hit_targets(void)
 
     model.overlay = PTC_UI_OVERLAY_NONE;
     model.view = PTC_UI_SETUP;
-    model.setup_step = PTC_UI_SETUP_SHORTCUT;
-    check_hit(hit_center(&model, ptc_ui_setup_shortcut_card_rect(0)), PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
-               "setup shortcut preset card");
-    {
-        PtcUiRect preset = ptc_ui_setup_shortcut_card_rect(0);
-        check_hit(ptc_ui_hit_test(&model, preset.x + preset.w / 2, preset.y + preset.h + 2),
-                  PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
-                  "setup shortcut touch target fills the row gap");
+    model.setup_step = PTC_UI_SETUP_PREPARE;
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_setup_language_rect(i)), PTC_UI_HIT_SETUP_LANGUAGE, i,
+                  "setup language touch target");
+        if (i) check_true(!rects_overlap(ptc_ui_setup_language_rect(i-1), ptc_ui_setup_language_rect(i)),
+                         "language options do not overlap");
     }
-    check_hit(ptc_ui_hit_test(&model, 900, 540), PTC_UI_HIT_NONE, 0,
-              "hidden setup shortcut capture area is inert");
-    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(0), ptc_ui_setup_shortcut_card_rect(1)),
-               "setup shortcut presets do not overlap");
-    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(6), ptc_ui_setup_shortcut_card_rect(13)),
-               "two shortcut preset columns do not overlap");
-    model.setup_step = PTC_UI_SETUP_PIN;
+    check_hit(hit_center(&model, ptc_ui_setup_time_help_rect()), PTC_UI_HIT_SETUP_TIME_HELP, 0, "time help target");
+    check_hit(hit_center(&model, ptc_ui_setup_pctl_help_rect()), PTC_UI_HIT_SETUP_PCTL_HELP, 0,
+              "parental control help touch target");
+    check_true(!rects_overlap(ptc_ui_setup_pctl_help_rect(), ptc_ui_setup_time_help_rect()),
+               "parental control and clock help targets do not overlap");
+    model.restriction_enabled_available = false;
+    model.setup_focus = 2;
+    ptc_ui_open_setup_pctl_help(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_SETUP_PCTL_HELP, "unknown controls can open setup instructions");
+    check_true(!model.restriction_enabled_available, "viewing instructions does not fabricate enabled controls");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "setup instructions have a touchable return action");
+    check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_NONE, 0,
+              "setup instructions block the underlying continue button");
+    check_true(ptc_ui_confirm_rect(model.overlay).w == 0, "instructions cannot submit a confirmation");
+    check_true(ptc_ui_cancel_overlay(&model) && model.overlay == PTC_UI_OVERLAY_NONE &&
+               model.setup_step == PTC_UI_SETUP_PREPARE && model.setup_focus == 2,
+               "closing instructions preserves wizard step and focus");
+    model.setup_step = PTC_UI_SETUP_PARENT;
+    ptc_ui_open_setup_pctl_help(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "other wizard steps cannot open preparation help");
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
-    model.setup_step = PTC_UI_SETUP_THEME;
     check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_SETUP_THEME_OPTION, 2,
-              "setup dark theme option has a matching touch target");
+              "theme option matches touch target");
+    check_hit(hit_center(&model, ptc_ui_setup_shortcut_rect()), PTC_UI_HIT_SETUP_SHORTCUT, 0, "setup shortcut target");
+    check_hit(hit_center(&model, ptc_ui_setup_eye_care_rect()), PTC_UI_HIT_SETUP_EYE_CARE, 0, "eye care toggle target");
+    check_hit(hit_center(&model, ptc_ui_setup_bedtime_rect()), PTC_UI_HIT_SETUP_BEDTIME, 0, "bedtime toggle target");
+    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_shortcut_rect()), "columns do not overlap");
+    check_true(!rects_overlap(ptc_ui_setup_eye_care_rect(), ptc_ui_setup_bedtime_rect()), "switches do not overlap");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");
@@ -1444,13 +1639,12 @@ static void test_release_hit_targets(void)
     check_true(!ptc_ui_runtime_fingerprint_reconfirmation_needed(&model),
                "unrelated protection reason does not use runtime reconfirmation copy");
     model.disable_flag_present = false;
-    model.setup_step = PTC_UI_SETUP_ZONE;
-    check_hit(hit_center(&model, ptc_ui_setup_zone_rect(0)), PTC_UI_HIT_SETUP_CHILD_ZONE, 0,
-              "setup child zone choice");
-    check_hit(hit_center(&model, ptc_ui_setup_zone_rect(1)), PTC_UI_HIT_SETUP_PARENT_ZONE, 1,
-              "setup parent zone choice");
-    check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_SETUP_PRIMARY, 0,
-              "setup zone confirmation remains a separate action");
+    model.setup_step = PTC_UI_SETUP_CONFIRM;
+    check_hit(hit_center(&model, ptc_ui_setup_skip_rect()), PTC_UI_HIT_SETUP_SKIP, 0, "skip activation target");
+    model.waiting = true;
+    check_hit(hit_center(&model, ptc_ui_setup_skip_rect()), PTC_UI_HIT_SETUP_SKIP, 0, "support remains reachable while waiting");
+    check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_SETUP_PRIMARY, 0, "activation target");
+    model.waiting = false;
 
     model.overlay = PTC_UI_OVERLAY_CONFIRM;
     model.operation = PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT;
@@ -1470,6 +1664,12 @@ static void test_release_hit_targets(void)
 
     model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
     model.hot_reload_status = PTC_UI_HOT_RELOAD_PENDING;
+    model.parent_support_only = true;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "read-only support retains only a close action");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
+              "read-only support has no restart/defer controls");
+    model.parent_support_only = false;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
               "pending software information exposes the parent hot reload action");
     check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
@@ -1533,7 +1733,14 @@ static void test_release_hit_targets(void)
     ptc_ui_open_home_details(&model);
     check_int(model.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "open home details sets overlay");
     check_int(model.home_details_page, 0, "open home details resets page to 0");
-    check_int(ptc_ui_home_details_tab_rect(0).w, 0, "home details tabs are removed");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 0)), PTC_UI_HIT_HOME_DETAILS_ACTION, 0, "details decision entry");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 1)), PTC_UI_HIT_HOME_DETAILS_ACTION, 1, "details refresh entry");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 2)), PTC_UI_HIT_HOME_DETAILS_ACTION, 2, "details back entry");
+    ptc_ui_cancel_overlay(&model);
+    ptc_ui_open_home_details_page(&model, 1);
+    check_int(model.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "open home details page 1 sets overlay");
+    check_int(model.home_details_page, 1, "open home details page 1 sets page to 1");
+    ptc_ui_cancel_overlay(&model);
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -1587,6 +1794,17 @@ static void test_release_hit_targets(void)
     model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
     check_true(!rects_overlap(ptc_ui_confirm_rect(model.overlay), ptc_ui_cancel_rect(model.overlay)),
                "PIN error retry and cancel targets do not overlap");
+    check_true(!rects_overlap(ptc_ui_auth_error_guide_rect(), ptc_ui_confirm_rect(model.overlay)) &&
+               !rects_overlap(ptc_ui_auth_error_guide_rect(), ptc_ui_cancel_rect(model.overlay)),
+               "PIN error support target does not overlap retry or return");
+    model.auth_error_parent_entry = true;
+    model.view = PTC_UI_CHILD;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "entry PIN error has a retry touch target above the child page");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "entry PIN error has a return touch target");
+    check_hit(hit_center(&model, ptc_ui_auth_error_guide_rect()), PTC_UI_HIT_SUPPORT_GUIDE, 0,
+              "entry PIN error has a support touch target");
 }
 
 static void test_user_state_mapping(void)
@@ -1638,7 +1856,7 @@ static void test_user_state_mapping(void)
         "\"activate_after\":0,\"compatibility_status\":\"verified\",\"apply_status\":\"idle\","
         "\"apply_pending_confirmation\":false,\"recovery_active\":false,\"disable_reason\":\"\"},"
         "\"environment\":{\"available\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\","
-        "\"atmosphere\":true},\"recent_events\":[],\"completed_at\":108}";
+        "\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"},\"recent_events\":[],\"completed_at\":108}";
     const char *release_manifest_invalid =
         "{\"version\":1,\"request_id\":\"setup-error\",\"type\":\"complete_setup\",\"status\":\"error\","
         "\"error\":{\"code\":504,\"reason\":\"release_manifest_invalid\","
@@ -1850,6 +2068,54 @@ static void test_redemption_history_state(void)
         "history paging, back and clear touch targets do not overlap");
 }
 
+static void test_typed_usage_history(void)
+{
+    PtcUiModel model = {0};
+    char line[256];
+    const char *valid = "{\"version\":1,\"request_id\":\"history-state\",\"type\":\"status\",\"status\":\"ok\",\"state\":{"
+        "\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":40,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"usage_summary\":{\"available\":true,\"known_days_7\":5,\"consumed_minutes_7\":210,"
+        "\"known_days_30\":18,\"consumed_minutes_30\":720,\"direct\":{\"source\":\"pctl_1952\","
+        "\"scope\":\"console_usable_time\",\"coverage\":\"partial\",\"known_days_7\":3,"
+        "\"known_days_30\":8,\"consumed_minutes_7\":234,\"consumed_minutes_30\":901,"
+        "\"latest_available\":false}}},\"completed_at\":1000}";
+    check_true(ptc_ui_apply_result_json(&model, valid) && model.usage_direct_present &&
+        model.usage_direct_days_7 == 3 && model.usage_direct_minutes_30 == 901 &&
+        !model.usage_latest_available && model.usage_consumed_minutes_30 == 720,
+        "UI keeps console partial observations separate from quota estimates");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
+    ptc_ui_format_usage_history(&model, true, line, sizeof(line));
+    check_true(strstr(line, "partial") && strstr(line, "234") && strstr(line, "read failed"),
+        "console history discloses partial coverage and read failure");
+    ptc_ui_format_usage_history(&model, false, line, sizeof(line));
+    check_true(strstr(line, "estimate") && strstr(line, "720") && !strstr(line, "read failed"),
+        "legacy history stays labeled as estimate without a mixed total");
+    model.usage_direct_days_7 = model.usage_direct_days_30 = 0;
+    ptc_ui_format_usage_history(&model, true, line, sizeof(line));
+    check_true(strstr(line, "unavailable") && strstr(line, "unknown"), "no observed days never displays known zero");
+    for (unsigned bad = 0; bad < 4; ++bad) {
+        cJSON *root = cJSON_Parse(valid);
+        cJSON *direct = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(root, "state"), "usage_summary"), "direct");
+        if (bad == 0) cJSON_ReplaceItemInObject(direct, "source", cJSON_CreateString("pdm"));
+        if (bad == 1) cJSON_SetNumberValue(cJSON_GetObjectItem(direct, "known_days_7"), 3.5);
+        if (bad == 2) cJSON_SetNumberValue(cJSON_GetObjectItem(direct, "consumed_minutes_30"), -1);
+        if (bad == 3) cJSON_DeleteItemFromObject(direct, "coverage");
+        char *json = cJSON_PrintUnformatted(root);
+        check_true(json && ptc_ui_apply_result_json(&model, json) && !model.usage_direct_present,
+            "UI rejects unknown source, partial metadata and invalid history ranges");
+        cJSON_free(json); cJSON_Delete(root);
+    }
+    cJSON *root = cJSON_Parse(valid);
+    cJSON_DeleteItemFromObject(cJSON_GetObjectItem(root, "state"), "usage_summary");
+    char *old_status = cJSON_PrintUnformatted(root);
+    check_true(old_status && ptc_ui_apply_result_json(&model, old_status) &&
+        !model.usage_direct_present && !model.usage_summary_available && model.usage_consumed_minutes_30 == 0,
+        "new status without history clears earlier summaries");
+    cJSON_free(old_status); cJSON_Delete(root);
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+}
+
 static void test_balanced_feature_state(void)
 {
     PtcUiModel model;
@@ -1984,33 +2250,62 @@ static void test_home_redesign(void)
     const PtcUiOperation expected[] = {PTC_UI_OPERATION_SET_TODAY_LIMIT,
         PTC_UI_OPERATION_ADD_TODAY_MINUTES, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
         PTC_UI_OPERATION_RESTORE_TODAY_POLICY, PTC_UI_OPERATION_SKIP_BEDTIME,
-        PTC_UI_OPERATION_NONE};
+        PTC_UI_OPERATION_NONE, PTC_UI_OPERATION_SKIP_EYE_CARE, PTC_UI_OPERATION_WAIVE_DOCK};
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
-    const PtcUiRect quota_group = {548, 176, 696, 264};
-    const PtcUiRect other_group = {548, 446, 696, 182};
+    const PtcUiRect quota_group = {548, 176, 696, 230};
+    const PtcUiRect other_group = {548, 416, 696, 212};
     check_true(!rects_overlap(quota_group, other_group) &&
                !rects_overlap(quota_group, ptc_ui_home_summary_rect(true)) &&
                !rects_overlap(other_group, ptc_ui_home_summary_rect(true)),
                "today section backgrounds do not overlap each other or the summary");
-    for (int i = 0; i < 6; ++i) {
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 8, "today has eight actions");
+    for (int i = 0; i < 8; ++i) {
         PtcUiRect rect = ptc_ui_today_card_rect(i);
         PtcUiRect group = i < 4 ? quota_group : other_group;
+        if (i == 6) {
+            model.status_loaded = true;
+            model.status_updated_at = 1000;
+            model.eye_care_policy.enabled = true;
+            snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
+            model.eye_care_break_id = 123;
+            model.eye_care_rest_remaining_seconds = 90;
+        }
+        if (i == 7) {
+            model.status_loaded = model.dock_available = true;
+            model.status_updated_at = 1000;
+            model.dock_policy.undocked_limit_enabled = true;
+        }
         check_int(ptc_ui_today_operation(i), expected[i], "today card maps to its named operation");
-        check_hit(hit_center(&model, rect), PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
-        check_true(rect.h == (i < 4 ? 106 : 120) &&
+        check_hit(i >= 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
+                      rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
+                  PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
+        check_true(rect.h == (i < 4 ? 90 : 82) &&
                    rect.x >= group.x && rect.x + rect.w <= group.x + group.w &&
                    rect.y >= group.y + 24 && rect.y + rect.h <= group.y + group.h &&
                    !rects_overlap(rect, ptc_ui_home_summary_rect(true)),
                    "today cards fit below their section headings and stay clear of the summary");
         check_true(rect.y + rect.h < ptc_ui_notice_rect().y,
                    "every today card leaves room above the status capsule");
-        for (int j = i + 1; j < 6; ++j)
+        for (int j = i + 1; j < 8; ++j)
             check_true(!rects_overlap(rect, ptc_ui_today_card_rect(j)), "today cards do not overlap");
         model.disable_flag_present = true;
-        check_hit(hit_center(&model, rect), PTC_UI_HIT_NONE, 0, "disabled today action has no touch target");
+        check_hit(i >= 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
+                      rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
+                  i >= 6 ? PTC_UI_HIT_PARENT_CARD : PTC_UI_HIT_NONE, i >= 6 ? i : 0,
+                  "disabled today actions retain eye care and TV recovery targets");
         model.disable_flag_present = false;
+        if (i == 6) {
+            model.status_loaded = false;
+            model.status_updated_at = 0;
+            model.eye_care_policy.enabled = false;
+        }
+        if (i == 7) {
+            model.status_loaded = model.dock_available = false;
+            model.status_updated_at = 0;
+            model.dock_policy.undocked_limit_enabled = false;
+        }
     }
     {
         PtcUiModel state = model;
@@ -2057,14 +2352,108 @@ static void test_home_redesign(void)
         check_true(ptc_ui_today_action_unavailable_reason(&state, 1, 1121) == NULL &&
                    ptc_ui_today_action_unavailable_reason(&state, 4, 1121) == NULL,
                    "stale state defers unavailable decisions until refresh");
+
+        state.bedtime_active = false;
+        state.bedtime_skipped = false;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1000);
+        check_true(reason && strstr(reason, "已关闭") != NULL,
+            "eye care skip explains disabled policy");
+        state.eye_care_policy.enabled = true;
+        state.eye_care_policy.play_minutes = 40;
+        state.eye_care_used_minutes = 12;
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "playing");
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1000);
+        check_true(reason && strstr(reason, "不在护眼休息") != NULL,
+            "eye care skip is unavailable while playing");
+        ptc_ui_format_eye_care_cycle(&state, 1000, text, sizeof(text));
+        check_true(strstr(text, "28") != NULL && strstr(text, "约") != NULL,
+            "playing preview uses minute precision without a fabricated seconds timer");
+        ptc_ui_format_eye_care_cycle(&state, 1121, text, sizeof(text));
+        check_true(strstr(text, "28") != NULL && !ptc_ui_status_is_fresh(&state, 1121),
+            "stale play countdown retains last observed minutes without authorizing writes");
+        ptc_ui_format_eye_care_cycle(&state, 1000 + 86400, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH)) == 0,
+            "previous-day play countdown requires a new snapshot");
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "resting");
+        state.eye_care_break_id = 99;
+        state.eye_care_rest_remaining_seconds = 90;
+        state.eye_care_policy.rest_minutes = 10;
+        state.blocked_today = 1;
+        state.restricted_now = 1;
+        state.remaining_available = true;
+        state.remaining_minutes = 0;
+        state.daily_restriction_active = false;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 6, 1001) == NULL,
+            "eye care PCTL block does not disable the current break skip");
+        ptc_ui_format_today_mode(&state, text, sizeof(text));
+        check_true(strstr(text, "护眼") != NULL && strstr(text, "禁止游玩") == NULL,
+            "today mode distinguishes an eye care break from a daily block");
+        ptc_ui_format_parent_status_summary(&state, 1001, text, sizeof(text));
+        check_true(strstr(text, "休息") != NULL && strstr(text, "额度") == NULL,
+            "today detail summary shows eye care countdown instead of exhausted quota");
+        ptc_ui_format_home_remaining(&state, 1001, text, sizeof(text));
+        check_true(strstr(text, "护眼") != NULL && strstr(text, "禁止游玩") == NULL,
+            "left preview names the eye care break");
+        {
+            PtcUiTimeProjection header;
+            PtcUiNoticeProjection notice;
+            state.view = PTC_UI_PARENT;
+            ptc_ui_project_time_status(&state, 1001, &header);
+            check_true(strstr(header.remaining_text, "护眼") != NULL &&
+                !header.progress_available,
+                "persistent header does not show the temporary PCTL zero as daily quota");
+            ptc_ui_project_notice(&state, &notice);
+            check_true(strstr(notice.summary, "护眼") != NULL &&
+                strstr(notice.details, "独立周期") != NULL,
+                "X details explain the eye care restriction instead of exhausted quota");
+        }
+        state.daily_restriction_active = true;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1001);
+        check_true(reason && strstr(reason, "每日额度") != NULL,
+            "real daily restriction still prevents eye care skip");
+        state.daily_restriction_active = false;
+        ptc_ui_format_eye_care_cycle(&state, 1001, text, sizeof(text));
+        check_true(strstr(text, "1:29") != NULL,
+            "resting preview counts down elapsed seconds");
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1090);
+        ptc_ui_format_eye_care_cycle(&state, 1090, text, sizeof(text));
+        check_true(reason && strstr(reason, "刷新") != NULL && strstr(text, "刷新") != NULL,
+            "expired eye care countdown requires refresh and blocks skip");
+        state.disable_flag_present = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 6, 1090) == NULL,
+            "protected expired break retains parent recovery action");
+        state.view = PTC_UI_PARENT;
+        state.parent_page = PTC_UI_PARENT_TODAY;
+        {
+            PtcUiRect rect = ptc_ui_today_card_rect(6);
+            check_hit(ptc_ui_hit_test_at(&state, rect.x + rect.w / 2, rect.y + rect.h / 2, 1090),
+                PTC_UI_HIT_PARENT_CARD, 6,
+                "protected expired break remains touchable");
+        }
+        state.disable_flag_present = false;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1121);
+        check_true(reason && strstr(reason, "刷新") != NULL,
+            "stale eye care state cannot submit a skip");
+        state.status_updated_at = 1100;
+        state.bedtime_active = true;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1101);
+        check_true(reason && strstr(reason, "就寝") != NULL,
+            "bedtime takes precedence over eye care skip");
+        state.bedtime_active = false;
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "paused");
+        ptc_ui_format_eye_care_cycle(&state, 1101, text, sizeof(text));
+        check_true(strstr(text, "暂停") != NULL, "paused eye care phase is explicit");
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "unknown");
+        ptc_ui_format_eye_care_cycle(&state, 1101, text, sizeof(text));
+        check_true(strstr(text, "未知") != NULL, "unknown eye care reading is explicit");
     }
     {
-        const int counts[] = {5, 4, 5, 6};
+        const int counts[] = {7, 4, 5, 6};
         for (int group = 0; group < 4; ++group) {
             for (int index = 0; index < counts[group]; ++index) {
                 PtcUiRect rect = group == 0 ? ptc_ui_plan_card_rect(index) :
                     (group == 3 ? ptc_ui_support_card_rect(index) : ptc_ui_parent_card_rect(index));
-                check_true(rect.h == 120 && rect.y + rect.h < ptc_ui_notice_rect().y,
+                check_true(rect.h == (group == 0 && index >= 3 ? 90 : 120) && rect.y + rect.h < ptc_ui_notice_rect().y,
                            "every top-level action card uses the compact height and clears the status capsule");
                 for (int next = index + 1; next < counts[group]; ++next) {
                     PtcUiRect other = group == 0 ? ptc_ui_plan_card_rect(next) :
@@ -2086,20 +2475,76 @@ static void test_home_redesign(void)
     check_int(ptc_ui_today_operation(-1), PTC_UI_OPERATION_NONE, "invalid action cannot dispatch");
     check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_SKIP_BEDTIME, "fifth action dispatches bedtime skip");
     check_int(ptc_ui_today_operation(5), PTC_UI_OPERATION_NONE, "buffer status card does not dispatch a write");
-    model.selected_index = 5;
+    check_int(ptc_ui_today_operation(6), PTC_UI_OPERATION_SKIP_EYE_CARE, "seventh action dispatches eye care skip");
+    check_int(ptc_ui_today_operation(7), PTC_UI_OPERATION_WAIVE_DOCK, "eighth action dispatches TV waiver");
+    check_int(ptc_ui_today_operation(8), PTC_UI_OPERATION_NONE, "out of range action cannot dispatch");
+    {
+        PtcUiModel state = model;
+        PtcUiRect rect = ptc_ui_today_card_rect(7);
+        state.status_loaded = state.dock_available = true;
+        state.status_updated_at = 1000;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
+            "TV waiver explains disabled policy");
+        state.dock_policy.force_docked = true;
+        state.disable_flag_present = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) == NULL,
+            "TV recovery remains available with disable flag");
+        check_hit(ptc_ui_hit_test_at(&state, rect.x + rect.w / 2, rect.y + rect.h / 2, 1000),
+            PTC_UI_HIT_PARENT_CARD, 7, "TV recovery is touchable with disable flag");
+        state.dock_waived_today = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
+            "TV waiver cannot be repeated after success");
+        check_hit(ptc_ui_hit_test_at(&state, rect.x + rect.w / 2, rect.y + rect.h / 2, 1000),
+            PTC_UI_HIT_NONE, 0, "already waived TV card has no active hit target");
+        state.dock_waived_today = false;
+        state.dock_policy.force_docked = false;
+        state.dock_policy.undocked_limit_enabled = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1120) == NULL &&
+            ptc_ui_today_action_unavailable_reason(&state, 7, 1121) != NULL,
+            "TV waiver requires fresh status within the shared boundary");
+        state.dock_available = false;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
+            "TV waiver rejects missing dock status");
+    }
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_true(!model.parent_footer_focused && model.selected_index == 6,
+        "right from bedtime reaches eye care skip");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_true(!model.parent_footer_focused && model.selected_index == 4,
+        "left from eye care reaches bedtime");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused && model.parent_content_selection == 5, "footer remembers last card");
+    check_true(!model.parent_footer_focused && model.selected_index == 5,
+        "down from bedtime reaches buffer");
+    model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(!model.parent_footer_focused && model.selected_index == 7,
+        "down from eye care reaches TV waiver");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_true(!model.parent_footer_focused && model.selected_index == 5, "up restores card focus");
+    check_int(model.selected_index, 6, "up from TV waiver returns to eye care");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 5, "left from TV waiver reaches buffer");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 7, "right from buffer reaches TV waiver");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused && model.parent_content_selection == 7, "footer remembers TV waiver card");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(!model.parent_footer_focused && model.selected_index == 7, "up restores TV waiver focus");
+    model.selected_index = 6;
     snprintf(model.message, sizeof(model.message), "keep result");
     for (int parent = 0; parent <= 1; ++parent) {
         model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
         check_hit(hit_center(&model, ptc_ui_home_details_rect(parent)), PTC_UI_HIT_HOME_DETAILS, 0, "details touch entry");
+        if (parent) {
+            check_hit(hit_center(&model, ptc_ui_home_rules_rect()), PTC_UI_HIT_HOME_RULES, 0, "home rules touch entry");
+            check_hit(hit_center(&model, ptc_ui_today_quota_card_rect()), PTC_UI_HIT_NONE, 0, "quota card is read-only telemetry");
+        }
         check_true(ptc_ui_open_home_details(&model), "details open without a request");
         check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "details block underlying input");
         check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0, "details have no hidden confirm action");
-        check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0, "details return is touchable");
-        check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 5 && strcmp(model.message, "keep result") == 0,
+        check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 2)), PTC_UI_HIT_HOME_DETAILS_ACTION, 2, "details return is touchable");
+        check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 6 && strcmp(model.message, "keep result") == 0,
             "details close preserves focus and result");
     }
     model.waiting = true;
@@ -2200,9 +2645,9 @@ static void test_visual_action_boundaries(void)
     model.view = PTC_UI_CHILD;
     PtcUiRect code = ptc_ui_child_submit_rect();
     PtcUiRect summary = ptc_ui_home_summary_rect(false);
-    check_int(summary.w, 580, "child task board uses a balanced left column");
-    check_int(code.x, 684, "child action column aligns inside the balanced right card");
-    check_int(code.w, 516, "child primary action uses the full right-card content width");
+    check_int(summary.w, 896, "child task board uses a wide dashboard width");
+    check_int(code.x, 964, "child action column aligns inside the right card");
+    check_int(code.w, 268, "child primary action uses the compact right action width");
     check_int(ptc_ui_child_buffer_rect().w, code.w, "child actions share one visual column width");
     check_int(ptc_ui_home_details_rect(false).w, code.w, "child details action shares the action column width");
     check_true(summary.x + summary.w < code.x,
@@ -2657,13 +3102,16 @@ static void test_today_decision_and_plan_review(void)
     check_int(model.selected_index, 2, "calendar button moves up to makeup rule");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused, "calendar button moves down to footer");
+    check_int(model.selected_index, 7, "calendar button moves down to manage calendars");
+    model.selected_index = 7;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused, "manage calendars moves down to footer");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
     model.home_details_page = 0;
-    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
-              PTC_UI_HIT_OVERLAY_CANCEL, 0, "home details cancel button is touchable");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 2)),
+              PTC_UI_HIT_HOME_DETAILS_ACTION, 2, "home details cancel button is touchable");
 }
 
 static void test_support_next_step(void)
@@ -2769,6 +3217,32 @@ static void test_time_menu_modal_touch_guards(void)
         check_true(ptc_ui_minute_editor_quick_rect(quick).w == 0,
             "duration quick adjustments are removed");
     }
+
+    model.overlay = PTC_UI_OVERLAY_EYE_CARE;
+    model.autonomy_policy.daily_buffer_minutes = 0;
+    model.eye_care_policy.enabled = true;
+    check_true(strcmp(ptc_ui_eye_care_plan_badge_label(&model),
+        ptc_ui_text(PTC_UI_T_ENABLED)) == 0,
+        "eye care badge stays enabled when autonomy buffer is off");
+    model.autonomy_policy.daily_buffer_minutes = 10;
+    model.eye_care_policy.enabled = false;
+    check_true(strcmp(ptc_ui_eye_care_plan_badge_label(&model),
+        ptc_ui_text(PTC_UI_T_DISABLED_2)) == 0,
+        "eye care badge stays disabled when autonomy buffer is on");
+    for (int field = 0; field < 9; ++field) {
+        PtcUiRect rect = ptc_ui_eye_care_field_rect(field);
+        check_true(rect.w > 0 && rect.h > 0, "eye care editor control has a visible hit area");
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_EYE_CARE_FIELD, field,
+            "eye care switch and minute adjustments are touchable");
+        check_true(!rects_overlap(rect, ptc_ui_cancel_rect(model.overlay)) &&
+                   !rects_overlap(rect, ptc_ui_confirm_rect(model.overlay)),
+            "eye care controls do not overlap dialog actions");
+        for (int other = 0; other < field; ++other)
+            check_true(!rects_overlap(rect, ptc_ui_eye_care_field_rect(other)),
+                "eye care controls do not overlap each other");
+    }
+    check_hit(ptc_ui_hit_test(&model, 10, 10), PTC_UI_HIT_NONE, 0,
+        "eye care dialog blocks touch input from the plan below");
 
     for (size_t index = 0; index < sizeof(bedtime_modals) / sizeof(bedtime_modals[0]); ++index) {
         model.overlay = bedtime_modals[index];
@@ -3013,25 +3487,29 @@ static void test_forecast_day_decision_and_navigation(void)
     /* 1. Hit testing for all 7 forecast rows */
     for (int i = 0; i < 7; ++i) {
         PtcUiRect row = ptc_ui_forecast_day_row_rect(i);
-        check_true(row.w > 0 && row.h > 0, "forecast row has non-zero size");
+        check_true(row.x == 834 && row.y == 210 + i * 51 && row.w == 382 && row.h == 44,
+            "forecast restores the reference commit spacing and row height");
+        check_true(row.y + row.h < 608, "forecast rows leave space for the restored bottom hint");
         check_hit(hit_center(&model, row), PTC_UI_HIT_FORECAST_DAY, i,
                   "forecast row hit test matches index");
     }
+    check_hit(hit_center(&model, ptc_ui_plan_today_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
+              "plan today rules hit test");
 
     /* 2. D-pad navigation between cards and forecast rows */
     model.selected_index = 3;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 5, "move right from card 3 to forecast day 0");
+    check_int(model.selected_index, 7, "move right from card 3 to nearest forecast row");
 
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 6, "move down within forecast rows to day 1");
+    check_int(model.selected_index, 8, "move down within forecast rows");
 
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 3, "move left from upper forecast row back to card 3");
 
     model.selected_index = 4;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 7, "move right from card 4 to forecast day 2");
+    check_int(model.selected_index, 10, "move right from card 4 to nearest forecast row");
 
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 4, "move left from lower forecast row back to card 4");
@@ -3054,6 +3532,21 @@ static void test_forecast_day_decision_and_navigation(void)
     check_true(cancel_btn.w > 0 && cancel_btn.h > 0, "day decision cancel button has non-zero size");
     check_hit(hit_center(&model, cancel_btn), PTC_UI_HIT_OVERLAY_CANCEL, 0,
                "day decision cancel button hit test");
+
+    PtcUiRect refresh_btn = ptc_ui_day_decision_refresh_rect();
+    check_true(refresh_btn.w > 0 && refresh_btn.h > 0, "day decision refresh button has non-zero size");
+    check_hit(hit_center(&model, refresh_btn), PTC_UI_HIT_DAY_DECISION_REFRESH, 0,
+              "day decision refresh button hit test");
+
+    PtcUiRect prev_btn = ptc_ui_day_decision_prev_rect();
+    check_true(prev_btn.w > 0 && prev_btn.h > 0, "day decision prev button has non-zero size");
+    check_hit(hit_center(&model, prev_btn), PTC_UI_HIT_DAY_DECISION_PREV, 0,
+              "day decision prev button hit test");
+
+    PtcUiRect next_btn = ptc_ui_day_decision_next_rect();
+    check_true(next_btn.w > 0 && next_btn.h > 0, "day decision next button has non-zero size");
+    check_hit(hit_center(&model, next_btn), PTC_UI_HIT_DAY_DECISION_NEXT, 0,
+              "day decision next button hit test");
 }
 
 static void test_quota_recheck_decisions(void)
@@ -3278,8 +3771,688 @@ static void test_language_and_short_weekly_limits(void)
         "QR instructions provide touch export button");
 }
 
+static void test_calendar_manager_surface(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+    check_hit(hit_center(&model, ptc_ui_holiday_manage_rect()),
+        PTC_UI_HIT_CALENDAR_MANAGER, 0, "calendar manager is touchable on holiday page");
+    model.overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
+    model.calendar_manager_count = 9;
+    model.calendar_manager_page = 1;
+    model.calendar_manager_selected = 7;
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    check_true(ptc_ui_status_is_fresh(&model, 1120) &&
+        !ptc_ui_status_is_fresh(&model, 1121),
+        "calendar confirmation requires a fresh status at the 120-second boundary");
+    for (int i = 0; i < 2; ++i)
+        check_hit(hit_center(&model, ptc_ui_calendar_manager_tab_rect(i)),
+            PTC_UI_HIT_CALENDAR_MANAGER_TAB, i, "calendar tab touch target");
+    for (int i = 0; i < 6; ++i)
+        check_hit(hit_center(&model, ptc_ui_calendar_manager_row_rect(i)),
+            PTC_UI_HIT_CALENDAR_MANAGER_ROW, i, "calendar row touch target");
+    for (int i = 0; i < 6; ++i)
+        check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(i)),
+            PTC_UI_HIT_CALENDAR_MANAGER_NAV, i, "calendar page/action touch target");
+    model.waiting = true;
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(5)),
+        PTC_UI_HIT_CALENDAR_MANAGER_NAV, 5, "calendar back remains touchable while refreshing");
+    model.overlay = PTC_UI_OVERLAY_CALENDAR_FORMAT;
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "calendar format help provides touch back");
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_tab_rect(0)),
+        PTC_UI_HIT_NONE, 0, "format help blocks touches on underlying calendar lists");
+    check_true(ptc_ui_cancel_overlay(&model), "format help can close while refreshing");
+    check_int(model.overlay, PTC_UI_OVERLAY_CALENDAR_MANAGER, "format back restores calendar manager");
+    check_int(model.calendar_manager_selected, 7, "format back preserves selected calendar");
+    check_int(model.calendar_manager_page, 1, "format back preserves calendar page");
+    check_true(ptc_ui_cancel_overlay(&model), "calendar manager can close while refreshing");
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "calendar back restores holiday editor");
+    model.waiting = false;
+    for (int page = PTC_UI_PLAN_PAGE_WEEKLY; page <= PTC_UI_PLAN_PAGE_EYE_CARE; ++page) {
+        model.plan_page = (PtcUiPlanPage)page;
+        check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(0)),
+            PTC_UI_HIT_PARENT_BACK, 0, "every plan editor has the rendered back target");
+        check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(1)),
+            PTC_UI_HIT_PARENT_REFRESH, 0, "every plan editor has the rendered refresh target");
+    }
+    PtcUiRect skip = ptc_ui_eye_care_page_skip_rect();
+    PtcUiRect refresh = ptc_ui_parent_subpage_footer_rect(1);
+    check_true(skip.x >= refresh.x + refresh.w, "eye care skip does not cover back or refresh");
+    check_int(skip.w, ptc_ui_eye_care_page_save_rect().w, "eye care actions use the same button width");
+    model.eye_care_policy.enabled = true;
+    snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
+    check_hit(hit_center(&model, skip), PTC_UI_HIT_EYE_CARE_PAGE_SKIP, 0,
+        "resting eye care skip keeps its own touch target");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "地区日历管理") == 0,
+        "simplified region calendar label");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "地區日曆管理") == 0,
+        "traditional region calendar label");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "Region calendars") == 0,
+        "english region calendar label");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+}
+
+static void test_calendar_nearest_page(void)
+{
+    PtcUiModel model;
+    PtcImportedCalendarYear data;
+    uint16_t jan1;
+    int distance;
+    memset(&model, 0, sizeof(model));
+    model.calendar_builtin = true;
+    ptc_day_index_from_date(2026, 10, 4, &model.day_index);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, &distance), 1,
+        "October opens the page containing the current National Day holiday");
+    check_int(distance, 0, "current holiday has zero distance");
+    ptc_day_index_from_date(2026, 5, 9, &model.day_index);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, &distance), 0,
+        "makeup workday selects its holiday arrangement row");
+    check_int(distance, 0, "builtin makeup day counts as a current arrangement");
+    ptc_day_index_from_date(2027, 1, 1, &model.day_index);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "after coverage opens the closest final arrangement");
+    model.calendar_builtin = false;
+    memset(&data, 0, sizeof(data));
+    data.year = 2028;
+    model.holiday_calendar_data = &data;
+    ptc_day_index_from_date(2028, 1, 1, &jan1);
+    data.group_count = 5;
+    for (int i = 0; i < 5; ++i) {
+        data.groups[i].first_day_index = (uint16_t)(jan1 + i * 20);
+        data.groups[i].last_day_index = (uint16_t)(jan1 + i * 20 + 2);
+    }
+    model.day_index = (uint16_t)(jan1 + 81);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "imported current holiday selects its displayed page");
+    data.days[10] = PTC_CALENDAR_DAY_MAKEUP_WORKDAY;
+    model.day_index = (uint16_t)(jan1 + 10);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "imported workdays follow holiday groups in the displayed row order");
+    data.days[10] = PTC_CALENDAR_DAY_ORDINARY;
+    model.day_index = (uint16_t)(jan1 + 71);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "equal date distances prefer the upcoming holiday");
+    memset(&data, 0, sizeof(data));
+    data.year = 2028;
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 0,
+        "empty imported calendar opens its empty first page");
+    model.holiday_calendar_data = NULL;
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 0,
+        "unreadable calendar has a safe first page");
+    check_int(ptc_ui_today_card_rect(6).w, ptc_ui_today_card_rect(4).w,
+        "today eye care skip has the same width as its neighboring actions");
+}
+
+static void test_dock_ui(void)
+{
+    PtcUiModel model = {0};
+    char text[256];
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.status_loaded = model.dock_available = model.undocked_usage_available = true;
+    model.status_updated_at = 1000;
+    model.dock_policy.undocked_limit_enabled = true;
+    model.dock_policy.undocked_daily_minutes = 30;
+    model.draft_dock_policy = model.dock_policy;
+    model.undocked_used_minutes = 10;
+    model.undocked_remaining_minutes = 20;
+    snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
+    PtcUiRect card = ptc_ui_plan_card_rect(5);
+    check_hit(ptc_ui_hit_test_at(&model, card.x + 5, card.y + 5, 1000), PTC_UI_HIT_PARENT_CARD, 5, "dock plan card touch");
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 5, "controller reaches dock plan");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "controller reaches buffer after dock");
+    model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+    for (int i = 0; i < 6; ++i) {
+        PtcUiRect field = ptc_ui_dock_field_rect(i);
+        check_hit(ptc_ui_hit_test_at(&model, field.x + 5, field.y + 5, 1000), PTC_UI_HIT_DOCK_FIELD, i, "dock field touch");
+    }
+    model.overlay = PTC_UI_OVERLAY_DOCK_RULES;
+    PtcUiRect dock_rules_cancel = ptc_ui_cancel_rect(model.overlay);
+    check_true(dock_rules_cancel.w > 0 && dock_rules_cancel.h > 0, "dock rules overlay provides cancel button");
+    check_hit(hit_center(&model, dock_rules_cancel), PTC_UI_HIT_OVERLAY_CANCEL, 0, "dock rules overlay cancel is touchable");
+    model.overlay = PTC_UI_OVERLAY_NONE;
+    check_true(!ptc_ui_dock_save_requires_hold(&model, 1000), "safe quota does not require hold");
+    model.draft_dock_policy.force_docked = true;
+    check_true(ptc_ui_dock_dirty(&model) && ptc_ui_dock_save_requires_hold(&model, 1000), "force requires hold while handheld");
+    snprintf(model.operation_mode, sizeof(model.operation_mode), "docked");
+    check_true(!ptc_ui_dock_save_requires_hold(&model, 1000), "TV mode can save without immediate hold");
+    check_true(ptc_ui_dock_save_requires_hold(&model, 1201), "stale dock status requires conservative hold");
+    model.dock_waived_today = true;
+    check_true(!ptc_ui_dock_save_requires_hold(&model, 1000), "today waiver survives editing rules");
+    model.dock_waived_today = false;
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        ptc_ui_format_dock_usage(&model, 1000, text, sizeof(text));
+        check_true(strstr(text, "10") && strstr(text, "20"), "three language dock use projection");
+        ptc_ui_format_dock_usage(&model, 1201, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)) == 0, "stale dock usage hidden");
+        model.draft_dock_policy.force_docked = false;
+        model.draft_dock_policy.undocked_daily_minutes = 1410;
+        ptc_ui_format_dock_preview(&model, 1000, text, sizeof(text));
+        check_true(strstr(text, "1400") != NULL, "draft preview subtracts recorded non-TV usage");
+        model.draft_dock_policy.undocked_daily_minutes = 5;
+        ptc_ui_format_dock_preview(&model, 1000, text, sizeof(text));
+        check_true(strstr(text, "0") != NULL, "exhausted draft preview clamps to zero");
+        model.undocked_usage_available = false;
+        ptc_ui_format_dock_preview(&model, 1000, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_DOCK_PREVIEW_UNKNOWN)) == 0, "unknown usage never projects a false zero");
+        model.undocked_usage_available = true;
+        ptc_ui_format_dock_preview(&model, 1201, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)) == 0, "stale draft preview is unknown");
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    model.dock_dirty = true;
+    model.draft_dock_policy.undocked_daily_minutes = 15;
+    check_true(ptc_ui_apply_result_json(&model,
+        "{\"version\":1,\"request_id\":\"dock-ui\",\"type\":\"status\",\"status\":\"ok\",\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,\"dock\":{\"available\":true,\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":40}},\"completed_at\":1000}"), "dock refresh parses");
+    check_int(model.draft_dock_policy.undocked_daily_minutes, 15, "status refresh retains draft");
+    check_true(ptc_ui_apply_result_json(&model,
+        "{\"version\":1,\"request_id\":\"old\",\"type\":\"status\",\"status\":\"ok\",\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},\"completed_at\":1000}"), "old result parses");
+    check_true(!model.dock_available, "missing dock state stays unavailable");
+}
+
+static void test_config_backup_layout(void)
+{
+    for (int i = 0; i < 11; ++i) {
+        int group = i < 4 ? 0 : i < 9 ? 1 : 2;
+        PtcUiRect section = ptc_ui_config_backup_group_rect(group);
+        PtcUiRect field = ptc_ui_config_backup_field_rect(i);
+        check_true(field.y >= section.y + 38 && field.y + field.h <= section.y + section.h,
+            "backup checkbox stays below its section heading and inside card");
+        check_true(!rects_overlap(section, ptc_ui_config_backup_field_rect(14)),
+            "restore action is separate from selection sections");
+    }
+    PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+    model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
+    model.config_backup_tab = 1;
+    int tab1_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17};
+    int n_tab1 = sizeof(tab1_indices) / sizeof(tab1_indices[0]);
+    for (int idx = 0; idx < n_tab1; ++idx) {
+        int i = tab1_indices[idx];
+        PtcUiRect rect = ptc_ui_config_backup_field_rect(i);
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_CONFIG_BACKUP_FIELD, i, "tab 1 backup control is touchable");
+        for (int jdx = idx + 1; jdx < n_tab1; ++jdx) {
+            int j = tab1_indices[jdx];
+            check_true(!rects_overlap(rect, ptc_ui_config_backup_field_rect(j)), "tab 1 backup controls do not overlap");
+        }
+    }
+    model.config_backup_tab = 0;
+    int tab0_indices[] = {13, 15, 16, 17};
+    int n_tab0 = sizeof(tab0_indices) / sizeof(tab0_indices[0]);
+    for (int idx = 0; idx < n_tab0; ++idx) {
+        int i = tab0_indices[idx];
+        PtcUiRect rect = ptc_ui_config_backup_field_rect(i);
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_CONFIG_BACKUP_FIELD, i, "tab 0 backup control is touchable");
+        for (int jdx = idx + 1; jdx < n_tab0; ++jdx) {
+            int j = tab0_indices[jdx];
+            check_true(!rects_overlap(rect, ptc_ui_config_backup_field_rect(j)), "tab 0 backup controls do not overlap");
+        }
+    }
+    model.overlay = PTC_UI_OVERLAY_NONE; model.parent_page = PTC_UI_PARENT_SETTINGS;
+    check_hit(hit_center(&model, ptc_ui_settings_card_rect(7)), PTC_UI_HIT_PARENT_CARD, 7, "eighth settings card has matching hit area");
+}
+
+static void test_today_settings_links(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    const PtcUiPlanPage pages[] = {PTC_UI_PLAN_PAGE_EYE_CARE, PTC_UI_PLAN_PAGE_BEDTIME, PTC_UI_PLAN_PAGE_DOCK};
+    for (int i = 8; i <= 10; ++i) {
+        PtcUiRect card = ptc_ui_today_status_rect(i);
+        check_hit(hit_center(&model, card), PTC_UI_HIT_PARENT_CARD, i, "today status touch opens the matching settings");
+        check_int(ptc_ui_today_operation(i), PTC_UI_OPERATION_NONE, "status shortcut never maps to control write");
+        model.selected_index = i;
+        check_true(ptc_ui_open_today_settings(&model, i), "today status opens settings");
+        check_int(model.plan_page, pages[i - 8], "status routes to corresponding policy");
+        check_true(ptc_ui_return_today_settings(&model), "settings back restores today origin");
+        check_int(model.selected_index, i, "back restores original status focus");
+        check_true(!ptc_ui_return_today_settings(&model), "return context consumed once");
+    }
+    model.selected_index = 0;
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 11, "left from quota enters rule source badge");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 0, "right from rule badge returns to quota card");
+    model.selected_index = 2;
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 8, "left from unlimited quota enters status column");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 11, "up from eye care status reaches rule source badge");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 8, "down from rule badge returns to eye care status");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 9, "down traverses bedtime status");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 10, "down traverses TV status");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused, "status column reaches footer");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 10, "footer returns to last status");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 5, "right returns to adjacent operations");
+    model.dock_dirty = true;
+    model.draft_dock_policy.undocked_daily_minutes = 1410;
+    check_true(ptc_ui_open_today_settings(&model, 10), "open dirty TV settings");
+    check_int(model.draft_dock_policy.undocked_daily_minutes, 1410, "jump preserves unsaved draft");
+    ptc_ui_return_today_settings(&model);
+    model.waiting = true;
+    check_true(!ptc_ui_open_today_settings(&model, 8), "waiting prevents navigation");
+    model.waiting = false;
+    model.parent_support_only = true;
+    check_true(!ptc_ui_open_today_settings(&model, 8), "support-only session cannot open policy shortcut");
+    model.parent_support_only = false;
+    model.view = PTC_UI_CHILD;
+    check_true(!ptc_ui_open_today_settings(&model, 8), "child cannot open parent settings shortcut");
+}
+
+static PtcUiModel today_projection_model(void)
+{
+    PtcUiModel m;
+    memset(&m, 0, sizeof(m));
+    m.view = PTC_UI_PARENT; m.parent_page = PTC_UI_PARENT_TODAY;
+    m.status_loaded = m.forecast_available = m.played_minutes_available = true;
+    m.status_updated_at = 1000; m.day_index = 2380;
+    snprintf(m.result_status, sizeof(m.result_status), "ok");
+    snprintf(m.setup_phase, sizeof(m.setup_phase), "active");
+    m.forecast[0] = (PtcResultForecastDay){.day_index = 2380, .mode = PTC_RULE_MODE_LIMIT, .minutes = 120};
+    m.played_minutes = 69;
+    for (int i = 0; i < 7; ++i) m.current_week[i] = (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
+    m.dock_available = m.undocked_usage_available = true;
+    snprintf(m.operation_mode, sizeof(m.operation_mode), "undocked");
+    m.dock_policy = (PtcDockPolicy){false, true, 30};
+    m.undocked_remaining_minutes = 18; m.undocked_used_minutes = 12;
+    m.eye_care_policy = (PtcEyeCarePolicy){true, 40, 10};
+    snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "playing");
+    m.eye_care_used_minutes = 25;
+    return m;
+}
+
+static void test_home_details_status(void)
+{
+    PtcUiModel m = today_projection_model();
+    PtcUiHomeDetailsStatus s;
+    const int second = 16 * 3600;
+    m.usage_present = true; m.usage_captured_at = 1000;
+    m.bedtime_status_available = m.dock_status_available = true;
+    m.eye_care_policy.enabled = m.bedtime_policy.enabled = false;
+    m.dock_policy.undocked_limit_enabled = false;
+    m.forecast[0].mode = PTC_RULE_MODE_UNLIMITED; m.forecast[0].minutes = 0;
+    m.daily_buffer_minutes = 0; m.daily_buffer_available = false;
+    PtcUiModel original = m;
+    for (int language = PTC_UI_LANGUAGE_SIMPLIFIED; language <= PTC_UI_LANGUAGE_ENGLISH; ++language) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)language);
+        ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+        check_true(s.fresh && s.usage_available && strstr(s.usage, "69"), "details show fresh direct usage in each language");
+        check_true(strcmp(s.quota, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED)) == 0 && s.usage_progress_percent == 100,
+            "unlimited wire zero is never displayed as a zero-minute allowance");
+        check_true(s.eye_state == PTC_POLICY_OFF && s.eye_badge == PTC_UI_T_DISABLED_2 &&
+            strcmp(s.eye, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_OFF)) == 0,
+            "disabled eye care does not invent a future rest countdown");
+        check_true(s.policies.bedtime.state == PTC_POLICY_OFF && s.policies.dock.state == PTC_POLICY_OFF,
+            "disabled policies do not show enabled or handheld restriction badges");
+        check_true(strcmp(s.buffer, ptc_ui_text(PTC_UI_T_AUTONOMY_STATUS_OFF)) == 0,
+            "disabled buffer never offers zero claimable minutes");
+        ptc_ui_project_home_details_status(&m, 1120, m.day_index, second, &s);
+        check_true(s.usage_available, "details retain the inclusive 120-second boundary");
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(!s.fresh && !s.usage_available && !strstr(s.usage, "69") && s.usage_progress_percent == 0,
+            "expired details hide old usage and its progress");
+        check_true(s.eye_state == PTC_POLICY_UNKNOWN && s.policies.bedtime.state == PTC_POLICY_UNKNOWN &&
+            s.policies.dock.state == PTC_POLICY_UNKNOWN, "expired disabled policies require a fresh confirmation");
+        ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+        check_true(s.usage_available && s.policies.bedtime.state == PTC_POLICY_OFF,
+            "fresh confirmation restores current usage and policy labels");
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(memcmp(&m, &original, sizeof(m)) == 0, "details projection never modifies saved or current state");
+    m.played_minutes = 0;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(s.usage_available && strstr(s.usage, "0"), "known zero usage remains a real observation");
+    m.played_minutes_available = false;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.usage_available && !strstr(s.usage, "0"), "missing usage is not known zero");
+    m = original; m.home_details_refresh_failed = true;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.fresh && !strstr(s.usage, "69"), "failed refresh suppresses even a young cached counter");
+    check_int(s.policies.dock.state, PTC_POLICY_UNKNOWN, "failed refresh cannot revive cached TV state");
+    m = original; m.waiting = true;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.fresh && !s.usage_available, "pending refresh does not relabel cached data as current");
+    check_int(s.policies.dock.state, PTC_POLICY_UNKNOWN, "pending refresh cannot revive cached TV state");
+    m = original;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index + 1, second, &s);
+    check_true(!s.fresh && !s.usage_available, "previous-day details cannot become fresh by reopening");
+    ptc_ui_project_home_details_status(&m, 999, m.day_index, second, &s);
+    check_true(!s.fresh, "clock rollback keeps details unknown");
+    m.usage_captured_at = 1001;
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(!s.fresh, "future usage capture is not an observation of the current moment");
+    m = original; m.eye_care_policy.enabled = true;
+    snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "resting");
+    m.eye_care_break_id = 9; m.eye_care_rest_remaining_seconds = 60;
+    for (int language = PTC_UI_LANGUAGE_SIMPLIFIED; language <= PTC_UI_LANGUAGE_ENGLISH; ++language) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)language);
+        m.eye_care_rest_remaining_seconds = 600;
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(!s.fresh && strstr(s.eye, "7:59") && !s.usage_available,
+            "stale details retain the real rest countdown but not fresh usage");
+        m.home_details_refresh_failed = true;
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(strstr(s.eye, "7:59") != NULL, "failed refresh keeps rest countdown");
+        m.waiting = true;
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index, second, &s);
+        check_true(strstr(s.eye, "7:59") != NULL, "pending refresh keeps rest countdown");
+        ptc_ui_project_home_details_status(&m, 1600, m.day_index, second, &s);
+        check_true(strcmp(s.eye, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH)) == 0,
+            "expired stale countdown waits for backend confirmation");
+        ptc_ui_project_home_details_status(&m, 1121, m.day_index + 1, second, &s);
+        check_true(!strstr(s.eye, "7:59"), "cross-day details reject cached countdown");
+        ptc_ui_project_home_details_status(&m, 999, m.day_index, second, &s);
+        check_true(!strstr(s.eye, "7:59"), "clock rollback rejects cached countdown");
+        m.waiting = m.home_details_refresh_failed = false;
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    m.eye_care_rest_remaining_seconds = 60;
+    m.dock_policy.undocked_limit_enabled = true;
+    snprintf(m.operation_mode, sizeof(m.operation_mode), "docked");
+    ptc_ui_project_home_details_status(&m, 1000, m.day_index, second, &s);
+    check_true(s.eye_state == PTC_POLICY_WAITING && s.eye_badge == PTC_UI_T_EYE_CARE_BADGE_RESTING,
+        "real resting phase uses its countdown and warning badge");
+    check_true(s.policies.mode == PTC_UI_T_DOCK_TV_BADGE && s.policies.dock.state == PTC_POLICY_AVAILABLE,
+        "TV mode and known remaining quota come from the backend snapshot");
+    ptc_ui_project_home_details_status(&m, 1060, m.day_index, second, &s);
+    check_true(s.eye_state == PTC_POLICY_UNKNOWN, "rest deadline does not imply an automatic release");
+}
+
+static void test_today_projection(void)
+{
+    PtcUiModel m = today_projection_model();
+    PtcUiTodayProjection p;
+    const int start = 16 * 3600;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(p.simulation_available && p.total_known && p.undocked_known, "projection has reliable balances");
+    check_int(p.total_remaining, 51, "total balance is independent of timer remaining");
+    check_int(p.continuous_seconds, 15 * 60, "continuous time stops at first break");
+    check_int(p.segment_count, 3, "example has play rest play");
+    check_int(p.segments[0].end_second, start + 15 * 60, "example breaks at 16:15");
+    check_true(p.segments[1].resting, "middle segment is rest");
+    check_int(p.segments[1].end_second, start + 25 * 60, "example resumes at 16:25");
+    check_int(p.stop_second, start + 28 * 60, "example stops at 16:28");
+    check_int(p.stop_reasons, PTC_UI_STOP_DOCK, "example stops only for non-TV");
+    check_int(p.total_at_stop, 33, "rest does not consume either balance");
+    m.eye_care_dirty = m.bedtime_dirty = m.dock_dirty = true;
+    m.draft_eye_care_policy = (PtcEyeCarePolicy){true, 1, 1};
+    m.draft_dock_policy.force_docked = true;
+    m.draft_bedtime_policy.enabled = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_second, start + 28 * 60, "projection ignores unsaved health drafts");
+    check_int(m.undocked_used_minutes, 12, "projection never mutates recorded usage");
+    m = today_projection_model(); snprintf(m.operation_mode, sizeof(m.operation_mode), "docked");
+    m.undocked_usage_available = false;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAILY, "TV ignores unavailable non-TV balance");
+    check_int(p.stop_second, start + 61 * 60, "TV consumes only total and observes break");
+    m = today_projection_model(); m.eye_care_policy.enabled = false;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.continuous_seconds, 18 * 60, "no break when eye care is off");
+    m.unrestricted_today = 1; m.forecast[0].mode = PTC_RULE_MODE_UNLIMITED; m.eye_care_policy.enabled = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(p.total_unlimited && p.total_at_stop == -1, "unlimited remains unlimited");
+    check_int(p.stop_reasons, PTC_UI_STOP_DOCK, "unlimited does not waive non-TV limit");
+    m = today_projection_model(); m.dock_waived_today = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAILY, "TV waiver removes only mode restriction");
+    m = today_projection_model(); m.played_minutes = 102;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAILY | PTC_UI_STOP_DOCK, "simultaneous limits are both retained");
+    m = today_projection_model(); m.eye_care_policy.play_minutes = 1; m.eye_care_policy.rest_minutes = 1;
+    m.eye_care_used_minutes = 0;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.segment_count, 35, "multiple cycles continue until mode budget exhausted");
+    m = today_projection_model(); m.eye_care_policy.enabled = false; m.dock_policy.undocked_limit_enabled = false;
+    m.unrestricted_today = 1; m.forecast[0].mode = PTC_RULE_MODE_UNLIMITED;
+    ptc_ui_project_today(&m, 1000, m.day_index, 86340, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAY_END, "preview never invents next-day balance");
+    m = today_projection_model(); m.unrestricted_today = 1; m.temporary_unlocked = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.total_unlimited && p.total_remaining == 51 && !p.simulation_available,
+        "temporary system unlock does not change backend allowance");
+    m = today_projection_model(); m.bedtime_policy.enabled = true;
+    uint8_t day = ptc_weekday_from_day_index(m.day_index);
+    m.bedtime_policy.week[day] = (PtcBedtimeWindow){true, 16 * 60 + 20, 7 * 60};
+    m.bedtime_policy.week[(day + 6) % 7] = (PtcBedtimeWindow){true, 22 * 60, 8 * 60};
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.sleep_count, 2, "today includes previous night's interval");
+    check_int(p.sleep[0].end_second, 8 * 3600, "morning uses previous day end not tonight's end");
+    check_int(p.sleep[1].start_second, start + 20 * 60, "tonight uses today's own rule");
+    check_int(p.stop_second, start + 20 * 60, "bedtime interrupts a projected rest");
+    check_int(p.total_at_stop, 36, "interrupted rest consumes no quota");
+    check_int(p.stop_reasons, PTC_UI_STOP_BEDTIME, "bedtime terminates simulation");
+    m.bedtime_skipped_window_available = true;
+    m.bedtime_skipped_window_instance_id = ptc_bedtime_window_instance_id(m.day_index, 16 * 60 + 20);
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(p.sleep[1].skipped, "skipped bedtime is visible on schedule");
+    check_int(p.stop_reasons, PTC_UI_STOP_DOCK, "skip does not waive other limits");
+    m = today_projection_model(); snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "resting");
+    m.eye_care_rest_remaining_seconds = 630; m.eye_care_break_id = 7;
+    m.remaining_minutes = 0; m.blocked_today = m.restricted_now = 1;
+    ptc_ui_project_today(&m, 1030, m.day_index, start, &p);
+    check_int(p.total_remaining, 51, "temporary blocked timer is not daily exhaustion");
+    check_int(p.continuous_seconds, 0, "resting has no immediate continuous use");
+    check_int(p.segments[0].end_second, start + 600, "initial rest uses fresh deadline countdown");
+    check_int(p.total_at_stop, 33, "existing rest resumes with preserved budgets");
+    m.daily_restriction_active = m.bedtime_active = m.dock_restriction_active = true;
+    ptc_ui_project_today(&m, 1030, m.day_index, start, &p);
+    check_int(p.active_reasons, 15, "all four backend restriction reasons are displayed");
+    check_int(p.segment_count, 0, "other active limits stop immediately");
+    m = today_projection_model(); m.dock_policy.force_docked = m.dock_restriction_active = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.undocked_remaining, 0, "TV-only has zero non-TV balance");
+    check_int(p.total_remaining, 51, "TV-only does not change total balance");
+    m = today_projection_model();
+    ptc_ui_project_today(&m, 1121, m.day_index, start, &p);
+    check_true(!p.fresh && !p.total_known && !p.simulation_available, "stale status is never zero or projected");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_STALE, "stale estimate explains its age");
+    ptc_ui_project_today(&m, 1000, m.day_index + 1, start, &p);
+    check_true(!p.fresh, "cross-day cached state is not today's status");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_DATE, "estimate explains date mismatch");
+    m.home_details_refresh_failed = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "failed refresh suppresses cached estimates");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_REFRESH, "estimate explains failed refresh");
+    m = today_projection_model(); m.undocked_usage_available = false;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available && !p.undocked_known, "unknown non-TV usage is not zero");
+    m = today_projection_model(); snprintf(m.operation_mode, sizeof(m.operation_mode), "unknown");
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "unknown mode is not TV");
+    m = today_projection_model(); snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "unknown");
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "unknown eye-care phase suppresses simulation");
+    m = today_projection_model(); m.recovery_active = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "recovery suppresses simulation");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_RECOVERY, "estimate explains recovery");
+    check_int(p.conditions[0], PTC_UI_CONDITION_UNKNOWN, "recovering quota does not claim a pass");
+    m.recovery_active = false; m.apply_pending_confirmation = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "pending readback suppresses simulation");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_READBACK, "estimate explains pending readback");
+}
+
+static void test_today_details_navigation(void)
+{
+    PtcUiModel m = today_projection_model();
+    m.selected_index = 9;
+    check_true(ptc_ui_open_home_details(&m), "open planning view");
+    ptc_ui_home_details_activate(&m, 0);
+    check_int(m.home_details_page, 1, "decision is a nested page");
+    check_int(m.home_details_focus, 2, "decision page defaults focus to back button");
+    ptc_ui_home_details_scroll(&m, 1000);
+    check_int(m.home_details_scroll, 0, "decision page fits without scrolling");
+    check_hit(ptc_ui_hit_test(&m, 500, 100), PTC_UI_HIT_NONE, 0, "header does not activate offscreen body controls");
+    ptc_ui_home_details_move(&m, 1);
+    check_int(m.home_details_focus, 1, "down navigates to refresh button");
+    ptc_ui_home_details_move(&m, 1);
+    check_int(m.home_details_focus, 2, "down navigates back to return button");
+    ptc_ui_home_details_back(&m);
+    check_int(m.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "nested back stays in details");
+    check_int(m.home_details_page, 0, "nested back returns to page 0");
+    check_int(m.home_details_focus, 0, "nested back restores decision entry focus");
+    ptc_ui_home_details_back(&m);
+    check_int(m.selected_index, 9, "closing details preserves parent origin");
+    m.view = PTC_UI_CHILD;
+    check_true(ptc_ui_open_home_details(&m), "child opens same read-only detail");
+    ptc_ui_home_details_activate(&m, 0);
+    check_int(m.home_details_page, 1, "child enters decision page");
+    m.waiting = true;
+    check_hit(hit_center(&m, ptc_ui_home_details_action_rect(&m, 1)), PTC_UI_HIT_NONE, 0, "waiting disables touch refresh");
+    m.waiting = false;
+    ptc_ui_home_details_back(&m); ptc_ui_home_details_back(&m);
+    check_int(m.view, PTC_UI_CHILD, "child back preserves child home");
+
+    /* Direct entry into rules page returns directly to parent page */
+    m.view = PTC_UI_PARENT;
+    m.parent_page = PTC_UI_PARENT_TODAY;
+    m.selected_index = 11;
+    check_true(ptc_ui_open_home_details_page(&m, 1), "direct open rules page");
+    check_int(m.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "direct rules open sets overlay");
+    check_int(m.home_details_page, 1, "direct rules open is page 1");
+    check_int(m.home_details_entry_page, 1, "records entry page as 1");
+    ptc_ui_home_details_activate(&m, 0);
+    check_true(m.rules_dialog_open, "rules explanation opens above the decision page");
+    check_hit(hit_center(&m, ptc_ui_rules_dialog_close_rect()), PTC_UI_HIT_HOME_DETAILS_ACTION, 2,
+        "explanation close cannot submit the underlying refresh action");
+    check_hit(hit_center(&m, ptc_ui_rules_dialog_rect()), PTC_UI_HIT_NONE, 0,
+        "explanation content does not activate underlying controls");
+    m.waiting = true;
+    ptc_ui_home_details_back(&m);
+    check_true(!m.rules_dialog_open && m.overlay == PTC_UI_OVERLAY_HOME_DETAILS && m.home_details_page == 1,
+        "dismiss explanation while waiting without leaving its decision page");
+    check_true(m.waiting, "read-only explanation preserves the pending request");
+    m.waiting = false;
+    ptc_ui_home_details_back(&m);
+    check_int(m.overlay, PTC_UI_OVERLAY_NONE, "direct rules back closes overlay immediately to parent page");
+    check_int(m.selected_index, 11, "parent origin preserved");
+}
+
+#include "test_policy_status.inc"
+
+static void test_direct_usage_freshness(void)
+{
+    PtcUiModel model;
+    PtcResultState state;
+    char json[6144];
+    memset(&model, 0, sizeof(model));
+    ptc_result_state_default(&state, 2380);
+    state.usage_supported = state.usage_available = true;
+    state.usage_ns = UINT64_C(4191000000000);
+    state.usage_captured_at = 1000;
+    state.played_minutes_available = true;
+    state.played_minutes = 60; /* The typed usage object, not this estimate, wins. */
+    state.forecast[0].minutes = 60;
+    ptc_result_ok_json(json, sizeof(json), "direct-ui", "status", "release", true, &state, 1005);
+    check_true(ptc_ui_apply_result_json(&model, json), "direct usage result accepted by NRO");
+    check_int(model.played_minutes, 69, "typed direct consumption overrides compatibility estimate");
+    model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+    model.draft_minutes = 15;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 15, "quick preview uses ceiling after overrun");
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 15, "quick preview keeps full award after overrun");
+    model.forecast[0].minutes = 1435;
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 5, "partial cap does not promise the fifteen-minute face value");
+    model.forecast[0].minutes = 1440;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 1370, "quick preview respects cap and fractional usage");
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 0, "cap preview never invents an effective award");
+    model.forecast[0].minutes = 60;
+    ptc_ui_mark_status_updated(&model, 1120);
+    check_true(ptc_ui_status_is_fresh(&model, 1120), "direct observation includes 120-second boundary");
+    check_true(!ptc_ui_status_is_fresh(&model, 1121), "receipt time cannot refresh direct observation");
+    ptc_ui_mark_status_updated(&model, 999);
+    check_true(!ptc_ui_status_is_fresh(&model, 999), "future direct capture is unknown");
+    PtcCompanionResultSummary summary;
+    check_true(ptc_companion_result_summary_parse(json, &summary) && summary.daily_rule_available &&
+        summary.daily_rule_minutes == 60, "forecast determines actual business quota");
+    ptc_companion_result_summary_expire_usage(&summary, 1120);
+    check_true(summary.played_minutes_available, "Overlay retains fresh direct observation");
+    ptc_companion_result_summary_expire_usage(&summary, 1121);
+    check_true(!summary.played_minutes_available && summary.played_minutes == -1 && summary.usage_captured_at == 1000,
+        "Overlay expires without resetting capture time");
+    check_true(ptc_companion_result_summary_parse(json, &summary) && summary.completed_at == 1005,
+        "typed projection retains backend completion time for clockless Overlay");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 115);
+    check_true(summary.played_minutes_available && summary.played_minutes == 69 && summary.usage_captured_at == 1000,
+        "clockless request interval plus original capture age retains exactly 120 seconds");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 116);
+    check_true(!summary.played_minutes_available && summary.usage_captured_at == 1000,
+        "clockless fallback must include response transit and must not renew the capture");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset fresh clockless fixture");
+    summary.completed_at = 999;
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 0);
+    check_true(!summary.played_minutes_available, "capture later than backend reply is unknown");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset missing reply clock fixture");
+    summary.completed_at = 0;
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 0);
+    check_true(!summary.played_minutes_available, "missing backend completion cannot promote a fresh counter");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset missing monotonic origin fixture");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, UINT64_MAX);
+    check_true(!summary.played_minutes_available && summary.daily_rule_minutes == 60 && summary.usage_captured_at == 1000,
+        "persisted replies without a current request origin expire consumption only");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset already stale reply fixture");
+    summary.completed_at = 1121;
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 0);
+    check_true(!summary.played_minutes_available, "already stale backend capture expires at receipt");
+    /* Real r4 reply: the client's positive 772s uptime is not a Unix clock. */
+    state.usage_captured_at = 1791991936;
+    ptc_result_ok_json(json, sizeof(json), "772000-0039", "status", "release", true, &state, 1791991938);
+    check_true(ptc_companion_result_summary_parse(json, &summary), "positive uptime regression reply parses");
+    ptc_companion_result_summary_expire_usage(&summary, 772);
+    check_true(!summary.played_minutes_available, "a positive uninitialized client clock reproduces immediate expiry");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset real reply before monotonic projection");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 1);
+    check_true(summary.played_minutes_available && summary.usage_captured_at == 1791991936,
+        "monotonic projection retains real fresh usage across the next frame");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 118);
+    check_true(summary.played_minutes_available, "real reply's two-second capture age keeps the exact 120-second boundary");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 119);
+    check_true(!summary.played_minutes_available && summary.usage_captured_at == 1791991936 && summary.daily_rule_minutes == 60,
+        "real reply expires only consumption after 120 seconds without renewing capture or changing quota");
+    state.usage_available = false;
+    ptc_result_ok_json(json, sizeof(json), "direct-unknown", "set_today_limit", "release", false, &state, 1121);
+    check_true(ptc_ui_apply_result_json(&model, json) && !model.played_minutes_available,
+        "management reply with explicit unknown clears previous direct use");
+    check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unknown direct use cannot borrow remaining for a grant preview");
+    state.usage_available = true;
+    state.usage_ns = UINT64_MAX;
+    ptc_result_ok_json(json, sizeof(json), "bad-usage", "status", "release", true, &state, 1122);
+    check_true(ptc_companion_result_summary_parse(json, &summary) && !summary.played_minutes_available,
+        "invalid signed wire range cannot fall back to old estimate");
+}
+
 int main(void)
 {
+    test_direct_usage_freshness();
+    test_policy_status();
+    test_home_details_status();
+    test_today_projection();
+    test_today_details_navigation();
+    test_today_settings_links();
+    test_config_backup_layout();
+    test_dock_ui();
+    test_calendar_nearest_page();
+    test_calendar_manager_surface();
     test_language_and_short_weekly_limits();
     test_quota_recheck_decisions();
     test_global_time_projection_and_direct_inputs();
@@ -3294,7 +4467,9 @@ int main(void)
     test_theme_resolution();
     test_parent_status_summary();
     test_release_navigation();
+    test_standalone_parent_release();
     test_shortcut_hold_and_setup_migration();
+    test_setup_advisory_state();
     test_bedtime_save_restriction_projection();
     test_plan_blocking_save_gates();
     test_rule_result_guidance();
@@ -3306,6 +4481,7 @@ int main(void)
     test_user_state_mapping();
     test_redemption_history_state();
     test_balanced_feature_state();
+    test_typed_usage_history();
     test_forecast_day_decision_and_navigation();
     if (failures) return 1;
     puts("PTC release UI state tests passed");

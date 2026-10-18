@@ -17,6 +17,8 @@
 #include "../../companion/transport_client.h"
 #include "../../companion/switch_ipc_client.h"
 #include "../../platform/switch/fs_storage.h"
+#include "../../platform/calendar_store.h"
+#include "../../platform/config_backup.h"
 #include "../../platform/install_defaults.h"
 #include "../../third_party/cjson/cJSON.h"
 #include "../../common/support/support_export.h"
@@ -90,7 +92,9 @@ typedef enum {
     AUTH_RETRY_CLEAR_REDEMPTION_HISTORY,
     AUTH_RETRY_CLEAR_ACTIVITY_HISTORY,
     AUTH_RETRY_SKIP_BEDTIME,
-    AUTH_RETRY_CLEAR_BEDTIME_SKIP
+    AUTH_RETRY_CLEAR_BEDTIME_SKIP,
+    AUTH_RETRY_SKIP_EYE_CARE,
+    AUTH_RETRY_WAIVE_DOCK
 } AuthRetryAction;
 
 typedef struct {
@@ -98,7 +102,13 @@ typedef struct {
     PtcCompanionTransportClient transport;
     PtcSwitchIpcClient ipc;
     PtcCompanionAuth auth;
+    bool setup_parent_authorized;
     PtcUiModel model;
+    PtcCalendarRuntime calendar_runtime;
+    PtcImportedCalendarYear *calendar_view_data;
+    uint16_t calendar_view_years[PTC_CALENDAR_MAX_INDEX_ENTRIES];
+    int calendar_view_year_count;
+    int calendar_view_year_index;
     PtcUiThemePreference theme_preference;
     PtcUiSystemTheme system_theme;
     PtcUiThemeView theme_view;
@@ -125,6 +135,12 @@ typedef struct {
     bool pending_leave_parent;
     int pending_bedtime_section;
     int bedtime_saved_section;
+    bool pending_eye_care_save;
+    bool pending_dock_save;
+    bool pending_config_restore;
+    char config_stage_id[80];
+    char config_digest[65];
+    uint16_t config_submitted_groups;
     bool code_preview_recheck;
     bool code_previous_after_available;
     bool code_previous_after_zero;
@@ -164,6 +180,10 @@ const char *auth_status_zh(PtcAuthStatus status);
 void set_message(UiState *ui, const char *prefix, PtcCompanionStatus status);
 void show_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after);
 void close_auth_error(UiState *ui, bool cancelled);
+void show_parent_pin_error(UiState *ui, int64_t retry_after);
+void refresh_auth_error_cooldown(UiState *ui);
+bool handle_parent_auth_error_input(UiState *ui, u64 down);
+bool handle_parent_auth_error_touch(UiState *ui, int x, int y);
 void set_command_name(UiState *ui, const char *type);
 void sync_transport_label(UiState *ui);
 void set_local_sd_command(UiState *ui, const char *command_name);
@@ -181,6 +201,12 @@ u64 shortcut_preset_mask(int index);
 bool shortcut_mask_valid(u64 mask);
 void refresh_custom_shortcut_label(UiState *ui);
 void refresh_shortcut_draft_label(UiState *ui);
+void open_config_backup(UiState *ui);
+void config_backup_action(UiState *ui, int index);
+void config_backup_preview(UiState *ui);
+void request_config_restore(UiState *ui);
+void submit_config_backup(UiState *ui, bool restore);
+void config_backup_result(UiState *ui);
 void load_ui_preferences(UiState *ui);
 bool save_ui_preferences(UiState *ui);
 bool save_setup_step(UiState *ui, int step);
@@ -212,10 +238,22 @@ void setup_pin(UiState *ui);
 bool ensure_default_setup_pin(UiState *ui);
 void setup_previous(UiState *ui);
 void setup_primary(UiState *ui);
+void finish_setup(UiState *ui, bool activated);
+void setup_action(UiState *ui, int action, int index);
+void enter_support_area(UiState *ui);
 void handle_setup_input(UiState *ui, u64 down, u64 held);
 void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 void open_weekly_page(UiState *ui);
+void open_calendar_manager(UiState *ui);
+void open_holiday_calendar_view(UiState *ui);
+void holiday_calendar_view_step(UiState *ui, int direction);
+int holiday_calendar_view_pages(const PtcUiModel *model);
+void calendar_manager_select_tab(UiState *ui, int tab);
+void calendar_manager_select_row(UiState *ui, int row);
+void calendar_manager_nav(UiState *ui, int action);
+void calendar_manager_refresh(UiState *ui);
+void submit_calendar_operation(UiState *ui, PtcUiOperation operation);
 void refresh_security_state(UiState *ui);
 bool verify_sensitive_pin(UiState *ui, const char *action);
 bool load_redemption_history(UiState *ui);
@@ -223,6 +261,13 @@ void open_redemption_history(UiState *ui);
 void request_clear_redemption_history(UiState *ui);
 void submit_scheduled_override(UiState *ui);
 void submit_autonomy_policy(UiState *ui);
+void submit_dock_policy(UiState *ui);
+void save_dock_from_page(UiState *ui);
+void request_dock_waiver(UiState *ui);
+void submit_dock_waiver(UiState *ui);
+void dock_page_action(UiState *ui, int action, int delta);
+void submit_eye_care_policy(UiState *ui);
+void submit_eye_care_skip(UiState *ui);
 void submit_bedtime_confirmation(UiState *ui);
 void submit_bedtime_policy(UiState *ui);
 void submit_bedtime_skip(UiState *ui);

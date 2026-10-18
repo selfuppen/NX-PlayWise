@@ -7,13 +7,17 @@
 - `common/`：跨端协议常量与平台无关 C 核心代码，例如 `common/protocol/*.h`、`common/token/*.h`。
 - `tools/`：Python 开发工具与参考实现，包括令牌生成、协议探测、请求队列、前端服务和统一打包入口。
 - `tests/`：主机侧 C/Python/前端测试与 fixtures，覆盖离线加时令牌、请求流、安全状态机、UI 和 package 门禁。
-- `docs/`：架构、协议、开发环境、测试与真实设备验证文档。开始开发前先读根目录 `README.md` 和 `docs/开发环境指南.md`。
+- `docs/`：按使用、开发、设计与调研分类，统一入口为 `docs/README.md`。开始开发前先读根目录 `README.md` 和 `docs/开发/开发环境指南.md`。
+
+开发文档按[开发入口](docs/开发/README.md)查阅；安排测试使用[测试操作手册](docs/开发/测试操作手册.md)。工具按[分类索引](tools/README.md)选择，调查背景按[调研分类](docs/调研/README.md)查阅；归档计划、失败记录和旧交接不作为当前待办或可重放步骤。
 
 维护者机器在仓库相对路径 `../libnx` 提供可选的上游 libnx checkout。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时可查阅该目录；实际构建使用 devkitPro 环境中的 libnx。当前调查用源码的 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
 
 维护者机器在仓库相对路径 `../libtesla` 提供可选的上游 libtesla checkout。涉及 Overlay 生命周期、输入处理、绘制或 libtesla API 行为时可查阅该目录。项目构建必须使用仓库内 `companion/overlay/vendor/libtesla/` 固定的版本，不得依赖工作区外的路径；同步 vendored 文件时同时更新 `companion/overlay/vendor/libtesla/UPSTREAM.txt` 中的上游 commit。
 
-维护者机器在仓库相对路径 `../Atmosphere` 提供可选的 Atmosphère checkout。只有问题涉及 `boot2.flag` 与 `atmosphere/contents` 扫描、sysmodule 自启动、SM/PM 服务和进程行为、hbmenu `override_config.ini` 解析、creport/fatal 取证或 Atmosphère/HOS 资格基线变化时，才把它作为 CFW 环境层参考；它不参与 PlayWise 构建，也不是 libnx、libtesla 或 Horizon PCTL 私有协议的替代来源。调查前必须用 `git -C ../Atmosphere rev-parse HEAD`、`git -C ../Atmosphere describe --tags --always --dirty` 和 `git -C ../Atmosphere status --short` 记录版本与工作树状态，只把绑定到该 commit 的已跟踪源码作为证据。未跟踪文件、当前 checkout 和远端 `main`/`master` 都不得自动视为项目固定依赖或其他版本的行为证明。详细阅读决策见 `docs/开发指南.md`，PCTL 边界见 `docs/PCTL集成架构.md`。
+维护者机器在仓库相对路径 `../Atmosphere` 提供可选的 Atmosphère checkout。只有问题涉及 `boot2.flag` 与 `atmosphere/contents` 扫描、sysmodule 自启动、SM/PM 服务和进程行为、hbmenu `override_config.ini` 解析、creport/fatal 取证或 Atmosphère/HOS 资格基线变化时，才把它作为 CFW 环境层参考；它不参与 PlayWise 构建，也不是 libnx、libtesla 或 Horizon PCTL 私有协议的替代来源。调查前必须用 `git -C ../Atmosphere rev-parse HEAD`、`git -C ../Atmosphere describe --tags --always --dirty` 和 `git -C ../Atmosphere status --short` 记录版本与工作树状态，只把绑定到该 commit 的已跟踪源码作为证据。未跟踪文件、当前 checkout 和远端 `main`/`master` 都不得自动视为项目固定依赖或其他版本的行为证明。详细阅读决策见 `docs/开发/开发指南.md`，PCTL 边界见 `docs/设计/PCTL集成架构.md`。
+
+维护者机器在仓库相对路径 `../sys-botbase` 提供可选的 olliz0r/sys-botbase checkout。它是一个通过 socket 远程设置手柄状态、模拟按键与触摸、按绝对/主模块/堆基址读写内存并截屏的 CFW sysmodule；只有在设计或评审 Device Lab 真机自动化与机器断言（如何远程驱动真机注入输入、读写内存或采集截屏证据）时才作为外部实现参考。它不参与 PlayWise 构建，不随标准分发或 Device Lab 包交付，也不是 libnx、libtesla 或 Horizon PCTL 私有协议的替代来源。调查前必须用 `git -C ../sys-botbase rev-parse HEAD`、`git -C ../sys-botbase describe --tags --always --dirty` 和 `git -C ../sys-botbase status --short` 记录版本与工作树状态，只把绑定到该 commit 的已跟踪源码作为证据；未跟踪文件、当前 checkout 和远端 `main`/`master` 都不得自动视为行为证明。详细登记见 `docs/开发/开发环境指南.md` 与 `docs/开发/开发指南.md`。
 
 ## 上游源码与 GitHub 调研
 
@@ -28,12 +32,12 @@
 Host Python 回归入口跨平台可用；C host、Companion NRO 和 package 的权威验证通过统一的 devkitPro 构建入口执行。维护者默认环境为 Windows、PowerShell、Docker Desktop 和 OpenSSH，其他开发者可使用满足同一门禁的等价环境。
 
 - `python tools/test.py`：运行全部本地 Python、协议和安全打包回归。
-- `python tools/package_remote.py`：在 devkitPro 环境运行 C/Python/UI 测试，清理并重新生成、校验标准分发与 Device Lab 产物；每次回归默认启用 `--with-eden`，打包并校验 Eden 模拟器测试应用（产物位于 `build/eden-test/pctc-eden.nro`）。
-- `python tools/make_fixtures.py`：重新生成确定性的令牌 fixture。
+- `python tools/package_remote.py`：在 devkitPro 环境运行 C/Python 核心测试，增量生成并校验标准分发包与 Eden 模拟器测试应用（产物位于 `build/eden-test/pctc-eden.nro`）；发布前或需完整交付包、Device Lab 及文档 UI 截图时使用 `--release`（或追加 `--clean` 完整清理）。
+- `python tools/build/make_fixtures.py`：重新生成确定性的令牌 fixture。
 - `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
-维护者默认 devkitPro profile 通过 `root@127.0.0.1:1888` 访问，仓库挂载为 `/ws/playwise`；host、port、user、容器路径和私钥均可通过脚本参数覆盖。密码只允许由 OpenSSH 交互读取，也可使用已授权私钥。容器脚本使用一次 SSH 会话完成清理、测试和构建；Zip 直接留在挂载工作区，不要维护手工 SSH、`docker exec` 或复制回本地的旁路构建命令。完整说明见 `docs/开发环境指南.md`。
+维护者默认 devkitPro profile 通过 `root@127.0.0.1:1888` 访问，仓库挂载为 `/ws/playwise`；host、port、user、容器路径和私钥均可通过脚本参数覆盖。密码只允许由 OpenSSH 交互读取，也可使用已授权私钥。容器脚本使用一次 SSH 会话完成清理、测试和构建；Zip 直接留在挂载工作区，不要维护手工 SSH、`docker exec` 或复制回本地的旁路构建命令。完整说明见 `docs/开发/开发环境指南.md`。
 
 容器直接读取挂载的当前工作区，因此未提交改动也会参与构建，不需要先提交或推送。除非用户明确只要求本地 Python 快速回归，否则涉及 C、Makefile、NRO 或 package 的最终验证都必须走该入口。
 
@@ -41,13 +45,34 @@ Host Python 回归入口跨平台可用；C host、Companion NRO 和 package 的
 
 Python 代码使用 4 空格缩进、类型注解和 `from __future__ import annotations`。保持工具脚本无第三方依赖，便于在早期主机测试中直接运行。文件、函数和变量使用 `snake_case`；协议常量使用全大写，例如 `TOKEN_VERSION`。C 头文件保持小型、稳定、无平台依赖，`common` 不应引用 libnx、SD 卡路径、UI、真实时钟或进程级可变状态。
 
+涉及 Companion NRO、Overlay、设置菜单或前端 UI 开发时，必须严格遵循 `docs/设计/视觉风格与设计指南.md`（英文版 `docs/设计/VISUAL_STYLE_GUIDE.md`）中的规范：严格支持双主题调色板（`companion/nro/ui_theme.c`）、高饱和实体配极浅软底的语义状态色、纯 CPU 软件渲染微几何质感，以及基于动态文本测量的端对端两端对齐与防溢出契约（严禁写死 X 偏移，严禁使用发灰脏黄色）。交互效果与调色板可通过 `docs/设计/theme_preview.html` 预览。
+
 ## 注释与文档要求
 
-新增复杂协议逻辑时，在代码附近添加简短注释说明位布局、错误原因或安全边界；不要为显而易见的赋值写注释。对外可见的行为变更应同步更新 `docs/协议.md`、`docs/测试指南.md` 或相关路线图。错误码、请求类型、fixture 字段和稳定性规则必须有文档来源，避免只存在于测试或实现中。
+新增复杂协议逻辑时，在代码附近添加简短注释说明位布局、错误原因或安全边界；不要为显而易见的赋值写注释。对外可见的行为变更应同步更新 `docs/设计/协议.md`、`docs/设计/视觉风格与设计指南.md`、`docs/开发/测试指南.md` 或相关路线图。错误码、请求类型、fixture 字段和稳定性规则必须有文档来源，避免只存在于测试或实现中。
 
 ## 测试指南
 
 测试以主机侧脚本为主，当前不依赖 pytest。新增测试文件建议命名为 `test_<feature>.py`，放在对应阶段目录下。测试必须可重复，不依赖真实时间、真实 Switch 服务或手写随机 fixture。涉及令牌、请求队列、nonce 消耗、PCTL 写入路径或错误码的改动，至少补充一个成功路径和一个失败路径。
+
+构建、核验、部署和提交按依赖顺序执行，任一步失败必须阻止后续依赖操作；PowerShell中须检查原生命令退出码，不能靠分号串接。派生报告封存前，在输入不变时从已写入JSON读回核对并复跑，schema键与类型须符合对应契约；首次成功不代表序列化往返或重复执行通过。已封存核验若需修正，另建补充材料并绑定原哈希，不改写原raw、截图或封存脚本。
+
+## 真机验证与减少人员值守
+
+真机探测、回归和候选验收必须先阅读并优先采用[真机稳定探测方法](docs/开发/真机稳定探测方法.md)和[无人值守更新与测试指南](docs/开发/无人值守更新与测试指南.md)。默认流程为“集中准备 → 一批实体操作 → 有界无人值守采集 → 离线机器核验与集中画面复核 → 恢复验收”，不要让操作者逐条盯日志、逐张确认截图或反复重启。
+
+- 部署候选、重新开启采集或处理仅在启动时读取的配置前，先按无人值守指南检查免整机重启路径，优先沿用现有稳定进程或已验证的后台安全交接。必须区分重新打开 NRO、重新启动后台进程与整机重启；“配置只在后台启动时读取”不等于“必须重启主机”，单独重开 NRO 也不能冒充后台已重新加载配置。
+- 现有自动更新入口对同一候选重载、当天已受限等情况有门禁。遇到这些限制，应先检查能否安全复用交接机制，并登记、修复和验证确有必要的工具缺口，不能直接把人工整机重启当作默认替代。不得绕过门禁、强杀后台，或伪造 release ID、制造无业务变更的新候选来触发热加载。只有验证目标本身需要真实重启，或已核实免整机重启路径不适用且没有可安全使用的替代方式时，才向用户提出正常重启，并说明本批具体原因与已排除的替代方式。
+- 开始前固定验证口径、已证明事实、缺口、通过条件、候选/环境身份和执行顺序。代理先完成构建、前像与恢复材料核对、采集租期计算、日志/报告目录和操作清单准备，再一次性交付本批确实需要人的步骤；已有证据只在相同适用范围内引用，不重复无关实验。
+- 优先沿用已有稳定进程与短时只读会话；标准候选优先使用固定生产二进制中默认关闭的[标准只读取证](docs/开发/PCTL1952标准采集.md)，限定频率、租期、失败次数并释放所有会话。编译期诊断旁路只在能力调查的原范围使用，不能替代生产候选证据。不得默认重走旧 BD23F1 自启动、HID/远程输入初始化、hbmenu/Controllers X+A、第二游戏切换或旧 BPC/PM 电源等已知故障路径；新服务或绕行方案先单独证明权限、生命周期与资源影响。
+- 将本批确需的正常重启、POWER 真休眠/唤醒、实体底座拔插、必要的 PIN/长按与画面观察合并为最小操作清单，让用户完成一组后统一回复。采集租期只在后台启动读取，必须在实际激活或请用户重启前完成配置与回读，并绑定实际新进程、boot、候选身份及停止边界；不能以断网、停计时、关显示或宿主等待冒充真实休眠/设备计时。真休眠窗口只拉日志，不提交 status 或控制请求。
+- 已授权且无需人的准备、采集、拉回、机器断言和报告工作继续执行。采集必须有结束条件、失败上限和可核验收尾，不因截图失败或独立画面复核待确认而阻塞可靠读数采集；设备 fatal、未知写入或恢复未证实则停止该设备上的依赖操作，先核对现场。
+- 规则操作仅经已有标准请求队列提交一次，先记录 UUID/内容，再等待相同 ID/type 回执。超时保留未知，不能换 ID 重发或猜测回滚。原始 JSONL、请求/回执、source/run/boot、设备日期/tick、各 Result、带符号余额、完整 0x44 和 SHA-256 只追加保留；不回写旧 raw，跨 boot 不相减 tick。
+- 截图默认只用 sys-botbase pixelPeek，不为截图初始化或注入输入。先整理带时间/阶段/哈希的 HTML 集中复核材料，再一次确认必须的真实观察；人工结论独立保存，绑定用户原话、画廊索引、原图及机器附件哈希。已确认且来源未变的画面不重复索取确认；新候选或真实缺口另定范围。不逐张进行不必要的 AI 读图，不以机器状态替代提示可见性、真实解除或游戏运行效果。
+- 同进程诊断旁路及旧能力证据不自动资格化标准候选。正式验收仍绑定实际 clean 候选、生产组件与原始附件哈希；若现有标准采集无法提供必需证据，先登记工具缺口，在新候选中补齐采集支持、回归和身份验证，不拿带采集标记的 NSP 或旧报告顶替冻结生产二进制，也不降低资格门禁。
+- 每个危险窗口保留既有超时与恢复事务，集中收尾不能延迟该窗口的恢复。按本次前像核验规则、完整 0x44/timer、启动项、原 NSP 和运行身份，只清除本批拥有的标记；确认停采不再追加，区分“SD 原像已恢复”和“下次正常启动才加载原二进制”。最终报告可离线重跑，分别记录通过、部分证明、未执行、前提不满足与恢复状态。
+
+恢复策略与正常业务痕迹分开：不能用旧state覆盖正常成功业务产生的消费、领取资格、nonce、账本或活动；失败事务仍按协议执行原回滚，不据此保留失败写入。文档／人工记录提交与冻结生产源码可以不同，不为更新记录伪造新候选或重新部署。只读／标准产品取证与正式完整资格分别执行各自门禁，不能因一批闭环而扩大资格范围。
 
 ## 提交与 Pull Request 指南
 
@@ -61,7 +86,9 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 ## Agent 专用说明
 
-修改前先查看 `docs/开发指南.md`、`docs/协议.md` 和相关测试。优先保持变更小而可验证；不要重写无关文档或回退用户改动。新增行为时同时补测试和必要文档，并在最终回复中列出实际执行过的命令。
+修改前先查看 `docs/开发/开发指南.md`、`docs/设计/协议.md`、`docs/设计/视觉风格与设计指南.md` 和相关测试。优先保持变更小而可验证；不要重写无关文档或回退用户改动。新增行为时同时补测试和必要文档，并在最终回复中列出实际执行过的命令。
+
+本文件和稳定开发／测试指南只维护跨任务适用的约束与可复用流程，不写入具体阶段的进度、下一步、临时授权，也不将某份阶段交接设为全局必读。候选、设备地址、PID／boot、当日规则和批次结果放在所属任务的阶段文档与验收记录中；现场快照注明核对时间，操作前重新核对。移动文档时同步更新索引和相对引用；低频／历史兼容工具不等于临时垃圾，不因整理移动其固定调用路径或删除被证据索引引用的文件。
 
 本仓库中文文档使用 UTF-8。PowerShell 默认编码或控制台显示可能把中文读成乱码；读取或写入 `AGENTS.md`、`docs/*.md` 等中文文档时，应显式使用 UTF-8，例如 `Get-Content <file> -Encoding utf8`，避免误判编码或把文档写坏。
 

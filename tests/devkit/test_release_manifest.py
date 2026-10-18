@@ -4,14 +4,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
 
-import generate_release_manifest as manifest  # noqa: E402
+import tools.build.generate_release_manifest as manifest  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -47,6 +48,7 @@ def test_libnx_devkitpro_package_database_fallback() -> None:
 
 def test_candidate_defaults_to_pending() -> None:
     with mock.patch.object(manifest, "git_commit", return_value="a" * 40), \
+            mock.patch.object(manifest, "source_fingerprint", return_value="c" * 64), \
             mock.patch.object(manifest, "git_tracked_dirty", return_value=False), \
             mock.patch.object(manifest, "toolchain_identity", return_value="gcc 15.2.0"), \
             mock.patch.object(manifest, "libnx_identity", return_value="libnx 4.12.0-1"), \
@@ -58,6 +60,8 @@ def test_candidate_defaults_to_pending() -> None:
     require(data["build"]["libnx"] == "libnx 4.12.0-1", "libnx package identity must be recorded")
     require(data["build"]["container_image"] == "devkitpro:v1", "Docker image tag must be recorded")
     require(data["build"]["source_dirty"] is False, "tracked dirty state must be recorded")
+    require(data["usage_contract"] == "pctl1952_v2_direct",
+            "release declares the direct counter contract while retaining the proxy")
 
 
 def test_manual_device_verification_is_explicit_and_scoped() -> None:
@@ -67,7 +71,8 @@ def test_manual_device_verification_is_explicit_and_scoped() -> None:
         "PLAYWISE_VERIFIED_HOS": "22.5.0",
         "PLAYWISE_VERIFIED_ATMOSPHERE": "1.11.2",
     }
-    with mock.patch.dict(os.environ, verification, clear=True):
+    with mock.patch.dict(os.environ, verification, clear=True), \
+            mock.patch.object(manifest, "source_fingerprint", return_value="c" * 64):
         release = manifest.make_manifest("release")
         lab = manifest.make_manifest("device-lab")
         eden = manifest.make_manifest("eden-test")
@@ -82,7 +87,10 @@ def test_manual_device_verification_is_explicit_and_scoped() -> None:
     }, "release must record the stated device environment")
     require(lab["qualification"]["status"] == "pending" and
             eden["qualification"]["status"] == "pending", "manual status must not leak into test profiles")
-    with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True):
+    require("usage_contract" not in lab and "usage_contract" not in eden,
+            "Lab raw and Eden simulation must not claim the release consumption contract")
+    with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True), \
+            mock.patch.object(manifest, "source_fingerprint", return_value="c" * 64):
         try:
             manifest.make_manifest("release")
         except ValueError as exc:
@@ -100,6 +108,73 @@ def test_tracked_dirty_uses_content_diff() -> None:
         require(manifest.git_tracked_dirty() is True, "tracked content changes must mark the candidate dirty")
 
 
+def test_host_newline_policy_preserves_real_edits() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-git-normalization-") as tmp_dir:
+        root = Path(tmp_dir)
+        def run(args: list[str]) -> None:
+            subprocess.run(["git", "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false",
+                            "-c", "core.hooksPath=" + str(root / "no-hooks"), *args],
+                           cwd=root, check=True, capture_output=True)
+        run(["init"])
+        tracked = root / "sample.txt"
+        tracked.write_bytes(b"value=1\n")
+        run(["add", "sample.txt"])
+        run(["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "baseline"])
+        tracked.write_bytes(b"value=1\r\n")
+        with mock.patch.object(manifest, "ROOT", root):
+            with mock.patch.dict(os.environ, {"PLAYWISE_GIT_AUTOCRLF": "false"}):
+                require(manifest.git_tracked_dirty(), "mismatched container policy exposes CRLF checkout difference")
+            with mock.patch.dict(os.environ, {"PLAYWISE_GIT_AUTOCRLF": "true"}):
+                require(not manifest.git_tracked_dirty(), "effective host normalization keeps identical source clean")
+                tracked.write_bytes(b"value=2\r\n")
+                require(manifest.git_tracked_dirty(), "normalization cannot hide a real source edit")
+            with mock.patch.dict(os.environ, {"PLAYWISE_GIT_AUTOCRLF": "false; unsafe"}):
+                try:
+                    manifest.git_tracked_dirty()
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError("invalid Git policy must not reach a command")
+        with mock.patch.object(manifest.subprocess, "run", side_effect=OSError("Git unavailable")):
+            require(manifest.git_tracked_dirty(), "Git failure can never force a clean source identity")
+
+
+def test_rebuild_identity_tracks_source_and_toolchain() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-build-identity-") as temporary:
+        root = Path(temporary)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        (root / ".gitignore").write_text("build/\n", encoding="utf-8")
+        source = root / "main.c"
+        source.write_text("int value = 1;\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+        with mock.patch.object(manifest, "ROOT", root), \
+                mock.patch.object(manifest, "git_commit", return_value="a" * 40), \
+                mock.patch.object(manifest, "git_tracked_dirty", return_value=True), \
+                mock.patch.object(manifest, "toolchain_identity", return_value="gcc fixture"), \
+                mock.patch.object(manifest, "libnx_identity", return_value="libnx fixture"):
+            first = manifest.make_manifest("release")
+            require(first == manifest.make_manifest("release"), "unchanged input has deterministic build identity")
+            require(first["release_id"] == manifest.make_manifest("eden-test")["release_id"],
+                    "profiles share their source/toolchain generation")
+            source.write_text("int value = 2;\n", encoding="utf-8")
+            second = manifest.make_manifest("release")
+            require(first["release_id"] != second["release_id"], "same-commit dirty rebuild must be reloadable")
+            require(first["commit"] == second["commit"], "source commit remains truthful")
+            new_source = root / "new.c"
+            new_source.write_text("new input 1", encoding="utf-8")
+            third = manifest.make_manifest("release")
+            new_source.write_text("new input 2", encoding="utf-8")
+            require(third["release_id"] != manifest.make_manifest("release")["release_id"],
+                    "editing a new untracked source must not collide")
+            unchanged = manifest.make_manifest("release")
+            (root / "build").mkdir()
+            (root / "build" / "output.bin").write_bytes(b"ignored generated output")
+            require(unchanged == manifest.make_manifest("release"), "ignored build output cannot feed back into identity")
+            with mock.patch.object(manifest, "libnx_identity", return_value="libnx changed"):
+                require(unchanged["release_id"] != manifest.make_manifest("release")["release_id"],
+                        "toolchain identity changes require a reload")
+
+
 def main() -> int:
     test_libnx_package_identity()
     test_libnx_pkgconfig_fallback()
@@ -107,6 +182,8 @@ def main() -> int:
     test_candidate_defaults_to_pending()
     test_manual_device_verification_is_explicit_and_scoped()
     test_tracked_dirty_uses_content_diff()
+    test_host_newline_policy_preserves_real_edits()
+    test_rebuild_identity_tracks_source_and_toolchain()
     print("Release manifest tests passed")
     return 0
 

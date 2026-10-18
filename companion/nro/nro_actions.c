@@ -67,7 +67,7 @@ void refresh_theme(UiState *ui)
 
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 {
-    if (!ui || ui->waiting || ui->recovering_redemption) return;
+    if (!ui || ui->waiting || ui->recovering_redemption || ui->transport.suspended) return;
     ui->status_refresh_pending = false;
     refresh_disable_flag(ui);
     refresh_album_restriction(ui);
@@ -81,6 +81,9 @@ void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 void applet_hook(AppletHookType hook, void *param)
 {
     UiState *ui = (UiState *)param;
+    if (ui && (hook == AppletHookType_OnResume || hook == AppletHookType_OnFocusState)) {
+        ui->minus_pending = false;
+    }
     if (ui && (hook == AppletHookType_OnResume ||
                (hook == AppletHookType_OnFocusState && appletGetFocusState() == AppletFocusState_InFocus))) {
         ui->theme_refresh_pending = true;
@@ -96,6 +99,11 @@ bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
     ui->theme_preference = preference;
     ui->theme_view = ptc_ui_theme_make_view(preference, ui->system_theme);
     if (save_ui_preferences(ui)) return true;
+    if (ui->model.view == PTC_UI_SETUP) {
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_THEME, PTC_ERR_STORAGE_WRITE_FAILED);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_SESSION_ONLY));
+        return false;
+    }
     ui->theme_preference = previous;
     ui->theme_view = ptc_ui_theme_make_view(previous, ui->system_theme);
     return false;
@@ -109,6 +117,12 @@ bool apply_language_preference(UiState *ui, PtcUiLanguagePreference preference)
     ui->language_preference = preference;
     ui->model.language_preference = preference;
     if (!save_ui_preferences(ui)) {
+        if (ui->model.view == PTC_UI_SETUP) {
+            refresh_language(ui);
+            ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_LANGUAGE, PTC_ERR_STORAGE_WRITE_FAILED);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_SESSION_ONLY));
+            return false;
+        }
         ui->language_preference = previous;
         ui->model.language_preference = previous;
         return false;
