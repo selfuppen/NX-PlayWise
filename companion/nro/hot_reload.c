@@ -11,6 +11,7 @@
 #include "../../common/crypto/sha256.h"
 #include "../../common/protocol/ipc_protocol.h"
 #include "../../common/version.h"
+#include "../../platform/switch/fs_storage.h"
 #include "../../third_party/cjson/cJSON.h"
 #include "release_manifest.h"
 
@@ -44,7 +45,8 @@ void ptc_hot_reload_record_event(PtcHotReloadController *controller, const char 
 {
     char path[384];
     char *json;
-    FILE *file;
+    PtcFsStorage fs;
+    PtcStorage *storage;
     cJSON *root;
     const char *id;
     if (!controller || !controller->journal.transaction_id[0]) return;
@@ -83,13 +85,11 @@ void ptc_hot_reload_record_event(PtcHotReloadController *controller, const char 
     json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!json) return;
-    file = NULL;
-    for (unsigned int attempt = 0; attempt < 51U; ++attempt) {
-        file = fopen(path, "ab");
-        if (file || (errno != EBUSY && errno != EACCES && errno != EAGAIN)) break;
-        if (attempt < 50U) svcSleepThread(10000000LL);
-    }
-    if (file) { (void)fprintf(file, "%s\n", json); (void)fclose(file); }
+    /* Reuse the bounded append path, including the observed EIO/0xE02 pair.
+       Only unopened files may retry; a write/close failure must never replay. */
+    ptc_fs_storage_init(&fs);
+    storage = ptc_fs_storage_as_storage(&fs);
+    (void)storage->vtable->append_line(storage, path, json);
     cJSON_free(json);
 }
 

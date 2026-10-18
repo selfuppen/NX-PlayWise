@@ -205,7 +205,7 @@ $(BUILD)/nro_input.o: nro_input.c nro_app_internal.h | $(BUILD)
 $(BUILD)/nro_touch_input.o: nro_touch_input.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/hot_reload.o: hot_reload.c hot_reload.h ../hot_reload_guard.h | $(BUILD)
+$(BUILD)/hot_reload.o: hot_reload.c hot_reload.h ../hot_reload_guard.h ../../platform/switch/fs_storage.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/hot_reload_guard.o: ../hot_reload_guard.c ../hot_reload_guard.h | $(BUILD)

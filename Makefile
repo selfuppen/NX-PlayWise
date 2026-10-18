@@ -130,8 +130,11 @@ $(HOST_BUILD_DIR)/fs_storage_retry_test.o: platform/switch/fs_storage.c platform
 $(HOST_FS_APPEND_TEST): tests/c/test_fs_append_retry.c $(HOST_BUILD_DIR)/fs_storage_retry_test.o FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ tests/c/test_fs_append_retry.c $(HOST_BUILD_DIR)/fs_storage_retry_test.o
 
-$(HOST_HOT_RELOAD_TEST): tests/hot_reload/test.c tests/hot_reload/switch.h tests/hot_reload/release_manifest.h companion/nro/hot_reload.c companion/hot_reload_guard.c common/crypto/sha256.c companion/ui_language.c third_party/cjson/cJSON.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -o $@ $(filter %.c,$^) -lm
+$(HOST_BUILD_DIR)/hot_reload_test.o: companion/nro/hot_reload.c companion/nro/hot_reload.h platform/switch/fs_storage.h tests/hot_reload/switch.h tests/hot_reload/release_manifest.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -Dfopen=ptc_test_fopen -Dfprintf=ptc_test_fprintf -Dfclose=ptc_test_fclose -c companion/nro/hot_reload.c -o $@
+
+$(HOST_HOT_RELOAD_TEST): tests/hot_reload/test.c tests/hot_reload/switch.h tests/hot_reload/release_manifest.h $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/fs_storage_retry_test.o companion/hot_reload_guard.c common/crypto/sha256.c companion/ui_language.c third_party/cjson/cJSON.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -o $@ $(filter %.c,$^) $(filter %.o,$^) -lm
 
 test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST)
 	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST)'

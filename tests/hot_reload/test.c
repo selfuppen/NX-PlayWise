@@ -1,4 +1,6 @@
 #include <assert.h>
+#include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -16,6 +18,61 @@ static const char *source_boot = "dddddddddddddddd";
 static u64 ticks, running, random_value;
 static unsigned launches, pm_sessions;
 static bool wrong_boot;
+static unsigned event_open_failures, event_open_attempts, event_write_calls, event_close_calls;
+static int event_open_errno;
+static uint32_t event_fs_result;
+static bool event_write_failure, event_close_failure;
+static FILE *event_stream;
+
+FILE *ptc_test_fopen(const char *path, const char *mode)
+{
+    if (strcmp(mode, "ab") == 0 && strstr(path, "/handover/events/")) {
+        ++event_open_attempts;
+        if (event_open_failures) {
+            --event_open_failures;
+            errno = event_open_errno;
+            return NULL;
+        }
+        event_stream = fopen(path, mode);
+        return event_stream;
+    }
+    return fopen(path, mode);
+}
+
+int ptc_test_fprintf(FILE *file, const char *format, ...)
+{
+    va_list args;
+    int result;
+    if (file == event_stream) {
+        ++event_write_calls;
+        if (event_write_failure) {
+            assert(fputs("{", file) >= 0);
+            errno = EIO;
+            return -1;
+        }
+    }
+    va_start(args, format);
+    result = vfprintf(file, format, args);
+    va_end(args);
+    return result;
+}
+
+int ptc_test_fclose(FILE *file)
+{
+    bool event = file == event_stream;
+    int result = fclose(file);
+    if (event) {
+        event_stream = NULL;
+        ++event_close_calls;
+        if (event_close_failure) {
+            errno = EIO;
+            return EOF;
+        }
+    }
+    return result;
+}
+
+uint32_t fsdevGetLastResult(void) { return event_fs_result; }
 
 static void put(const char *path, const char *text)
 {
@@ -81,6 +138,9 @@ static void fixture(unsigned index)
         ROOT "/handover/ready.json", ROOT "/handover/events/00000000000000010000000000000002.jsonl"};
     for (size_t i = 0; i < sizeof(owned) / sizeof(owned[0]); ++i) (void)remove(owned[i]);
     ticks = 1; running = 131; random_value = 0; launches = pm_sessions = 0; wrong_boot = false;
+    event_open_failures = event_open_attempts = event_write_calls = event_close_calls = 0;
+    event_open_errno = 0; event_fs_result = 0; event_write_failure = event_close_failure = false;
+    event_stream = NULL;
     put(FLAG, ""); runtime(running, source_boot);
     put(ROOT "/pctc.nro", "component"); put("sdmc:/switch/.overlays/playwise.ovl", "component");
     put("sdmc:/atmosphere/contents/4200000000BD2300/exefs.nsp", "component");
@@ -119,6 +179,60 @@ static void ready(PtcHotReloadController *c)
     for (unsigned i = 0; i < 3; ++i) ptc_hot_reload_tick(c);
     assert(c->phase == PTC_HOT_RELOAD_PHASE_WAIT_TARGET_READY && launches == 1 && exists(FLAG));
     ptc_hot_reload_tick(c);
+}
+
+static void event_fixture(unsigned index, PtcHotReloadController *c)
+{
+    fixture(index);
+    ptc_hot_reload_init(c);
+    snprintf(c->journal.transaction_id, sizeof(c->journal.transaction_id), "00000000000000010000000000000002");
+}
+
+static unsigned event_lines(void)
+{
+    FILE *file = fopen(ROOT "/handover/events/00000000000000010000000000000002.jsonl", "rb");
+    unsigned lines = 0;
+    if (!file) return 0;
+    for (int ch; (ch = fgetc(file)) != EOF;) if (ch == '\n') ++lines;
+    assert(fclose(file) == 0);
+    return lines;
+}
+
+static void test_event_append(void)
+{
+    PtcHotReloadController c;
+    event_fixture(10, &c);
+    event_open_failures = 2; event_open_errno = EIO; event_fs_result = 0xE02;
+    ptc_hot_reload_record_event(&c, "runtime_ready", NULL, 0);
+    assert(event_open_attempts == 3 && event_write_calls == 1 && event_close_calls == 1);
+    assert(ticks == UINT64_C(20000001) && event_lines() == 1);
+    ptc_hot_reload_record_event(&c, "status_submitted", "ui-status", 0);
+    assert(event_lines() == 2 && event_write_calls == 2);
+    assert(chdir("../..") == 0);
+
+    event_fixture(11, &c);
+    event_open_failures = 100; event_open_errno = EIO; event_fs_result = 0xE02;
+    ptc_hot_reload_record_event(&c, "runtime_ready", NULL, 0);
+    assert(event_open_attempts == 51 && !event_write_calls && !event_close_calls && !event_lines());
+    assert(ticks == UINT64_C(500000001)); assert(chdir("../..") == 0);
+
+    event_fixture(12, &c);
+    event_open_failures = 2; event_open_errno = EIO; event_fs_result = 0x1234;
+    ptc_hot_reload_record_event(&c, "runtime_ready", NULL, 0);
+    assert(event_open_attempts == 1 && !event_write_calls && !event_lines() && ticks == 1);
+    assert(chdir("../..") == 0);
+
+    event_fixture(13, &c);
+    event_write_failure = true;
+    ptc_hot_reload_record_event(&c, "runtime_ready", NULL, 0);
+    assert(event_open_attempts == 1 && event_write_calls == 1 && event_close_calls == 1 && !event_lines());
+    assert(chdir("../..") == 0);
+
+    event_fixture(14, &c);
+    event_close_failure = true;
+    ptc_hot_reload_record_event(&c, "runtime_ready", NULL, 0);
+    assert(event_open_attempts == 1 && event_write_calls == 1 && event_close_calls == 1 && event_lines() == 1);
+    assert(chdir("../..") == 0);
 }
 
 int main(void)
@@ -185,6 +299,7 @@ int main(void)
     ticks += UINT64_C(10000000000); ptc_hot_reload_tick(&c);
     assert(c.phase == PTC_HOT_RELOAD_PHASE_FAILED && exists(FLAG) && !launches && !pm_sessions);
     assert(chdir("../..") == 0);
-    puts("PASS actual NRO capture restart, single claim, changed config, bounded exit, crash recovery and boot rejection");
+    test_event_append();
+    puts("PASS actual NRO capture restart, single claim, bounded exit/recovery and event append retry/no replay");
     return 0;
 }
