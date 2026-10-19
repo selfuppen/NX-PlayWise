@@ -531,9 +531,21 @@ int main(void)
     applet_hook(AppletHookType_OnFocusState, &ui);
     check(!ui.minus_pending && ui.status_refresh_pending,
           "returning to focus refreshes status without replaying Minus");
+    check(ui.status_refresh_origin == PTC_UI_STATUS_FOCUS,
+          "focus refresh retains its own provenance");
     ui.minus_pending = true;
     applet_hook(AppletHookType_OnResume, &ui);
     check(!ui.minus_pending, "resume discards a pending standalone Minus press");
+    check(ui.status_refresh_origin == PTC_UI_STATUS_RESUME_AND_FOCUS,
+          "coalesced focus and resume are not reported as a Y press");
+    ui.waiting = true;
+    trigger_resume_status_refresh(&ui, NULL);
+    check(ui.status_refresh_pending && ui.status_refresh_origin == PTC_UI_STATUS_RESUME_AND_FOCUS,
+          "deferred refresh keeps its provenance while another request waits");
+    ui.waiting = false;
+    trigger_resume_status_refresh(&ui, NULL);
+    check(!ui.status_refresh_pending && ui.status_refresh_origin == PTC_UI_STATUS_OTHER && ui.waiting,
+          "resume dispatch consumes its cause once without changing status submission");
     test_config_backup_ui();
     test_today_detail_refresh();
     test_parent_pin_error();

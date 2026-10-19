@@ -2,7 +2,7 @@
 
 [开发文档入口](../docs/开发/README.md) · [测试操作手册](../docs/开发/测试操作手册.md)
 
-本目录核对于2026-10-19：59个Python／PowerShell脚本及`ptc_frontend/`的14个既有跟踪文件。分类清单同时保存在[catalog.json](catalog.json)，每个脚本恰好一项；根目录仅保留6个日常入口，其余按实际子目录管理。
+本目录核对于2026-10-19：60个Python／PowerShell脚本及`ptc_frontend/`的14个既有跟踪文件。分类清单同时保存在[catalog.json](catalog.json)，每个脚本恰好一项；根目录仅保留6个日常入口，其余按实际子目录管理。
 
 ## 日常怎么选
 
@@ -64,6 +64,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | --- | --- |
 | [device/auto_update.py](device/auto_update.py) | 正常PIN有界更新／显式同候选采集重启，禁止重放已开始run；diagnose独立离线定位封存交接缺口 |
 | [device/ui_receipt_observer.py](device/ui_receipt_observer.py) | 只读观察有界窗口内全部新增原请求／回执；多条有效回执与来源隔离分别判定，不注入输入 |
+| [device/ui_status_trace.py](device/ui_status_trace.py) | 离线准备有期限的status来源取证配置，审计已停采客户端日志并配对原请求回执；不操作设备、不证明输入隔离 |
 | [device/pctl_standard_evidence.py](device/pctl_standard_evidence.py) | 标准候选prepare、stage、只读拉回和原始审计；不授予完整资格 |
 | [device/pctl_production_midnight.py](device/pctl_production_midnight.py) | 新标准raw的自然午夜离线核验；不创建时间窗口或设备采集 |
 | [device/bounded_input_batch.py](device/bounded_input_batch.py) | 受限输入辅助库，限制动作／期限并释放detach，不是任意导航脚本 |

@@ -58,6 +58,12 @@
         prev_stick_keys_ = stick_keys;
         const auto touch = page_touch(raw_touch);
         const bool tapped = touch.x != 0 || touch.y != 0;
+        status_trigger_origin_ = (keysDown & HidNpadButton_Y) ? PTC_UI_STATUS_BUTTON_Y
+            : (tapped ? PTC_UI_STATUS_TOUCH : PTC_UI_STATUS_OTHER);
+        struct ResetStatusOrigin {
+            PtcUiStatusOrigin &origin;
+            ~ResetStatusOrigin() { origin = PTC_UI_STATUS_OTHER; }
+        } reset_status_origin{status_trigger_origin_};
         const int tx = static_cast<int>(touch.x), ty = static_cast<int>(touch.y);
         // PIN keeps both sticks as digit input. Other pages use the right stick
         // for scrolling; explanatory pages also use Up/Down without executing.

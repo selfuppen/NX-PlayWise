@@ -2,12 +2,17 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-19",
   "scope": "playwise/tools",
-  "script_count": 59,
+  "script_count": 60,
   "scripts": [
     {
       "path": "device/ui_receipt_observer.py",
       "category": "device",
       "purpose": "只读观察全部新增UI原请求回执，区分多来源与无回执"
+    },
+    {
+      "path": "device/ui_status_trace.py",
+      "category": "device",
+      "purpose": "离线准备限期UI status来源取证并配对原请求回执，不操作设备"
     },
     {
       "path": "test.py",
@@ -42,7 +47,7 @@
     {
       "path": "device/auto_update.py",
       "category": "device",
-        "purpose": "正常PIN有界更新／显式同候选采集重启，禁止重放已开始run；diagnose独立离线定位封存交接缺口",
+      "purpose": "正常PIN有界更新／显式同候选采集重启，禁止重放已开始run；diagnose独立离线定位封存交接缺口",
       "legacy_path": "auto_update.py"
     },
     {

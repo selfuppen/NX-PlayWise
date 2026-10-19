@@ -16,6 +16,7 @@ extern "C" {
 #include "../../auth.h"
 #include "../input_model.h"
 #include "../../ui_language.h"
+#include "../../ui_status_trace.h"
 #include "third_party/cjson/cJSON.h"
 #include "common/crypto/sha256.h"
 #include "common/time/ptc_time.h"
@@ -30,6 +31,7 @@ constexpr char APP_ROOT[] = "sdmc:/switch/playwise";
 #include "render_types.hpp"
 
 static PtcUiResolvedTheme s_overlay_theme = PTC_UI_RESOLVED_DARK;
+static PtcUiStatusTrace s_status_trace;
 
 static void load_overlay_config(PtcStorage *storage)
 {
@@ -228,7 +230,7 @@ public:
                 usage_snapshot_tick_ = request_started_tick_;
                 has_status_snapshot_ = true;
                 error_ = false;
-                (void)begin_status_refresh();
+                (void)begin_status_refresh(PTC_UI_STATUS_OVERLAY_READY);
             } else if (ptc_overlay_bridge_status_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 usage_snapshot_tick_ = request_started_tick_;
@@ -417,12 +419,15 @@ public:
         ptc_overlay_input_init(input_);
     }
 
-    bool begin_status_refresh()
+    bool begin_status_refresh(PtcUiStatusOrigin origin = PTC_UI_STATUS_OTHER)
     {
         if (!bridge_ || bridge_->waiting) return false;
         request_started_tick_ = armGetSystemTick();
         PtcCompanionStatus status = ptc_overlay_bridge_submit_status(
             bridge_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
+        ptc_ui_status_trace_record(&s_status_trace, bridge_->request_id,
+            origin == PTC_UI_STATUS_OTHER ? status_trigger_origin_ : origin,
+            armTicksToNs(armGetSystemTick()), -1, status);
         if (status != PTC_COMPANION_OK) {
             error_ = true;
             status_expanded_ = true;
@@ -1058,6 +1063,7 @@ public:
 #include "render_methods.hpp"
 
 private:
+    PtcUiStatusOrigin status_trigger_origin_ = PTC_UI_STATUS_OTHER;
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
     PlayWiseOverlayFrame *frame_ = nullptr;
@@ -1129,11 +1135,14 @@ public:
         ptc_fs_storage_init(&storage_);
         load_overlay_config(ptc_fs_storage_as_storage(&storage_));
         ptc_overlay_bridge_init(&bridge_, APP_ROOT, ptc_fs_storage_as_storage(&storage_));
+        ptc_ui_status_trace_init(&s_status_trace, ptc_fs_storage_as_storage(&storage_), APP_ROOT,
+            PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, "overlay", armTicksToNs(armGetSystemTick()));
         ptc_overlay_input_init(&input_);
     }
 
     void exitServices() override
     {
+        ptc_ui_status_trace_close(&s_status_trace, armTicksToNs(armGetSystemTick()));
         ptc_overlay_bridge_exit(&bridge_);
         fsdevUnmountDevice("sdmc");
     }

@@ -118,6 +118,10 @@ int main(int argc, char **argv)
 #endif
     install_defaults_ready = ptc_install_materialize_defaults(ptc_fs_storage_as_storage(&fs), APP_ROOT);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
+#ifndef PLAYWISE_EDEN
+    ptc_ui_status_trace_init(&ui.status_trace, ptc_fs_storage_as_storage(&fs), APP_ROOT,
+        PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, "nro", armTicksToNs(armGetSystemTick()));
+#endif
     load_ui_preferences(&ui);
     refresh_theme(&ui);
     refresh_language(&ui);
@@ -363,7 +367,7 @@ int main(int argc, char **argv)
                 }
             } else if (down & HidNpadButton_Y) {
                 ptc_audio_play(PTC_SE_CONFIRM);
-                submit_status(&ui);
+                submit_status_with_origin(&ui, PTC_UI_STATUS_BUTTON_Y);
             } else if (down & HidNpadButton_Plus) {
                 ptc_audio_play(PTC_SE_POPUP);
                 ptc_ui_open_home_details(&ui.model);
@@ -388,7 +392,7 @@ int main(int argc, char **argv)
         } else if (ui.model.view == PTC_UI_SETUP) {
             if (down & HidNpadButton_Y) {
                 ptc_audio_play(PTC_SE_CONFIRM);
-                submit_status(&ui);
+                submit_status_with_origin(&ui, PTC_UI_STATUS_BUTTON_Y);
             } else {
                 handle_setup_input(&ui, down, held);
             }
@@ -1014,6 +1018,7 @@ int main(int argc, char **argv)
     ptc_ui_graphics_exit();
     free(ui.calendar_view_data);
 #ifndef PLAYWISE_EDEN
+    ptc_ui_status_trace_close(&ui.status_trace, armTicksToNs(armGetSystemTick()));
     ptc_hot_reload_exit(&ui.hot_reload);
     ptc_switch_ipc_client_exit(&ui.ipc);
 #endif

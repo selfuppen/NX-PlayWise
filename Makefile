@@ -12,6 +12,7 @@ HOST_PCTL_ADAPTER_TEST := $(HOST_BUILD_DIR)/test_pctl_adapter
 HOST_USAGE_EVIDENCE_TEST := $(HOST_BUILD_DIR)/test_usage_evidence
 HOST_FS_APPEND_TEST := $(HOST_BUILD_DIR)/test_fs_append_retry
 HOST_HOT_RELOAD_TEST := $(HOST_BUILD_DIR)/test_hot_reload
+HOST_UI_STATUS_TRACE_TEST := $(HOST_BUILD_DIR)/test_ui_status_trace
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
@@ -136,8 +137,11 @@ $(HOST_BUILD_DIR)/hot_reload_test.o: companion/nro/hot_reload.c companion/nro/ho
 $(HOST_HOT_RELOAD_TEST): tests/hot_reload/test.c tests/hot_reload/switch.h tests/hot_reload/release_manifest.h $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/fs_storage_retry_test.o companion/hot_reload_guard.c common/crypto/sha256.c companion/ui_language.c third_party/cjson/cJSON.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -o $@ $(filter %.c,$^) $(filter %.o,$^) -lm
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST)
-	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST)'
+$(HOST_UI_STATUS_TRACE_TEST): companion/ui_status_trace.c common/crypto/sha256.c third_party/cjson/cJSON.c platform/host/mem_storage.c tests/c/test_ui_status_trace.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^)
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST)
+	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)

@@ -15,6 +15,7 @@
 #include "../../companion/album_restriction.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/transport_client.h"
+#include "../../companion/ui_status_trace.h"
 #include "../../companion/switch_ipc_client.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/calendar_store.h"
@@ -116,6 +117,8 @@ typedef struct {
     PtcUiSystemLanguage system_language;
     volatile bool theme_refresh_pending;
     volatile bool status_refresh_pending;
+    volatile PtcUiStatusOrigin status_refresh_origin;
+    PtcUiStatusTrace status_trace;
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char last_result[RESULT_TEXT_SIZE];
     int elapsed_ms;
@@ -216,6 +219,7 @@ void open_offline_code_input(UiState *ui);
 void begin_wait(UiState *ui, const char *type, const char *message);
 void submit_transport_empty(UiState *ui, const char *type, const char *ok_message, const char *fail_prefix);
 void submit_status(UiState *ui);
+void submit_status_with_origin(UiState *ui, PtcUiStatusOrigin origin);
 void activate_parent_status(UiState *ui);
 void enter_child_area(UiState *ui);
 void show_pending_redemption(UiState *ui);

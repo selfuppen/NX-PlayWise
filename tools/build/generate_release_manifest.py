@@ -177,6 +177,7 @@ def make_manifest(profile: str) -> dict:
         data["capture_restart_version"] = 1
         from tools.qualification.pctl_usage_qualification import CURRENT_CONTRACT
         data["usage_contract"] = CURRENT_CONTRACT
+        data["ui_status_trace_version"] = 1
     return data
 
 

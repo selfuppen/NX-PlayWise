@@ -86,6 +86,7 @@ OBJS := \
 	$(BUILD)/auth.o \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/transport_client.o \
+	$(BUILD)/ui_status_trace.o \
 	$(BUILD)/switch_ipc_client.o \
 	$(BUILD)/request_client.o \
 	$(BUILD)/result_summary.o \
@@ -311,6 +312,9 @@ $(BUILD)/request_client.o: ../request_client.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/transport_client.o: ../transport_client.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_status_trace.o: ../ui_status_trace.c ../ui_status_trace.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/switch_ipc_client.o: ../switch_ipc_client.c | $(BUILD)

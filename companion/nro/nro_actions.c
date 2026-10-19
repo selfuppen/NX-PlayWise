@@ -67,12 +67,15 @@ void refresh_theme(UiState *ui)
 
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 {
+    PtcUiStatusOrigin origin;
     if (!ui || ui->waiting || ui->recovering_redemption || ui->transport.suspended) return;
+    origin = ui->status_refresh_origin;
     ui->status_refresh_pending = false;
+    ui->status_refresh_origin = PTC_UI_STATUS_OTHER;
     refresh_disable_flag(ui);
     refresh_album_restriction(ui);
     refresh_security_state(ui);
-    submit_status(ui);
+    submit_status_with_origin(ui, origin);
     if (background_poll_elapsed_ms) {
         *background_poll_elapsed_ms = BACKGROUND_POLL_INTERVAL_MS;
     }
@@ -87,6 +90,9 @@ void applet_hook(AppletHookType hook, void *param)
     if (ui && (hook == AppletHookType_OnResume ||
                (hook == AppletHookType_OnFocusState && appletGetFocusState() == AppletFocusState_InFocus))) {
         ui->theme_refresh_pending = true;
+        ui->status_refresh_origin = (PtcUiStatusOrigin)(
+            (ui->status_refresh_pending ? ui->status_refresh_origin : PTC_UI_STATUS_OTHER) |
+            (hook == AppletHookType_OnResume ? PTC_UI_STATUS_RESUME : PTC_UI_STATUS_FOCUS));
         ui->status_refresh_pending = true;
     }
 }

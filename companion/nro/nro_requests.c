@@ -31,6 +31,11 @@ void submit_transport_empty(UiState *ui, const char *type, const char *ok_messag
 
 void submit_status(UiState *ui)
 {
+    submit_status_with_origin(ui, PTC_UI_STATUS_OTHER);
+}
+
+void submit_status_with_origin(UiState *ui, PtcUiStatusOrigin origin)
+{
     PtcCompanionStatus status;
     if (!ui || ui->waiting) {
         return;
@@ -39,6 +44,13 @@ void submit_status(UiState *ui)
         ui->model.home_details_refresh_failed = true;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
+#ifndef PLAYWISE_EDEN
+    if (ui->status_trace.active)
+        ptc_ui_status_trace_record(&ui->status_trace, ui->active_request_id, origin,
+            armTicksToNs(armGetSystemTick()), appletGetFocusState(), status);
+#else
+    (void)origin;
+#endif
     set_command_name(ui, "status");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) begin_wait(ui, "status", ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS));
