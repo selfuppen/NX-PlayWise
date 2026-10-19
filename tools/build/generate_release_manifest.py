@@ -178,6 +178,7 @@ def make_manifest(profile: str) -> dict:
         from tools.qualification.pctl_usage_qualification import CURRENT_CONTRACT
         data["usage_contract"] = CURRENT_CONTRACT
         data["ui_status_trace_version"] = 1
+        data["nro_overlay_input_owner_version"] = 1
     return data
 
 

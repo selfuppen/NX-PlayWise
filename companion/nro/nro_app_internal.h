@@ -16,6 +16,7 @@
 #include "../../companion/file_protocol.h"
 #include "../../companion/transport_client.h"
 #include "../../companion/ui_status_trace.h"
+#include "../../companion/input_owner.h"
 #include "../../companion/switch_ipc_client.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/calendar_store.h"
@@ -119,6 +120,7 @@ typedef struct {
     volatile bool status_refresh_pending;
     volatile PtcUiStatusOrigin status_refresh_origin;
     PtcUiStatusTrace status_trace;
+    PtcInputOwnerReader input_owner;
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char last_result[RESULT_TEXT_SIZE];
     int elapsed_ms;
@@ -302,6 +304,7 @@ void refresh_language(UiState *ui);
 void ptc_ui_refresh_recent_event_labels(PtcUiModel *model);
 bool apply_language_preference(UiState *ui, PtcUiLanguagePreference preference);
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms);
+bool input_owner_blocks(UiState *ui, bool non_neutral);
 void applet_hook(AppletHookType hook, void *param);
 bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
 void handle_today_action_ready(UiState *ui, int index);

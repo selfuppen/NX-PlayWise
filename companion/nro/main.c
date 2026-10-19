@@ -121,6 +121,8 @@ int main(int argc, char **argv)
 #ifndef PLAYWISE_EDEN
     ptc_ui_status_trace_init(&ui.status_trace, ptc_fs_storage_as_storage(&fs), APP_ROOT,
         PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, "nro", armTicksToNs(armGetSystemTick()));
+    ptc_input_owner_reader_init(&ui.input_owner, ptc_fs_storage_as_storage(&fs), APP_ROOT,
+        PLAYWISE_BUILD_RELEASE_ID);
 #endif
     load_ui_preferences(&ui);
     refresh_theme(&ui);
@@ -189,6 +191,8 @@ int main(int argc, char **argv)
         bool custom_combo_triggered;
         bool custom_combo_candidate;
         bool touch_active;
+        HidAnalogStickState left_stick;
+        HidAnalogStickState right_stick;
         int touch_x = -1;
         int touch_y = -1;
         if (ui.theme_refresh_pending) {
@@ -199,7 +203,9 @@ int main(int argc, char **argv)
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
         held = padGetButtons(&pad);
-        stick_buttons = stick_direction_buttons(padGetStickPos(&pad, 0));
+        left_stick = padGetStickPos(&pad, 0);
+        right_stick = padGetStickPos(&pad, 1);
+        stick_buttons = stick_direction_buttons(left_stick);
         down |= stick_buttons & ~previous_stick_buttons;
         previous_stick_buttons = stick_buttons;
         held |= stick_buttons;
@@ -207,6 +213,19 @@ int main(int argc, char **argv)
         if (touch_active) {
             touch_x = (int)touch.touches[0].x;
             touch_y = (int)touch.touches[0].y;
+        }
+        if (input_owner_blocks(&ui, down || held || touch_active ||
+                abs(right_stick.x) > STICK_DEADZONE || abs(right_stick.y) > STICK_DEADZONE)) {
+            down = held = previous_stick_buttons = 0;
+            memset(&left_stick, 0, sizeof(left_stick));
+            memset(&right_stick, 0, sizeof(right_stick));
+            touch_active = touch_down = details_touch_drag = false;
+            touch_x = touch_y = details_touch_y = -1;
+            ui.minus_pending = false;
+            ui.hidden_ticks = 0;
+            memset(&ui.custom_shortcut_hold, 0, sizeof(ui.custom_shortcut_hold));
+            memset(&ui.r_stick_repeat, 0, sizeof(ui.r_stick_repeat));
+            ui.r_stick_prev_h_dir = 0;
         }
         padRepeaterUpdate(&direction_repeater, held & DIRECTION_BUTTON_MASK);
         down |= padRepeaterGetButtons(&direction_repeater);
@@ -304,7 +323,7 @@ int main(int argc, char **argv)
                 handle_overlay_input(&ui, down);
             }
             if (ui.model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
-                HidAnalogStickState r_stick = padGetStickPos(&pad, 1);
+                HidAnalogStickState r_stick = right_stick;
                 int v_dir = 0;
                 int h_dir = 0;
                 if (r_stick.y > STICK_DEADZONE) v_dir = 1;

@@ -188,6 +188,19 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
         buttons_held = padGetButtons(g_active_pad);
         left = padGetStickPos(g_active_pad, 0);
         right = padGetStickPos(g_active_pad, 1);
+        touch_active = hidGetTouchScreenStates(&touch, 1) && touch.count > 0;
+        if (input_owner_blocks(ui, buttons_down || buttons_held || touch_active ||
+                abs(left.x) > STICK_DEADZONE || abs(left.y) > STICK_DEADZONE ||
+                abs(right.x) > STICK_DEADZONE || abs(right.y) > STICK_DEADZONE)) {
+            buttons_down = buttons_held = 0;
+            memset(&left, 0, sizeof(left));
+            memset(&right, 0, sizeof(right));
+            touch_active = touch_was_active = touch_plus_was_held = false;
+            ignore_touch_until_release = true;
+            left_latched = right_latched = -1;
+            plus_samples = 0;
+            plus_was_held = plus_keyboard = false;
+        }
         left_digit = ptc_ui_pin_digit_from_vector(left.x, left.y, STICK_DEADZONE);
         right_digit = ptc_ui_pin_digit_from_vector(right.x, right.y, STICK_DEADZONE);
         if (left_digit < 0) left_latched = -1;
@@ -251,7 +264,6 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
         }
         plus_was_held = (buttons_held & HidNpadButton_Plus) != 0;
 
-        touch_active = hidGetTouchScreenStates(&touch, 1) && touch.count > 0;
         touch_allowed = ptc_ui_touch_after_entry_allowed(&ignore_touch_until_release, touch_active);
         if (!touch_allowed) {
             if (!touch_active) touch_was_active = false;

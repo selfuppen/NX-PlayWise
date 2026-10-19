@@ -40,6 +40,17 @@
         HidAnalogStickState left, HidAnalogStickState right) override
     {
         const u64 now = armGetSystemTick();
+        const bool physical_input = keysDown || keysHeld || raw_touch.x || raw_touch.y ||
+            std::abs(left.x) > 16000 || std::abs(left.y) > 16000 ||
+            std::abs(right.x) > 16000 || std::abs(right.y) > 16000;
+        const bool verify_identity = physical_input || owner_input_latched_;
+        owner_input_latched_ = physical_input;
+        if (!s_owner_visible || !(verify_identity
+                ? ptc_input_owner_accept(&s_input_owner, armTicksToNs(now))
+                : ptc_input_owner_maintain(&s_input_owner, armTicksToNs(now)))) {
+            if (s_owner_visible) tsl::Overlay::get()->hide();
+            return true;
+        }
         int elapsed_ms = 0;
         if (last_input_tick_) {
             const u64 elapsed = armTicksToNs(now - last_input_tick_) / 1000000ULL;

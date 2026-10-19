@@ -17,6 +17,7 @@ extern "C" {
 #include "../input_model.h"
 #include "../../ui_language.h"
 #include "../../ui_status_trace.h"
+#include "../../input_owner.h"
 #include "third_party/cjson/cJSON.h"
 #include "common/crypto/sha256.h"
 #include "common/time/ptc_time.h"
@@ -32,6 +33,8 @@ constexpr char APP_ROOT[] = "sdmc:/switch/playwise";
 
 static PtcUiResolvedTheme s_overlay_theme = PTC_UI_RESOLVED_DARK;
 static PtcUiStatusTrace s_status_trace;
+static PtcInputOwnerWriter s_input_owner;
+static bool s_owner_visible = false;
 
 static void load_overlay_config(PtcStorage *storage)
 {
@@ -174,9 +177,6 @@ public:
         frame_ = frame;
         frame->set_parent_view_predicate([this] { return access_recovery_visible(); });
         content_parent_layout_ = access_recovery_visible();
-        if (!restore_pending_redemption()) {
-            (void)begin_overlay_ready();
-        }
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             renderer->setPreferTraditionalChinese(
                 ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_TRADITIONAL);
@@ -197,6 +197,13 @@ public:
 
     void update() override
     {
+        if (s_owner_visible && !ptc_input_owner_maintain(&s_input_owner, armTicksToNs(armGetSystemTick()))) {
+            tsl::Overlay::get()->hide();
+            return;
+        }
+        if (s_owner_visible && ptc_input_owner_begin_ui(&s_input_owner)) {
+            if (!restore_pending_redemption()) (void)begin_overlay_ready();
+        }
         expire_usage_snapshot();
         // Parent views use a raised content top (banner hidden); re-layout the
         // frame whenever we cross the child<->parent boundary. Runs every frame
@@ -1064,6 +1071,7 @@ public:
 
 private:
     PtcUiStatusOrigin status_trigger_origin_ = PTC_UI_STATUS_OTHER;
+    bool owner_input_latched_ = false;
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
     PlayWiseOverlayFrame *frame_ = nullptr;
@@ -1129,10 +1137,24 @@ private:
 
 class PctcOverlay final : public tsl::Overlay {
 public:
+    void onShow() override
+    {
+        s_owner_visible = true;
+        if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) hide();
+    }
+
+    void onHide() override
+    {
+        s_owner_visible = false;
+        ptc_input_owner_release(&s_input_owner, armTicksToNs(armGetSystemTick()));
+    }
+
     void initServices() override
     {
         fsdevMountSdmc();
         ptc_fs_storage_init(&storage_);
+        ptc_input_owner_writer_init(&s_input_owner, ptc_fs_storage_as_storage(&storage_), APP_ROOT,
+            PLAYWISE_BUILD_RELEASE_ID, armTicksToNs(armGetSystemTick()));
         load_overlay_config(ptc_fs_storage_as_storage(&storage_));
         ptc_overlay_bridge_init(&bridge_, APP_ROOT, ptc_fs_storage_as_storage(&storage_));
         ptc_ui_status_trace_init(&s_status_trace, ptc_fs_storage_as_storage(&storage_), APP_ROOT,
@@ -1142,6 +1164,7 @@ public:
 
     void exitServices() override
     {
+        onHide();
         ptc_ui_status_trace_close(&s_status_trace, armTicksToNs(armGetSystemTick()));
         ptc_overlay_bridge_exit(&bridge_);
         fsdevUnmountDevice("sdmc");

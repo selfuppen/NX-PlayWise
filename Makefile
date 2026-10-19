@@ -13,6 +13,7 @@ HOST_USAGE_EVIDENCE_TEST := $(HOST_BUILD_DIR)/test_usage_evidence
 HOST_FS_APPEND_TEST := $(HOST_BUILD_DIR)/test_fs_append_retry
 HOST_HOT_RELOAD_TEST := $(HOST_BUILD_DIR)/test_hot_reload
 HOST_UI_STATUS_TRACE_TEST := $(HOST_BUILD_DIR)/test_ui_status_trace
+HOST_INPUT_OWNER_TEST := $(HOST_BUILD_DIR)/test_input_owner
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
@@ -140,8 +141,11 @@ $(HOST_HOT_RELOAD_TEST): tests/hot_reload/test.c tests/hot_reload/switch.h tests
 $(HOST_UI_STATUS_TRACE_TEST): companion/ui_status_trace.c common/crypto/sha256.c third_party/cjson/cJSON.c platform/host/mem_storage.c tests/c/test_ui_status_trace.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^)
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST)
-	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST)'
+$(HOST_INPUT_OWNER_TEST): companion/input_owner.c third_party/cjson/cJSON.c platform/host/mem_storage.c tests/c/test_input_owner.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^)
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST)
+	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST) && $(HOST_INPUT_OWNER_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)

@@ -87,6 +87,7 @@ OBJS := \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/transport_client.o \
 	$(BUILD)/ui_status_trace.o \
+	$(BUILD)/input_owner.o \
 	$(BUILD)/switch_ipc_client.o \
 	$(BUILD)/request_client.o \
 	$(BUILD)/result_summary.o \
@@ -315,6 +316,9 @@ $(BUILD)/transport_client.o: ../transport_client.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_status_trace.o: ../ui_status_trace.c ../ui_status_trace.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/input_owner.o: ../input_owner.c ../input_owner.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/switch_ipc_client.o: ../switch_ipc_client.c | $(BUILD)

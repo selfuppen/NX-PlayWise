@@ -65,6 +65,17 @@ void refresh_theme(UiState *ui)
     ui->theme_refresh_pending = false;
 }
 
+bool input_owner_blocks(UiState *ui, bool non_neutral)
+{
+#ifdef PLAYWISE_EDEN
+    (void)ui;
+    (void)non_neutral;
+    return false;
+#else
+    return ui && ptc_input_owner_block(&ui->input_owner, armTicksToNs(armGetSystemTick()), non_neutral);
+#endif
+}
+
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 {
     PtcUiStatusOrigin origin;

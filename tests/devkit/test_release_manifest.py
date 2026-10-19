@@ -64,6 +64,8 @@ def test_candidate_defaults_to_pending() -> None:
             "release declares the direct counter contract while retaining the proxy")
     require(data["ui_status_trace_version"] == 1,
             "release advertises bounded frontend status provenance")
+    require(data["nro_overlay_input_owner_version"] == 1,
+            "release advertises the NRO Overlay ownership guard")
 
 
 def test_manual_device_verification_is_explicit_and_scoped() -> None:
@@ -93,6 +95,8 @@ def test_manual_device_verification_is_explicit_and_scoped() -> None:
             "Lab raw and Eden simulation must not claim the release consumption contract")
     require("ui_status_trace_version" not in lab and "ui_status_trace_version" not in eden,
             "Lab and Eden must not claim production frontend provenance")
+    require("nro_overlay_input_owner_version" not in lab and "nro_overlay_input_owner_version" not in eden,
+            "Lab and Eden must not claim production input ownership")
     with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True), \
             mock.patch.object(manifest, "source_fingerprint", return_value="c" * 64):
         try:
