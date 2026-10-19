@@ -21,6 +21,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import argparse
+import hashlib
 import json
 
 
@@ -141,18 +142,37 @@ STANDARD_FIELDS = (
 )
 
 
-def capture_eye_care(reader, commit: str, release_id: str, model: str, hos: str, atmosphere: str) -> dict:
-    report = make_eye_care.template(commit, release_id, model, hos, atmosphere)
+def capture_eye_care(reader, commit: str, release_id: str, model: str, hos: str, atmosphere: str,
+                     usage_contract: str | None = None, usage_report_sha256: str | None = None) -> dict:
+    if usage_contract == make_eye_care.DIRECT_CONTRACT and usage_report_sha256 is None:
+        raise CaptureError("去代理观察需要同目录final标准1952资格报告")
+    report = make_eye_care.template(commit, release_id, model, hos, atmosphere, usage_contract)
+    if usage_contract == make_eye_care.DIRECT_CONTRACT:
+        report["pctl_usage_report"]["sha256"] = usage_report_sha256
     report["report_status"] = "final"
     report["games"] = [ask_text(reader, "游戏 A 名称"), ask_text(reader, "游戏 B 名称")]
     report["timing"]["rest_start_trigger_seconds"] = ask_int(reader, "休息开始触发秒数", 0, 60)
     report["timing"]["rest_end_trigger_seconds"] = ask_int(reader, "休息恢复触发秒数", 0, 60)
-    for key, prompt in make_eye_care.OBSERVATION_FIELDS:
+    for key, prompt in make_eye_care.observation_fields(usage_contract):
         report["observations"][key] = ask_bool(reader, prompt)
     report["pctl"]["settings_exactly_restored"] = ask_bool(reader, "0x44 是否逐字节精确恢复？")
     report["pctl"]["unexpected_raw_offsets"] = []
     report["pctl"]["eye_care_consumed_daily_allowance"] = ask_bool(reader, "护眼休息是否消耗了每日额度？（应为否）")
     return report
+
+
+def direct_usage_digest(reports: Path, commit: str, release_id: str) -> str:
+    """Bind existing bytes; the authoritative gate still verifies all raw and artifacts."""
+    try:
+        raw = (reports / "pctl-usage-qualification.json").read_bytes()
+        value = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        raise CaptureError("缺少可读取的final标准1952资格报告") from exc
+    if not isinstance(value, dict) or value.get("report_status") != "final" or \
+            value.get("subject") != {"commit": commit, "release_id": release_id} or \
+            value.get("usage_contract") != make_eye_care.DIRECT_CONTRACT:
+        raise CaptureError("标准1952资格的final状态、候选或去代理契约不匹配")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def capture_standard(reader, commit: str, release_id: str) -> dict:
@@ -192,6 +212,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hos", default="22.5.0")
     parser.add_argument("--atmosphere", default="1.11.2")
     parser.add_argument("--reports", type=Path, default=Path("device-reports"))
+    parser.add_argument("--usage-contract", choices=(make_eye_care.LEGACY_CONTRACT, make_eye_care.DIRECT_CONTRACT),
+                        help="eye-care去代理候选使用 pctl1952_v2_direct；省略保留旧观察契约")
     return parser
 
 
@@ -207,8 +229,13 @@ def main(argv: list[str] | None = None, reader=None) -> int:
             report = capture_bedtime(reader, args.commit, args.release_id, args.model, args.hos, args.atmosphere)
             out = args.reports / "bedtime-qualification.json"
         elif args.kind == "eye-care":
-            report = capture_eye_care(reader, args.commit, args.release_id, args.model, args.hos, args.atmosphere)
             out = args.reports / "eye-care-qualification.json"
+            if out.exists():
+                raise CaptureError("输出已存在，保留原观察报告")
+            usage_digest = direct_usage_digest(args.reports, args.commit, args.release_id) \
+                if args.usage_contract == make_eye_care.DIRECT_CONTRACT else None
+            report = capture_eye_care(reader, args.commit, args.release_id, args.model, args.hos, args.atmosphere,
+                                      args.usage_contract, usage_digest)
         else:
             report = capture_standard(reader, args.commit, args.release_id)
             out = args.reports / "standard-observations.json"

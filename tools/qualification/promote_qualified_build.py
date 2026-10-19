@@ -79,6 +79,23 @@ def promote(packages: Path, verification_path: Path, output: Path) -> dict:
             raise PromotionError(str(exc)) from exc
         if checked != attestation or not set(usage_qualification.checks_for(checked["contract"])) <= set(verification.get("checks", [])):
             raise PromotionError("1952 资格证据或检查记录已变化")
+    eye_binding = verification.get("eye_care")
+    eye_path = verification.get("reports", {}).get("eye_care_path")
+    if eye_binding is not None or eye_path is not None or \
+            {"eye_care_rest_cycle", "eye_care_isolation"} & set(verification.get("checks", [])):
+        if not isinstance(eye_binding, dict) or eye_binding.get("path") != eye_path or not isinstance(eye_path, str):
+            raise PromotionError("护眼资格缺少报告哈希绑定，请重新核验")
+        baseline = verification.get("baseline", {})
+        try:
+            checked_eye = qualification_verifier.verify_eye_care_report(
+                Path(eye_path).parent, manifest, baseline.get("model", ""), baseline.get("hos", ""),
+                baseline.get("atmosphere", ""), required=True,
+                standard_sha256=actual[PACKAGE_NAMES[0]], components=components)
+            if checked_eye is None or qualification_verifier.sha256_file(checked_eye) != eye_binding.get("sha256") or \
+                    not {"eye_care_rest_cycle", "eye_care_isolation"} <= set(verification.get("checks", [])):
+                raise PromotionError("护眼资格报告或检查记录已变化")
+        except qualification_verifier.QualificationError as exc:
+            raise PromotionError(str(exc)) from exc
     if output.exists() and any(output.iterdir()):
         raise PromotionError(f"晋级目录不是空目录：{output}")
     output.mkdir(parents=True, exist_ok=True)
@@ -100,6 +117,8 @@ def promote(packages: Path, verification_path: Path, output: Path) -> dict:
     }
     if "pctl_usage" in verification:
         qualification["pctl_usage"] = verification["pctl_usage"]
+    if eye_binding is not None:
+        qualification["eye_care"] = eye_binding
     qualification_path = output / "qualification.json"
     qualification_path.write_text(json.dumps(qualification, ensure_ascii=False, indent=2) + "\n",
                                   encoding="utf-8", newline="\n")

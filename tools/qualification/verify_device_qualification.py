@@ -448,7 +448,9 @@ def verify_bedtime_report(reports_dir: Path, manifest: dict, expected_model: str
 
 
 def verify_eye_care_report(reports_dir: Path, manifest: dict, expected_model: str,
-                           expected_hos: str, expected_atmosphere: str, *, required: bool) -> Path | None:
+                           expected_hos: str, expected_atmosphere: str, *, required: bool,
+                           standard_sha256: str | None = None,
+                           components: dict[str, str] | None = None) -> Path | None:
     """Authoritative eye-care gate, mirroring verify_bedtime_report. Eye-care is a
     candidate (pending) feature, so the gate is opt-in: when `required` it demands
     the report; otherwise a *present* report is still fail-closed validated (a
@@ -459,8 +461,17 @@ def verify_eye_care_report(reports_dir: Path, manifest: dict, expected_model: st
         return None
     report = read_json(path)
     label = path.name
-    require(report.get("schema_version") == 1 and report.get("report_status") == "final",
-            f"{label}: 只接受 final schema v1")
+    contract = manifest.get("usage_contract")
+    direct = contract == usage_qualification.DIRECT_CONTRACT
+    require(contract in (None, *usage_qualification.SUPPORTED_CONTRACTS), f"{label}: 未知候选使用契约")
+    require(type(report.get("schema_version")) is int and
+            report["schema_version"] == (2 if direct else 1) and report.get("report_status") == "final",
+            f"{label}: 只接受与候选契约匹配的 final schema v{2 if direct else 1}")
+    require(report.get("usage_contract") == contract if direct else
+            report.get("usage_contract") in (None, usage_qualification.CONTRACT),
+            f"{label}: 使用契约不匹配")
+    for section in ("subject", "environment", "timing", "pctl"):
+        require(isinstance(report.get(section), dict), f"{label}: {section} 必须是对象")
     subject = report.get("subject", {})
     require(subject.get("commit") == manifest.get("commit") and
             subject.get("release_id") == manifest.get("release_id"),
@@ -483,13 +494,31 @@ def verify_eye_care_report(reports_dir: Path, manifest: dict, expected_model: st
             0 <= rest_start <= 60 and 0 <= rest_end <= 60,
             f"{label}: 休息开始或恢复未在 60 秒内触发")
     observations = report.get("observations", {})
-    for key, _prompt in make_eye_care.OBSERVATION_FIELDS:
+    require(isinstance(observations, dict), f"{label}: observations 必须是对象")
+    if direct:
+        require("unlimited_vs_1440_proxy_compared" not in observations,
+                f"{label}: 去代理报告不得包含旧代理观察")
+    for key, _prompt in make_eye_care.observation_fields(contract):
         require(observations.get(key) is True, f"{label}: 未证明 {key}")
     pctl = report.get("pctl", {})
     require(pctl.get("settings_exactly_restored") is True and
             pctl.get("unexpected_raw_offsets") == [] and
             pctl.get("eye_care_consumed_daily_allowance") is False,
             f"{label}: PCTL 精确恢复、raw offset 或额度隔离证据失败")
+    if direct:
+        binding = report.get("pctl_usage_report")
+        require(isinstance(binding, dict) and binding.get("path") == usage_qualification.REPORT_NAME,
+                f"{label}: 缺少同目录标准1952资格绑定")
+        usage_path = reports_dir / usage_qualification.REPORT_NAME
+        require(usage_path.is_file() and binding.get("sha256") == sha256_file(usage_path),
+                f"{label}: 标准1952资格哈希不匹配")
+        require(standard_sha256 is not None and components is not None,
+                f"{label}: 缺少实际候选产物身份")
+        try:
+            usage_qualification.verify_report(reports_dir, manifest, standard_sha256, components,
+                                               expected_model, expected_hos, expected_atmosphere)
+        except usage_qualification.UsageQualificationError as exc:
+            raise QualificationError(f"{label}: {exc}") from exc
     return path
 
 
@@ -504,7 +533,7 @@ def verify(packages: Path, reports: Path, expected_model: str,
         reports, manifest, expected_model, expected_hos, expected_atmosphere)
     eye_care_report = verify_eye_care_report(
         reports, manifest, expected_model, expected_hos, expected_atmosphere,
-        required=require_eye_care)
+        required=require_eye_care, standard_sha256=zip_hashes[STANDARD_ZIP], components=component_hashes)
     usage_attestation = None
     if "usage_contract" in manifest or (reports / usage_qualification.REPORT_NAME).exists():
         try:
@@ -535,6 +564,7 @@ def verify(packages: Path, reports: Path, expected_model: str,
     if eye_care_report is not None:
         result["checks"].extend(["eye_care_rest_cycle", "eye_care_isolation"])
         result["reports"]["eye_care_path"] = str(eye_care_report.resolve())
+        result["eye_care"] = {"path": str(eye_care_report.resolve()), "sha256": sha256_file(eye_care_report)}
     if usage_attestation is not None:
         result["checks"].extend(usage_qualification.checks_for(usage_attestation["contract"]))
         result["pctl_usage"] = usage_attestation
@@ -578,7 +608,7 @@ def main() -> int:
         "bedtime_full_entry_block": "bedtime 弹窗期间五类应用入口均被阻断",
         "bedtime_overlay_recovery": "Overlay PIN 与三级恢复路径均完成真机验证",
         "bedtime_lifecycle": "bedtime 时限、生命周期、时钟与失败路径完整",
-        "eye_care_rest_cycle": "eye-care 休息开始/恢复、1440 代理与关闭恢复不限时均真机验证",
+        "eye_care_rest_cycle": "eye-care 休息开始/恢复、候选使用契约与关闭恢复不限时均真机验证",
         "eye_care_isolation": "eye-care 休息 0 分钟不计入每日额度且 0x44 精确恢复",
         "artifact_identity": "报告、候选 Zip 与 Switch 二进制身份绑定",
         "vision_attestation": "每个限制槽位的 AI 判定均有哈希绑定的截图旁证",

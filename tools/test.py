@@ -66,6 +66,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_qualification_tools.py",
         "tests/devkit/test_pctl_usage_qualification.py",
         "tests/devkit/test_pctl_direct_qualification.py",
+        "tests/devkit/test_eye_care_direct_qualification.py",
         "tests/devkit/test_pctl_production_midnight.py",
         "tests/devkit/test_pctl_standard_evidence.py",
         "tests/devkit/test_package_remote.py",
