@@ -1791,10 +1791,75 @@ static void test_usage_state_validation(void)
 
 #include "test_direct_unlimited.inc"
 
+static void test_eye_rest_scheduler_deadline(void)
+{
+    for (unsigned scenario = 0; scenario < 3; ++scenario) {
+        Fixture f;
+        PtcRules rules;
+        PtcRuntimeState state;
+        char build[256];
+        const char *environment = "{\"read_ok\":true,\"hos\":\"22.5.0\","
+            "\"model\":\"mariko-oled\",\"firmware_hash\":\"fixture\","
+            "\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\",\"release_id\":\"fixture\"}";
+        seed_direct_grant(&f, 20 * PTC_USAGE_MINUTE_NS, 120);
+        snprintf(build, sizeof(build), "{\"profile\":\"%s\",\"playwise_version\":\"%s\","
+            "\"release_id\":\"fixture\"}", PLAYWISE_PROFILE_NAME, PLAYWISE_VERSION);
+        expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/build.json", build) &&
+            f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/environment.json", environment) &&
+            f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/compatibility.json", environment),
+            "seed accepted scheduler environment");
+        expect(load_rules(&f.core, &rules), "load scheduler rest rules");
+        rules.eye_care.enabled = true;
+        rules.eye_care.play_minutes = 40;
+        rules.eye_care.rest_minutes = 2;
+        expect(save_rules(&f.core, &rules) && load_state(&f.core, &state), "seed scheduler rest policy");
+        int64_t deadline = f.clock.snapshot.unix_seconds + 17;
+        state.eye_care_resting = true;
+        state.eye_care_rest_deadline = deadline;
+        state.eye_care_break_id = 4242;
+        expect(save_state(&f.core, &state, f.clock.snapshot.unix_seconds), "persist non-minute rest deadline");
+        (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+        expect(f.pctl.status.blocked_today, "scheduler applies initial rest");
+        f.clock.snapshot.unix_seconds = deadline - 1;
+        f.core.scan_backoff_ms = 5000;
+        expect(ptc_sysmodule_next_wait_ms(&f.core) == 1000, "scheduler wakes at rest deadline before next minute");
+        (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+        expect(load_state(&f.core, &state) && state.eye_care_resting && f.pctl.status.blocked_today,
+            "rest never clears one second early");
+        unsigned calls = f.pctl.start_timer_calls;
+        unsigned writes = f.pctl.apply_target_calls;
+        f.clock.snapshot.unix_seconds = deadline;
+        if (scenario == 1) f.pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+        if (scenario == 2)
+            expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage,
+                "app/flags/disable.flag", "fixture\n"), "disable controls before deadline");
+        (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+        if (scenario) {
+            expect(load_state(&f.core, &state) && state.eye_care_resting && f.pctl.status.blocked_today,
+                "failed or disabled deadline recovery retains rest");
+            if (scenario == 1) expect(f.pctl.apply_target_calls > writes, "deadline recovery attempts its failed write");
+            expect(ptc_sysmodule_next_wait_ms(&f.core) >= 500,
+                "failed or disabled overdue rest retains bounded scan backoff");
+            /* Exact rollback may restore the saved timer. The subsequent
+               successful deadline retry must not introduce another start. */
+            calls = f.pctl.start_timer_calls;
+            f.pctl.write_error = PTC_ERR_OK;
+            if (scenario == 2) (void)f.mem->storage.vtable->remove_path(&f.mem->storage, "app/flags/disable.flag");
+            (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+        }
+        expect(load_state(&f.core, &state) && !state.eye_care_resting && !f.pctl.status.blocked_today &&
+            f.pctl.last_target.mode == PTC_PCTL_TARGET_LIMIT && f.pctl.last_target.minutes == 120,
+            "rest expires on its deadline without request, notification or minute change");
+        expect(f.pctl.start_timer_calls == calls, "direct deadline recovery never starts 1451");
+        free(f.mem);
+    }
+}
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
     test_direct_usage_projection();
+    test_eye_rest_scheduler_deadline();
     test_direct_unlimited_lifecycle();
     test_direct_unlimited_reason_recovery();
     test_eden_direct_unlimited_counter();

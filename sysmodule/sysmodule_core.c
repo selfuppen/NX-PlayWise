@@ -577,6 +577,18 @@ uint32_t ptc_sysmodule_current_scan_interval(const PtcSysmodule *sysmodule)
     return sysmodule && sysmodule->scan_backoff_ms ? sysmodule->scan_backoff_ms : 500;
 }
 
+#ifndef PLAYWISE_DEVICE_LAB
+static bool pending_eye_rest_deadline(PtcSysmodule *sysmodule, int64_t *deadline)
+{
+    PtcRules rules;
+    PtcRuntimeState state;
+    if (sysmodule->quiescing || !load_rules(sysmodule, &rules) || !rules.eye_care.enabled ||
+        !load_state(sysmodule, &state) || !state.eye_care_resting) return false;
+    *deadline = state.eye_care_rest_deadline;
+    return true;
+}
+#endif
+
 uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
 {
     PtcRules dock_rules;
@@ -595,6 +607,15 @@ uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
     wait_ms = ptc_sysmodule_current_scan_interval(sysmodule);
     if (minute_ms < wait_ms) wait_ms = minute_ms;
     if (date_ms < wait_ms) wait_ms = date_ms;
+#ifndef PLAYWISE_DEVICE_LAB
+    int64_t eye_deadline;
+    /* Overdue recovery retains normal scan backoff if Enforce was blocked or
+       failed; a past deadline must not turn recovery into a busy loop. */
+    if (pending_eye_rest_deadline(sysmodule, &eye_deadline) && eye_deadline > now.unix_seconds) {
+        uint64_t seconds = (uint64_t)eye_deadline - (uint64_t)now.unix_seconds;
+        if (seconds <= wait_ms / 1000U) wait_ms = (uint32_t)seconds * 1000U;
+    }
+#endif
 #ifdef PLAYWISE_DEVICE_LAB
     wait_ms = ptc_lab_next_wait_ms(sysmodule, wait_ms);
     wait_ms = ptc_lab_selfdrive_next_wait_ms(sysmodule, wait_ms);
@@ -748,9 +769,15 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     PtcRules dock_rules;
     bool dock_tick = load_rules(sysmodule, &dock_rules) && dock_policy_enabled(&dock_rules) &&
         (sysmodule->dock_last_sample_at != now.unix_seconds);
+    bool eye_deadline_due = false;
+#ifndef PLAYWISE_DEVICE_LAB
+    int64_t eye_deadline;
+    eye_deadline_due = pending_eye_rest_deadline(sysmodule, &eye_deadline) && now.unix_seconds >= eye_deadline;
+#endif
     /* A completed setup grace changes whether Enforce may run, even when the
-       minute and disable flag stayed unchanged. Apply its policy this tick. */
-    if (setup_changed || minute_changed || reload || storage_notified || disable_changed || processed > 0 || dock_tick) {
+       minute and disable flag stayed unchanged. An expired persisted rest also
+       needs Enforce without a request: waking alone must not wait for a minute. */
+    if (setup_changed || minute_changed || reload || storage_notified || disable_changed || processed > 0 || dock_tick || eye_deadline_due) {
         sysmodule->dock_last_sample_at = now.unix_seconds;
 #ifndef PLAYWISE_DEVICE_LAB
         if (sysmodule->minute_initialized) {
