@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shlex
+import shutil
 import struct
 import subprocess
 import sys
@@ -169,6 +171,65 @@ def test_container_command() -> None:
             "PLAYWISE_VERIFIED_ATMOSPHERE=1.11.2" in manual_script,
             "manual device environment must reach manifest generation")
     require("PLAYWISE_MANUAL_DEVICE_VERIFIED" not in command, "default packaging must remain pending")
+
+
+def test_clean_build_profiles() -> None:
+    # Execute the real clean recipes in an isolated tree; no compiler is needed.
+    # Windows host regression delegates GNU Make execution to the devkitPro gate.
+    if os.name == "nt":
+        print("Clean profile integration: deferred to the required devkitPro regression")
+        return
+    make = shutil.which("make")
+    require(make is not None, "clean profile regression requires GNU Make")
+    with tempfile.TemporaryDirectory(prefix="ptc-clean-profiles-") as tmp_dir:
+        root = Path(tmp_dir)
+        for name in ("Makefile", "common/version.mk", "sysmodule/Makefile",
+                     "tools/build/stage_timer.py"):
+            target = root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / name, target)
+        # Unrelated components are stubbed; sysmodule uses its actual clean recipe.
+        for name in ("companion/nro", "companion/overlay", "device_lab/nro", "device_lab/overlay"):
+            target = root / name / "Makefile"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("clean:\n\t@true\n", encoding="utf-8")
+        devkit = root / "devkitpro"
+        (devkit / "libnx").mkdir(parents=True)
+        (devkit / "libnx/switch_rules").write_text("", encoding="utf-8")
+        preserved = ("sysmodule/source/main.c", "sysmodule/sysmodule.json",
+                     "sysmodule/sysmodule.device-lab.json", "device-reports/keep.txt")
+        for name in preserved:
+            target = root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"preserve")
+        generated = ["sysmodule/build/main.o", "sysmodule/build-device-lab/main.o",
+                     "sysmodule/build-device-lab/main.d", "sysmodule/build-device-lab/exefs/main",
+                     "build/device-lab/generated/release_manifest.h", "build/switch/exefs.nsp",
+                     "companion/nro/build-eden/main.o", "companion/nro/pctc-eden.nro"]
+        generated += [f"sysmodule/{target}.{suffix}"
+                      for target in ("pctc-sysmodule", "pwtl-sysmodule")
+                      for suffix in ("nsp", "nso", "npdm", "elf")]
+        eden = root / "build/eden-test/pctc-eden.nro"
+        env = {key: value for key, value in os.environ.items()
+               if key not in {"MAKEFLAGS", "MAKEOVERRIDES", "MFLAGS", "MAKELEVEL", "TOPDIR", "BUILD", "TARGET"}}
+        for clean_eden in (False, True):
+            for name in generated:
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"main.o: /ws/old-checkout/sysmodule/source/main.c\n")
+            eden.parent.mkdir(parents=True, exist_ok=True)
+            eden.write_bytes(b"eden")
+            command = [make, "--no-print-directory", "clean", f"DEVKITPRO={devkit}",
+                       f"CLEAN_EDEN={int(clean_eden)}"]
+            # Repeated cleanup must also succeed when its outputs no longer exist.
+            for _ in range(2):
+                result = subprocess.run(command, cwd=root, env=env, text=True, capture_output=True)
+                require(result.returncode == 0, f"clean failed: {result.stdout}\n{result.stderr}")
+                remaining = [name for name in generated if (root / name).exists()]
+                require(not remaining, f"clean left stale profile outputs: {remaining}")
+                require(all((root / name).read_bytes() == b"preserve" for name in preserved),
+                        "clean must preserve source, configuration and device evidence")
+                require(eden.exists() == (not clean_eden), "clean must honor CLEAN_EDEN")
 
 
 def test_build_identity_detection() -> None:
@@ -596,6 +657,7 @@ def test_parse_args_stripped_components() -> None:
 
 def main() -> int:
     test_container_command()
+    test_clean_build_profiles()
     test_build_identity_detection()
     test_ssh_command()
     test_git_newline_transport()
