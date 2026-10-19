@@ -85,6 +85,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_capture_observations.py",
         "tests/devkit/test_sys_botbase_client.py",
         "tests/devkit/test_bounded_input_batch.py",
+        "tests/devkit/test_ui_receipt_observer.py",
         "tests/devkit/test_auto_update.py",
         "tests/devkit/test_input_smoke_harness.py",
         "tests/devkit/test_assert_selfdrive_evidence.py",

@@ -1,9 +1,14 @@
 {
   "schema_version": 2,
-  "reviewed_date": "2026-10-16",
+  "reviewed_date": "2026-10-19",
   "scope": "playwise/tools",
-  "script_count": 58,
+  "script_count": 59,
   "scripts": [
+    {
+      "path": "device/ui_receipt_observer.py",
+      "category": "device",
+      "purpose": "只读观察全部新增UI原请求回执，区分多来源与无回执"
+    },
     {
       "path": "test.py",
       "category": "daily",
