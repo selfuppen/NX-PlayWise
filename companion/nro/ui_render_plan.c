@@ -1308,7 +1308,7 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool active = model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
     bool compact = card.height < 200;
     char value[96], line[192];
-    int step = compact ? 22 : 28;
+    int step = compact ? 22 : 24;
     draw_plan_card(pixels, stride, card, false);
     draw_text(pixels, stride, card.x + 16, card.y + 24, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 16, UI_INK);
     const char *mode = !fresh ? ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM) :
@@ -1352,10 +1352,10 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("value", value)};
         (void)ptc_ui_text_format(labels[i], line, sizeof(line), args, 1);
         fit_text(fitted, sizeof(fitted), line, 13, card.width - 32);
-        draw_text(pixels, stride, card.x + 16, card.y + 68 + i * step, fitted, 13, UI_INK);
+        draw_text(pixels, stride, card.x + 16, card.y + 64 + i * step, fitted, 13, UI_INK);
     }
     if (!compact) {
-        UiRect bar = {card.x + 16, card.y + 166, card.width - 32, 6};
+        UiRect bar = {card.x + 16, card.y + 150, card.width - 32, 6};
         fill_round_rect(pixels, stride, bar, 3, UI_RAISED);
         if (known && model->dock_policy.undocked_limit_enabled && !model->dock_policy.force_docked && model->dock_policy.undocked_daily_minutes > 0) {
             int used = model->undocked_used_minutes;
@@ -1365,8 +1365,8 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             if (width > 0) fill_round_rect(pixels, stride, (UiRect){bar.x, bar.y, width, bar.height}, 3, UI_ACCENT);
         }
     }
-    draw_wrapped_text(pixels, stride, card.x + 16, card.y + (compact ? 151 : 192),
-        ptc_ui_text(compact ? PTC_UI_T_DOCK_TOTAL_RELATION_SHORT : PTC_UI_T_DOCK_TOTAL_RELATION), compact ? 10 : 12, card.width - 32, compact ? 12 : 16,
+    draw_wrapped_text(pixels, stride, card.x + 16, card.y + (compact ? 151 : 172),
+        ptc_ui_text(compact ? PTC_UI_T_DOCK_TOTAL_RELATION_SHORT : PTC_UI_T_DOCK_TOTAL_RELATION), compact ? 10 : 12, card.width - 32, compact ? 12 : 15,
         compact ? 1 : 3, UI_MUTED);
 }
 
@@ -1433,13 +1433,13 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
         }
     }
 
-    draw_dock_usage_card(pixels, stride, model, (UiRect){824, 230, 402, 240});
-    UiRect rules_panel = {824, 482, 402, 170};
+    draw_dock_usage_card(pixels, stride, model, (UiRect){824, 230, 402, 220});
+    UiRect rules_panel = {824, 464, 402, 158};
     draw_plan_card(pixels, stride, rules_panel, false);
-    draw_wrapped_text(pixels, stride, 840, 500, ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT),
+    draw_wrapped_text(pixels, stride, 840, 480, ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT),
         12, 370, 15, 2, UI_INK);
-    draw_text(pixels, stride, 840, 538, ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_ACCENT);
-    draw_wrapped_text(pixels, stride, 840, 558, ptc_ui_text(PTC_UI_T_DETAIL_RELATION),
+    draw_text(pixels, stride, 840, 514, ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, 840, 534, ptc_ui_text(PTC_UI_T_DETAIL_RELATION),
         11, 370, 15, 2, UI_MUTED);
     home_button(pixels, stride, ptc_ui_dock_field_rect(5), ptc_ui_text(PTC_UI_T_DOCK_RULES_EXPLAIN_BTN),
         false, model->dock_field_focus == 5 && !model->parent_footer_focused, false);

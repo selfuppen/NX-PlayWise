@@ -75,17 +75,17 @@ PtcUiRect ptc_ui_error_back_rect(void)
 PtcUiRect ptc_ui_setup_language_rect(int index)
 {
     if (index < 0 || index > 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){94 + index * 274, 236, 262, 42};
+    return (PtcUiRect){94 + index * 274, 240, 262, 44};
 }
 
-PtcUiRect ptc_ui_setup_primary_rect(void) { return (PtcUiRect){794, 646, 432, 52}; }
-PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 646, 210, 52}; }
-PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){276, 646, 506, 52}; }
+PtcUiRect ptc_ui_setup_primary_rect(void) { return (PtcUiRect){1036, 664, 190, 44}; }
+PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 664, 170, 44}; }
+PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){236, 664, 280, 44}; }
 PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 320, 510, 54}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){0, 0, 0, 0}; }
 PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){676, 334, 510, 44}; }
-PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){94, 500, 1092, 100}; }
-PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){914, 404, 272, 38}; }
+PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){94, 502, 1092, 108}; }
+PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){914, 424, 272, 38}; }
 PtcUiRect ptc_ui_setup_theme_rect(int index)
 {
     if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
@@ -1643,7 +1643,7 @@ PtcUiRect ptc_ui_language_option_rect(int index)
 PtcUiRect ptc_ui_dock_field_rect(int index)
 {
     if (index == 7 || index == 8) return (PtcUiRect){54 + (index - 7) * 380, 620, 364, 44};
-    if (index == 5) return (PtcUiRect){840, 595, 370, 42};
+    if (index == 5) return (PtcUiRect){840, 570, 370, 40};
     if (index < 0 || index > 4) return (PtcUiRect){0,0,0,0};
     if (index < 3) return (PtcUiRect){54, 230 + index * 100, 744, 84};
     return (PtcUiRect){54 + (index - 3) * 380, 550, 364, 58};
@@ -1658,15 +1658,15 @@ PtcUiRect ptc_ui_today_status_rect(int index)
 
 PtcUiRect ptc_ui_config_backup_field_rect(int index)
 {
-    if (index == 16) return (PtcUiRect){54, 96, 180, 38};
-    if (index == 17) return (PtcUiRect){244, 96, 180, 38};
+    if (index == 16) return (PtcUiRect){54, 120, 190, 38};
+    if (index == 17) return (PtcUiRect){254, 120, 190, 38};
     if (index >= 0 && index < 4) return (PtcUiRect){70 + (index % 2) * 364, 210 + (index / 2) * 44, 348, 38};
     if (index >= 4 && index < 9) return (PtcUiRect){70 + ((index - 4) % 2) * 364, 354 + ((index - 4) / 2) * 44, 348, 38};
     if (index == 9 || index == 10) return (PtcUiRect){70 + (index - 9) * 364, 542, 348, 38};
-    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 604, 175, 38};
-    if (index == 13) return (PtcUiRect){54, 560, 744, 54};
-    if (index == 14) return (PtcUiRect){824, 550, 402, 58};
-    if (index == 15) return (PtcUiRect){54, 646, 160, 40};
+    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 602, 175, 38};
+    if (index == 13) return (PtcUiRect){54, 552, 744, 58};
+    if (index == 14) return (PtcUiRect){824, 552, 402, 58};
+    if (index == 15) return (PtcUiRect){54, 664, 170, 44};
     return (PtcUiRect){0, 0, 0, 0};
 }
 

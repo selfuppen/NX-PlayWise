@@ -637,6 +637,9 @@ void ptc_ui_numpad_finish(PtcUiModel *model)
 void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide)
 {
     if (!model) return;
+    if (model->overlay != PTC_UI_OVERLAY_NONE && model->confirm_return_overlay == PTC_UI_OVERLAY_NONE) {
+        model->confirm_return_overlay = model->overlay;
+    }
     model->overlay = PTC_UI_OVERLAY_PIN;
     model->pin_text[0] = '\0';
     model->pin_error[0] = '\0';
@@ -689,6 +692,7 @@ void ptc_ui_pin_finish(PtcUiModel *model)
 {
     if (!model || model->overlay != PTC_UI_OVERLAY_PIN) return;
     model->overlay = PTC_UI_OVERLAY_NONE;
+    model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
     model->pin_text[0] = '\0';
     model->pin_error[0] = '\0';
     model->pin_keyboard_mode = false;
