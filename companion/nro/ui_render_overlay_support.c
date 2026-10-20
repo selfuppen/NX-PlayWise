@@ -1612,9 +1612,9 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 : PTC_UI_T_DETAIL_BACK)
             : (model->view == PTC_UI_CHILD ? PTC_UI_T_DETAIL_BACK_CHILD : PTC_UI_T_DETAIL_BACK_TODAY));
     home_button(pixels, stride, ptc_ui_home_details_action_rect(model, 2), back_label,
-        model->home_details_focus == 2, false, false);
+        true, model->home_details_focus == 2, false);
     home_button(pixels, stride, ptc_ui_home_details_action_rect(model, 1), ptc_ui_text(PTC_UI_T_Y_REFRESH),
-        model->home_details_focus == 1, false, model->waiting);
+        false, model->home_details_focus == 1, model->waiting);
 
     /* 底部右侧文字 */
     char footer[384];

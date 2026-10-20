@@ -121,7 +121,8 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     UiRect rule_badge = {dt_box.x - rw - 10, dt_box.y, rw, dt_box.height};
     bool rule_focused = (model->selected_index == 11 && !model->parent_footer_focused);
     fill_round_rect(pixels, stride, rule_badge, 8, rule_focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised)));
-    draw_rect_outline(pixels, stride, rule_badge, 8, rule_focused ? 3 : 1, rule_focused ? UI_FOCUS : UI_BORDER);
+    if (rule_focused) draw_focus_ring(pixels, stride, rule_badge, 8);
+    else draw_rect_outline(pixels, stride, rule_badge, 8, 1, UI_BORDER);
     uint32_t rule_fg = rule_focused ? UI_ACCENT : UI_RGB(UI_BLENDED(text_secondary));
     draw_text(pixels, stride, rule_badge.x + 10, rule_badge.y + (rule_badge.height + 12) / 2 - 2, rule_label, 12, rule_fg);
     draw_chevron_right(pixels, stride, rule_badge.x + rule_badge.width - 10, rule_badge.y + rule_badge.height / 2, 4, rule_fg);
@@ -223,9 +224,9 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     /* 周期 2：护眼休息设置入口卡 */
     UiRect eye_card = to_uirect(ptc_ui_today_status_rect(8));
     bool eye_focused = (model->selected_index == 8 && !model->parent_footer_focused);
-    fill_round_rect(pixels, stride, eye_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, eye_card, 8, eye_focused ? 3 : 1,
-        eye_focused ? UI_FOCUS : eye_resting ? UI_DANGER : UI_BORDER);
+    fill_round_rect(pixels, stride, eye_card, 8, eye_focused ? UI_ACCENT_SOFT : UI_RAISED);
+    if (eye_focused) draw_focus_ring(pixels, stride, eye_card, 8);
+    else draw_rect_outline(pixels, stride, eye_card, 8, 1, eye_resting ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, eye_card.x + 12, eye_card.y + 20, ptc_ui_text(PTC_UI_T_EYE_CARE), 14, UI_INK);
     const char *eye_badge = !model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_ENABLED));
@@ -252,9 +253,9 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     /* 周期 3：就寝计划设置入口卡 */
     UiRect bedtime_card = to_uirect(ptc_ui_today_status_rect(9));
     bool bedtime_focused = (model->selected_index == 9 && !model->parent_footer_focused);
-    fill_round_rect(pixels, stride, bedtime_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, bedtime_card, 8, bedtime_focused ? 3 : 1,
-        bedtime_focused ? UI_FOCUS : bedtime_enforcing ? UI_DANGER : UI_BORDER);
+    fill_round_rect(pixels, stride, bedtime_card, 8, bedtime_focused ? UI_ACCENT_SOFT : UI_RAISED);
+    if (bedtime_focused) draw_focus_ring(pixels, stride, bedtime_card, 8);
+    else draw_rect_outline(pixels, stride, bedtime_card, 8, 1, bedtime_enforcing ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 20, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_INK);
     PtcPolicyStatus policies;
     ptc_ui_render_policy_status(model, &policies);
@@ -275,9 +276,9 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     /* 周期 4：电视模式规则设置入口卡 */
     UiRect dock_card = to_uirect(ptc_ui_today_status_rect(10));
     bool dock_focused = (model->selected_index == 10 && !model->parent_footer_focused);
-    fill_round_rect(pixels, stride, dock_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, dock_card, 8, dock_focused ? 3 : 1,
-        dock_focused ? UI_FOCUS : model->dock_restriction_active ? UI_DANGER : UI_BORDER);
+    fill_round_rect(pixels, stride, dock_card, 8, dock_focused ? UI_ACCENT_SOFT : UI_RAISED);
+    if (dock_focused) draw_focus_ring(pixels, stride, dock_card, 8);
+    else draw_rect_outline(pixels, stride, dock_card, 8, 1, model->dock_restriction_active ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 20, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 14, UI_INK);
 
     uint32_t d_badge_color = policy_display_color(policies.dock.state);
@@ -418,8 +419,10 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
             snprintf(latest, sizeof(latest), "%s  |  %s", model->recent_events[source_index], event_time);
             fit_text(latest, sizeof(latest), latest, 14, panel.width - 52);
             UiRect ev_rect = to_uirect(ptc_ui_support_event_rect(event_index));
-            if (event_index + 6 == model->selected_index && !model->parent_footer_focused)
-                draw_rect_outline(pixels, stride, ev_rect, 8, 2, UI_RGB(UI_BLENDED(focus)));
+            if (event_index + 6 == model->selected_index && !model->parent_footer_focused) {
+                fill_round_rect(pixels, stride, ev_rect, 8, UI_ACCENT_SOFT);
+                draw_focus_ring(pixels, stride, ev_rect, 8);
+            }
             draw_text(pixels, stride, panel.x + 26, ev_rect.y + 24,
                       latest, 14, event_index + 6 == model->selected_index ? UI_ACCENT : UI_MUTED);
         }
@@ -433,8 +436,9 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     }
     UiRect guide = to_uirect(ptc_ui_support_guide_rect());
     bool guide_focused = model->selected_index == 6 + model->recent_event_count && !model->parent_footer_focused;
-    fill_round_rect(pixels, stride, guide, 8, guide_focused ? UI_ACCENT_SOFT : UI_PAGE);
-    draw_rect_outline(pixels, stride, guide, 8, guide_focused ? 2 : 1, UI_ACCENT);
+    fill_round_rect(pixels, stride, guide, 8, guide_focused ? UI_ACCENT_SOFT : UI_SURFACE);
+    if (guide_focused) draw_focus_ring(pixels, stride, guide, 8);
+    else draw_rect_outline(pixels, stride, guide, 8, 1, UI_ACCENT);
     draw_text_center(pixels, stride, guide, ptc_ui_text(PTC_UI_T_SUPPORT_GUIDE), 14, UI_ACCENT);
 }
 

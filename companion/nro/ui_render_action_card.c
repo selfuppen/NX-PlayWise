@@ -367,7 +367,9 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     }
 
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
-    draw_card_shadow(pixels, stride, rect, 16);
+    if (!selected) {
+        draw_card_shadow(pixels, stride, rect, 16);
+    }
     fill_round_rect(pixels, stride, rect, 16, background);
     if (selected) {
         draw_focus_ring(pixels, stride, rect, 16);

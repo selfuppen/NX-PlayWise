@@ -358,32 +358,6 @@ int get_breathing_phase(void)
     return phase > 15 ? 15 : phase;
 }
 
-void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
-{
-    int phase = get_breathing_phase();
-    int offset = is_docked_mode() ? 4 : 3;
-    int stroke_w = is_docked_mode() ? 3 : 2;
-
-    /* 呼吸动态颜色：在基础 UI_FOCUS 与呼吸高光荧光亮蓝之间平滑脉冲插值 */
-    uint32_t focus_token = UI_FOCUS;
-    if (phase > 0 && g_palette) {
-        uint32_t raw_rgb = UI_BLENDED(focus);
-        uint32_t r = (raw_rgb >> 16) & 0xff;
-        uint32_t g = (raw_rgb >> 8) & 0xff;
-        uint32_t b = raw_rgb & 0xff;
-        r += (uint32_t)((215 - (int)r) * phase) / 30u;
-        g += (uint32_t)((238 - (int)g) * phase) / 30u;
-        b += (uint32_t)((255 - (int)b) * phase) / 30u;
-        focus_token = UI_RGB((r << 16) | (g << 8) | b);
-    }
-
-    /* 绘制完整、闭合、严密同心的圆角焦点框，彻底根除断裂悬空的多余线条 */
-    draw_rect_outline(pixels, stride,
-        (UiRect){rect.x - offset, rect.y - offset, rect.width + 2 * offset, rect.height + 2 * offset},
-        radius + offset, stroke_w, focus_token);
-}
-
-
 /* 圆角矩形符号距离（负值在内部）。轴对齐带状区域免开方，仅角部走 sqrt。 */
 static float round_rect_sdf(UiRect rect, int radius, float x, float y)
 {
@@ -411,19 +385,21 @@ static inline float smootherstep(float t)
     return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 }
 
-/* 工业级圆角感知软阴影：
+/* 工业级圆角感知软阴影（支持自定义色彩与主题强度缩放）：
  * 1. 采用精准圆角 SDF 几何遮罩剔除卡片实心本体，保留四个转角弧线外的完整阴影与抗锯齿带，
  *    根除外接矩形 AABB 直角截断导致的转角分层断裂；
  * 2. 单次像素遍历中融合 Key（向下投影核心）与 Ambient（大范围漫反射光晕）双层物理软阴影；
  * 3. 采用五次 Smootherstep 极平滑衰减，并在单次 blend_pixel 中完成 Alpha 复合，画质与帧率兼顾。 */
-void draw_round_rect_shadow(
+static void draw_round_rect_shadow_colored(
     uint32_t *pixels,
     uint32_t stride,
     UiRect rect,
     int radius,
     int blur,
     int peak_alpha,
-    int y_bias)
+    int y_bias,
+    uint32_t shadow_color,
+    bool scale_by_theme)
 {
     if (blur <= 0 || peak_alpha <= 0) return;
     if (rect.width <= 0 || rect.height <= 0) return;
@@ -431,7 +407,7 @@ void draw_round_rect_shadow(
     if (radius > rect.height / 2) radius = rect.height / 2;
 
     /* 阴影峰值按主题 shadow_strength 缩放，暗色主题阴影更实。 */
-    if (g_palette && g_palette->shadow_strength) {
+    if (scale_by_theme && g_palette && g_palette->shadow_strength) {
         peak_alpha = peak_alpha * (int)g_palette->shadow_strength / 100;
         if (peak_alpha > 255) peak_alpha = 255;
     }
@@ -440,7 +416,7 @@ void draw_round_rect_shadow(
      * Key 层：聚集清晰，偏置随光源下移；
      * Ambient 层：扩散更广，偏置轻微，营造柔和弥散光晕。 */
     int blur_key = blur * 3 / 5;
-    if (blur_key < 3) blur_key = 3;
+    if (blur_key < 2) blur_key = 2;
     int blur_amb = blur + 2;
     int alpha_key = peak_alpha * 65 / 100;
     int alpha_amb = peak_alpha * 40 / 100;
@@ -505,16 +481,67 @@ void draw_round_rect_shadow(
             int total_alpha = a_amb + a_key - (a_amb * a_key + 127) / 255;
             if (total_alpha > 255) total_alpha = 255;
             if (total_alpha > 0) {
-                blend_pixel(pixels, stride, x, y, RGBA8_MAXALPHA(0, 0, 0), (uint8_t)total_alpha);
+                blend_pixel(pixels, stride, x, y, shadow_color, (uint8_t)total_alpha);
             }
         }
     }
 }
 
-/* 海拔档位：页面卡片用轻阴影；弹窗在 draw_dialog_shell 用更强更扩散的一档。 */
+void draw_round_rect_shadow(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    int radius,
+    int blur,
+    int peak_alpha,
+    int y_bias)
+{
+    uint32_t shadow_rgb = g_palette ? ui_mix_rgb(UI_BLENDED(text_primary), 0x000000, 65) : 0x000000;
+    draw_round_rect_shadow_colored(pixels, stride, rect, radius, blur, peak_alpha, y_bias,
+                                   pack_rgb(shadow_rgb), true);
+}
+
+/* 海拔档位：未获焦页面卡片与舞台按钮采用方案 B 极轻底边投影（blur=4, peak_alpha=22, y_bias=2），
+ * 兼顾底部微立体托举感与分组托盘内窄缝的干净通透；弹窗在 draw_dialog_shell 用更强更扩散的一档。 */
 void draw_card_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
 {
-    draw_round_rect_shadow(pixels, stride, rect, radius, 10, 42, 3);
+    uint32_t shadow_rgb = g_palette ? ui_mix_rgb(UI_BLENDED(text_primary), 0x000000, 55) : 0x000000;
+    draw_round_rect_shadow_colored(pixels, stride, rect, radius, 4, 22, 2,
+                                   pack_rgb(shadow_rgb), true);
+}
+
+/* 焦点光环（方案 B + C 组合）：
+ * 1. 获焦时向外投射冷蓝环境悬浮投影（blur=9, peak_alpha=52, y_bias=3）；
+ * 2. 紧贴卡片边缘绘制 2px UI_ACCENT 主框 + 外侧紧贴 1px（底座 2px）UI_FOCUS 呼吸宽框，
+ *    构成零黑缝的 3px Switch 原生风贴边宽框。 */
+void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
+{
+    int phase = get_breathing_phase();
+    int outer_w = is_docked_mode() ? 2 : 1;
+
+    /* 呼吸动态颜色：在基础 UI_FOCUS 与呼吸高光荧光亮蓝之间平滑脉冲插值 */
+    uint32_t focus_token = UI_FOCUS;
+    if (phase > 0 && g_palette) {
+        uint32_t raw_rgb = UI_BLENDED(focus);
+        uint32_t r = (raw_rgb >> 16) & 0xff;
+        uint32_t g = (raw_rgb >> 8) & 0xff;
+        uint32_t b = raw_rgb & 0xff;
+        r += (uint32_t)((215 - (int)r) * phase) / 30u;
+        g += (uint32_t)((238 - (int)g) * phase) / 30u;
+        b += (uint32_t)((255 - (int)b) * phase) / 30u;
+        focus_token = UI_RGB((r << 16) | (g << 8) | b);
+    }
+
+    UiRect outer_rect = {
+        rect.x - outer_w,
+        rect.y - outer_w,
+        rect.width + 2 * outer_w,
+        rect.height + 2 * outer_w
+    };
+    draw_round_rect_shadow_colored(pixels, stride, outer_rect, radius + outer_w,
+                                   9, 52, 3, resolve_color(focus_token), false);
+    draw_rect_outline(pixels, stride, rect, radius, 2, UI_ACCENT);
+    draw_rect_outline(pixels, stride, outer_rect, radius + outer_w, outer_w, focus_token);
 }
 
 /* 背景氛围层：页面底色加两团极低透明度的主题色光斑，整幅缓存在离屏，

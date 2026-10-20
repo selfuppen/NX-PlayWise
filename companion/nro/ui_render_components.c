@@ -66,9 +66,15 @@ const char *ui_rule_source_label(const char *source)
 
 void draw_plan_card(uint32_t *pixels, uint32_t stride, UiRect card, bool focused)
 {
-    draw_card_shadow(pixels, stride, card, 16);
-    fill_round_rect(pixels, stride, card, 16, UI_RGB(UI_BLENDED(surface)));
-    draw_rect_outline(pixels, stride, card, 16, focused ? 3 : 1, UI_RGB(focused ? UI_BLENDED(focus) : UI_BLENDED(border_control)));
+    if (!focused) {
+        draw_card_shadow(pixels, stride, card, 16);
+    }
+    fill_round_rect(pixels, stride, card, 16, focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface)));
+    if (focused) {
+        draw_focus_ring(pixels, stride, card, 16);
+    } else {
+        draw_rect_outline(pixels, stride, card, 16, 1, UI_BORDER);
+    }
 }
 
 void draw_toggle_switch(

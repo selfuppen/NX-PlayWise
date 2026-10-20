@@ -37,8 +37,10 @@ static int check_primitives(void)
     if (preview_pixels[40 * 1280 + 40] != pack_rgb(0xff00ff) || preview_pixels[20 * 1280 + 20] != background) ++failed;
     if (preview_pixels[21 * 1280 + 60] != pack_rgb(0xabcdef) || preview_pixels[40 * 1280 + 21] != pack_rgb(0xabcdef)) ++failed;
     draw_focus_ring(preview_pixels, 1280, rect, 16);
-    if (preview_pixels[40 * 1280 + 19] != background ||
-        preview_pixels[40 * 1280 + 17] != resolve_color(UI_FOCUS) ||
+    if (preview_pixels[40 * 1280 + 4] != background ||
+        preview_pixels[40 * 1280 + 16] == background ||
+        preview_pixels[40 * 1280 + 19] != resolve_color(UI_FOCUS) ||
+        preview_pixels[40 * 1280 + 20] != resolve_color(UI_ACCENT) ||
         preview_pixels[40 * 1280 + 40] != pack_rgb(0xff00ff)) ++failed;
     /* Requested radii remain distinct even on large cards. */
     fill_round_rect(preview_pixels, 1280, (UiRect){200, 20, 96, 64}, 8, UI_RGB(0xe0c0a0));
