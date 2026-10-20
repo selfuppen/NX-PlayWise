@@ -284,5 +284,6 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
 void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void ui_glyph_cache_clear(void);
 void ui_background_rebuild(void);
+void ui_background_draw_frame(uint32_t *pixels, uint32_t stride);
 
 #endif

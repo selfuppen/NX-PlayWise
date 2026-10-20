@@ -128,7 +128,7 @@ PtcUiRect ptc_ui_notice_command_text_rect(int y, int height)
 
 PtcUiRect ptc_ui_time_status_bar_rect(void)
 {
-    return (PtcUiRect){754, 24, 472, 66};
+    return (PtcUiRect){754, 18, 472, 66};
 }
 
 PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
@@ -138,7 +138,11 @@ PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
     bool policy = model->bedtime_policy.enabled || model->bedtime_status_enabled ||
         model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
     rect.h += (model->eye_care_policy.enabled ? 12 : 0) + (policy ? 16 : 0);
-    if (rect.y + rect.h > 104) rect.y = 104 - rect.h;
+    /* 保持状态胶囊与顶部通栏底分界线(Y=104)之间至少留出 10px 舒适呼吸空间 (即底边缘不超过 Y=94) */
+    if (rect.y + rect.h > 94) {
+        rect.y = 94 - rect.h;
+        if (rect.y < 6) rect.y = 6;
+    }
     return rect;
 }
 
@@ -163,7 +167,7 @@ PtcUiRect ptc_ui_parent_subpage_footer_rect(int index)
 
 PtcUiRect ptc_ui_parent_tab_rect(int index)
 {
-    PtcUiRect rect = {54 + index * 174, 108, 158, 48};
+    PtcUiRect rect = {54 + index * 174, 120, 158, 38};
     return rect;
 }
 
@@ -700,7 +704,7 @@ bool ptc_ui_home_notice_expanded(const PtcUiModel *model)
 
 PtcUiRect ptc_ui_advanced_back_rect(void)
 {
-    return (PtcUiRect){54, 108, 192, 48};
+    return (PtcUiRect){54, 120, 192, 38};
 }
 
 PtcUiRect ptc_ui_support_card_rect(int index)

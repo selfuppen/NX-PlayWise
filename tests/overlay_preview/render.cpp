@@ -4,6 +4,11 @@
 #include <cstring>
 #include <filesystem>
 #include <initializer_list>
+#ifndef _WIN32
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 extern "C" {
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/auth.h"
@@ -270,8 +275,8 @@ int main(int argc, char **argv) {
             "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown",
             "overlay-console-usage", "overlay-console-unknown",
             "overlay-console-details", "overlay-console-details-unknown"};
-        int child_overflows = 0;
-        for (int language = 0; language < 3; ++language) {
+        auto run_language_pass = [&](int language) -> int {
+            int child_overflows = 0;
             ptc_ui_language_set_resolved(languages[language]);
             test_text_layout(renderer);
             auto dir = std::filesystem::path(argv[2]) / folders[language] / "overlay";
@@ -614,8 +619,47 @@ int main(int argc, char **argv) {
                 renderer.drawString("HOST PREVIEW / SAMPLE DATA", false, 20, 699, 18, WAITING_COLOR);
                 renderer.save((dir / (std::string(scenes[scene]) + ".ppm")).string());
             }
+            require(child_overflows == 0, "ordinary child pages must fit on one screen in all three languages");
+            return 0;
+        };
+
+#if defined(_WIN32)
+        for (int language = 0; language < 3; ++language) {
+            run_language_pass(language);
         }
-        require(child_overflows == 0, "ordinary child pages must fit on one screen in all three languages");
+#else
+        pid_t pids[3] = {0, 0, 0};
+        for (int language = 0; language < 3; ++language) {
+            pid_t pid = fork();
+            if (pid < 0) {
+                run_language_pass(language);
+            } else if (pid == 0) {
+                try {
+                    int res = run_language_pass(language);
+                    _exit(res == 0 ? 0 : 1);
+                } catch (const std::exception &e) {
+                    std::fprintf(stderr, "FAIL: %s\n", e.what());
+                    _exit(1);
+                }
+            } else {
+                pids[language] = pid;
+            }
+        }
+        bool failed = false;
+        for (int language = 0; language < 3; ++language) {
+            if (pids[language] > 0) {
+                int status = 0;
+                if (waitpid(pids[language], &status, 0) > 0) {
+                    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                        failed = true;
+                    }
+                } else {
+                    failed = true;
+                }
+            }
+        }
+        if (failed) return 1;
+#endif
         std::printf("PASS: %zu production Overlay previews (3 languages, %zu sample states)\n",
             3 * (sizeof(scenes) / sizeof(scenes[0]) + 4), sizeof(scenes) / sizeof(scenes[0]) + 4);
         return 0;

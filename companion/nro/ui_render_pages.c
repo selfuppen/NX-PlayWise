@@ -339,7 +339,7 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
                 PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("name", name)};
                 (void)ptc_ui_text_format(PTC_UI_T_TODAY_SETTINGS_PATH_NAMED, path, sizeof(path), args, 1);
             } else snprintf(path, sizeof(path), ptc_ui_text(PTC_UI_T_TIME_PLANS_S), name);
-            draw_text(pixels, stride, 278, 140, path, 22, UI_MUTED);
+            draw_text(pixels, stride, 278, 146, path, 22, UI_MUTED);
         }
         return;
     }
@@ -370,7 +370,7 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         bool active = index == (int)model->parent_page;
         draw_text_center(pixels, stride, tab, LABELS[index], 18, active ? UI_ON_ACCENT : UI_INK);
     }
-    draw_text(pixels, stride, 1038, 140, ptc_ui_text(PTC_UI_T_L_R_SWITCH), 19, UI_MUTED);
+    draw_text(pixels, stride, 1038, 146, ptc_ui_text(PTC_UI_T_L_R_SWITCH), 19, UI_MUTED);
 }
 
 static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

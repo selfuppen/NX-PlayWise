@@ -6,7 +6,7 @@
 * **默认构建目标**：仅构建 **标准分发包 (`playwise`)** 与 **Eden 模拟器测试包 (`eden-test-nro`)**。
 * **默认剥离的三大阶段**：
   1. **Device Lab 组件与打包 (`device-lab-*`)**：默认不再编译 `pwtl-sysmodule`、`playwise-device-lab.nro` 与 `.ovl`，不再打包实验 Zip。
-  2. **UI 截图预览图渲染、转换与文档同步 (`ui-previews`)**：默认完全跳过 PPM 渲染、Python PNG 转码与 `docs/` 目录同步。
+  2. **UI 截图预览图渲染、转换与文档同步 (`ui-previews`)**：打包流程默认启用（可用 `--no-previews` 快速跳过）。
   3. **完整交付包合并 (`package-complete`)**：默认不再运行单文件 Web 前端编译及合并打 Zip。
 * **默认构建机制**：保持增量复用（`--incremental` 为默认，避免每次全量 `make clean`）。
 
@@ -26,7 +26,7 @@
 | **（无额外参数）** | - | 默认仅构建 **标准分发包** + **Eden 模拟器包**，增量构建 |
 | `--with-device-lab` / `--device-lab`<br>`--no-device-lab` | 禁用 (`False`) | 显式启用/禁用 Device Lab 专用套件编译与打包 |
 | `--with-complete` / `--complete`<br>`--no-complete` | 禁用 (`False`) | 显式启用/禁用离线 HTML 单文件打包与完整交付 Zip 合并 |
-| `--with-previews`<br>`--no-previews` | 禁用 (`False`) | 显式启用/禁用 UI 预览图生成、PNG 转码与文档同步 |
+| `--with-previews`<br>`--no-previews` | 启用 (`True`) | 显式启用/禁用 UI 预览图生成、PNG 转码与文档同步 |
 | `--previews` | - | 仅生成并验证 UI 预览图（不构建任何固件安装包） |
 | `--release` | - | **一键全量发布模式**：打包标准包、Eden包、完整交付包、Device Lab 包，并全量生成预览图与校验 |
 | `--only` | `default` | 可选值：`default`、`all`、`playwise`、`complete`、`device-lab`、`eden`、`previews` |
@@ -73,6 +73,7 @@ from pathlib import Path, PurePosixPath
 import shlex
 import shutil
 import struct
+import socket
 import subprocess
 import time
 import zipfile
@@ -555,7 +556,7 @@ def container_command(
     with_usage_probe: bool = False,
     with_pctl_capture: bool = False,
     with_complete: bool = False,
-    with_previews: bool = False,
+    with_previews: bool = True,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -652,7 +653,7 @@ def ssh_command(
     with_usage_probe: bool = False,
     with_pctl_capture: bool = False,
     with_complete: bool = False,
-    with_previews: bool = False,
+    with_previews: bool = True,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -703,7 +704,7 @@ def run_container(
     with_usage_probe: bool = False,
     with_pctl_capture: bool = False,
     with_complete: bool = False,
-    with_previews: bool = False,
+    with_previews: bool = True,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -773,7 +774,7 @@ def build_and_verify(
     with_usage_probe: bool = False,
     with_pctl_capture: bool = False,
     with_complete: bool = False,
-    with_previews: bool = False,
+    with_previews: bool = True,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -1039,8 +1040,8 @@ def parse_args() -> argparse.Namespace:
         "--with-previews",
         dest="with_previews",
         action="store_true",
-        default=False,
-        help="Render, convert, and verify UI preview images. (Default: disabled)",
+        default=True,
+        help="Render, convert, and verify UI preview images. (Default: enabled)",
     )
     preview_group.add_argument(
         "--no-previews",
@@ -1124,10 +1125,21 @@ def main() -> int:
     with_device_lab = args.with_device_lab or args.release or (only == "all")
     with_complete = args.with_complete or args.release or (only == "all")
     jobs = args.jobs if args.jobs is not None else 8
+    port = args.port
+    if port == DEFAULT_SSH_PORT and args.host in {"127.0.0.1", "localhost", "::1"}:
+        try:
+            with socket.create_connection((args.host, DEFAULT_SSH_PORT), timeout=0.1):
+                pass
+        except OSError:
+            try:
+                with socket.create_connection((args.host, 18881), timeout=0.1):
+                    port = 18881
+            except OSError:
+                pass
     try:
         build_and_verify(
             args.host,
-            args.port,
+            port,
             args.user,
             args.container_path,
             args.identity,

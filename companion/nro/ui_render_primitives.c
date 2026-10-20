@@ -555,6 +555,81 @@ static void ui_background_glow(int center_x, int center_y, int radius, uint32_t 
     }
 }
 
+/* 绘制三段式通栏外框 (Classic 3-Section Console Shell)：
+ * 1. 顶部 Header Bar (y: 0..103，高度 104px)：高质感微通栏底色，将应用图标、标题与状态胶囊牢牢锚定
+ * 2. 顶部微细分割线 (y: 104，1px 高)：贯通 1280 物理像素的 border_decorative 分界线
+ * 3. 底部微细分割线 (y: 652，1px 高)：贯通 1280 物理像素的 border_decorative 分界线
+ * 4. 底部 Footer Bar (y: 653..719，高度 67px)：停泊底栏底色，包裹按键提焂与状态通知 */
+void ui_background_draw_frame(uint32_t *pixels, uint32_t stride)
+{
+    if (!pixels || !g_palette) return;
+
+    uint32_t page_rgb = UI_BLENDED(page_bg);
+    uint32_t surface_rgb = UI_BLENDED(surface);
+    uint32_t raised_rgb = UI_BLENDED(surface_raised);
+    uint32_t border_rgb = pack_rgb(UI_BLENDED(border_decorative));
+    bool is_dark = ((page_rgb & 0xFF) < 0x80);
+
+    /* 顶部通栏透明度混合 (Light: 43% surface, Dark: 47% surface) */
+    int top_alpha = is_dark ? 120 : 110;
+    uint32_t top_r = (surface_rgb >> 16) & 0xff;
+    uint32_t top_g = (surface_rgb >> 8) & 0xff;
+    uint32_t top_b = surface_rgb & 0xff;
+
+    /* 底部通栏透明度混合 (Light: 70% raised, Dark: 55% raised) */
+    int bot_alpha = is_dark ? 140 : 180;
+    uint32_t bot_r = (raised_rgb >> 16) & 0xff;
+    uint32_t bot_g = (raised_rgb >> 8) & 0xff;
+    uint32_t bot_b = raised_rgb & 0xff;
+
+    int y, x;
+    /* 1. 顶部通栏 Header Bar (y: 0..103) */
+    for (y = 0; y < 104; ++y) {
+        uint32_t *row = pixels + (size_t)y * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            uint32_t dst = row[x];
+            uint32_t dst_r = dst & 0xff;
+            uint32_t dst_g = (dst >> 8) & 0xff;
+            uint32_t dst_b = (dst >> 16) & 0xff;
+            row[x] = RGBA8_MAXALPHA(
+                (top_r * top_alpha + dst_r * (255 - top_alpha)) / 255,
+                (top_g * top_alpha + dst_g * (255 - top_alpha)) / 255,
+                (top_b * top_alpha + dst_b * (255 - top_alpha)) / 255);
+        }
+    }
+
+    /* 2. 顶部贯通分割线 (y: 104) */
+    {
+        uint32_t *row = pixels + (size_t)104 * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            row[x] = border_rgb;
+        }
+    }
+
+    /* 3. 底部贯通分割线 (y: 652) */
+    {
+        uint32_t *row = pixels + (size_t)652 * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            row[x] = border_rgb;
+        }
+    }
+
+    /* 4. 底部通栏 Footer Bar (y: 653..719) */
+    for (y = 653; y < SCREEN_HEIGHT; ++y) {
+        uint32_t *row = pixels + (size_t)y * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            uint32_t dst = row[x];
+            uint32_t dst_r = dst & 0xff;
+            uint32_t dst_g = (dst >> 8) & 0xff;
+            uint32_t dst_b = (dst >> 16) & 0xff;
+            row[x] = RGBA8_MAXALPHA(
+                (bot_r * bot_alpha + dst_r * (255 - bot_alpha)) / 255,
+                (bot_g * bot_alpha + dst_g * (255 - bot_alpha)) / 255,
+                (bot_b * bot_alpha + dst_b * (255 - bot_alpha)) / 255);
+        }
+    }
+}
+
 void ui_background_rebuild(void)
 {
     uint32_t base = pack_rgb(UI_BLENDED(page_bg));
@@ -567,6 +642,7 @@ void ui_background_rebuild(void)
     }
     ui_background_glow(230, 40, 760, UI_BLENDED(accent), 12);
     ui_background_glow(1180, 730, 680, UI_BLENDED(coral), 10);
+    ui_background_draw_frame(g_background_cache, SCREEN_WIDTH);
     g_background_palette = g_palette;
     g_background_docked = is_docked_mode();
 }

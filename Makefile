@@ -82,7 +82,7 @@ UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/ui_language.
 
 STAGE_TIMER ?= python3 tools/build/stage_timer.py
 
-.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test ui-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
+.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test ui-previews render-nro-previews render-overlay-previews convert-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
 
 all: test
 
@@ -165,16 +165,27 @@ $(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) FORCE_HOST_R
 $(HOST_BUILD_DIR)/overlay_preview: tests/overlay_preview/render.cpp tests/overlay_preview/renderer.hpp companion/overlay/source/render_types.hpp companion/overlay/source/render_methods.hpp companion/overlay/source/render_pages.hpp companion/overlay/layout.h $(HOST_BUILD_DIR)/overlay_preview_core.o
 	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
 
-.PHONY: ui-previews
-ui-previews: $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview
+.PHONY: render-nro-previews render-overlay-previews convert-previews ui-previews
+render-nro-previews: $(HOST_BUILD_DIR)/ui_preview
 	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \
 		echo "ERROR: missing pinned preview font" >&2; \
 		exit 1; \
 	fi
 	mkdir -p build/ui-previews
 	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
+
+render-overlay-previews: $(HOST_BUILD_DIR)/overlay_preview
+	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \
+		echo "ERROR: missing pinned preview font" >&2; \
+		exit 1; \
+	fi
+	mkdir -p build/ui-previews
 	$(STAGE_TIMER) playwise overlay-previews -- $(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
+
+convert-previews: render-nro-previews render-overlay-previews
 	$(STAGE_TIMER) playwise convert-previews -- python3 tools/build/convert_ui_previews.py
+
+ui-previews: convert-previews
 
 test-python:
 	$(STAGE_TIMER) global test-python -- python3 tools/test.py

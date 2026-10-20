@@ -117,6 +117,19 @@ In list rows, health-care cards, and decision cells, content must strictly separ
   * Header to sub-card gap: 12px
   * Inline icon-to-text gap: 6px / 8px
 
+
+### 3.3 Classic 3-Section Console Shell Framing Contract
+Across the Nintendo Switch 1280x720 global canvas, all main pages (Child Home, Parent Today) and second-level subpages (Time Plans, Settings, Offline Grants, Support & Recovery) uniformly follow the classic 3-section console shell framing:
+1. **Top Header Bar (Y=0–104)**:
+   * Anchored with a subtle elevated surface tint (blending 43% surface in Light mode, 47% surface in Dark mode), bounding the app icon, title, subtitle, and top-right time status capsule.
+   * A full-width 1px hairline divider rule (border_decorative) spans across Y=104, establishing an architectural boundary.
+   * **Status Capsule Breathing Contract**: Base position is Y=18, height 66px (vertical center Y=51 aligns harmoniously with the left app icon Y=49). When active policy rows (such as TV mode or bedtime restrictions) expand capsule height to 82px, the bottom edge is strictly clamped to Y<=94, ensuring at least 10px of clear breathing clearance to the divider line at Y=104, eliminating crowding.
+2. **Central Main Stage (Y=105–651)**:
+   * **Top Stage Buffer**: Navigation tabs and subpage back buttons start at Y=120 (height 38px, span Y=120~158), creating an airy 16px vertical breathing space from the top divider line (Y=104) and a balanced 14~18px space before content cards below (Y=172~176). Child mode summary and setup panels also align with Y=120, ensuring consistent rhythm across all views.
+   * Feature cards (Y=172–628) are framed cleanly within this bounded stage with balanced breathing margins.
+3. **Bottom Footer Bar (Y=652–720)**:
+   * A full-width 1px hairline divider rule (border_decorative) spans across Y=652.
+   * Y=653–719 provides a grounded dock bar surface tint (blending 70% surface_raised in Light mode, 55% surface_raised in Dark mode), with button prompts (Y=664, height 44px) perfectly vertically centered (12px top and bottom padding).
 ---
 
 ## 4. Key Component Standards

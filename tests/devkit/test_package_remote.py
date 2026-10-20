@@ -103,10 +103,8 @@ def test_container_command() -> None:
     command = package_remote.container_command()
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     require("/ws/playwise" in command, "container command must use the mounted repository")
-    require("make -j test && make -j package-playwise eden-test-nro" in command,
-            "container command must run fast tests before building default targets")
-    require("python3 tools/build/sync_doc_previews.py" not in command,
-            "default container command must omit preview synchronization")
+    require("make -j test && make -j ui-previews && python3 tools/build/sync_doc_previews.py && make -j package-playwise eden-test-nro" in command,
+            "default container command must run tests and synchronize previews before building default targets")
     require("packages: package-complete device-lab-package" in makefile,
             "packages target must verify the isolated Device Lab target")
     require("make clean" not in command, "the default build must reuse valid intermediates")
@@ -131,12 +129,12 @@ def test_container_command() -> None:
 
     incremental = package_remote.container_command(clean=False)
     require("make clean" not in incremental, "incremental build must omit make clean")
-    require("make -j test && make -j package-playwise eden-test-nro" in incremental,
-            "incremental build must run tests before compiling default packages")
+    require("make -j test && make -j ui-previews && python3 tools/build/sync_doc_previews.py && make -j package-playwise eden-test-nro" in incremental,
+            "incremental build must run tests and previews before compiling default packages")
 
-    skip_tests = package_remote.container_command(run_tests=False)
+    skip_tests = package_remote.container_command(run_tests=False, with_previews=False)
     require("test" not in skip_tests.split("make -j ")[1].split(), "skip_tests must omit test target")
-    require("ui-previews" not in skip_tests, "skipping tests must not run ui-previews by default")
+    require("ui-previews" not in skip_tests, "skipping tests without previews must omit ui-previews")
 
     only_lab = package_remote.container_command(only="device-lab")
     require("device-lab-package" in only_lab, "only=device-lab must target device-lab-package")
@@ -626,7 +624,7 @@ def test_parse_args_stripped_components() -> None:
         require(args.only == "default", "default target should be 'default'")
         require(args.with_device_lab is False, "device lab must be disabled by default")
         require(args.with_complete is False, "complete package must be disabled by default")
-        require(args.with_previews is False, "previews must be disabled by default")
+        require(args.with_previews is True, "previews must be enabled by default")
         require(args.with_eden is True, "Eden test app must be enabled by default")
         require(args.clean is False, "incremental build must be enabled by default")
 
@@ -650,9 +648,9 @@ def test_parse_args_stripped_components() -> None:
         args = package_remote.parse_args()
         require(args.with_complete is True, "parse_args must accept --complete shorthand")
 
-    with mock.patch.object(sys, "argv", ["package_remote.py", "--with-previews"]):
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--no-previews"]):
         args = package_remote.parse_args()
-        require(args.with_previews is True, "parse_args must accept --with-previews")
+        require(args.with_previews is False, "parse_args must accept --no-previews")
 
 
 def main() -> int:
