@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from copy import deepcopy
 import ftplib
 import json
 from pathlib import Path
@@ -530,6 +531,53 @@ def test_diagnosis_incomplete_and_foreign_rows():
         require('status_submitted' in observed['missing_required_events'], 'partial terminal event is not accepted')
 
 
+def test_capture_recovery_without_host_target():
+    with tempfile.TemporaryDirectory() as temporary:
+        out, files = restart_prepared(Path(temporary))
+        console = RestartConsole(files)
+        run_case(console, out, Clock())
+        source = update.load(out, 'source-runtime.json')
+        binding = update.load(out, 'capture-restart-request.json')
+        current = update.load(out, 'target-runtime.json')
+        (out / 'target-runtime.json').unlink()  # Observer died before persisting its target.
+        filename = 'e' * 32 + '.jsonl'
+        rows = [json.loads(line) for line in console.files[update.EVENTS + '/' + filename].splitlines()]
+        for row in rows: row['result'] = 0
+        kwargs = dict(source=source, binding=binding, current=current,
+                      config_bytes=console.files[update.CAPTURE_CONFIG],
+                      claimed=json.dumps(binding).encode(), pending=None,
+                      event_snapshots={filename: ('\n'.join(json.dumps(r) for r in rows) + '\n').encode()},
+                      raw=next(v for k, v in console.files.items() if '/support/usage-evidence-' in k and k.endswith('.jsonl')),
+                      accepted={'request_id': 'ui-status', 'type': 'status'},
+                      result={'request_id': 'ui-status', 'type': 'status', 'status': 'ok'})
+        before = deepcopy(kwargs)
+        with mock.patch.object(update, 'Device', side_effect=AssertionError('pure evidence validation only')):
+            require(update.capture_recovery_target(**kwargs) == current, 'original chain recovers missing host target')
+            require(kwargs == before, 'recovery binding does not mutate evidence')
+            for failure in ('boot', 'release', 'source', 'claim', 'pending', 'config', 'multiple',
+                            'tail', 'missing', 'order', 'result', 'receipt', 'raw'):
+                changed = deepcopy(kwargs)
+                if failure == 'boot': changed['current']['boot_id'] = 'd' * 16
+                elif failure == 'release': changed['current']['release_id'] = 'foreign'
+                elif failure == 'source': changed['binding']['source_boot_id'] = 'd' * 16
+                elif failure == 'claim': changed['claimed'] = b'{}'
+                elif failure == 'pending': changed['pending'] = kwargs['claimed']
+                elif failure == 'config': changed['config_bytes'] += b' '
+                elif failure == 'multiple': changed['event_snapshots']['d' * 32 + '.jsonl'] = kwargs['event_snapshots'][filename]
+                elif failure == 'tail': changed['event_snapshots'][filename] += b'{'
+                elif failure in ('missing', 'order', 'result'):
+                    altered = deepcopy(rows)
+                    if failure == 'missing': altered.pop()
+                    elif failure == 'order': altered[2], altered[3] = altered[3], altered[2]
+                    else: altered[0]['result'] = 1
+                    changed['event_snapshots'][filename] = ('\n'.join(json.dumps(r) for r in altered) + '\n').encode()
+                elif failure == 'receipt': changed['result']['request_id'] = 'different'
+                elif failure == 'raw': changed['raw'] = changed['raw'].replace(b'"boot_id": "bbbbbbbbbbbbbbbb"', b'"boot_id": "dddddddddddddddd"').replace(b'"boot_id":"bbbbbbbbbbbbbbbb"', b'"boot_id":"dddddddddddddddd"')
+                try: update.capture_recovery_target(**changed)
+                except (update.UpdateError, ValueError): pass
+                else: raise AssertionError('unsafe recovery binding accepted: ' + failure)
+
+
 def main():
     console = Console()
     with mock.patch.object(console, "nlst", side_effect=ftplib.error_temp("450 No such file or directory")):
@@ -559,6 +607,7 @@ def main():
     test_capture_restart_prepare_gates()
     test_sealed_handover_diagnosis()
     test_diagnosis_incomplete_and_foreign_rows()
+    test_capture_recovery_without_host_target()
     print("PASS bounded auto update, no replay, preimages, PIN privacy and offline evidence")
 
 

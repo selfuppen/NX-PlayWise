@@ -78,6 +78,45 @@ def capture_event_chain(rows: list[dict], binding: dict, source: dict, target: d
             target["release_id"] == source["release_id"], "capture handover target differs")
 
 
+def capture_recovery_target(*, source: dict, binding: dict, current: dict,
+                            config_bytes: bytes, claimed: bytes, pending: bytes | None,
+                            event_snapshots: dict[str, bytes], raw: bytes,
+                            accepted: dict, result: dict) -> dict:
+    """Rebind an interrupted observer's target from originals; never mutate a device.
+
+    A missing host target-runtime file is not proof of a foreign process. A
+    caller must still check health, installed bytes and ownership before cleanup.
+    """
+    from tools.device.pctl_standard_evidence import audit
+    identity(source)
+    identity(current)
+    config = json.loads(config_bytes)
+    require(binding.get("purpose") == "usage_evidence" and
+            binding.get("source_boot_id") == source["boot_id"] and
+            binding.get("release_id") == source["release_id"] == config.get("release_id") and
+            binding.get("run_id") == config.get("run_id") and
+            binding.get("config_sha256") == digest(config_bytes), "recovery capture binding differs")
+    require(pending is None and json.loads(claimed) == binding, "recovery request is unclaimed or ambiguous")
+    require(len(event_snapshots) == 1, "recovery needs one original new handover transaction")
+    filename, data = next(iter(event_snapshots.items()))
+    require(re.fullmatch(r"[0-9a-f]{32}\.jsonl", filename) is not None and
+            data.endswith(b"\n"), "recovery handover name or incomplete tail")
+    rows = [json.loads(line) for line in data.splitlines()]
+    capture_event_chain(rows, binding, source, current, filename[:-6])
+    require(all(type(row.get("result")) is int and row["result"] == 0 for row in rows),
+            "recovery handover contains failed Result")
+    terminal = next(row for row in rows if row.get("event") == "status_submitted")
+    request_id = terminal.get("request_id")
+    require(isinstance(request_id, str) and bool(request_id) and
+            accepted.get("request_id") == result.get("request_id") == request_id and
+            accepted.get("type") == result.get("type") == "status" and result.get("status") == "ok",
+            "recovery lacks original matching successful status receipt")
+    observed = audit(raw, config)
+    require(observed["start"]["boot_id"] == current["boot_id"] and observed["samples"] and
+            not observed["gaps"] and not observed["partial_tail_lines"], "recovery capture stream differs")
+    return dict(current)
+
+
 def load(out: Path, name: str) -> dict:
     return json.loads((out / name).read_bytes())
 
