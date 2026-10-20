@@ -49,7 +49,7 @@ bool verify_sensitive_pin(UiState *ui, const char *action)
     if (return_overlay != PTC_UI_OVERLAY_NONE && ui->model.overlay == PTC_UI_OVERLAY_NONE) {
         ui->model.overlay = return_overlay;
     }
-    status = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
+    status = ptc_companion_auth_verify_pin_now(&ui->auth, pin, &retry_after);
     if (status != PTC_AUTH_OK) {
         ptc_audio_play(PTC_SE_ERROR);
         if (status == PTC_AUTH_COOLDOWN && retry_after > 0) {

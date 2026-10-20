@@ -14,6 +14,7 @@
 extern "C" {
 #include "../bridge.h"
 #include "../../auth.h"
+#include "../../auth_clock.h"
 #include "../input_model.h"
 #include "../../ui_language.h"
 #include "../../ui_status_trace.h"
@@ -799,8 +800,7 @@ public:
                     return true;
                 }
                 int64_t retry_after = 0;
-                PtcAuthStatus auth_status = ptc_companion_auth_verify_pin(
-                    &auth_, pin_, static_cast<int64_t>(std::time(nullptr)), &retry_after);
+                PtcAuthStatus auth_status = ptc_companion_auth_verify_pin_now(&auth_, pin_, &retry_after);
                 std::memset(pin_, 0, sizeof(pin_));
                 pin_length_ = 0;
                 if (auth_status == PTC_AUTH_OK) {
@@ -816,6 +816,8 @@ public:
                     PtcUiTextArg args[] = {{"seconds", nullptr, retry_after, true}};
                     (void)ptc_ui_text_format(PTC_UI_T_PIN_COOLDOWN,
                         pin_message_, sizeof(pin_message_), args, 1);
+                } else if (auth_status == PTC_AUTH_TIME_UNAVAILABLE) {
+                    std::snprintf(pin_message_, sizeof(pin_message_), "%s", ptc_ui_text(PTC_UI_T_PIN_CLOCK_UNAVAILABLE));
                 } else if (auth_status == PTC_AUTH_EMPTY) {
                     std::snprintf(pin_message_, sizeof(pin_message_), "%s", ptc_ui_text(PTC_UI_T_PIN_MISSING));
                 } else {

@@ -77,7 +77,7 @@ void enter_parent_area(UiState *ui)
     }
     {
         int64_t retry_after = 0;
-        state = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
+        state = ptc_companion_auth_verify_pin_now(&ui->auth, pin, &retry_after);
         if (state == PTC_AUTH_COOLDOWN && retry_after > 0) {
             show_parent_pin_error(ui, retry_after);
             return;

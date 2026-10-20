@@ -269,7 +269,7 @@ int main(int argc, char **argv) {
             "overlay-eye-rest-boundary", "overlay-eye-unlimited", "overlay-quota-unknown",
             "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown",
             "overlay-console-usage", "overlay-console-unknown",
-            "overlay-console-details", "overlay-console-details-unknown"};
+            "overlay-console-details", "overlay-console-details-unknown", "overlay-parent-pin-clock-unavailable"};
         int child_overflows = 0;
         for (int language = 0; language < 3; ++language) {
             ptc_ui_language_set_resolved(languages[language]);
@@ -486,7 +486,7 @@ int main(int argc, char **argv) {
                     if (scene == 55) std::snprintf(view.pin_message_, sizeof(view.pin_message_), "%s",
                         ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR));
                 }
-                if (scene >= 56) {
+                if (scene >= 56 && scene <= 59) {
                     status.usage_present = true;
                     status.usage_ns = 4191000000000ULL;
                     status.usage_captured_at = 1000;
@@ -501,6 +501,12 @@ int main(int argc, char **argv) {
                         status.bedtime_active = true;
                         status.usage_captured_at = scene == 58 ? 1791983569 : 0;
                     }
+                }
+                const bool pin_clock_unavailable = std::strcmp(scenes[scene], "overlay-parent-pin-clock-unavailable") == 0;
+                if (pin_clock_unavailable) {
+                    view.parent_view_ = ParentView::Pin;
+                    view.pin_length_ = 0;
+                    std::snprintf(view.pin_message_, sizeof(view.pin_message_), "%s", ptc_ui_text(PTC_UI_T_PIN_CLOCK_UNAVAILABLE));
                 }
                 renderer.text_runs.clear();
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
@@ -522,7 +528,7 @@ int main(int argc, char **argv) {
                             "merged dashboard must not retain an unavailable console counter");
                     }
                 }
-                if (scene >= 58) {
+                if (scene >= 58 && scene <= 59) {
                     std::string drawn;
                     for (const auto &run : renderer.text_runs) drawn += run.text + " ";
                     require(drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos,
@@ -531,6 +537,15 @@ int main(int argc, char **argv) {
                         "unknown details must not show a fabricated counter");
                     require((drawn.find("2026-10-14 13:12:49 UTC") != std::string::npos) == (scene == 58),
                         "details must show the original captured timestamp, not the refresh timestamp");
+                }
+                if (pin_clock_unavailable) {
+                    std::string drawn, expected;
+                    for (const auto &run : renderer.text_runs)
+                        for (char c : run.text) if (c != ' ' && c != '\n') drawn += c;
+                    for (char c : std::string(ptc_ui_text(PTC_UI_T_PIN_CLOCK_UNAVAILABLE)))
+                        if (c != ' ' && c != '\n') expected += c;
+                    require(drawn.find(expected) != std::string::npos,
+                        "all localized clock-unavailable text must remain visible on the PIN page");
                 }
                 if (view.parent_view_ == ParentView::Result) {
                     const auto label = bridge.waiting ? PTC_UI_T_PROCESSING_REQUEST : view.parent_action_succeeded_ ?

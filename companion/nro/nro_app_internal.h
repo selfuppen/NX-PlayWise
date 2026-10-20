@@ -12,6 +12,7 @@
 #include <time.h>
 
 #include "../../companion/auth.h"
+#include "../../companion/auth_clock.h"
 #include "../../companion/album_restriction.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/transport_client.h"

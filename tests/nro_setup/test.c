@@ -190,6 +190,21 @@ static void test_parent_pin_error(void)
     check(ui.model.parent_support_only && ui.model.parent_page == PTC_UI_PARENT_SUPPORT &&
           !ui.model.auth_error_parent_entry, "authentication persistence failure retains support fallback");
     mem.fail_write_path_contains = NULL;
+    init_parent_entry(&ui, &mem);
+    close_auth_error(&ui, true);
+    {
+        char before[1024], after[1024];
+        mem.storage.vtable->read_text(&mem.storage, APP_ROOT "/auth.json", before, sizeof(before));
+        fixed_time = 0;
+        pin_cursor = 0; pin_values[0] = "1234";
+        enter_parent_area(&ui);
+        check(ui.model.parent_support_only && !ui.setup_parent_authorized &&
+              strcmp(ui.model.message, ptc_ui_text(PTC_UI_T_PIN_CLOCK_UNAVAILABLE)) == 0,
+              "unavailable clock cannot authorize and explains the unchanged failure count");
+        mem.storage.vtable->read_text(&mem.storage, APP_ROOT "/auth.json", after, sizeof(after));
+        check(strcmp(before, after) == 0, "unavailable clock never resets or increments persisted authentication state");
+        fixed_time = start;
+    }
     mem.storage.vtable->write_text_atomic(&mem.storage, APP_ROOT "/auth.json", "{}");
     enter_parent_area(&ui);
     check(ui.model.parent_support_only && ui.model.overlay == PTC_UI_OVERLAY_NONE &&

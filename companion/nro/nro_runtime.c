@@ -249,6 +249,8 @@ const char *auth_status_zh(PtcAuthStatus status)
         return ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT);
     case PTC_AUTH_COOLDOWN:
         return ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_TEMPORARILY_LOCKED);
+    case PTC_AUTH_TIME_UNAVAILABLE:
+        return ptc_ui_text(PTC_UI_T_PIN_CLOCK_UNAVAILABLE);
     default:
         return ptc_ui_text(PTC_UI_T_UNKNOWN_AUTHENTICATION_ERROR);
     }

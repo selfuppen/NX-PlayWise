@@ -84,6 +84,7 @@ OBJS := \
 	$(BUILD)/ui_layout.o \
 	$(BUILD)/ui_hit_test.o \
 	$(BUILD)/auth.o \
+	$(BUILD)/auth_clock.o \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/transport_client.o \
 	$(BUILD)/ui_status_trace.o \
@@ -307,6 +308,9 @@ $(BUILD)/file_protocol.o: ../file_protocol.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/auth.o: ../auth.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/auth_clock.o: ../auth_clock.c ../auth_clock.h ../auth.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/request_client.o: ../request_client.c | $(BUILD)

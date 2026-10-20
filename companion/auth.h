@@ -28,6 +28,7 @@ typedef enum {
     PTC_AUTH_INVALID_FILE = 5,
     PTC_AUTH_DENIED = 6,
     PTC_AUTH_COOLDOWN = 7,
+    PTC_AUTH_TIME_UNAVAILABLE = 8,
 } PtcAuthStatus;
 
 typedef struct {
