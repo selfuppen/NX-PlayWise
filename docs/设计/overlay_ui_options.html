@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlayWise Overlay 儿童概览 UI 优化 · 方案 A / B 预览</title>
+<style>
+:root{
+  /* PTC_UI_RESOLVED_DARK（companion/nro/ui_theme.c） */
+  --bg:#121212; --foot:#000;
+  --surface:#131B2A; --raised:#172338; --inset:#0E141F;
+  --bd:#233047; --bd-ctl:#7E90AA; --bd-dim:#1B2538;
+  --t1:#F3F6FD; --t2:#B6C4D9; --t3:#818C98;
+  --accent:#91B9FF; --accent-soft:#273E60; --on-accent:#122344;
+  --ok:#5CCB8A; --ok-soft:#193C32;
+  --warn:#FFA940; --warn-soft:#40351F;
+  --bad:#FF7A85; --bad-soft:#462936;
+  --font:"Noto Sans SC","Source Han Sans SC","Microsoft YaHei UI","PingFang SC",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;color:#e6edf3;font-family:var(--font);padding:24px 28px 60px}
+h1{font-size:22px;font-weight:600;margin-bottom:4px}
+.pagesub{color:#8b949e;font-size:13px;margin-bottom:16px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+.bar button,.bar select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 12px;font:13px var(--font);cursor:pointer}
+.bar button.on{background:#1f6feb;border-color:#1f6feb}
+.bar label{font-size:13px;color:#8b949e;display:flex;gap:6px;align-items:center}
+.sep{width:1px;height:22px;background:#30363d;margin:0 6px}
+
+.req{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px;line-height:1.7;color:#c9d1d9}
+.req table{border-collapse:collapse;width:100%}
+.req td,.req th{border-top:1px solid #21262d;padding:5px 8px;text-align:left;vertical-align:top}
+.req th{color:#8b949e;font-weight:500;border-top:0}
+.req td:first-child{width:38%}
+.opts{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.opt h2{font-size:17px;font-weight:600;margin-bottom:2px}
+.opt .tag{font-size:12.5px;color:#8b949e;margin-bottom:10px;max-width:448px;line-height:1.6}
+.grid{display:flex;flex-wrap:wrap;gap:16px}
+.cell .cap{font-size:12px;color:#8b949e;margin:0 0 4px}
+.wrap{position:relative}
+.wrap>.screen{transform-origin:0 0}
+
+/* ===== Overlay 画布 448×720（掌机模式）===== */
+.screen{position:absolute;left:0;top:0;width:448px;height:720px;background:var(--bg);color:var(--t1);font-family:var(--font);overflow:hidden;font-weight:400;line-height:1.2;border-radius:2px;outline:1px solid #30363d}
+.content{position:absolute;left:16px;top:6px;width:416px;height:641px;display:flex;flex-direction:column;padding-bottom:8px}
+.foot{position:absolute;left:0;right:0;top:647px;height:73px;background:var(--foot);border-top:1px solid #2b2b2b;display:flex;align-items:center;gap:34px;padding:0 30px 0 30px;font-size:30px;color:#e8e8e8}
+.guides .content{outline:1px dashed #ff4dd2}
+.guides .screen::after{content:"Y=647 Tesla 页脚安全线";position:absolute;left:0;right:0;top:646px;border-top:1px dashed #ff4dd2;color:#ff4dd2;font-size:11px;padding-left:4px;z-index:5}
+
+/* 手柄按键字模（真机使用系统内置 \uE0E0..）*/
+.g{display:inline-flex;align-items:center;justify-content:center;width:1.12em;height:1.12em;border:2px solid currentColor;border-radius:50%;font-size:.78em;line-height:1;margin-right:.3em;flex:none;font-weight:500}
+.g.sh{border-radius:.35em;width:1.35em}
+.foot .g{font-size:28px;margin-right:10px}
+
+.ic{width:24px;height:24px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* 通用按钮 */
+.btn{display:flex;align-items:center;justify-content:center;border:1px solid var(--bd-ctl);border-radius:4px;background:var(--raised);color:var(--accent);white-space:nowrap}
+.btn.primary{background:var(--accent-soft);border:2px solid var(--accent);color:var(--accent)}
+.btn.solid{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.dis{background:var(--inset);border-color:var(--bd);color:var(--t3)}
+.btn.focus{outline:2px solid var(--accent);outline-offset:-4px;border-color:var(--accent)}
+.tone-ok{--tc:var(--ok);--ts:var(--ok-soft)}
+.tone-warn{--tc:var(--warn);--ts:var(--warn-soft)}
+.tone-bad{--tc:var(--bad);--ts:var(--bad-soft)}
+
+/* ===== 方案 A：卡片层级 ===== */
+.A .head{height:48px;display:flex;align-items:center;justify-content:space-between;flex:none}
+.A .brand{font-size:24px;color:var(--t1);letter-spacing:0;white-space:nowrap}
+.A .brand i{font-style:normal;color:var(--accent)}
+.A .hb{display:flex;gap:8px}
+.A .hb .btn{height:44px;padding:0 9px;font-size:22px}.A .hb{gap:6px}
+.A .sec{display:flex;align-items:center;justify-content:space-between;height:26px;margin:8px 0 6px;font-size:22px;color:var(--t2);letter-spacing:.12em}
+.A .sec b{font-weight:400;display:flex;align-items:center;gap:8px}
+.A .sec b::before{content:"";width:4px;height:18px;background:var(--accent);border-radius:2px}
+.A .sec span{letter-spacing:0;color:var(--t3);font-size:22px}
+.A .hero{position:relative;background:var(--ts);border:1px solid color-mix(in srgb,var(--tc) 45%,transparent);border-radius:4px;padding:12px 16px 14px 20px}
+.A .hero::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:4px;background:var(--tc);border-radius:0 2px 2px 0}
+.A .hero .r1{display:flex;justify-content:space-between;align-items:center;font-size:28px;color:var(--t2)}
+.A .pill{font-size:22px;color:var(--tc);background:rgba(0,0,0,.28);border:1px solid color-mix(in srgb,var(--tc) 55%,transparent);border-radius:99px;padding:3px 14px;display:inline-flex;gap:8px;align-items:center}
+.A .pill::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--tc)}
+.A .val{display:flex;align-items:baseline;gap:8px;margin:2px 0 8px;color:var(--tc)}
+.A .val .n{font-size:56px;line-height:1.1}.A .val .u{font-size:28px}
+.A .meter{height:10px;border-radius:5px;background:rgba(0,0,0,.35);overflow:hidden}
+.A .meter i{display:block;height:100%;background:var(--tc);border-radius:5px}
+.A .cap2{font-size:22px;color:var(--t2);margin-top:8px}
+.A .rules{display:flex;flex-direction:column;gap:6px}
+.A .rule{position:relative;display:flex;align-items:center;gap:10px;height:56px;padding:0 14px 0 18px;border-radius:4px}
+.A .rule .t{font-size:28px;color:var(--t1);flex:none}
+.A .rule .v{margin-left:auto;font-size:26px;text-align:right}
+.A .rule.active{background:var(--raised);border:1px solid #2A3B54}
+.A .rule.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:4px;background:var(--tc);border-radius:0 2px 2px 0}
+.A .rule.active .ic{color:var(--tc)} .A .rule.active .v{color:var(--tc)}
+.A .rule.standby{background:var(--surface);border:1px solid var(--bd)}
+.A .rule.standby::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;background:#3D506E;border-radius:0 2px 2px 0}
+.A .rule.standby .ic{color:var(--t2)} .A .rule.standby .v{color:var(--t2);font-size:24px}
+.A .rule.idle{background:transparent;border:1px solid var(--bd-dim)}
+.A .rule.idle .t{font-size:26px;color:var(--t3)} .A .rule.idle .ic{color:#5c6672} .A .rule.idle .v{color:var(--t3);font-size:22px}
+.A .detail{margin-top:auto;height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:#10243a;border:1px solid #1d3855;border-radius:4px;font-size:24px;color:var(--t2)}
+.A .detail em{font-style:normal;color:var(--accent)}
+.A .acts{display:flex;gap:8px;margin-top:8px;height:64px;flex:none}
+.A .acts .btn{font-size:28px}
+.A .acts .btn:first-child{flex:0 0 190px;font-size:24px}.A .acts .btn:last-child{flex:1}
+/* 受限 */
+.A .why{position:relative;background:var(--ts);border:1px solid color-mix(in srgb,var(--tc) 45%,transparent);border-radius:4px;padding:14px 16px 16px 20px}
+.A .why::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:4px;background:var(--tc);border-radius:0 2px 2px 0}
+.A .why .hl{font-size:44px;color:var(--tc);margin:8px 0 6px;line-height:1.15}
+.A .why .big{font-size:56px;color:var(--tc);line-height:1.1;margin:0 0 4px}
+.A .why .sm{font-size:28px;color:var(--t1)}
+.A .why .nt{font-size:22px;color:var(--t2);margin-top:8px}
+.A .unlock{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--bd);border-radius:4px;padding:10px 14px;margin-top:8px}
+.A .unlock .ic{color:var(--accent);width:30px;height:30px}
+.A .unlock small{display:block;font-size:22px;color:var(--t2)}
+.A .unlock span{font-size:30px;color:var(--t1)}
+.A .ask{font-size:22px;color:var(--t2);padding:8px 4px 0;display:flex;align-items:center;gap:8px}
+.A .ask .g{color:var(--accent)}
+
+/* ===== 方案 B：状态横幅 + 规则链 ===== */
+.B .banner{position:relative;background:linear-gradient(180deg,var(--ts) 0%,rgba(0,0,0,0) 100%),var(--inset);border:1px solid color-mix(in srgb,var(--tc) 40%,transparent);border-radius:8px;padding:8px 14px 14px;overflow:hidden}
+.B .banner::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--tc)}
+.B .top{display:flex;align-items:center;justify-content:space-between;height:44px}
+.B .ov{font-size:22px;color:var(--t2);white-space:nowrap}.B .ov i{font-style:normal;color:var(--accent)}
+.B .hb{display:flex;gap:4px}
+.B .hb .btn{height:40px;padding:0 6px;font-size:22px;background:rgba(0,0,0,.35)}
+.B .hl{font-size:44px;color:var(--tc);margin-top:6px;line-height:1.15}
+.B .row{display:flex;align-items:baseline;gap:10px;margin-top:2px}
+.B .row .n{font-size:56px;line-height:1.1;color:var(--t1)}
+.B .row .u{font-size:28px;color:var(--t1)}
+.B .row .l{margin-left:auto;font-size:22px;color:var(--t2);text-align:right;line-height:1.35}
+.B .meter{height:8px;border-radius:4px;background:rgba(0,0,0,.45);margin-top:10px}
+.B .meter i{display:block;height:100%;background:var(--tc);border-radius:4px}
+.B .mm{display:flex;justify-content:space-between;font-size:22px;color:var(--t2);margin-top:6px}
+.B .sub{font-size:28px;color:var(--t1);margin-top:6px}
+.B .nt{font-size:22px;color:var(--t2);margin-top:6px;line-height:1.4}
+.B .rec{display:flex;align-items:center;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--tc) 30%,transparent)}
+.B .rec .ic{width:30px;height:30px;color:var(--accent)}
+.B .rec small{display:block;font-size:22px;color:var(--t2)}
+.B .rec span{font-size:30px}
+.B .sec{display:flex;align-items:center;height:26px;margin:12px 4px 4px;font-size:22px;color:var(--t2);letter-spacing:.12em;gap:8px}
+.B .sec::after{content:"";flex:1;height:1px;background:var(--bd)}
+.B .chain{position:relative;display:flex;flex-direction:column;padding-left:2px}
+.B .chain::before{content:"";position:absolute;left:17px;top:22px;bottom:22px;width:2px;background:var(--bd)}
+.B .node{position:relative;display:flex;align-items:center;gap:12px;height:54px;padding:0 12px 0 0;border-radius:6px}
+.B .dot{position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex:none;border-radius:50%;background:var(--bg)}
+.B .dot::after{content:"";width:14px;height:14px;border-radius:50%;border:2px solid #3D506E;background:var(--bg)}
+.B .node .t{font-size:28px;color:var(--t1);flex:none}
+.B .node .v{margin-left:auto;font-size:26px;text-align:right}
+.B .node.active{background:linear-gradient(90deg,var(--ts),rgba(0,0,0,0) 85%)}
+.B .node.active .dot::after{width:20px;height:20px;background:var(--tc);border-color:var(--tc);box-shadow:0 0 0 5px color-mix(in srgb,var(--tc) 25%,transparent)}
+.B .node.active .v{color:var(--tc)}
+.B .node.standby .dot::after{border-color:var(--t2);background:var(--surface)}
+.B .node.standby .v{color:var(--t2);font-size:24px}
+.B .node.idle .t{font-size:26px;color:var(--t3)}.B .node.idle .v{font-size:22px;color:var(--t3)}
+.B .node.idle .dot::after{width:10px;height:10px;border-color:#444d58;background:#444d58}
+.B .node .nx{font-size:22px;color:var(--on-accent);background:var(--accent);border-radius:99px;padding:1px 10px;flex:none}
+.B .detail{margin-top:auto;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 6px;font-size:24px;color:var(--t2);border-top:1px solid var(--bd)}
+.B .detail em{font-style:normal;color:var(--accent)}
+.B .acts{display:flex;gap:8px;margin-top:6px;height:64px;flex:none}
+.B .acts .btn{font-size:28px}
+.B .acts .btn:first-child{flex:0 0 190px;font-size:24px}.B .acts .btn:last-child{flex:1}
+.B .ask{font-size:22px;color:var(--t2);padding:10px 4px 0;display:flex;align-items:center;gap:8px}
+.B .ask .g{color:var(--accent)}
+
+/* 规格表 */
+.spec{margin-top:12px;max-width:448px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#c9d1d9}
+.spec table{width:100%;border-collapse:collapse}
+.spec td,.spec th{padding:3px 6px;text-align:left;border-top:1px solid #21262d;vertical-align:baseline}
+.spec th{color:#8b949e;font-weight:500;border-top:0}
+.spec td:first-child{white-space:nowrap}
+.spec .px{color:#79c0ff;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<h1>PlayWise Overlay · 儿童概览 UI 优化（方案 A / B）</h1>
+<div class="pagesub">画布 448×720（掌机模式，1:1）· 深色基准调色板 · 示例数据 · 真机用系统按键字模，这里用圆形字母代替 · 仅为预览，未改动生产代码</div>
+
+<div class="req">
+<table>
+<tr><th>需求</th><th>方案 A「卡片层级」</th><th>方案 B「状态横幅 + 规则链」</th></tr>
+<tr><td>字体层次 / 突出当前状态 / 闲置降噪</td><td>品牌 24 → 分区标签 22 → 生效卡 28/26 → 闲置 26/22；三档卡片：<b>生效</b>（抬升+语义轨）/<b>待命</b>/<b>闲置</b>（无底、灰）</td><td>横幅标题 44 + 数值 56 是唯一视觉焦点；规则链节点：生效（亮点+光晕）/待命（空心）/闲置（小灰点）</td></tr>
+<tr><td>未受限：缓冲 + 加时码同一排；家长区进右上角与 Y 刷新并排</td><td>底部单行双按钮；页眉右侧并排</td><td>同；页眉并入横幅顶行，进一步省高度</td></tr>
+<tr><td>受限：去掉 B 返回</td><td>已去掉，无底部按钮；空间让给原因 + 恢复时间</td><td>同；横幅直接展开为原因区</td></tr>
+<tr><td>受限原因改成结果口吻（对小孩说）</td><td>“今天的时间用完啦 / 该睡觉啦 / 让眼睛休息一下 / 掌机时间用完啦”+ 一句下一步 + “什么时候能玩”</td><td>同文案；恢复时间放进横幅底部</td></tr>
+<tr><td>整体上移，利用顶部空间</td><td>页眉起点 Y=6（原约 14），分区标签补回大标题层级</td><td>横幅从 Y=6 起，品牌名降为顶行小标题，把“大标题”位让给当前状态</td></tr>
+<tr><td>“自律约定” → “自律约定·任我玩”</td><td colspan="2">两个方案均为“自律约定·任我玩”（“·任我玩”用强调色）；繁体 “自律約定·任我玩”，英文 PlayWise 不变</td></tr>
+</table>
+</div>
+
+<div class="bar" id="bar"></div>
+<div class="opts" id="opts"></div>
+
+<script>
+const G=(c,sh)=>`<span class="g${sh?' sh':''}">${c}</span>`;
+const IC={
+ eye:'<svg class="ic" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+ bed:'<svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+ dock:'<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+ clock:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+};
+const TONE={ok:'tone-ok',warn:'tone-warn',bad:'tone-bad'};
+
+/* 示例数据：zh 文案对应 companion/ui_text 现有 key 风格；新增文案在落地时补三语 */
+const STATES=[
+ {id:'ok',name:'可以玩 · 缓冲可领',r:false,tone:'ok',pill:'可以玩',hl:'现在可以玩',label:'今天还可玩',num:'25',unit:'分钟',used:35,quota:60,buf:'ready',
+  rules:[['eye','护眼','再玩约 25 分钟休息','active'],['bed','就寝','21:00 · 44 分后就寝','standby'],['dock','掌机模式','非电视剩余 18 分','active']]},
+ {id:'wait',name:'缓冲暂不可领',r:false,tone:'ok',pill:'可以玩',hl:'现在可以玩',label:'今天还可玩',num:'40',unit:'分钟',used:20,quota:60,buf:'wait',
+  rules:[['eye','护眼','未开启','idle'],['bed','就寝','未开启','idle'],['dock','掌机模式','非电视剩余 40 分','active']]},
+ {id:'low',name:'快到点了',r:false,tone:'warn',pill:'快到点',hl:'快到时间啦',label:'今天还可玩',num:'5',unit:'分钟',used:55,quota:60,buf:'done',
+  rules:[['eye','护眼','再玩约 5 分钟休息','active'],['bed','就寝','21:00 · 44 分后就寝','standby'],['dock','掌机模式','非电视剩余 5 分','active']]},
+ {id:'quota',name:'受限 · 额度用完',r:true,tone:'bad',pill:'今天玩完了',hl:'今天的时间用完啦',sub:'休息一下，明天再玩吧',note:'今日额度 60 分钟都用完了',un:'明天 07:00',unl:'什么时候能玩',
+  rules:[['eye','护眼','未开启','idle'],['bed','就寝','21:00 开始','standby']]},
+ {id:'bed',name:'受限 · 就寝',r:true,tone:'bad',pill:'睡觉时间',hl:'该睡觉啦',sub:'晚安，明天再玩吧',note:'休息时段 21:00 ~ 07:00 · 早睡长身体',un:'早上 07:00',unl:'什么时候能玩',
+  rules:[['eye','护眼','未开启','idle'],['dock','掌机模式','今天还剩 40 分','standby']]},
+ {id:'eye',name:'受限 · 护眼休息',r:true,tone:'warn',pill:'休息中',hl:'让眼睛休息一下',big:'05:00',sub:'看看远处，闭目养神',note:'每玩 40 分钟，休息 10 分钟',un:'5 分钟后，倒计时结束',unl:'什么时候能玩',
+  rules:[['bed','就寝','21:00 · 44 分后就寝','standby']]},
+ {id:'dock',name:'受限 · 掌机用完',r:true,tone:'bad',pill:'掌机休息',hl:'掌机时间用完啦',sub:'放回底座连电视，就能继续玩',note:'掌机和电视共用今天的额度',un:'连上电视就能玩',unl:'怎么继续玩',
+  rules:[['eye','护眼','未开启','idle'],['bed','就寝','21:00 · 44 分后就寝','standby']]}
+];
+
+const btn=(cls,inner,extra='')=>`<div class="btn ${cls}" ${extra}>${inner}</div>`;
+const PARENT=G('R',1)+'家长区', REFRESH=G('Y')+'刷新';
+const BUF={ready:['','领取自主缓冲',G('L',1)],wait:['dis','缓冲暂不可领',''],done:['dis','缓冲今日已领','']};
+const foot=()=>`<div class="foot"><span>${G('B')}Back</span><span>${G('A')}OK</span></div>`;
+const rules=(s,k)=>s.rules.map(([ic,t,v,st])=>k==='A'
+  ?`<div class="rule ${st} ${TONE[s.tone]}">${IC[ic]}<span class="t">${t}</span><span class="v">${v}</span></div>`
+  :`<div class="node ${st} ${TONE[s.tone]}"><span class="dot"></span><span class="t">${t}</span><span class="v">${v}</span></div>`).join('');
+const detail=`<div class="detail"><span>命令与状态</span><em>查看详情 (${G('−')})</em></div>`.replace(G('−'),'<span class="g sh" style="font-size:.7em">−</span>');
+
+function A(s){
+  const t=TONE[s.tone];
+  let body;
+  if(!s.r){
+    const [bc,bt,bg]=BUF[s.buf];
+    body=`<div class="sec"><b>今日状态</b><span>刚刚刷新</span></div>
+    <div class="hero ${t}"><div class="r1"><span>${s.label}</span><span class="pill">${s.pill}</span></div>
+      <div class="val"><span class="n">${s.num}</span><span class="u">${s.unit}</span></div>
+      <div class="meter"><i style="width:${Math.round(s.used/s.quota*100)}%"></i></div>
+      <div class="cap2">已用 ${s.used} 分钟 · 今日额度 ${s.quota} 分钟</div></div>
+    <div class="sec"><b>守护规则</b></div><div class="rules">${rules(s,'A')}</div>
+    ${detail}
+    <div class="acts">${btn(bc==='dis'?'dis':'',bg+bt)}${btn('primary',G('A')+'输入加时码')}</div>`;
+  }else{
+    body=`<div class="why ${t}"><span class="pill">${s.pill}</span>
+      <div class="hl">${s.hl}</div>${s.big?`<div class="big">${s.big}</div>`:''}
+      <div class="sm">${s.sub}</div><div class="nt">${s.note}</div></div>
+    <div class="unlock">${IC.clock}<div><small>${s.unl}</small><span>${s.un}${s.unsfx?'，'+s.unsfx:''}</span></div></div>
+    <div class="ask">${G('R',1)}想继续玩，请找爸爸妈妈</div>
+    <div class="sec"><b>其他规则</b></div><div class="rules">${rules(s,'A')}</div>
+    ${detail}`;
+  }
+  return `<div class="content A">
+   <div class="head"><div class="brand">自律约定<i>·任我玩</i></div><div class="hb">${btn('',PARENT)}${btn('',REFRESH)}</div></div>${body}</div>${foot()}`;
+}
+
+function B(s){
+  const t=TONE[s.tone];
+  const top=`<div class="top"><div class="ov">自律约定<i>·任我玩</i></div><div class="hb">${btn('',PARENT)}${btn('',REFRESH)}</div></div>`;
+  let body;
+  if(!s.r){
+    const [bc,bt,bg]=BUF[s.buf];
+    const nodes=s.rules.map(r=>r.slice());
+    // “下一个”标签：示例仅标在最先到点的生效规则上（落地时由剩余秒数最小者决定）
+    body=`<div class="banner ${t}">${top}
+      <div class="hl">${s.hl}</div>
+      <div class="row"><span class="n">${s.num}</span><span class="u">${s.unit}</span><span class="l">${s.label}<br>额度 ${s.quota} 分钟</span></div>
+      <div class="meter"><i style="width:${100-Math.round(s.used/s.quota*100)}%"></i></div>
+      <div class="mm"><span>已用 ${s.used} 分钟</span><span>剩 ${s.num} 分钟</span></div></div>
+    <div class="sec">今日规则</div><div class="chain">${rules(s,'B')}</div>
+    ${detail}
+    <div class="acts">${btn(bc==='dis'?'dis':'',bg+bt)}${btn('solid',G('A')+'输入加时码')}</div>`;
+  }else{
+    body=`<div class="banner ${t}">${top}
+      <div class="hl">${s.hl}</div>${s.big?`<div class="row"><span class="n" style="color:var(--tc)">${s.big}</span></div>`:''}
+      <div class="sub">${s.sub}</div><div class="nt">${s.note}</div>
+      <div class="rec">${IC.clock}<div><small>${s.unl}</small><span>${s.un}${s.unsfx?'，'+s.unsfx:''}</span></div></div></div>
+    <div class="ask">${G('R',1)}想继续玩，请找爸爸妈妈</div>
+    <div class="sec">其他规则</div><div class="chain">${rules(s,'B')}</div>
+    ${detail}`;
+  }
+  return `<div class="content B">${body}</div>${foot()}`;
+}
+
+const SPEC={
+A:`<table><tr><th>层级</th><th>用途</th><th>字号</th></tr>
+<tr><td>L1 状态数值</td><td>剩余时间 / 倒计时</td><td class="px">56 + 单位 28</td></tr>
+<tr><td>L1 结果标题</td><td>受限原因（对孩子说的话）</td><td class="px">44</td></tr>
+<tr><td>L2 品牌 / 次级句</td><td>自律约定·任我玩 / 结果副句</td><td class="px">24 / 28</td></tr>
+<tr><td>L3 分区标签</td><td>今日状态 · 守护规则 · 其他规则</td><td class="px">22（字距 +0.12em，左 4px 强调条）</td></tr>
+<tr><td>L4 规则行</td><td>生效 标题28 值26｜待命 28/24｜闲置 26/22</td><td class="px">28 / 26 / 22</td></tr>
+<tr><td>L5 按钮 / 注释</td><td>主 28，缓冲 24，说明 22</td><td class="px">28 / 24 / 22</td></tr></table>
+<table style="margin-top:8px"><tr><th>垂直预算（未受限）</th><th>Y</th></tr>
+<tr><td>页眉 48（按钮 44，字 22）</td><td class="px">6–54</td></tr><tr><td>今日状态卡（~150）</td><td class="px">~62–232</td></tr>
+<tr><td>规则 3×56 + 间距</td><td class="px">~262–450</td></tr><tr><td>命令与状态 48（底部吸附）</td><td class="px">~480–528</td></tr>
+<tr><td>底部双按钮 64</td><td class="px">575–639</td></tr></table>`,
+B:`<table><tr><th>层级</th><th>用途</th><th>字号</th></tr>
+<tr><td>L1 横幅标题</td><td>当前状态一句话（原“大标题”位）</td><td class="px">44（语义色）</td></tr>
+<tr><td>L1 状态数值</td><td>剩余时间 / 倒计时</td><td class="px">56 + 单位 28</td></tr>
+<tr><td>L2 品牌 overline</td><td>自律约定·任我玩（降为顶行小标题）</td><td class="px">22（“·任我玩”强调色）</td></tr>
+<tr><td>L2 副句</td><td>受限时的结果说明</td><td class="px">28</td></tr>
+<tr><td>L3 分区标签</td><td>今日规则 · 其他规则（右延分隔线）</td><td class="px">22</td></tr>
+<tr><td>L4 规则链节点</td><td>生效 28/26｜待命 28/24｜闲置 26/22</td><td class="px">28 / 26 / 22</td></tr>
+<tr><td>L5 按钮 / 注释</td><td>主按钮实心强调 28，缓冲 24</td><td class="px">28 / 24 / 22</td></tr></table>
+<table style="margin-top:8px"><tr><th>垂直预算（未受限）</th><th>Y</th></tr>
+<tr><td>横幅（含页眉按钮 40）</td><td class="px">6–~196</td></tr>
+<tr><td>规则链 3×54</td><td class="px">~236–398</td></tr>
+<tr><td>命令与状态 44（底部吸附）</td><td class="px">~485–529</td></tr>
+<tr><td>底部双按钮 64</td><td class="px">575–639</td></tr></table>`
+};
+
+let mode='single', cur='ok', guides=false, scale=1;
+{const h=location.hash.slice(1); // 例：#eye 直达状态，#all 全部状态
+ if(h==='all'){mode='all';scale=.55}else if(STATES.some(s=>s.id===h))cur=h}
+function frame(fn,s,sc){
+  return `<div class="wrap" style="width:${448*sc}px;height:${720*sc}px"><div class="screen ${guides?'guides':''}" style="transform:scale(${sc})">${fn(s)}</div></div>`;
+}
+function render(){
+  const bar=document.getElementById('bar');
+  bar.innerHTML=STATES.map(s=>`<button class="${mode==='single'&&cur===s.id?'on':''}" data-s="${s.id}">${s.name}</button>`).join('')
+   +`<button class="${mode==='all'?'on':''}" data-s="__all">全部状态</button><span class="sep"></span>`
+   +`<label><input type="checkbox" id="gd" ${guides?'checked':''}>布局参考线</label>`
+   +`<label>缩放 <select id="sc">${[1,.85,.7,.55].map(v=>`<option value="${v}" ${v===scale?'selected':''}>${Math.round(v*100)}%</option>`).join('')}</select></label>`;
+  bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    if(b.dataset.s==='__all'){mode='all';scale=.55}else{mode='single';cur=b.dataset.s;scale=1}render()});
+  document.getElementById('gd').onchange=e=>{guides=e.target.checked;render()};
+  document.getElementById('sc').onchange=e=>{scale=+e.target.value;render()};
+  const o=document.getElementById('opts');
+  const meta={A:['方案 A · 卡片层级（保守升级）','沿用现有卡片体系：分区标签建立“状态 → 规则”逻辑层级；规则分生效 / 待命 / 闲置三档，闲置项降噪。改动集中在 render_pages.hpp 的 begin_page / child_card，输入命中区基本不变。'],
+              B:['方案 B · 状态横幅 + 规则链（更大胆）','当前状态直接占据顶部“大标题”位，品牌名降为 overline；规则以竖向链条呈现，节点亮 / 空心 / 灰点表达生效 / 待命 / 闲置，无卡片边框省高度。需重写 child_overview 的布局与命中区。']};
+  o.innerHTML=['A','B'].map(k=>{
+    const fn=k==='A'?A:B;
+    const cells=mode==='single'
+      ?frame(fn,STATES.find(s=>s.id===cur),scale)
+      :`<div class="grid">${STATES.map(s=>`<div class="cell"><div class="cap">${s.name}</div>${frame(fn,s,scale)}</div>`).join('')}</div>`;
+    return `<div class="opt"><h2>${meta[k][0]}</h2><div class="tag">${meta[k][1]}</div>${cells}${mode==='single'?`<div class="spec">${SPEC[k]}</div>`:''}</div>`}).join('');
+}
+render();
+</script>
+</body>
+</html>

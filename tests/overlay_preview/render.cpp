@@ -585,13 +585,14 @@ int main(int argc, char **argv) {
                 }
                 if (scene == 37) {
                     require(view.page_identity() == 22 && view.page_layout_.primary.w == 0 &&
-                        view.page_layout_.parent.w > 0 && view.page_layout_.secondary.w > 0,
+                        view.page_layout_.parent.w > 0 && view.page_layout_.secondary.w == 0,
                         "active restriction must replace an open keypad with a fixed parent recovery entry");
                 }
                 for (const auto rect : {view.page_layout_.primary, view.page_layout_.secondary,
-                     view.page_layout_.parent, view.page_layout_.buffer, view.page_layout_.refresh}) {
+                     view.page_layout_.parent, view.page_layout_.buffer, view.page_layout_.redeem,
+                     view.page_layout_.refresh}) {
                     if (rect.w == 0) continue;
-                    require(rect.x >= 16 && rect.x + rect.w <= 432 && rect.y >= 40 && rect.y + rect.h <= 647,
+                    require(rect.x >= 16 && rect.x + rect.w <= 432 && rect.y >= PTC_OVERLAY_CONTENT_Y && rect.y + rect.h <= 647,
                         "fixed controls must remain inside the sidebar and above the host footer");
                 }
                 if (view.parent_view_ == ParentView::Actions) {

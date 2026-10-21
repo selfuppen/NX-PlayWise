@@ -5,6 +5,7 @@
     int page_identity_ = -1;
     bool page_changed_ = false;
     int flow_y_ = 0;
+    OverlayNavbarScheme navbar_scheme_ = OverlayNavbarScheme::Default;
 
     bool child_is_restricted() const
     {
@@ -73,6 +74,205 @@
         const char *title, bool refresh = false, int title_size = PTC_OVERLAY_FONT_TITLE)
     {
         const auto &pal = current_palette();
+        if (navbar_scheme_ != OverlayNavbarScheme::Default) {
+            const char *category = ptc_ui_text(PTC_UI_T_PLAYWISE);
+            const char *breadcrumb = "\u4efb\u6211\u73a9 › \u4eca\u65e5\u6982\u89c8";
+            const char *display_title = title;
+            int step_index = 0, total_steps = 1;
+            const char *step_names[4] = {"\u4eca\u65e5\u6982\u89c8", "", "", ""};
+            tsl::Color cat_color = pal.accent;
+            tsl::Color cat_soft = pal.accent_soft;
+
+            const bool is_child_overview = !access_recovery_visible() && !preview_ready_ && !success_visible_ && !status_expanded_ && !is_keypad_mode();
+            const bool parent_in_header = is_child_overview;
+
+            if (access_recovery_visible()) {
+                category = "\u5bb6\u957f\u533a";
+                cat_color = pal.warning;
+                cat_soft = pal.warning_soft;
+                if (parent_view_ == ParentView::Pin) {
+                    breadcrumb = "\u9996\u9875 › \u5bb6\u957f\u533a › PIN\u9a8c\u8bc1";
+                    display_title = "\u5bb6\u957f\u8eab\u4efd\u9a8c\u8bc1";
+                    step_index = 0; total_steps = 3;
+                    step_names[0] = "1.\u9a8c\u8bc1PIN"; step_names[1] = "2.\u7ba1\u7406\u83dc\u5355"; step_names[2] = "3.\u6267\u884c\u786e\u8ba4";
+                } else if (parent_view_ == ParentView::Actions) {
+                    breadcrumb = "\u9996\u9875 › \u5bb6\u957f\u533a › \u7ba1\u7406\u83dc\u5355";
+                    display_title = "\u5feb\u6377\u7ba1\u7406\u4e0e\u63a7\u5236";
+                    step_index = 1; total_steps = 3;
+                    step_names[0] = "1.\u9a8c\u8bc1PIN"; step_names[1] = "2.\u7ba1\u7406\u83dc\u5355"; step_names[2] = "3.\u6267\u884c\u786e\u8ba4";
+                } else if (parent_view_ == ParentView::Confirm) {
+                    breadcrumb = "\u9996\u9875 › \u5bb6\u957f\u533a › \u64cd\u4f5c\u786e\u8ba4";
+                    display_title = "\u64cd\u4f5c\u786e\u8ba4";
+                    step_index = 2; total_steps = 3;
+                    step_names[0] = "1.\u9a8c\u8bc1PIN"; step_names[1] = "2.\u7ba1\u7406\u83dc\u5355"; step_names[2] = "3.\u6267\u884c\u786e\u8ba4";
+                } else {
+                    breadcrumb = "\u9996\u9875 › \u5bb6\u957f\u533a › \u6267\u884c\u7ed3\u679c";
+                    display_title = "\u64cd\u4f5c\u7ed3\u679c";
+                    step_index = 2; total_steps = 3;
+                    step_names[0] = "1.\u9a8c\u8bc1PIN"; step_names[1] = "2.\u7ba1\u7406\u83dc\u5355"; step_names[2] = "3.\u6267\u884c\u786e\u8ba4";
+                }
+            } else if (preview_ready_) {
+                category = "\u52a0\u65f6\u7801";
+                cat_color = pal.success;
+                cat_soft = pal.success_soft;
+                breadcrumb = "\u9996\u9875 › \u5151\u6362\u52a0\u65f6 › \u9884\u89c8\u786e\u8ba4";
+                display_title = "\u786e\u8ba4\u589e\u52a0\u6e38\u73a9\u65f6\u95f4";
+                step_index = 1; total_steps = 3;
+                step_names[0] = "1.\u8f93\u5165\u7801"; step_names[1] = "2.\u9884\u89c8\u6548\u679c"; step_names[2] = "3.\u5b8c\u6210";
+            } else if (success_visible_) {
+                category = "\u52a0\u65f6\u7801";
+                cat_color = pal.success;
+                cat_soft = pal.success_soft;
+                breadcrumb = "\u9996\u9875 › \u5151\u6362\u52a0\u65f6 › \u5151\u6362\u7ed3\u679c";
+                display_title = "\u5151\u6362\u7ed3\u679c";
+                step_index = 2; total_steps = 3;
+                step_names[0] = "1.\u8f93\u5165\u7801"; step_names[1] = "2.\u9884\u89c8\u6548\u679c"; step_names[2] = "3.\u5b8c\u6210";
+            } else if (status_expanded_) {
+                category = "\u8be6\u60c5";
+                cat_color = pal.text_secondary;
+                cat_soft = pal.card_raised;
+                breadcrumb = "\u9996\u9875 › \u4eca\u65e5\u6982\u89c8 › \u89c4\u5219\u4e0e\u72b6\u6001\u8be6\u60c5";
+                display_title = "\u6838\u5fc3\u72b6\u6001\u4e0e\u63a7\u5236\u89c4\u5219";
+                step_index = 1; total_steps = 2;
+                step_names[0] = "\u4eca\u65e5\u6982\u89c8"; step_names[1] = "\u72b6\u6001\u4e0e\u89c4\u5219\u8be6\u60c5";
+            } else if (is_keypad_mode()) {
+                category = "\u52a0\u65f6\u7801";
+                cat_color = pal.success;
+                cat_soft = pal.success_soft;
+                breadcrumb = "\u9996\u9875 › \u5151\u6362\u52a0\u65f6 › \u8f93\u5165\u7801";
+                display_title = "\u8f93\u5165 8 \u4f4d\u52a0\u65f6\u7801";
+                step_index = 0; total_steps = 3;
+                step_names[0] = "1.\u8f93\u5165\u7801"; step_names[1] = "2.\u9884\u89c8\u6548\u679c"; step_names[2] = "3.\u5b8c\u6210";
+            } else {
+                const bool restricted = child_is_restricted();
+                category = "\u6982\u89c8";
+                cat_color = pal.accent;
+                cat_soft = pal.accent_soft;
+                breadcrumb = restricted ? "\u4efb\u6211\u73a9 › \u4f11\u606f\u63d0\u9192" : "\u4efb\u6211\u73a9 › \u4eca\u65e5\u6982\u89c8";
+                display_title = ptc_ui_text(PTC_UI_T_PLAYWISE);
+                step_index = 0; total_steps = 2;
+                step_names[0] = "\u4eca\u65e5\u6982\u89c8"; step_names[1] = "\u72b6\u6001\u4e0e\u89c4\u5219\u8be6\u60c5";
+            }
+
+            const bool restricted = child_is_restricted();
+            const bool parent_focused = !status_expanded_ && !is_keypad_mode() &&
+                parent_view_ == ParentView::Child &&
+                child_overview_focus_ == (restricted ? 0 : 2);
+            const bool refresh_focused = (parent_view_ == ParentView::Actions && parent_action_ == -1) ||
+                (status_expanded_ && status_details_focus_ == 2) ||
+                (!status_expanded_ && !is_keypad_mode() && parent_view_ == ParentView::Child &&
+                 child_overview_focus_ == (restricted ? 3 : 4));
+
+            if (navbar_scheme_ == OverlayNavbarScheme::Breadcrumb) {
+                renderer->drawString(breadcrumb, false, cx + 6, cy + 16, 20, renderer->a(pal.text_secondary));
+                int title_w = parent_in_header ? cw - 224 : (refresh ? cw - 124 : cw - 16);
+                overlay_text(renderer, display_title, cx + 6, cy + 24, title_w, 30, pal.text_primary);
+
+                if (parent_in_header) {
+                    page_layout_.parent = ptc_overlay_rect(cx + cw - 216, cy + 4, 102, 50);
+                    draw_button(renderer, page_layout_.parent, ptc_ui_text(PTC_UI_T_R_PARENT_AREA),
+                        pal.accent, restricted, PTC_OVERLAY_FONT_SECONDARY, parent_focused);
+                }
+                if (refresh) {
+                    page_layout_.refresh = ptc_overlay_rect(cx + cw - 108, cy + 4, 108, 50);
+                    draw_button(renderer, page_layout_.refresh, ptc_ui_text(PTC_UI_T_Y_REFRESH),
+                        pal.accent, false, PTC_OVERLAY_FONT_SECONDARY, refresh_focused);
+                }
+
+                renderer->drawRect(cx + 4, cy + 62, cw - 8, 1, renderer->a(pal.border_decorative));
+                renderer->drawRect(cx + 4, cy + 62, 36, 2, renderer->a(cat_color));
+
+                page_layout_.viewport = ptc_overlay_rect(cx, cy + 70, cw, 544 - 70);
+            } else if (navbar_scheme_ == OverlayNavbarScheme::Capsule) {
+                auto badge_size = measure_localized(renderer, category, 20);
+                int badge_w = static_cast<int>(badge_size.first) + 18;
+                int badge_h = 32;
+                int badge_x = cx + 6;
+                int badge_y = cy + 10;
+
+                draw_round_rect_surface(renderer, badge_x, badge_y, badge_w, badge_h, 4,
+                    cat_soft, cat_color, 1);
+                draw_localized_center(renderer, category, badge_x, badge_y, badge_w, badge_h, 20, cat_color);
+
+                int title_x = badge_x + badge_w + 10;
+                int title_w = parent_in_header ? (cx + cw - 220 - title_x) : (refresh ? (cx + cw - 116 - title_x) : (cw - title_x));
+                overlay_text(renderer, display_title, title_x, cy + 8, title_w, 28, pal.text_primary);
+
+                if (parent_in_header) {
+                    page_layout_.parent = ptc_overlay_rect(cx + cw - 216, cy + 2, 102, 48);
+                    draw_button(renderer, page_layout_.parent, ptc_ui_text(PTC_UI_T_R_PARENT_AREA),
+                        pal.accent, restricted, PTC_OVERLAY_FONT_SECONDARY, parent_focused);
+                }
+                if (refresh) {
+                    page_layout_.refresh = ptc_overlay_rect(cx + cw - 108, cy + 2, 108, 48);
+                    draw_button(renderer, page_layout_.refresh, ptc_ui_text(PTC_UI_T_Y_REFRESH),
+                        pal.accent, false, PTC_OVERLAY_FONT_SECONDARY, refresh_focused);
+                }
+
+                renderer->drawRect(cx + 4, cy + 54, cw - 8, 1, renderer->a(pal.border_decorative));
+                renderer->drawRect(cx + 4, cy + 54, 36, 2, renderer->a(cat_color));
+
+                page_layout_.viewport = ptc_overlay_rect(cx, cy + 62, cw, 544 - 62);
+            } else if (navbar_scheme_ == OverlayNavbarScheme::Stepper) {
+                int title_w = parent_in_header ? cw - 224 : (refresh ? cw - 124 : cw - 16);
+                overlay_text(renderer, display_title, cx + 6, cy + 2, title_w, 28, pal.text_primary);
+
+                if (parent_in_header) {
+                    page_layout_.parent = ptc_overlay_rect(cx + cw - 216, cy + 2, 102, 42);
+                    draw_button(renderer, page_layout_.parent, ptc_ui_text(PTC_UI_T_R_PARENT_AREA),
+                        pal.accent, restricted, PTC_OVERLAY_FONT_CAPTION, parent_focused);
+                }
+                if (refresh) {
+                    page_layout_.refresh = ptc_overlay_rect(cx + cw - 108, cy + 2, 108, 42);
+                    draw_button(renderer, page_layout_.refresh, ptc_ui_text(PTC_UI_T_Y_REFRESH),
+                        pal.accent, false, PTC_OVERLAY_FONT_CAPTION, refresh_focused);
+                }
+
+                int step_y = cy + 46;
+                int step_x = cx + 6;
+                int step_w = (cw - 12) / total_steps;
+                for (int i = 0; i < total_steps; ++i) {
+                    bool active = (i == step_index);
+                    bool done = (i < step_index);
+                    tsl::Color step_col = active ? pal.accent : done ? pal.success : pal.text_disabled;
+
+                    int dot_x = step_x + i * step_w + 4;
+                    int dot_y = step_y + 4;
+                    if (active) {
+                        renderer->drawRect(dot_x - 1, dot_y - 1, 8, 8, renderer->a(pal.accent_soft));
+                        renderer->drawRect(dot_x, dot_y, 6, 6, renderer->a(pal.accent));
+                    } else if (done) {
+                        renderer->drawRect(dot_x, dot_y, 6, 6, renderer->a(pal.success));
+                    } else {
+                        renderer->drawRect(dot_x, dot_y, 6, 6, renderer->a(pal.border_control));
+                    }
+
+                    char step_buf[64];
+                    std::snprintf(step_buf, sizeof(step_buf), "%s", step_names[i]);
+                    renderer->drawString(step_buf, false, dot_x + 10, step_y + 12, 18, renderer->a(step_col));
+
+                    if (i < total_steps - 1) {
+                        int line_start = dot_x + 10 + static_cast<int>(measure_localized(renderer, step_buf, 18).first) + 6;
+                        int line_end = step_x + (i + 1) * step_w - 4;
+                        if (line_end > line_start) {
+                            renderer->drawRect(line_start, dot_y + 2, line_end - line_start, 1,
+                                renderer->a(done ? pal.success : pal.border_decorative));
+                        }
+                    }
+                }
+
+                renderer->drawRect(cx + 4, cy + 70, cw - 8, 1, renderer->a(pal.border_decorative));
+                renderer->drawRect(cx + 4, cy + 70, 36, 2, renderer->a(cat_color));
+
+                page_layout_.viewport = ptc_overlay_rect(cx, cy + 76, cw, 544 - 76);
+            }
+
+            page_layout_.secondary = ptc_overlay_rect(cx, cy + 554, 154, 76);
+            page_layout_.primary = ptc_overlay_rect(cx + 166, cy + 554, cw - 166, 76);
+            flow_y_ = page_layout_.viewport.y;
+            renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);
+            return;
+        }
         const int title_width = refresh ? cw - 156 : cw - 32;
         const int header = std::max(56, overlay_text_height(renderer, title, title_width,
             title_size) + 8);
@@ -615,12 +815,16 @@
         const auto &pal = current_palette();
         const auto &summary = displayed_summary_;
         char line[128], age[64], date[64];
+        if (navbar_scheme_ != OverlayNavbarScheme::Default) {
+            begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE), true);
+        } else {
         overlay_text(renderer, ptc_ui_text(PTC_UI_T_PLAYWISE), cx + 4, cy, cw - 148, PTC_OVERLAY_FONT_TITLE, pal.accent);
         page_layout_.refresh = ptc_overlay_rect(cx + cw - 132, cy + 4, 128, 52);
         const bool highlight = needs_refresh() && !bridge_->waiting;
         draw_button(renderer, page_layout_.refresh, ptc_ui_text(bridge_->waiting ? PTC_UI_T_REFRESHING : PTC_UI_T_Y_REFRESH),
             bridge_->waiting ? pal.text_secondary : highlight ? pal.warning : pal.accent,
             highlight || bridge_->waiting, PTC_OVERLAY_FONT_SECONDARY);
+        }
         if (ptc_overlay_remaining_refresh_pending(bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode))
             std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING));
         else if (summary.valid && summary.unrestricted_today == 1) std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));

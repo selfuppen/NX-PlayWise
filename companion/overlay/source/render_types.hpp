@@ -274,6 +274,13 @@ enum class ParentView {
     Result,
 };
 
+enum class OverlayNavbarScheme {
+    Default = 0,
+    Breadcrumb = 1,
+    Capsule = 2,
+    Stepper = 3
+};
+
 enum class ChildCardKind { Plain, Time, Eye, Bedtime, Dock };
 
 struct OverlayPanelLine {

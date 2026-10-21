@@ -205,10 +205,7 @@
                 return true;
             }
             if (restricted) {
-                if (page_hit(page_layout_.secondary, tx, ty)) {
-                    child_overview_focus_ = 1;
-                    tsl::Overlay::get()->close();
-                } else if (flow_hit(page_layout_.status, tx, ty)) {
+                if (flow_hit(page_layout_.status, tx, ty)) {
                     child_overview_focus_ = 2;
                     status_expanded_ = true;
                 }
@@ -259,16 +256,16 @@
             }
         }
         if (restricted) {
+            if (child_overview_focus_ == 1) child_overview_focus_ = 0;
+            else if (child_overview_focus_ == 4) child_overview_focus_ = 3;
             const int prev_focus = child_overview_focus_;
             if (keysDown & HidNpadButton_Up) {
-                if (child_overview_focus_ == 0 || child_overview_focus_ == 1) child_overview_focus_ = 2;
-                else if (child_overview_focus_ == 2) child_overview_focus_ = 3;
+                if (child_overview_focus_ == 2) child_overview_focus_ = 0;
             } else if (keysDown & HidNpadButton_Down) {
-                if (child_overview_focus_ == 3) child_overview_focus_ = 2;
-                else if (child_overview_focus_ == 2) child_overview_focus_ = 0;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 3) child_overview_focus_ = 2;
             } else if (keysDown & (HidNpadButton_Left | HidNpadButton_Right)) {
-                if (child_overview_focus_ == 0 || child_overview_focus_ == 1)
-                    child_overview_focus_ = child_overview_focus_ == 0 ? 1 : 0;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 3)
+                    child_overview_focus_ = child_overview_focus_ == 0 ? 3 : 0;
             }
             if (child_overview_focus_ == 2 && child_overview_focus_ != prev_focus) {
                 page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
@@ -277,7 +274,6 @@
             }
             if (keysDown & HidNpadButton_A) {
                 if (child_overview_focus_ == 0) open_parent_pin();
-                else if (child_overview_focus_ == 1) tsl::Overlay::get()->close();
                 else if (child_overview_focus_ == 2) status_expanded_ = true;
                 else if (child_overview_focus_ == 3 && requests_enabled) (void)begin_status_refresh();
                 return true;
@@ -294,17 +290,17 @@
         if (!is_keypad_mode()) {
             const int prev_focus = child_overview_focus_;
             if (keysDown & HidNpadButton_Up) {
-                if (child_overview_focus_ == 1 || child_overview_focus_ == 2) child_overview_focus_ = 0;
-                else if (child_overview_focus_ == 0) child_overview_focus_ = 3;
-                else if (child_overview_focus_ == 3) child_overview_focus_ = 4;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 1) child_overview_focus_ = 3;
+                else if (child_overview_focus_ == 3) child_overview_focus_ = 2;
             } else if (keysDown & HidNpadButton_Down) {
-                if (child_overview_focus_ == 4) child_overview_focus_ = 3;
+                if (child_overview_focus_ == 2 || child_overview_focus_ == 4) child_overview_focus_ = 3;
                 else if (child_overview_focus_ == 3) child_overview_focus_ = 0;
-                else if (child_overview_focus_ == 0) child_overview_focus_ = 1;
             } else if (keysDown & HidNpadButton_Left) {
-                if (child_overview_focus_ == 2) child_overview_focus_ = 1;
+                if (child_overview_focus_ == 0) child_overview_focus_ = 1;
+                else if (child_overview_focus_ == 4) child_overview_focus_ = 2;
             } else if (keysDown & HidNpadButton_Right) {
-                if (child_overview_focus_ == 1) child_overview_focus_ = 2;
+                if (child_overview_focus_ == 1) child_overview_focus_ = 0;
+                else if (child_overview_focus_ == 2) child_overview_focus_ = 4;
             }
             if (child_overview_focus_ == 3 && child_overview_focus_ != prev_focus) {
                 page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
