@@ -554,14 +554,17 @@ int main(int argc, char **argv) {
                     for (const auto label : {PTC_UI_T_OVERLAY_EYE_LABEL, PTC_UI_T_POLICY_BED_LABEL,
                         view.page_identity() == 4 || policies.mode == PTC_UI_T_STATUS_TO_CONFIRM ?
                         PTC_UI_T_POLICY_DOCK_LABEL : policies.mode}) {
-                        const auto title_lines = overlay_wrap(&renderer, ptc_ui_text(label), 32, 380);
+                        // Details keep 32px rule titles; the overview chain uses 28px (26px when idle).
+                        const bool details_page = view.page_identity() == 4;
+                        const auto title_lines = overlay_wrap(&renderer, ptc_ui_text(label), details_page ? 32 : 28, 380);
                         bool found = true;
                         for (const auto &title_line : title_lines) {
                             bool line_found = false;
                             for (const auto &run : renderer.text_runs) {
                                 if (run.text == title_line) {
                                     line_found = true;
-                                    require(run.size == 32, "production child rule titles must all use 32px");
+                                    require(details_page ? run.size == 32 : (run.size == 28 || run.size == 26),
+                                        "production child rule titles must use their page type scale");
                                 }
                             }
                             found = found && line_found;

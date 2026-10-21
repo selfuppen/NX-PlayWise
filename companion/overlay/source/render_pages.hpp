@@ -879,66 +879,208 @@
         draw_button(renderer, page_layout_.parent, ptc_ui_text(PTC_UI_T_R_PARENT_AREA), pal.accent, true, PTC_OVERLAY_FONT_BTN, keypad_nav_focus_ == 14);
     }
 
+    // ---- Child overview: status banner + rule chain ------------------------
+    // The banner owns the current state (headline 44px, value 56px); rules below
+    // are graded active / standby / idle so idle rules never compete for focus.
+    struct ChildRuleRow {
+        const char *label;
+        const char *value;
+        tsl::Color color = {0, 0, 0, 0};
+        int level; // 0 active, 1 standby, 2 idle
+    };
+
+    static int text_width(tsl::gfx::Renderer *renderer, const char *text, int size)
+    {
+        const auto lines = overlay_wrap(renderer, text, size, 100000);
+        return lines.empty() ? 0 : static_cast<int>(measure_localized(renderer, lines[0].c_str(), size).first);
+    }
+
+    // Largest size that keeps a button label on one line; never below 24px.
+    int fit_button_size(tsl::gfx::Renderer *renderer, const char *text, int width)
+    {
+        const int sizes[] = {PTC_OVERLAY_FONT_BODY, 26, PTC_OVERLAY_FONT_SECONDARY};
+        for (const int size : sizes)
+            if (overlay_text_height(renderer, text, width - 24, size) <= (size * 6 + 4) / 5) return size;
+        return PTC_OVERLAY_FONT_SECONDARY;
+    }
+
+    int child_rule_level(bool enabled, tsl::Color color) const
+    {
+        if (!enabled) return 2;
+        return same_color(color, current_palette().text_secondary) ? 1 : 0;
+    }
+
+    void draw_child_section(tsl::gfx::Renderer *renderer, const char *label)
+    {
+        const auto &pal = current_palette();
+        const auto &vp = page_layout_.viewport;
+        const int y = flow_y_ - static_cast<int>(page_scroll_);
+        const int width = text_width(renderer, label, PTC_OVERLAY_FONT_CAPTION);
+        overlay_text(renderer, label, vp.x + 8, y, width + 2, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+        renderer->drawRect(vp.x + 8 + width + 12, y + 14, vp.w - width - 24, 1,
+            renderer->a(pal.border_decorative));
+        flow_y_ += 32;
+    }
+
+    void draw_child_rule_chain(tsl::gfx::Renderer *renderer, const ChildRuleRow *rows, int count)
+    {
+        const auto &pal = current_palette();
+        const auto &vp = page_layout_.viewport;
+        const int x = vp.x + 4, w = vp.w - 8;
+        const int text_x = x + 44, avail = w - 44 - 12;
+        int previous_center = 0;
+        for (int i = 0; i < count; ++i) {
+            const auto &row = rows[i];
+            const int title_size = row.level == 2 ? PTC_OVERLAY_FONT_BODY - 2 : PTC_OVERLAY_FONT_BODY;
+            const int value_size = row.level == 0 ? PTC_OVERLAY_FONT_BODY - 2 :
+                row.level == 1 ? PTC_OVERLAY_FONT_SECONDARY : PTC_OVERLAY_FONT_CAPTION;
+            const int title_w = text_width(renderer, row.label, title_size);
+            const int value_w = text_width(renderer, row.value, value_size);
+            const bool inline_value = title_w + value_w + 12 <= avail;
+            const int title_h = overlay_text_height(renderer, row.label, avail, title_size);
+            const int value_h = overlay_text_height(renderer, row.value, avail, value_size);
+            const int height = inline_value ? 54 : std::max(54, 14 + title_h + 2 + value_h + 6);
+            const int y = flow_y_ - static_cast<int>(page_scroll_);
+            flow_y_ += height + 4;
+
+            const auto soft = dashboard_soft(row.color);
+            if (row.level == 0) draw_round_rect_surface(renderer, x, y, w, height, 4, soft, soft, 0);
+            const int dot_x = x + 18;
+            const int dot_y = y + (inline_value ? height / 2 : 27);
+            // Chain rail runs between dots; dots never sit on top of it.
+            if (i > 0 && dot_y - 17 > previous_center + 17)
+                renderer->drawRect(dot_x - 1, previous_center + 17, 2, dot_y - 17 - (previous_center + 17),
+                    renderer->a(pal.border_control));
+            previous_center = dot_y;
+            if (row.level == 0) {
+                auto halo = row.color;
+                halo.a = 5;
+                draw_round_rect_surface(renderer, dot_x - 15, dot_y - 15, 30, 30, 15, halo, halo, 0);
+                draw_round_rect_surface(renderer, dot_x - 10, dot_y - 10, 20, 20, 10, row.color, row.color, 0);
+            } else if (row.level == 1) {
+                draw_round_rect_surface(renderer, dot_x - 8, dot_y - 8, 16, 16, 8,
+                    pal.text_secondary, pal.text_secondary, 0);
+                draw_round_rect_surface(renderer, dot_x - 5, dot_y - 5, 10, 10, 5, pal.card_bg, pal.card_bg, 0);
+            } else {
+                draw_round_rect_surface(renderer, dot_x - 5, dot_y - 5, 10, 10, 5,
+                    pal.text_disabled, pal.text_disabled, 0);
+            }
+
+            const auto title_color = row.level == 2 ? pal.text_disabled : pal.text_primary;
+            const auto value_color = row.level == 0 ? row.color :
+                row.level == 1 ? pal.text_secondary : pal.text_disabled;
+            if (inline_value) {
+                overlay_text(renderer, row.label, text_x, y + (height - title_h) / 2, title_w + 2,
+                    title_size, title_color);
+                overlay_text(renderer, row.value, x + w - 12 - value_w, y + (height - value_h) / 2,
+                    value_w + 2, value_size, value_color);
+            } else {
+                overlay_text(renderer, row.label, text_x, y + 8, avail, title_size, title_color);
+                overlay_text(renderer, row.value, text_x, y + 10 + title_h, avail, value_size, value_color);
+            }
+        }
+    }
+
+    // Bottom-anchored when the page fits; otherwise follows the flow and scrolls.
+    PtcOverlayRect draw_child_status_row(tsl::gfx::Renderer *renderer, bool focused)
+    {
+        const auto &pal = current_palette();
+        const auto &vp = page_layout_.viewport;
+        const int height = 48;
+        const int raw_y = std::max(flow_y_ + 4, vp.y + vp.h - height);
+        const auto raw = ptc_overlay_rect(vp.x + 4, raw_y, vp.w - 8, height);
+        flow_y_ = raw_y + height;
+        const auto rect = ptc_overlay_rect(raw.x, raw.y - static_cast<int>(page_scroll_), raw.w, raw.h);
+        draw_dashboard_surface(renderer, rect, focused ? pal.accent_soft : pal.card_bg,
+            focused ? pal.accent : pal.border_decorative, focused);
+        if (focused) draw_focus_ring(renderer, rect, pal.accent);
+        const char *action = error_ ? ptc_ui_text(PTC_UI_T_OVERLAY_FAILED_DETAILS) :
+            bridge_->waiting ? ptc_ui_text(PTC_UI_T_BACKGROUND_PROCESSING) : ptc_ui_text(PTC_UI_T_OVERLAY_OPEN_DETAILS);
+        const int action_w = text_width(renderer, action, PTC_OVERLAY_FONT_SECONDARY);
+        const int line_h = (PTC_OVERLAY_FONT_SECONDARY * 6 + 4) / 5;
+        overlay_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_STATUS), rect.x + 14, rect.y + (rect.h - line_h) / 2,
+            rect.w - action_w - 40, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
+        overlay_text(renderer, action, rect.x + rect.w - 14 - action_w, rect.y + (rect.h - line_h) / 2,
+            action_w + 2, PTC_OVERLAY_FONT_SECONDARY, error_ ? pal.danger : pal.accent);
+        return raw;
+    }
+
     void draw_child_overview(tsl::gfx::Renderer *renderer, int cx, int cy, int cw)
     {
         const auto &pal = current_palette();
         auto summary = displayed_summary_;
-        char line[384], age[64];
-        begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_PLAYWISE), true);
+        char line[384], number[48], window[160];
         const bool restricted = child_is_restricted();
-        // Only the ordinary overview reserves a separate redeem row.
-        if (!restricted) page_layout_.viewport.h -= 76;
-        renderer->disableScissoring();
-        renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);
-        if (restricted) {
-            const bool bedtime = bedtime_restricted();
-            const bool eye = !bedtime && eye_care_restricted();
-            const auto color = eye ? pal.warning : pal.danger;
-            const auto *title = ptc_ui_text(bedtime ? PTC_UI_T_BEDTIME_ACTIVE_2 : eye ? PTC_UI_T_EYE_CARE_RESTING : PTC_UI_T_DOCK_TITLE);
-            if (bedtime) {
-                std::snprintf(line, sizeof(line), "%02u:%02u ~ %02u:%02u", summary.bedtime_start_minute / 60,
-                    summary.bedtime_start_minute % 60, summary.bedtime_end_minute / 60, summary.bedtime_end_minute % 60);
-                dashboard_panel(renderer, {{title, PTC_OVERLAY_FONT_TITLE_LG, color},
-                    {line, PTC_OVERLAY_FONT_DISPLAY, pal.text_primary},
-                    {ptc_ui_text(PTC_UI_T_FOR_EXCEPTIONS_SELECT_SKIP_TONIGHT_BEDTIME_IN), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary}}, color);
-            } else if (eye) {
-                const auto status = child_eye_care_status(summary);
-                if (status.rest_seconds >= 0)
-                    std::snprintf(line, sizeof(line), "%02d:%02d", status.rest_seconds / 60, status.rest_seconds % 60);
-                else std::snprintf(line, sizeof(line), "%s", status.compact);
-                dashboard_panel(renderer, {{title, PTC_OVERLAY_FONT_TITLE_LG, color},
-                    {line, status.rest_seconds >= 0 ? PTC_OVERLAY_FONT_HERO : PTC_OVERLAY_FONT_BODY, pal.warning},
-                    {status.detail, PTC_OVERLAY_FONT_BODY, pal.text_secondary}}, color);
-                flow_text(renderer, ptc_ui_text(PTC_UI_T_MESSAGE_2), PTC_OVERLAY_FONT_BODY_LG, pal.text_primary);
-                flow_text(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary);
+        const bool bedtime = restricted && bedtime_restricted();
+        const bool eye_restricted = restricted && !bedtime && eye_care_restricted();
+        const bool dock_restricted = restricted && !bedtime && !eye_restricted;
+        const auto eye = child_eye_care_status(summary);
+        const auto policies = child_policy_status(summary);
+
+        // Banner content ----------------------------------------------------
+        const char *head = ""; tsl::Color tone = pal.success;
+        const char *num = nullptr; int num_size = PTC_OVERLAY_FONT_HERO; tsl::Color num_color = pal.text_primary;
+        const char *num_label = nullptr;
+        const char *sub = nullptr; const char *note = nullptr;
+        if (bedtime) {
+            head = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_TITLE); tone = pal.danger;
+            sub = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_HERO);
+            std::snprintf(window, sizeof(window), ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_WINDOW),
+                summary.bedtime_start_minute / 60, summary.bedtime_start_minute % 60,
+                summary.bedtime_end_minute / 60, summary.bedtime_end_minute % 60);
+            note = window;
+        } else if (eye_restricted) {
+            head = ptc_ui_text(PTC_UI_T_OVERLAY_EYE_CHILD_TITLE); tone = pal.warning;
+            if (eye.rest_seconds >= 0) {
+                std::snprintf(number, sizeof(number), "%02d:%02d", eye.rest_seconds / 60, eye.rest_seconds % 60);
+                num = number; num_color = pal.warning;
             } else {
-                dashboard_panel(renderer, {{title, PTC_OVERLAY_FONT_TITLE_LG, color},
-                    {ptc_ui_text(PTC_UI_T_DOCK_CONNECT), PTC_OVERLAY_FONT_BODY_LG, pal.warning},
-                    {ptc_ui_text(PTC_UI_T_OVERLAY_DOCK_SUMMARY), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary}}, color);
+                num = eye.compact; num_size = PTC_OVERLAY_FONT_BODY; num_color = pal.warning;
             }
-            if (!eye && summary.eye_care_enabled) {
-                const auto status = child_eye_care_status(summary);
-                child_rule(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), status.compact, nullptr,
-                    status.warning ? pal.warning : pal.success, ChildCardKind::Eye);
-            }
+            sub = ptc_ui_text(PTC_UI_T_OVERLAY_EYE_CHILD_NOTE);
+            note = eye.detail;
+        } else if (dock_restricted) {
+            head = ptc_ui_text(summary.force_docked ? PTC_UI_T_OVERLAY_DOCK_CHILD_FORCE_TITLE :
+                PTC_UI_T_OVERLAY_DOCK_CHILD_TITLE);
+            tone = pal.danger;
+            sub = ptc_ui_text(PTC_UI_T_OVERLAY_DOCK_CHILD_HERO);
+            note = ptc_ui_text(PTC_UI_T_OVERLAY_DOCK_SUMMARY);
         } else {
-            if (ptc_overlay_remaining_refresh_pending(bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode))
-                std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING));
-            else if (summary.valid && summary.unrestricted_today == 1) std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
-            else if (summary.valid && summary.remaining_available) ptc_ui_format_minutes(summary.remaining_minutes, line, sizeof(line));
-            else std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
-            format_refresh_age(age, sizeof(age));
-            char label[128], value[128], note[128];
-            ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), value, sizeof(value), note, sizeof(note));
-            // Keep the quota and usage together so the eye-care row fits without
-            // shrinking text. Full proxy-timer explanations stay in details.
-            char quota[256];
+            const bool confirming = ptc_overlay_remaining_refresh_pending(bridge_->waiting,
+                active_request_kind_ == OverlayRequestKind::OfflineCode);
+            const bool stale = status_is_stale();
+            if (confirming) {
+                head = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY); tone = pal.warning;
+                std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING));
+                num = number; num_color = pal.warning;
+            } else if (summary.valid && summary.unrestricted_today == 1) {
+                head = ptc_ui_text(PTC_UI_T_OVERLAY_NOW_CAN_PLAY); tone = stale ? pal.warning : pal.success;
+                std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+                num = number; num_label = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY);
+            } else if (summary.valid && summary.remaining_available && summary.remaining_minutes == 0) {
+                head = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE); tone = pal.danger;
+                sub = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_VALUE);
+            } else if (summary.valid && summary.remaining_available) {
+                const bool low = summary.remaining_minutes <= 10;
+                head = ptc_ui_text(low ? PTC_UI_T_OVERLAY_NOW_LOW : PTC_UI_T_OVERLAY_NOW_CAN_PLAY);
+                tone = stale || low ? pal.warning : pal.success;
+                ptc_ui_format_minutes(summary.remaining_minutes, number, sizeof(number));
+                num = number; num_label = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY);
+            } else {
+                head = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY); tone = pal.text_secondary;
+                std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+                num = number; num_color = pal.text_disabled;
+            }
+            // Keep the quota and usage together; proxy-timer detail stays in the status page.
+            char label[128], value[128], quota_note[128];
+            ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), value, sizeof(value),
+                quota_note, sizeof(quota_note));
             const bool used = summary.valid && summary.played_minutes_available && summary.played_minutes >= 0;
             PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("quota", value),
                 PTC_UI_TEXT_NUMBER("minutes", summary.played_minutes)};
             if (used && !summary.remaining_available && !summary.daily_rule_available &&
                 summary.unrestricted_today != 1 && !summary.eye_care_unlimited_capped)
-                std::snprintf(quota, sizeof(quota), "%s %s", label, value);
+                std::snprintf(line, sizeof(line), "%s %s", label, value);
             else if (summary.usage_present) {
                 char daily_quota[96], console_usage[96];
                 ptc_ui_text_format(PTC_UI_T_OVERLAY_QUOTA, daily_quota, sizeof(daily_quota), args, 1);
@@ -949,46 +1091,140 @@
                     std::snprintf(console_usage, sizeof(console_usage), "%s %s",
                         ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_POLICY_PENDING));
                 }
-                std::snprintf(quota, sizeof(quota), "%s / %s", daily_quota, console_usage);
+                std::snprintf(line, sizeof(line), "%s / %s", daily_quota, console_usage);
             }
             else ptc_ui_text_format(used ? PTC_UI_T_OVERLAY_QUOTA_USAGE :
-                PTC_UI_T_OVERLAY_QUOTA, quota, sizeof(quota), args, used ? 2 : 1);
-            child_card(renderer, ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY), line, quota, PTC_OVERLAY_FONT_HERO,
-                !summary.valid || !summary.remaining_available ? pal.text_disabled : (status_is_stale() || (summary.remaining_available && summary.remaining_minutes == 0)) ? pal.warning : pal.success,
-                PTC_OVERLAY_FONT_BODY_LG, ChildCardKind::Time);
-            const auto policies = child_policy_status(summary);
-            const auto eye = child_eye_care_status(summary);
-            child_rule(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye.compact, nullptr,
-                eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary, ChildCardKind::Eye);
-            child_rule(renderer, ptc_ui_text(PTC_UI_T_POLICY_BED_LABEL), policies.bedtime.compact, nullptr,
-                policy_color(policies.bedtime), ChildCardKind::Bedtime);
-            child_rule(renderer, ptc_ui_text(policies.mode == PTC_UI_T_STATUS_TO_CONFIRM ? PTC_UI_T_POLICY_DOCK_LABEL : policies.mode),
-                policies.dock.compact, nullptr, policy_color(policies.dock), ChildCardKind::Dock);
+                PTC_UI_T_OVERLAY_QUOTA, line, sizeof(line), args, used ? 2 : 1);
+            note = line;
         }
-        page_layout_.status = child_card(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_STATUS),
-            error_ ? ptc_ui_text(PTC_UI_T_OVERLAY_FAILED_DETAILS) : bridge_->waiting ? ptc_ui_text(PTC_UI_T_BACKGROUND_PROCESSING) :
-            ptc_ui_text(PTC_UI_T_OVERLAY_OPEN_DETAILS), nullptr, PTC_OVERLAY_FONT_SECONDARY,
-            error_ ? pal.danger : pal.accent, PTC_OVERLAY_FONT_SECONDARY, ChildCardKind::Plain,
-            child_overview_focus_ == (restricted ? 2 : 3));
+
+        // One walk both measures and draws, so the banner always fits its text.
+        const int pad_x = 14, banner_y = cy - 6, inner_w = cw - 2 * pad_x;
+        auto walk = [&](bool draw) {
+            int y = cy + 46;
+            const int x = cx + pad_x;
+            const int head_h = overlay_text_height(renderer, head, inner_w, PTC_OVERLAY_FONT_TITLE_LG);
+            if (draw) overlay_text(renderer, head, x, y, inner_w, PTC_OVERLAY_FONT_TITLE_LG, tone);
+            y += head_h + 2;
+            if (num) {
+                const int num_h = overlay_text_height(renderer, num, inner_w, num_size);
+                const int num_w = text_width(renderer, num, num_size);
+                const int label_w = num_label ? text_width(renderer, num_label, PTC_OVERLAY_FONT_CAPTION) : 0;
+                const bool beside = num_label && num_w + label_w + 16 <= inner_w;
+                if (draw) {
+                    overlay_text(renderer, num, x, y, inner_w, num_size, num_color);
+                    if (beside) overlay_text(renderer, num_label, x + inner_w - label_w,
+                        y + num_size - PTC_OVERLAY_FONT_CAPTION, label_w + 2, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+                }
+                y += num_h;
+                if (num_label && !beside) {
+                    if (draw) overlay_text(renderer, num_label, x, y, inner_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+                    y += overlay_text_height(renderer, num_label, inner_w, PTC_OVERLAY_FONT_CAPTION);
+                }
+            }
+            if (sub) {
+                if (draw) overlay_text(renderer, sub, x, y, inner_w, PTC_OVERLAY_FONT_BODY, pal.text_primary);
+                y += overlay_text_height(renderer, sub, inner_w, PTC_OVERLAY_FONT_BODY) + 4;
+            }
+            if (note && *note) {
+                if (draw) overlay_text(renderer, note, x, y, inner_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+                y += overlay_text_height(renderer, note, inner_w, PTC_OVERLAY_FONT_CAPTION);
+            }
+            return y + 12;
+        };
+        const int banner_bottom = walk(false);
+        const auto banner = ptc_overlay_rect(cx, banner_y, cw, banner_bottom - banner_y);
+        draw_dashboard_surface(renderer, banner, dashboard_soft(tone), pal.border_decorative);
+        renderer->drawRect(banner.x + 8, banner.y + 1, banner.w - 16, 3, renderer->a(tone));
+
+        // Header row: brand on the left, parent area and refresh on the right.
+        const bool refresh_busy = bridge_->waiting;
+        const char *refresh_text = ptc_ui_text(refresh_busy ? PTC_UI_T_REFRESHING : PTC_UI_T_Y_REFRESH);
+        const char *parent_text = ptc_ui_text(PTC_UI_T_R_PARENT_AREA);
+        const int refresh_w = std::max(text_width(renderer, ptc_ui_text(PTC_UI_T_Y_REFRESH), PTC_OVERLAY_FONT_SECONDARY),
+            text_width(renderer, ptc_ui_text(PTC_UI_T_REFRESHING), PTC_OVERLAY_FONT_SECONDARY)) + 24;
+        const int parent_w = text_width(renderer, parent_text, PTC_OVERLAY_FONT_SECONDARY) + 24;
+        page_layout_.refresh = ptc_overlay_rect(cx + cw - 8 - refresh_w, cy, refresh_w, 40);
+        page_layout_.parent = ptc_overlay_rect(page_layout_.refresh.x - 6 - parent_w, cy, parent_w, 40);
+        const int brand_x = cx + pad_x, brand_w = page_layout_.parent.x - brand_x - 8;
+        const char *brand = ptc_ui_text(PTC_UI_T_PLAYWISE);
+        const char *dot = std::strstr(brand, "\xC2\xB7");
+        const int brand_top = cy + (40 - (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5) / 2;
+        if (dot) {
+            const std::string head_part(brand, dot);
+            const int head_w = text_width(renderer, head_part.c_str(), PTC_OVERLAY_FONT_CAPTION);
+            overlay_text(renderer, head_part.c_str(), brand_x, brand_top, brand_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+            overlay_text(renderer, dot, brand_x + head_w, brand_top, std::max(0, brand_w - head_w),
+                PTC_OVERLAY_FONT_CAPTION, pal.accent);
+        } else overlay_text(renderer, brand, brand_x, brand_top, brand_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+        const bool highlight = needs_refresh() && !refresh_busy;
+        draw_button(renderer, page_layout_.parent, parent_text, pal.accent, restricted,
+            PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == (restricted ? 0 : 2));
+        draw_button(renderer, page_layout_.refresh, refresh_text,
+            refresh_busy ? pal.text_secondary : highlight ? pal.warning : pal.accent,
+            highlight || refresh_busy, PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == (restricted ? 3 : 4));
+        walk(true);
+
+        // Scrolling area: ask-a-parent hint, rule chain and the status row.
+        const int button_h = 68;
+        const int bottom = restricted ? cy + PTC_OVERLAY_CONTENT_H - 8 : cy + PTC_OVERLAY_CONTENT_H - 8 - button_h - 8;
+        page_layout_.viewport = ptc_overlay_rect(cx, banner_bottom + 8, cw, bottom - (banner_bottom + 8));
+        flow_y_ = page_layout_.viewport.y;
+        renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);
+
+        char eye_text[160], bed_text[160], dock_text[160];
+        std::snprintf(eye_text, sizeof(eye_text), "%s", eye.compact);
+        std::snprintf(bed_text, sizeof(bed_text), "%s", policies.bedtime.compact);
+        std::snprintf(dock_text, sizeof(dock_text), "%s", policies.dock.compact);
+        const auto eye_color = eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary;
+        const auto bed_color = policy_color(policies.bedtime);
+        const auto dock_color = policy_color(policies.dock);
+        const bool bed_on = policies.bedtime.state != PTC_POLICY_OFF && policies.bedtime.state != PTC_POLICY_NONE_TODAY;
+        const bool dock_on = policies.dock.state != PTC_POLICY_OFF && policies.dock.state != PTC_POLICY_NONE_TODAY;
+        const ChildRuleRow all_rows[3] = {
+            {ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye_text, eye_color,
+                child_rule_level(summary.eye_care_enabled, eye_color)},
+            {ptc_ui_text(PTC_UI_T_POLICY_BED_LABEL), bed_text, bed_color, child_rule_level(bed_on, bed_color)},
+            {ptc_ui_text(policies.mode == PTC_UI_T_STATUS_TO_CONFIRM ? PTC_UI_T_POLICY_DOCK_LABEL : policies.mode),
+                dock_text, dock_color, child_rule_level(dock_on, dock_color)}};
+        ChildRuleRow rows[3] = {};
+        int count = 0;
+        for (int i = 0; i < 3; ++i) {
+            // The rule that caused the restriction is already the banner.
+            if ((bedtime && i == 1) || (eye_restricted && i == 0) || (dock_restricted && i == 2)) continue;
+            rows[count++] = all_rows[i];
+        }
+        if (restricted) {
+            flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_ASK_PARENT), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+            flow_y_ += 4;
+        }
+        draw_child_section(renderer, ptc_ui_text(restricted ? PTC_UI_T_OVERLAY_SECTION_OTHER_RULES :
+            PTC_UI_T_OVERLAY_SECTION_RULES));
+        draw_child_rule_chain(renderer, rows, count);
+        page_layout_.status = draw_child_status_row(renderer, child_overview_focus_ == (restricted ? 2 : 3));
         end_page(renderer);
-        page_layout_.redeem = restricted ? PtcOverlayRect{} : ptc_overlay_rect(cx, cy + 450, cw, 64);
-        page_layout_.buffer = restricted ? PtcOverlayRect{} : ptc_overlay_rect(cx, cy + 526, 202, 76);
-        page_layout_.parent = restricted ? ptc_overlay_rect(cx + 166, cy + 526, cw - 166, 76) : ptc_overlay_rect(cx + 214, cy + 526, cw - 214, 76);
-        const bool buffer_ready = summary.valid && summary.daily_buffer_available && !restricted && !bridge_->waiting;
-        if (!restricted) {
-            char redeem_btn[96];
-            std::snprintf(redeem_btn, sizeof(redeem_btn), "\uE0E0  %s", ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE));
-            draw_button(renderer, page_layout_.redeem, redeem_btn, pal.accent, true, PTC_OVERLAY_FONT_BTN, child_overview_focus_ == 0);
-            draw_button(renderer, page_layout_.buffer, ptc_ui_text(buffer_ready ? PTC_UI_T_L_RECEIVE_AUTONOMOUS_BUFFER :
-                summary.daily_buffer_claimed ? PTC_UI_T_BUFFER_RECEIVED_TODAY : PTC_UI_T_THE_BUFFER_IS_TEMPORARILY_UNAVAILABLE),
-                buffer_ready ? pal.accent : pal.text_secondary, buffer_ready, PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == 1);
-        } else {
-            page_layout_.secondary = ptc_overlay_rect(cx, cy + 526, 154, 76);
-            draw_button(renderer, page_layout_.secondary, ptc_ui_text(PTC_UI_T_B_BACK_2), pal.text_primary, false, PTC_OVERLAY_FONT_BTN, child_overview_focus_ == 1);
-        }
-        draw_button(renderer, page_layout_.parent, ptc_ui_text(PTC_UI_T_R_PARENT_AREA), pal.accent, true, PTC_OVERLAY_FONT_BTN, child_overview_focus_ == (restricted ? 0 : 2));
+
         page_layout_.primary = {};
-        if (!restricted) page_layout_.secondary = {};
+        page_layout_.secondary = {};
+        page_layout_.redeem = {};
+        page_layout_.buffer = {};
+        if (restricted) return;
+
+        // Buffer and extra-time code share one bottom row; B/A are on the Tesla footer.
+        const bool buffer_ready = summary.valid && summary.daily_buffer_available && !bridge_->waiting;
+        const int button_y = cy + PTC_OVERLAY_CONTENT_H - 8 - button_h;
+        const int buffer_w = 200;
+        page_layout_.buffer = ptc_overlay_rect(cx, button_y, buffer_w, button_h);
+        page_layout_.redeem = ptc_overlay_rect(cx + buffer_w + 8, button_y, cw - buffer_w - 8, button_h);
+        char redeem_btn[96];
+        std::snprintf(redeem_btn, sizeof(redeem_btn), "\uE0E0  %s", ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE));
+        const char *buffer_text = ptc_ui_text(buffer_ready ? PTC_UI_T_L_RECEIVE_AUTONOMOUS_BUFFER :
+            summary.daily_buffer_claimed ? PTC_UI_T_BUFFER_RECEIVED_TODAY : PTC_UI_T_THE_BUFFER_IS_TEMPORARILY_UNAVAILABLE);
+        draw_button(renderer, page_layout_.buffer, buffer_text,
+            buffer_ready ? pal.accent : pal.text_secondary, buffer_ready,
+            fit_button_size(renderer, buffer_text, buffer_w), child_overview_focus_ == 1);
+        draw_button(renderer, page_layout_.redeem, redeem_btn, pal.accent, true,
+            fit_button_size(renderer, redeem_btn, page_layout_.redeem.w), child_overview_focus_ == 0);
     }
 
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)
