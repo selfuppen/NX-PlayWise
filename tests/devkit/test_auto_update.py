@@ -578,6 +578,68 @@ def test_capture_recovery_without_host_target():
                 else: raise AssertionError('unsafe recovery binding accepted: ' + failure)
 
 
+def test_update_recovery_without_host_target():
+    source = {'profile': 'release', 'title_id': '4200000000BD2300', 'ipc_version': 2,
+              'pid': 1, 'boot_id': 'a' * 16, 'release_id': 'old'}
+    current = dict(source, pid=2, boot_id='b' * 16, release_id='new')
+    transaction = 'e' * 32
+    events = ('prepared', 'quiesce_ready', 'boot_disabled', 'source_absent', 'boot_restored',
+              'launch_result', 'target_launched', 'runtime_ready', 'status_submitted')
+    rows = [dict(version=1, transaction_id=transaction, event=event, source_pid=1, source_boot_id='a' * 16,
+                 source_release_id='old', target_release_id='new', target_pid=2,
+                 target_boot_id='b' * 16, result=0, request_id='original-status') for event in events]
+    def encode(items): return ('\n'.join(json.dumps(r) for r in items) + '\n').encode()
+    filename = transaction + '.jsonl'
+    kwargs = dict(source=source, target_release_id='new', current=current,
+                  event_snapshots={filename: encode(rows)},
+                  accepted={'request_id': 'original-status', 'type': 'status'},
+                  result={'request_id': 'original-status', 'type': 'status', 'status': 'ok'})
+    before = deepcopy(kwargs)
+    with mock.patch.object(update, 'Device', side_effect=AssertionError('pure evidence only')):
+        require(update.update_recovery_target(**kwargs) == current, 'complete ordinary update binds target')
+        require(kwargs == before, 'update recovery does not mutate evidence')
+        require(update.update_recovery_target(**json.loads(json.dumps({k: v for k, v in kwargs.items()
+                if k != 'event_snapshots'})), event_snapshots={filename: encode(rows)}) == current,
+                'saved JSON round trip preserves update identity')
+        for failure in ('source', 'target', 'same_release', 'same_pid', 'same_boot', 'multiple', 'tail',
+                        'missing', 'duplicate', 'order', 'result', 'result_bool', 'failed', 'foreign',
+                        'purpose', 'runtime_boot', 'runtime_pid', 'receipt', 'receipt_error', 'after_terminal',
+                        'source_bool', 'target_bool', 'version', 'launch_order', 'launch_duplicate'):
+            changed = deepcopy(kwargs); altered = deepcopy(rows)
+            if failure == 'source': changed['source']['boot_id'] = 'd' * 16
+            elif failure == 'target': changed['target_release_id'] = 'foreign'
+            elif failure == 'same_release': changed['source']['release_id'] = 'new'
+            elif failure == 'same_pid': changed['current']['pid'] = 1
+            elif failure == 'same_boot': changed['current']['boot_id'] = 'a' * 16
+            elif failure == 'multiple': changed['event_snapshots']['d' * 32 + '.jsonl'] = encode(rows)
+            elif failure == 'tail': changed['event_snapshots'][filename] += b'{'
+            elif failure == 'missing': altered.pop(3)
+            elif failure == 'duplicate': altered.insert(3, deepcopy(altered[3]))
+            elif failure == 'order': altered[2], altered[3] = altered[3], altered[2]
+            elif failure == 'result': altered[0]['result'] = 1
+            elif failure == 'result_bool': altered[0]['result'] = False
+            elif failure == 'failed': altered.insert(3, dict(altered[0], event='failure'))
+            elif failure == 'foreign': altered[0]['transaction_id'] = 'd' * 32
+            elif failure == 'purpose': altered[0]['purpose'] = 'usage_evidence'
+            elif failure == 'runtime_boot': altered[-2]['target_boot_id'] = 'd' * 16
+            elif failure == 'runtime_pid': altered[-1]['target_pid'] = 99
+            elif failure == 'receipt': changed['accepted']['request_id'] = 'foreign'
+            elif failure == 'receipt_error': changed['result']['status'] = 'error'
+            elif failure == 'after_terminal': altered.append(deepcopy(altered[0]))
+            elif failure == 'source_bool': altered[0]['source_pid'] = True
+            elif failure == 'target_bool': altered[-1]['target_pid'] = True; changed['current']['pid'] = 1
+            elif failure == 'version': altered[0]['version'] = True
+            elif failure == 'launch_order': altered[4], altered[5] = altered[5], altered[4]
+            elif failure == 'launch_duplicate': altered.insert(5, deepcopy(altered[5]))
+            if failure in ('missing', 'duplicate', 'order', 'result', 'result_bool', 'failed',
+                           'foreign', 'purpose', 'runtime_boot', 'runtime_pid', 'after_terminal',
+                           'source_bool', 'target_bool', 'version', 'launch_order', 'launch_duplicate'):
+                changed['event_snapshots'][filename] = encode(altered)
+            try: update.update_recovery_target(**changed)
+            except (update.UpdateError, ValueError): pass
+            else: raise AssertionError('unsafe ordinary update binding accepted: ' + failure)
+
+
 def test_capture_stop_proof():
     from test_pctl_standard_evidence import CONFIG, raw_rows, encode
     rows = raw_rows()
@@ -638,6 +700,7 @@ def main():
                     pass
                 else:
                     raise AssertionError("ambiguous FTP failure must stop instead of proving absence")
+    test_update_recovery_without_host_target()
     test_capture_stop_proof()
     test_success_and_offline_report()
     test_missing_ack_never_replays()

@@ -117,6 +117,57 @@ def capture_recovery_target(*, source: dict, binding: dict, current: dict,
     return dict(current)
 
 
+def update_recovery_target(*, source: dict, target_release_id: str, current: dict,
+                           event_snapshots: dict[str, bytes], accepted: dict,
+                           result: dict) -> dict:
+    """Bind an ordinary update's target from its complete original audit.
+
+    This is evidence validation, not permission to restore rules. The caller
+    still checks installed bytes, health, active setup and transaction ownership.
+    Capture restarts use their separate purpose/config/raw binding above.
+    """
+    identity(source)
+    identity(current)
+    require(current["release_id"] == target_release_id != source["release_id"] and
+            current["pid"] != source["pid"] and current["boot_id"] != source["boot_id"],
+            "update recovery target differs")
+    require(len(event_snapshots) == 1, "update recovery needs one original new transaction")
+    filename, data = next(iter(event_snapshots.items()))
+    require(re.fullmatch(r"[0-9a-f]{32}\.jsonl", filename) is not None and
+            isinstance(data, bytes) and data.endswith(b"\n"), "update recovery event name or incomplete tail")
+    rows = [json.loads(line) for line in data.splitlines()]
+    events = ("prepared", "quiesce_ready", "boot_disabled", "source_absent", "boot_restored",
+              "target_launched", "runtime_ready", "status_submitted")
+    for row in rows:
+        require(isinstance(row, dict) and type(row.get("version")) is int and row["version"] == 1 and
+                row.get("transaction_id") == filename[:-6] and type(row.get("source_pid")) is int and
+                row.get("source_pid") == source["pid"] and
+                row.get("source_boot_id") == source["boot_id"] and
+                row.get("source_release_id") == source["release_id"] and
+                row.get("target_release_id") == target_release_id and
+                type(row.get("result")) is int and row["result"] == 0 and
+                row.get("event") in events + ("launch_result",) and
+                not any(key in row for key in ("purpose", "capture_request_id", "capture_run_id",
+                                               "capture_config_sha256")),
+                "update recovery has foreign, failed or purpose-bound events")
+    observed = [row.get("event") for row in rows]
+    require(all(observed.count(event) == 1 for event in events) and
+            [observed.index(event) for event in events] == sorted(observed.index(event) for event in events) and
+            observed in (list(events), list(events[:5]) + ["launch_result"] + list(events[5:])),
+            "update recovery lacks ordered complete handover")
+    for event in ("runtime_ready", "status_submitted"):
+        row = rows[observed.index(event)]
+        require(type(row.get("target_pid")) is int and row.get("target_pid") == current["pid"] and
+                row.get("target_boot_id") == current["boot_id"], "update recovery runtime differs")
+    terminal = rows[-1]
+    request_id = terminal.get("request_id")
+    require(isinstance(request_id, str) and bool(request_id) and
+            accepted.get("request_id") == result.get("request_id") == request_id and
+            accepted.get("type") == result.get("type") == "status" and result.get("status") == "ok",
+            "update recovery lacks the original successful status receipt")
+    return dict(current)
+
+
 def capture_stop_proof(*, config: dict, target: dict,
                        pulls: list[tuple[int, bytes]]) -> dict:
     """Require a bound clean terminal and two stable intervals before completion.
