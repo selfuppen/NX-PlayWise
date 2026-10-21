@@ -578,6 +578,45 @@ def test_capture_recovery_without_host_target():
                 else: raise AssertionError('unsafe recovery binding accepted: ' + failure)
 
 
+def test_capture_stop_proof():
+    from test_pctl_standard_evidence import CONFIG, raw_rows, encode
+    rows = raw_rows()
+    target = {'profile': 'release', 'title_id': '4200000000BD2300', 'ipc_version': 2,
+              'pid': 2, 'boot_id': rows[0]['boot_id'], 'release_id': CONFIG['release_id']}
+    rows[-1]['reason'] = 'config_removed_or_changed'
+    raw = encode(rows)
+    pulls = [(1, raw), (7_000_000_001, raw), (14_000_000_001, raw)]
+    with mock.patch.object(update, 'Device', side_effect=AssertionError('pure stop proof only')):
+        first = update.capture_stop_proof(config=CONFIG, target=target, pulls=pulls)
+        require(first == update.capture_stop_proof(config=CONFIG, target=target, pulls=pulls),
+                'fixed stop inputs yield the same JSON proof')
+        require(json.loads(json.dumps(first)) == first and first['qualified'] is False,
+                'stop proof survives serialization without claiming qualification')
+        require(first['raw_sha256'] == update.digest(raw) and first['stable_intervals_ns'] == ['7000000000'] * 2,
+                'stop proof binds original raw and two real host intervals')
+        for failure in ('missing_stop', 'changing', 'partial', 'boot', 'release', 'config',
+                        'short_wait', 'boolean_time', 'regression', 'missing_pull', 'failure_stop', 'bad_count'):
+            altered, subject, config = deepcopy(pulls), deepcopy(target), deepcopy(CONFIG)
+            bad_rows = deepcopy(rows)
+            if failure == 'missing_stop': altered = [(t, encode(rows[:-1])) for t, _ in pulls]
+            elif failure == 'changing': altered[-1] = (pulls[-1][0], raw + b' ')
+            elif failure == 'partial': altered = [(t, raw + b'{') for t, _ in pulls]
+            elif failure == 'boot': subject['boot_id'] = 'd' * 16
+            elif failure == 'release': subject['release_id'] = 'foreign'
+            elif failure == 'config': config['run_id'] = 'e' * 32
+            elif failure == 'short_wait': altered[1] = (2, raw)
+            elif failure == 'boolean_time': altered[0] = (True, raw)
+            elif failure == 'regression': altered[2] = (3, raw)
+            elif failure == 'missing_pull': altered.pop()
+            elif failure in ('failure_stop', 'bad_count'):
+                if failure == 'failure_stop': bad_rows[-1]['reason'] = 'failure_limit'
+                else: bad_rows[-1]['samples'] += 1
+                altered = [(t, encode(bad_rows)) for t, _ in pulls]
+            try: update.capture_stop_proof(config=config, target=subject, pulls=altered)
+            except (update.UpdateError, ValueError): pass
+            else: raise AssertionError('unsafe completed stop accepted: ' + failure)
+
+
 def main():
     console = Console()
     with mock.patch.object(console, "nlst", side_effect=ftplib.error_temp("450 No such file or directory")):
@@ -599,6 +638,7 @@ def main():
                     pass
                 else:
                     raise AssertionError("ambiguous FTP failure must stop instead of proving absence")
+    test_capture_stop_proof()
     test_success_and_offline_report()
     test_missing_ack_never_replays()
     test_preflight_and_partial_failure()

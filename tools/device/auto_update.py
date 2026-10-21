@@ -117,6 +117,40 @@ def capture_recovery_target(*, source: dict, binding: dict, current: dict,
     return dict(current)
 
 
+def capture_stop_proof(*, config: dict, target: dict,
+                       pulls: list[tuple[int, bytes]]) -> dict:
+    """Require a bound clean terminal and two stable intervals before completion.
+
+    This only validates saved evidence. The caller retains ownership/health
+    checks and records actual monotonic read times; no cleanup is sent here.
+    """
+    from tools.device.pctl_standard_evidence import audit
+    from tools.qualification.pctl_usage_qualification import UsageQualificationError
+    identity(target)
+    require(target["release_id"] == config.get("release_id"), "stop candidate differs")
+    require(len(pulls) == 3 and all(type(at) is int and at >= 0 and isinstance(raw, bytes)
+                                  for at, raw in pulls), "three timed raw pulls required")
+    intervals = [pulls[i][0] - pulls[i - 1][0] for i in (1, 2)]
+    require(all(span >= 7_000_000_000 for span in intervals), "two seven-second stop intervals required")
+    raw = pulls[0][1]
+    require(all(data == raw for _, data in pulls), "capture still appends or changed after stop")
+    try:
+        observed = audit(raw, config)
+    except UsageQualificationError as exc:
+        raise UpdateError("stop raw audit rejected: " + str(exc)) from exc
+    require(observed["start"]["boot_id"] == target["boot_id"] and observed["samples"] and
+            observed["stop_record_present"] and not observed["partial_tail_lines"] and not observed["gaps"],
+            "stop lacks bound complete terminal evidence")
+    terminal = json.loads(raw.splitlines()[-1])
+    require(terminal["kind"] == "usage_evidence_stop" and
+            terminal["reason"] in ("config_removed_or_changed", "lease_expired") and
+            terminal["consecutive_failures"] == 0, "capture ended abnormally; retain claim uncertainty")
+    return {"schema_version": 1, "qualified": False, "run_id": config["run_id"],
+            "boot_id": target["boot_id"], "release_id": target["release_id"],
+            "raw_sha256": digest(raw), "samples": len(observed["samples"]),
+            "stop_reason": terminal["reason"], "stable_intervals_ns": [str(span) for span in intervals]}
+
+
 def load(out: Path, name: str) -> dict:
     return json.loads((out / name).read_bytes())
 
