@@ -2,8 +2,13 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-19",
   "scope": "playwise/tools",
-  "script_count": 60,
+  "script_count": 61,
   "scripts": [
+    {
+      "path": "device/input_connection.py",
+      "category": "device",
+      "purpose": "授权输入前可选中立连接等待，复用有界租期、健康和detach"
+    },
     {
       "path": "device/ui_receipt_observer.py",
       "category": "device",
