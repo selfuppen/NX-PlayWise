@@ -173,6 +173,29 @@ def test_typed_reply_guards() -> None:
             check(client.get_system_language() == "15", "numeric language reply remains a string")
 
 
+def test_home_title_reply_and_update_foreground() -> None:
+    from tools.device.auto_update import Updater, UpdateError
+    with FakeSysBotBase() as fake:
+        fake.REPLIES['getTitleID'] = ''  # Upstream emits a bare newline when no main NSO is present.
+        with sbb.SysBotBaseClient('127.0.0.1', fake.port, timeout=3.0) as client:
+            check(client.get_title_id() == '', 'valid no-application title remains empty')
+            updater = Updater.__new__(Updater)
+            updater.bot = client
+            updater.guard = lambda: None  # No device or FTP; exercise the actual foreground check.
+            updater.foreground('')
+            try:
+                updater.foreground('0100000000010000')
+            except UpdateError:
+                pass
+            else:
+                check(False, 'empty HOME reply cannot satisfy an application foreground check')
+            fake.REPLIES['getTitleID'] = '0100000000010000'
+            updater.foreground('0100000000010000')
+            check(client.get_system_language() == '15', 'valid empty title preserves the query connection')
+    check(fake.commands == ['getTitleID'] * 4 + ['getSystemLanguage'],
+          'HOME/application queries require no retries, input or reconnection')
+
+
 def test_bad_barrier_stops_bounded_input() -> None:
     import json
     from tools.device.bounded_input_batch import BoundedInputBatch
@@ -200,6 +223,7 @@ def main() -> int:
     test_input_and_queries()
     test_capture_screenshot()
     test_typed_reply_guards()
+    test_home_title_reply_and_update_foreground()
     test_bad_barrier_stops_bounded_input()
     if FAILURES:
         print(f"{FAILURES} sys_botbase_client test(s) failed", file=sys.stderr)

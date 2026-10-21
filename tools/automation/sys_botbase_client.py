@@ -141,8 +141,10 @@ class SysBotBaseClient:
 
     def get_title_id(self) -> str:
         reply = self._query("getTitleID")
+        # A bare newline is the upstream no-main-NSO response (e.g. HOME).
+        # Callers still compare the returned identity with their exact target.
         return self._checked_reply("getTitleID", reply,
-                                   re.fullmatch(r"[0-9A-Fa-f]{16}", reply) is not None)
+                                   reply == "" or re.fullmatch(r"[0-9A-Fa-f]{16}", reply) is not None)
 
     def get_system_language(self) -> str:
         reply = self._query("getSystemLanguage")
