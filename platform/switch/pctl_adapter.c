@@ -489,14 +489,20 @@ static PtcErrorCode switch_snapshot_settings(PtcPctl *pctl, PtcPctlSettingsSnaps
     PtcSwitchSession session;
     PtcSwitchPlayTimerSettings settings;
     bool timer_enabled = false;
-    PtcErrorCode err = open_write_session(adapter, &session);
+    PtcErrorCode err;
+    memset(out, 0, sizeof(*out));
+    err = open_write_session(adapter, &session);
     if (err != PTC_ERR_OK) {
         return err;
     }
     err = get_play_timer_settings(adapter, &session.service, &settings);
     if (err == PTC_ERR_OK) {
-        (void)dispatch_out(&session.service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &timer_enabled, sizeof(timer_enabled));
-        memset(out, 0, sizeof(*out));
+        /* A failed timer read is not a stopped-timer preimage. */
+        err = map_result(adapter,
+            dispatch_out(&session.service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED,
+                &timer_enabled, sizeof(timer_enabled)), PTC_ERR_PCTL_READ_FAILED);
+    }
+    if (err == PTC_ERR_OK) {
         memcpy(out->data, settings.words, sizeof(settings.words));
         out->size = sizeof(settings.words);
         out->timer_enabled = timer_enabled;

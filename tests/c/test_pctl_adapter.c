@@ -5,7 +5,7 @@
 #include "../../platform/switch/play_timer_settings_layout.h"
 
 static int handles, peak_handles, spent_reads, failure, date_day = 14;
-static bool midnight_during_read, clock_error;
+static bool midnight_during_read, clock_error, timer_enabled = true;
 static u64 tick = 1, unix_s = 1791914860;
 static s64 spent_ns = INT64_C(4191000000000), remaining_ns = -INT64_C(591000000000);
 static u16 quota = 60;
@@ -50,7 +50,7 @@ Result serviceDispatchImpl(Service *s, u32 id, const void *in, u32 in_size, void
     if (id == 1451) { assert(!out && !size); return 0; }
     if (id == 1031 || id == 1006 || id == 1453 || id == 1455) {
         assert(size == sizeof(bool));
-        *(bool *)out = id == 1031 || id == 1453;
+        *(bool *)out = id == 1031 || (id == 1453 && timer_enabled);
     } else if (id == 1454) {
         assert(size == sizeof(s64)); *(s64 *)out = remaining_ns;
     } else if (id == 1952) {
@@ -78,11 +78,42 @@ static PtcPctlStatus read_status(PtcSwitchPctl *adapter)
     return status;
 }
 
+static void test_complete_settings_snapshot(PtcSwitchPctl *adapter)
+{
+    PtcPctlSettingsSnapshot snapshot;
+    for (unsigned enabled = 0; enabled < 2; ++enabled) {
+        timer_enabled = enabled != 0;
+        memset(&snapshot, 0xa5, sizeof(snapshot));
+        assert(adapter->pctl.vtable->snapshot_settings(&adapter->pctl, &snapshot) == PTC_ERR_OK);
+        assert(snapshot.size == 0x44 && snapshot.timer_enabled == timer_enabled);
+        assert(adapter->last_result == 0 && handles == 0);
+    }
+    const u32 commands[] = {1453, 145601};
+    for (unsigned i = 0; i < sizeof(commands) / sizeof(commands[0]); ++i) {
+        failed_command = commands[i];
+        memset(&snapshot, 0xa5, sizeof(snapshot));
+        assert(adapter->pctl.vtable->snapshot_settings(&adapter->pctl, &snapshot) == PTC_ERR_PCTL_READ_FAILED);
+        assert(snapshot.size == 0 && !snapshot.timer_enabled);
+        assert(adapter->last_result == 778 && handles == 0);
+    }
+    failed_command = 0;
+    for (failure = 1; failure <= 4; ++failure) {
+        memset(&snapshot, 0xa5, sizeof(snapshot));
+        assert(adapter->pctl.vtable->snapshot_settings(&adapter->pctl, &snapshot) == PTC_ERR_PCTL_INIT_FAILED);
+        assert(snapshot.size == 0 && !snapshot.timer_enabled);
+        assert(adapter->last_result == 777 && handles == 0);
+    }
+    failure = 0;
+    timer_enabled = true;
+    assert(adapter->start_timer_calls == 0 && peak_handles <= 2);
+}
+
 int main(void)
 {
     PtcSwitchPctl adapter;
     PtcPctlStatus status;
     ptc_switch_pctl_init(&adapter);
+    test_complete_settings_snapshot(&adapter);
     status = read_status(&adapter);
     assert(status.usage_supported && status.usage_available && status.usage_ns == (u64)spent_ns);
     assert(status.signed_remaining_ns == remaining_ns && status.remaining_ns == 0);

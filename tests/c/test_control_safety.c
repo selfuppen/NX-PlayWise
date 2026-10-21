@@ -121,6 +121,34 @@ static void test_direct_usage_projection(void)
     free(f.mem);
 }
 
+static void test_snapshot_failure_stops_rule_writes(void)
+{
+    for (unsigned scenario = 0; scenario < 2; ++scenario) {
+        Fixture f;
+        char rules_before[8192], state_before[8192], after[8192];
+        init_fixture(&f);
+        expect(f.mem->storage.vtable->read_text(&f.mem->storage, "app/rules.json",
+            rules_before, sizeof(rules_before)) &&
+            f.mem->storage.vtable->read_text(&f.mem->storage, "app/state.json",
+                state_before, sizeof(state_before)), "save snapshot-failure file preimages");
+        f.pctl.snapshot_error = PTC_ERR_PCTL_READ_FAILED;
+        request(&f, "snapshot-read-failed", scenario ? "disable_today_limit" : "set_scheduled_override",
+            scenario ? "{}" : "{\"enabled\":true,\"start_day_index\":2380,\"end_day_index\":2380,"
+                "\"rule\":{\"mode\":\"limit\",\"minutes\":180}}");
+        expect(result_has(&f, "snapshot-read-failed", "\"reason\":\"pctl_backup_failed\""),
+            "incomplete snapshot rejects the rule request with the existing backup error");
+        expect(f.pctl.apply_target_calls == 0 && f.pctl.start_timer_calls == 0 &&
+            !f.pctl.timer_stopped && !f.pctl.restore_called,
+            "snapshot read failure performs no target, timer or guessed restoration write");
+        expect(f.mem->storage.vtable->read_text(&f.mem->storage, "app/rules.json", after, sizeof(after)) &&
+            strcmp(rules_before, after) == 0, "snapshot failure preserves rules bytes");
+        expect(f.mem->storage.vtable->read_text(&f.mem->storage, "app/state.json", after, sizeof(after)) &&
+            strcmp(state_before, after) == 0 && !recovery_path_exists(&f.core),
+            "snapshot failure preserves business state without publishing a recovery transaction");
+        free(f.mem);
+    }
+}
+
 static void test_positive_subminute_runtime(void)
 {
     Fixture f;
@@ -1858,6 +1886,7 @@ static void test_eye_rest_scheduler_deadline(void)
 int ptc_test_control_safety(void)
 {
     failures = 0;
+    test_snapshot_failure_stops_rule_writes();
     test_direct_usage_projection();
     test_eye_rest_scheduler_deadline();
     test_direct_unlimited_lifecycle();
