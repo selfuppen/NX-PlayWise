@@ -209,8 +209,63 @@
         }
     }
 
+    // Read-only top path bar shared by every non-child page (方案 A). The last
+    // node is the current step; the root is dropped first when space is tight.
+    struct PtcFlowPath {
+        const char *nodes[3] = {nullptr, nullptr, nullptr};
+        int count = 0;
+    };
+
+    int fit_rail_button_size(tsl::gfx::Renderer *renderer, const char *text, int width)
+    {
+        const int sizes[] = {PTC_OVERLAY_FONT_BTN, 26, PTC_OVERLAY_FONT_SECONDARY};
+        for (const int size : sizes)
+            if (overlay_text_height(renderer, text, width - 24, size) <= PTC_OVERLAY_RAIL_H - 8)
+                return size;
+        return PTC_OVERLAY_FONT_SECONDARY;
+    }
+
+    int draw_flow_bar(tsl::gfx::Renderer *renderer, int x, int y, int width,
+        const PtcFlowPath &flow)
+    {
+        const auto &pal = current_palette();
+        int count = flow.count < 0 ? 0 : flow.count > 3 ? 3 : flow.count;
+        if (count == 0) return 0;
+        const int line_h = (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5;
+        auto node_width = [&](const char *key) {
+            return static_cast<int>(measure_localized(renderer, key,
+                PTC_OVERLAY_FONT_CAPTION).first);
+        };
+        auto total_width = [&](int start) {
+            int total = 4 + 8;
+            for (int i = start; i < count; ++i) {
+                if (i > start) total += 8 + node_width(">") + 8;
+                total += node_width(flow.nodes[i]);
+            }
+            return total;
+        };
+        int start = 0;
+        if (total_width(0) > width && count > 2) start = 1;
+        if (total_width(start) > width && count - start > 1) start = count - 1;
+        renderer->drawRect(x, y + 5, 4, 16, renderer->a(pal.accent));
+        int cursor = x + 12;
+        for (int i = start; i < count; ++i) {
+            if (i > start) {
+                overlay_text(renderer, ">", cursor, y, 16, PTC_OVERLAY_FONT_CAPTION,
+                    pal.text_disabled);
+                cursor += 8 + node_width(">") + 8;
+            }
+            const int available = width - (cursor - x);
+            const bool current = i == count - 1;
+            overlay_text(renderer, flow.nodes[i], cursor, y, available,
+                PTC_OVERLAY_FONT_CAPTION, current ? pal.text_primary : pal.text_secondary);
+            cursor += node_width(flow.nodes[i]);
+        }
+        return line_h;
+    }
+
     void dashboard_panel(tsl::gfx::Renderer *renderer,
-        std::initializer_list<OverlayPanelLine> lines, tsl::Color color)
+        std::initializer_list<OverlayPanelLine> lines, tsl::Color color, bool quiet = false)
     {
         const auto &vp = page_layout_.viewport;
         const int gap = (parent_view_ == ParentView::Child || parent_view_ == ParentView::Pin) ? 6 : 12;
@@ -219,9 +274,10 @@
             height += overlay_text_height(renderer, line.text, vp.w - 36, line.size) + gap;
         draw_dashboard_surface(renderer, ptc_overlay_rect(vp.x + 4,
             flow_y_ - static_cast<int>(page_scroll_), vp.w - 8, height + 8),
-            dashboard_soft(color), current_palette().border_decorative);
+            quiet ? tsl::Color{1, 2, 3, 15} : dashboard_soft(color),
+            quiet ? color : current_palette().border_decorative, false);
         renderer->drawRect(vp.x + 4, flow_y_ + 6 - static_cast<int>(page_scroll_),
-            3, height - 4, renderer->a(color));
+            quiet ? 1 : 3, height - 4, renderer->a(color));
         flow_y_ += 4;
         for (const auto &line : lines) flow_text(renderer, line.text, line.size, line.color);
         flow_y_ += 8;

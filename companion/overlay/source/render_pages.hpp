@@ -71,8 +71,10 @@
     }
 
     void begin_page(tsl::gfx::Renderer *renderer, int cx, int cy, int cw,
-        const char *title, bool refresh = false, int title_size = PTC_OVERLAY_FONT_TITLE)
+        const char *title, const PtcFlowPath &flow, bool refresh = false,
+        int title_size = PTC_OVERLAY_FONT_TITLE)
     {
+        (void)title_size; // 方案 A: the path bar carries page identity; kept for scheme B experiments.
         const auto &pal = current_palette();
         if (navbar_scheme_ != OverlayNavbarScheme::Default) {
             const char *category = ptc_ui_text(PTC_UI_T_PLAYWISE);
@@ -273,14 +275,16 @@
             renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);
             return;
         }
-        const int title_width = refresh ? cw - 156 : cw - 32;
-        const int header = std::max(56, overlay_text_height(renderer, title, title_width,
-            title_size) + 8);
-        overlay_text(renderer, title, cx + 16, cy, title_width, title_size, pal.text_primary);
-        renderer->drawRect(cx + 4, cy + header + 2, cw - 8, 1, renderer->a(pal.border_decorative));
-        renderer->drawRect(cx + 4, cy + header + 2, 32, 2, renderer->a(pal.accent));
+        // 方案 A：所有非儿童根页面共用顶部单行路径栏，页头不再画 34px 标题。
+        const int path_width = refresh ? cw - 156 : cw - 32;
+        draw_flow_bar(renderer, cx + PTC_OVERLAY_PATH_X, cy + PTC_OVERLAY_PATH_Y,
+            path_width, flow);
+        renderer->drawRect(cx + 4, cy + PTC_OVERLAY_HEADER_H + 2, cw - 8, 1,
+            renderer->a(pal.border_decorative));
+        renderer->drawRect(cx + 4, cy + PTC_OVERLAY_HEADER_H + 2, 32, 2,
+            renderer->a(pal.accent));
         if (refresh) {
-            page_layout_.refresh = ptc_overlay_rect(cx + cw - 132, cy + 4, 128, 52);
+            page_layout_.refresh = ptc_overlay_rect(cx + cw - 140, cy + 2, 136, 40);
             const bool highlight = needs_refresh() && !bridge_->waiting;
             const bool restricted = child_is_restricted();
             const bool refresh_focused = (parent_view_ == ParentView::Actions && parent_action_ == -1) ||
@@ -290,11 +294,14 @@
             draw_button(renderer, page_layout_.refresh,
                 ptc_ui_text(bridge_->waiting ? PTC_UI_T_REFRESHING : PTC_UI_T_Y_REFRESH),
                 bridge_->waiting ? pal.text_secondary : highlight ? pal.warning : pal.accent,
-                highlight || bridge_->waiting, PTC_OVERLAY_FONT_SECONDARY, refresh_focused);
+                highlight || bridge_->waiting, PTC_OVERLAY_FONT_CAPTION, refresh_focused);
         }
-        page_layout_.viewport = ptc_overlay_rect(cx, cy + header + 8, cw, 516 - header - 8);
-        page_layout_.secondary = ptc_overlay_rect(cx, cy + 526, 154, 76);
-        page_layout_.primary = ptc_overlay_rect(cx + 166, cy + 526, cw - 166, 76);
+        page_layout_.viewport = ptc_overlay_rect(cx, cy + PTC_OVERLAY_HEADER_H + 8, cw,
+            PTC_OVERLAY_VIEWPORT_BOTTOM - (PTC_OVERLAY_HEADER_H + 8));
+        page_layout_.secondary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y,
+            154, PTC_OVERLAY_RAIL_H);
+        page_layout_.primary = ptc_overlay_rect(cx + 166, cy + PTC_OVERLAY_RAIL_Y,
+            cw - 166, PTC_OVERLAY_RAIL_H);
         flow_y_ = page_layout_.viewport.y;
         renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);
     }
@@ -319,17 +326,18 @@
         const int label_h = overlay_text_height(renderer, label, width, PTC_OVERLAY_FONT_BODY_LG);
         const int value_h = value && *value ? overlay_text_height(renderer, value, width, value_size) : 0;
         const int note_h = note && *note ? overlay_text_height(renderer, note, width, PTC_OVERLAY_FONT_SECONDARY) : 0;
-        const int height = std::max(104, 28 + label_h + (value_h ? value_h + 8 : 0) + (note_h ? note_h + 8 : 0));
+        const int height = std::max(static_cast<int>(PTC_OVERLAY_PARENT_CARD_MIN_H),
+            20 + label_h + (value_h ? value_h + 8 : 0) + (note_h ? note_h + 8 : 0));
         const auto raw = ptc_overlay_rect(vp.x + 4, flow_y_, vp.w - 12, height);
         const int y = raw.y - static_cast<int>(page_scroll_);
-        flow_y_ += height + 12;
+        flow_y_ += height + 10;
         // Still measure hidden cards for scrolling, but avoid rasterizing their
         // glyphs into the bounded Tesla cache when the entire card is clipped.
         if (y + height <= vp.y || y >= vp.y + vp.h) return raw;
         draw_dashboard_surface(renderer, ptc_overlay_rect(raw.x, y, raw.w, raw.h),
             highlighted ? dashboard_soft(tone) : tsl::Color{1, 2, 3, 15},
             highlighted ? tone : pal.border_decorative, highlighted);
-        renderer->drawRect(raw.x, y + 10, 3, height - 20, renderer->a(tone));
+        renderer->drawRect(raw.x, y + 10, disabled ? 2 : 3, height - 20, renderer->a(tone));
         // Optional icons do not change measured card height or wrap a title.
         const int icon_space = static_cast<int>(measure_localized(renderer, label,
             PTC_OVERLAY_FONT_BODY_LG).first) + 30 <= width ? 30 : 0;
@@ -344,7 +352,7 @@
             top += value_h + 8;
         }
         if (note_h) overlay_text(renderer, note, raw.x + 14, top, width, PTC_OVERLAY_FONT_SECONDARY,
-            disabled ? pal.warning : pal.text_secondary);
+            disabled ? pal.text_disabled : pal.text_secondary);
         return raw;
     }
 
@@ -438,7 +446,9 @@
         const auto &pal = current_palette();
         char line[256];
         begin_page(renderer, cx, cy, cw, ptc_ui_text(preview_changed_ ?
-            PTC_UI_T_STATUS_CHANGED_PLEASE_CONFIRM_AGAIN : PTC_UI_T_CONFIRM_PLAYTIME_GRANT));
+            PTC_UI_T_STATUS_CHANGED_PLEASE_CONFIRM_AGAIN : PTC_UI_T_CONFIRM_PLAYTIME_GRANT),
+            PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE),
+                ptc_ui_text(PTC_UI_T_NAV_CONFIRM)}, 3});
         ptc_ui_format_actual_added(preview_summary_.grant_minutes, line, sizeof(line));
         dashboard_panel(renderer, {{line, PTC_OVERLAY_FONT_DISPLAY, pal.accent},
             {ptc_ui_text(PTC_UI_T_OVERLAY_CODE_ONCE), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary}}, pal.accent);
@@ -465,9 +475,13 @@
         flow_text(renderer, warning, PTC_OVERLAY_FONT_BODY_LG,
             dangerous ? pal.danger : level == PTC_OVERLAY_PREVIEW_WARNING ? pal.warning : pal.text_secondary);
         end_page(renderer);
-        draw_button(renderer, page_layout_.secondary, ptc_ui_text(PTC_UI_T_B_CANCEL_2), pal.text_primary, false, PTC_OVERLAY_FONT_BTN, preview_focus_ == 0);
-        draw_button(renderer, page_layout_.primary, ptc_ui_text(dangerous ? PTC_UI_T_HOLD_A_TO_CONFIRM : PTC_UI_T_A_CONFIRM_2),
-            dangerous ? pal.danger : pal.accent, true, PTC_OVERLAY_FONT_BTN, preview_focus_ == 1);
+        const char *cancel_label = ptc_ui_text(PTC_UI_T_B_CANCEL_2);
+        const char *confirm_label = ptc_ui_text(dangerous ? PTC_UI_T_HOLD_A_TO_CONFIRM : PTC_UI_T_A_CONFIRM_2);
+        draw_button(renderer, page_layout_.secondary, cancel_label, pal.text_primary, false,
+            fit_rail_button_size(renderer, cancel_label, page_layout_.secondary.w), preview_focus_ == 0);
+        draw_button(renderer, page_layout_.primary, confirm_label,
+            dangerous ? pal.danger : pal.accent, true,
+            fit_rail_button_size(renderer, confirm_label, page_layout_.primary.w), preview_focus_ == 1);
         if (dangerous) draw_hold(renderer, page_layout_.primary, pal.danger);
     }
 
@@ -477,7 +491,9 @@
         const auto accent = result_failed_ ? pal.danger : result_pending_ ? pal.warning : pal.success;
         char line[256];
         begin_page(renderer, cx, cy, cw, ptc_ui_text(result_pending_ ? PTC_UI_T_CONFIRMING_GRANT_RESULT :
-            result_failed_ ? PTC_UI_T_GRANT_FAILED : PTC_UI_T_GRANT_SUCCESSFUL), false, PTC_OVERLAY_FONT_TITLE_LG);
+            result_failed_ ? PTC_UI_T_GRANT_FAILED : PTC_UI_T_GRANT_SUCCESSFUL),
+            PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE),
+                ptc_ui_text(PTC_UI_T_NAV_RESULT)}, 3}, false, PTC_OVERLAY_FONT_TITLE_LG);
         std::snprintf(line, sizeof(line), ptc_ui_text(result_pending_ ? PTC_UI_T_ESTIMATED_D_MIN :
             result_failed_ ? PTC_UI_T_ORIGINALLY_PLANNED_D_MIN : PTC_UI_T_ADDED_D_MIN), preview_summary_.grant_minutes);
         dashboard_panel(renderer, {{line, PTC_OVERLAY_FONT_DISPLAY, accent},
@@ -499,9 +515,11 @@
         flow_text(renderer, ptc_ui_text(result_pending_ ? PTC_UI_T_YOU_MAY_CLOSE_STATUS_WILL_RESUME_NEXT :
             result_failed_ ? PTC_UI_T_FAILURE_RESULT_CONFIRMED : PTC_UI_T_RESULTS_CONFIRMED_AND_SAVED), PTC_OVERLAY_FONT_BODY, accent);
         end_page(renderer);
-        page_layout_.primary = ptc_overlay_rect(cx, cy + 526, cw, 76);
+        page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
         page_layout_.secondary = {};
-        draw_button(renderer, page_layout_.primary, ptc_ui_text(PTC_UI_T_A_B_RETURN_TO_BLANK_INPUT_PAGE), pal.accent, true, PTC_OVERLAY_FONT_BTN, true);
+        const char *return_label = ptc_ui_text(PTC_UI_T_A_B_RETURN_TO_BLANK_INPUT_PAGE);
+        draw_button(renderer, page_layout_.primary, return_label, pal.accent, true,
+            fit_rail_button_size(renderer, return_label, page_layout_.primary.w), true);
     }
 
     void draw_parent_page(tsl::gfx::Renderer *renderer, int cx, int cy, int cw)
@@ -512,7 +530,18 @@
             parent_view_ == ParentView::Actions ? PTC_UI_T_PARENT_ZONE :
             parent_view_ == ParentView::Confirm ? PTC_UI_T_CONFIRM_RESTORING_LIMIT : PTC_UI_T_OPERATION_RESULT);
         if (parent_view_ == ParentView::Confirm && parent_action_ == PTC_OVERLAY_PARENT_WAIVE_DOCK) title = ptc_ui_text(PTC_UI_T_DOCK_WAIVE);
-        begin_page(renderer, cx, cy, cw, title, parent_view_ == ParentView::Actions);
+        PtcFlowPath flow{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_PARENT_ZONE), nullptr}, 2};
+        if (parent_view_ == ParentView::Pin) {
+            flow.nodes[2] = ptc_ui_text(PTC_UI_T_NAV_VERIFY);
+            flow.count = 3;
+        } else if (parent_view_ == ParentView::Confirm) {
+            flow.nodes[2] = ptc_ui_text(PTC_UI_T_NAV_CONFIRM);
+            flow.count = 3;
+        } else if (parent_view_ == ParentView::Result) {
+            flow.nodes[2] = ptc_ui_text(PTC_UI_T_NAV_RESULT);
+            flow.count = 3;
+        }
+        begin_page(renderer, cx, cy, cw, title, flow, parent_view_ == ParentView::Actions);
         const bool stale = !has_status_snapshot_ || status_is_stale();
         const char *state = ptc_ui_text(stale ? PTC_UI_T_STATUS_PENDING_REFRESH :
             bedtime_restricted() ? PTC_UI_T_BEDTIME_ACTIVE_3 : displayed_summary_.daily_restriction_active ? PTC_UI_T_DAILY_LIMIT_REACHED_2 :
@@ -521,7 +550,22 @@
         const auto state_color = stale ? pal.warning :
             bedtime_restricted() || displayed_summary_.daily_restriction_active ? pal.danger :
             eye_care_restricted() ? pal.warning : displayed_summary_.dock_restriction_active ? pal.danger : pal.success;
-        dashboard_panel(renderer, {{state, PTC_OVERLAY_FONT_SECONDARY, state_color}}, state_color);
+        const bool normal_state = !stale && !bedtime_restricted() &&
+            !displayed_summary_.daily_restriction_active && !eye_care_restricted() &&
+            !displayed_summary_.dock_restriction_active;
+        // PIN must stay one screen: fall back to 32px only when the 44px state wraps.
+        const int state_size = (parent_view_ == ParentView::Pin &&
+            overlay_text_height(renderer, state, cw - 36, PTC_OVERLAY_FONT_DISPLAY) >
+                (PTC_OVERLAY_FONT_DISPLAY * 6 + 4) / 5)
+            ? PTC_OVERLAY_FONT_BODY_LG : PTC_OVERLAY_FONT_DISPLAY;
+        if (parent_view_ == ParentView::Actions && !stale) {
+            char age[64];
+            format_refresh_age(age, sizeof(age));
+            dashboard_panel(renderer, {{state, state_size, state_color},
+                {age, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary}}, state_color, normal_state);
+        } else {
+            dashboard_panel(renderer, {{state, state_size, state_color}}, state_color, normal_state);
+        }
         if (parent_view_ == ParentView::Pin) {
             std::memset(page_layout_.pin_keys, 0, sizeof(page_layout_.pin_keys));
             char masked[PTC_AUTH_PIN_MAX_LEN + 1];
@@ -604,9 +648,13 @@
             flow_y_ += btn_h + 4;
 
             end_page(renderer);
-            draw_button(renderer, page_layout_.secondary, ptc_ui_text(PTC_UI_T_B_BACK_2), pal.text_primary, false, PTC_OVERLAY_FONT_BTN,
+            const char *back_label = ptc_ui_text(PTC_UI_T_B_BACK_2);
+            const char *verify_label = ptc_ui_text(PTC_UI_T_VERIFY_PIN);
+            draw_button(renderer, page_layout_.secondary, back_label, pal.text_primary, false,
+                fit_rail_button_size(renderer, back_label, page_layout_.secondary.w),
                 parent_pin_standard_keypad_ && parent_pin_focus_ == 13);
-            draw_button(renderer, page_layout_.primary, ptc_ui_text(PTC_UI_T_VERIFY_PIN), pal.accent, true, PTC_OVERLAY_FONT_BTN,
+            draw_button(renderer, page_layout_.primary, verify_label, pal.accent, true,
+                fit_rail_button_size(renderer, verify_label, page_layout_.primary.w),
                 parent_pin_standard_keypad_ && parent_pin_focus_ == 14);
             return;
         }
@@ -628,9 +676,9 @@
                     }
                     renderer->drawRect(page_layout_.viewport.x + 4,
                         flow_y_ - static_cast<int>(page_scroll_) + 4, 4,
-                        PTC_OVERLAY_FONT_TITLE - 10, renderer->a(group_color));
+                        PTC_OVERLAY_FONT_CAPTION - 4, renderer->a(group_color));
                     flow_text(renderer, ptc_ui_text(groups[slot == 0 ? 0 : slot == 2 ? 1 : 2]),
-                        PTC_OVERLAY_FONT_TITLE, group_color, 12);
+                        PTC_OVERLAY_FONT_CAPTION, group_color, 12);
                 }
                 const auto action = static_cast<PtcOverlayParentAction>(index);
                 const char *reason = parent_action_reason(action);
@@ -650,7 +698,7 @@
                 const int start = flow_y_;
                 const auto tone = reason ? pal.text_disabled : parent_action_requires_hold(action) ? pal.danger : pal.accent;
                 page_layout_.actions[index] = flow_card(renderer, ptc_ui_text(labels[index]), value, note,
-                    PTC_OVERLAY_FONT_BODY_LG, reason ? pal.text_disabled : pal.text_primary,
+                    PTC_OVERLAY_FONT_TITLE, reason ? pal.text_disabled : pal.text_primary,
                     tone, action, parent_action_ == index, reason != nullptr);
                 if (parent_action_ == index && !reason && parent_action_requires_hold(action)) {
                     auto rect = page_layout_.actions[index];
@@ -661,13 +709,13 @@
             end_page(renderer);
             if (page_changed_) page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
                 page_layout_.viewport, page_layout_.actions[parent_action_], 0, page_layout_.scroll_max));
-            page_layout_.primary = ptc_overlay_rect(cx, cy + 526, cw, 76);
+            page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
             page_layout_.secondary = {};
             const auto selected = static_cast<PtcOverlayParentAction>(parent_action_);
             const char *footer = ptc_ui_text(parent_action_reason(selected) ? PTC_UI_T_ACTION_CURRENTLY_UNAVAILABLE_B_BACK :
                 parent_action_requires_hold(selected) ? PTC_UI_T_HOLD_A_1S_Y_REFRESH_B_BACK : PTC_UI_T_A_EXECUTE_Y_REFRESH_B_BACK);
             draw_button(renderer, page_layout_.primary, footer, parent_action_reason(selected) ? pal.warning : pal.accent,
-                false, PTC_OVERLAY_FONT_SECONDARY);
+                false, fit_rail_button_size(renderer, footer, page_layout_.primary.w));
             return;
         }
         if (parent_view_ == ParentView::Confirm) {
@@ -679,9 +727,16 @@
             const char *reason = parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_));
             if (reason) flow_text(renderer, reason, PTC_OVERLAY_FONT_BODY, pal.warning);
             end_page(renderer);
-            draw_button(renderer, page_layout_.secondary, ptc_ui_text(PTC_UI_T_B_CANCEL_2), pal.text_primary, false, PTC_OVERLAY_FONT_BTN, confirm_focus_ == 0);
-            draw_button(renderer, page_layout_.primary, ptc_ui_text(immediate ? PTC_UI_T_HOLD_A_1S_TO_RESTORE :
-                waive ? PTC_UI_T_A_CONFIRM : PTC_UI_T_A_CONFIRM_RESTORE), reason ? pal.text_disabled : immediate ? pal.danger : pal.accent, true, PTC_OVERLAY_FONT_BTN, confirm_focus_ == 1);
+            const char *cancel_label = ptc_ui_text(PTC_UI_T_B_CANCEL_2);
+            const char *confirm_label = ptc_ui_text(immediate ? PTC_UI_T_HOLD_A_1S_TO_RESTORE :
+                waive ? PTC_UI_T_A_CONFIRM : PTC_UI_T_A_CONFIRM_RESTORE);
+            draw_button(renderer, page_layout_.secondary, cancel_label, pal.text_primary, false,
+                fit_rail_button_size(renderer, cancel_label, page_layout_.secondary.w),
+                confirm_focus_ == 0);
+            draw_button(renderer, page_layout_.primary, confirm_label,
+                reason ? pal.text_disabled : immediate ? pal.danger : pal.accent, true,
+                fit_rail_button_size(renderer, confirm_label, page_layout_.primary.w),
+                confirm_focus_ == 1);
             if (immediate) draw_hold(renderer, page_layout_.primary, pal.danger);
             return;
         }
@@ -708,10 +763,14 @@
             flow_text(renderer, ptc_ui_text(PTC_UI_T_WHEN_BACKGROUND_IS_UNAVAILABLE_PLEASE_RECOVER_VIA), PTC_OVERLAY_FONT_BODY, pal.text_secondary);
         }
         end_page(renderer);
+        const char *reverify_label = ptc_ui_text(PTC_UI_T_Y_RE_VERIFY);
+        const char *back_label = ptc_ui_text(PTC_UI_T_B_BACK_2);
         if (last_request_kind_ != OverlayRequestKind::ClaimDailyBuffer)
-            draw_button(renderer, page_layout_.secondary, ptc_ui_text(PTC_UI_T_Y_RE_VERIFY), pal.accent, false, PTC_OVERLAY_FONT_BTN, result_focus_ == 1);
+            draw_button(renderer, page_layout_.secondary, reverify_label, pal.accent, false,
+                fit_rail_button_size(renderer, reverify_label, page_layout_.secondary.w), result_focus_ == 1);
         else page_layout_.secondary = {};
-        draw_button(renderer, page_layout_.primary, ptc_ui_text(PTC_UI_T_B_BACK_2), pal.accent, true, PTC_OVERLAY_FONT_BTN, result_focus_ == 0);
+        draw_button(renderer, page_layout_.primary, back_label, pal.accent, true,
+            fit_rail_button_size(renderer, back_label, page_layout_.primary.w), result_focus_ == 0);
     }
 
     void draw_status_details(tsl::gfx::Renderer *renderer, int cx, int cy, int cw)
@@ -719,7 +778,8 @@
         const auto &pal = current_palette();
         const auto &summary = displayed_summary_;
         char line[384];
-        begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_OPERATION_RESULT), true);
+        begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS),
+            PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS)}, 2}, true);
         char age[64];
         format_refresh_age(age, sizeof(age));
         flow_text(renderer, age, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary, 6);
@@ -805,9 +865,12 @@
             flow_text(renderer, ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_NOT_BEEN_OBTAINED_YET), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary);
         }
         end_page(renderer);
-        page_layout_.primary = ptc_overlay_rect(cx, cy + 526, cw, 76);
+        page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
         page_layout_.secondary = {};
-        draw_button(renderer, page_layout_.primary, ptc_ui_text(PTC_UI_T_B_BACK_2), pal.accent, true, PTC_OVERLAY_FONT_BTN, status_details_focus_ == 0);
+        const char *back_label = ptc_ui_text(PTC_UI_T_B_BACK_2);
+        draw_button(renderer, page_layout_.primary, back_label, pal.accent, true,
+            fit_rail_button_size(renderer, back_label, page_layout_.primary.w),
+            status_details_focus_ == 0);
     }
 
     void draw_keypad(tsl::gfx::Renderer *renderer, int cx, int cy, int cw)
@@ -815,26 +878,22 @@
         const auto &pal = current_palette();
         const auto &summary = displayed_summary_;
         char line[128], age[64], date[64];
-        if (navbar_scheme_ != OverlayNavbarScheme::Default) {
-            begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE), true);
-        } else {
-        overlay_text(renderer, ptc_ui_text(PTC_UI_T_PLAYWISE), cx + 4, cy, cw - 148, PTC_OVERLAY_FONT_TITLE, pal.accent);
-        page_layout_.refresh = ptc_overlay_rect(cx + cw - 132, cy + 4, 128, 52);
-        const bool highlight = needs_refresh() && !bridge_->waiting;
-        draw_button(renderer, page_layout_.refresh, ptc_ui_text(bridge_->waiting ? PTC_UI_T_REFRESHING : PTC_UI_T_Y_REFRESH),
-            bridge_->waiting ? pal.text_secondary : highlight ? pal.warning : pal.accent,
-            highlight || bridge_->waiting, PTC_OVERLAY_FONT_SECONDARY);
-        }
+        begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE),
+            PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE)}, 2}, true);
         if (ptc_overlay_remaining_refresh_pending(bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode))
             std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING));
         else if (summary.valid && summary.unrestricted_today == 1) std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         else if (summary.valid && summary.remaining_available) ptc_ui_format_minutes(summary.remaining_minutes, line, sizeof(line));
         else std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
         format_refresh_age(age, sizeof(age));
-        draw_localized(renderer, line, false, cx + 14, cy + 88, PTC_OVERLAY_FONT_BODY, renderer->a(pal.success));
+        const bool default_scheme = navbar_scheme_ == OverlayNavbarScheme::Default;
+        const int status_y = default_scheme ? 64 : 88;
+        const int meta_y = default_scheme ? 174 : 198;
+        const int date_y = default_scheme ? 201 : 226;
+        draw_localized(renderer, line, false, cx + 14, cy + status_y, PTC_OVERLAY_FONT_BODY, renderer->a(pal.success));
         const int left_width = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
         if (left_width + static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_SECONDARY).first) + 40 <= cw)
-            draw_localized_right(renderer, age, cx + cw - 14, cy + 88, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
+            draw_localized_right(renderer, age, cx + cw - 14, cy + status_y, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
         const int total = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W + (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
         for (unsigned i = 0; i < PTC_OVERLAY_CODE_SYMBOLS; ++i) {
             const int x = cx + (cw - total) / 2 + static_cast<int>(i) * (PTC_OVERLAY_SLOT_W + PTC_OVERLAY_SLOT_GAP);
@@ -847,9 +906,9 @@
                 PTC_OVERLAY_FONT_CODE, entered ? pal.text_primary : cursor ? pal.accent : pal.text_disabled);
         }
         std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_INPUT_COUNT), input_->length);
-        draw_localized(renderer, line, false, cx + 14, cy + 198, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
+        draw_localized(renderer, line, false, cx + 14, cy + meta_y, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
         format_console_date(summary, date, sizeof(date));
-        draw_localized(renderer, date, false, cx + 14, cy + 226, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
+        draw_localized(renderer, date, false, cx + 14, cy + date_y, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
         const char *charset = ptc_overlay_input_charset();
         for (unsigned i = 0; i < PTC_OVERLAY_KEY_COUNT; ++i) {
             const char symbol[] = {charset[i], '\0'};
@@ -865,6 +924,9 @@
         }
         draw_button(renderer, ptc_overlay_backspace_rect(cx, cy), ptc_ui_text(PTC_UI_T_X_BACKSPACE), pal.warning, false, PTC_OVERLAY_FONT_SECONDARY, keypad_nav_focus_ == 10);
         draw_button(renderer, ptc_overlay_clear_rect(cx, cy), ptc_ui_text(PTC_UI_T_OVERLAY_CLEAR), pal.danger, false, PTC_OVERLAY_FONT_SECONDARY, keypad_nav_focus_ == 11);
+        // Submit and navigation live outside the scrolled viewport; release the
+        // clip so the rail row is not cut at the viewport bottom.
+        end_page(renderer);
         page_layout_.primary = ptc_overlay_submit_rect(cx, cy, cw);
         const bool unavailable = has_status_snapshot_ && !status_is_stale() &&
             (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped || summary.dock_unlimited_capped);
@@ -1166,8 +1228,8 @@
         walk(true);
 
         // Scrolling area: ask-a-parent hint, rule chain and the status row.
-        const int button_h = 68;
-        const int bottom = restricted ? cy + PTC_OVERLAY_CONTENT_H - 8 : cy + PTC_OVERLAY_CONTENT_H - 8 - button_h - 8;
+        const int button_h = PTC_OVERLAY_RAIL_H;
+        const int bottom = restricted ? cy + PTC_OVERLAY_RAIL_BOTTOM : cy + PTC_OVERLAY_RAIL_Y - 8;
         page_layout_.viewport = ptc_overlay_rect(cx, banner_bottom + 8, cw, bottom - (banner_bottom + 8));
         flow_y_ = page_layout_.viewport.y;
         renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);
@@ -1212,7 +1274,7 @@
 
         // Buffer and extra-time code share one bottom row; B/A are on the Tesla footer.
         const bool buffer_ready = summary.valid && summary.daily_buffer_available && !bridge_->waiting;
-        const int button_y = cy + PTC_OVERLAY_CONTENT_H - 8 - button_h;
+        const int button_y = cy + PTC_OVERLAY_RAIL_Y;
         const int buffer_w = 200;
         page_layout_.buffer = ptc_overlay_rect(cx, button_y, buffer_w, button_h);
         page_layout_.redeem = ptc_overlay_rect(cx + buffer_w + 8, button_y, cw - buffer_w - 8, button_h);

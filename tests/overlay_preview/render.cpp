@@ -73,15 +73,20 @@ static void test_text_layout(tsl::gfx::Renderer &renderer)
     }
     const auto sanitized = overlay_wrap(&renderer, "A😀B", 32, 380);
     require(sanitized.size() == 1 && sanitized[0] == "AB", "unsupported emoji is removed before measurement");
+    PreviewView view;
     const PtcUiTextId small_buttons[] = {PTC_UI_T_B_CANCEL_2, PTC_UI_T_B_BACK_2, PTC_UI_T_Y_RE_VERIFY};
-    for (const auto label : small_buttons)
-        require(overlay_text_height(&renderer, ptc_ui_text(label), 130, PTC_OVERLAY_FONT_BTN) <= 76,
-            "localized small footer button must fit without shrinking");
+    for (const auto label : small_buttons) {
+        const int size = view.fit_rail_button_size(&renderer, ptc_ui_text(label), 154);
+        require(overlay_text_height(&renderer, ptc_ui_text(label), 130, size) <=
+            PTC_OVERLAY_RAIL_H - 8, "localized small footer button must fit the rail");
+    }
     const PtcUiTextId large_buttons[] = {PTC_UI_T_A_CONFIRM_2, PTC_UI_T_HOLD_A_TO_CONFIRM,
         PTC_UI_T_HOLD_A_1S_TO_RESTORE, PTC_UI_T_VERIFY_PIN, PTC_UI_T_R_PARENT_AREA};
-    for (const auto label : large_buttons)
-        require(overlay_text_height(&renderer, ptc_ui_text(label), 226, PTC_OVERLAY_FONT_BTN) <= 76,
-            "localized primary footer button must fit without shrinking");
+    for (const auto label : large_buttons) {
+        const int size = view.fit_rail_button_size(&renderer, ptc_ui_text(label), 250);
+        require(overlay_text_height(&renderer, ptc_ui_text(label), 226, size) <=
+            PTC_OVERLAY_RAIL_H - 8, "localized primary footer button must fit the rail");
+    }
 }
 
 static void test_child_cards(tsl::gfx::Renderer &renderer)
@@ -191,7 +196,7 @@ static void test_parent_cards(tsl::gfx::Renderer &renderer)
         const auto rect = view.flow_card(&renderer, label, "15 min", "A supporting explanation that wraps without losing its content",
             32, DARK_OVERLAY_PALETTE.text_primary, DARK_OVERLAY_PALETTE.danger,
             PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, true);
-        require(rect.h >= 104 && rect.h <= view.page_layout_.viewport.h,
+        require(rect.h >= PTC_OVERLAY_PARENT_CARD_MIN_H && rect.h <= view.page_layout_.viewport.h,
             "parent action decoration must preserve readable, reachable measured cards");
         for (const auto &run : renderer.text_runs) {
             require(run.x >= rect.x + 14 && run.x + static_cast<int>(measure_localized(
@@ -207,8 +212,8 @@ static void test_surface_outline(tsl::gfx::Renderer &renderer)
     PreviewView view;
     const tsl::Color background{1, 2, 3, 15};
     // Code slots, keypad keys, refresh, footer buttons and both card widths.
-    for (const auto &dimensions : {std::pair<int, int>{44, 64}, {124, 56}, {128, 52},
-        {416, 76}, {408, 114}, {404, 104}}) {
+    for (const auto &dimensions : {std::pair<int, int>{44, 64}, {124, 56}, {136, 40},
+        {416, 68}, {408, 114}, {404, PTC_OVERLAY_PARENT_CARD_MIN_H}}) {
         for (const bool emphasized : {false, true}) {
             for (const auto color : {DARK_OVERLAY_PALETTE.border_control,
                 DARK_OVERLAY_PALETTE.accent, DARK_OVERLAY_PALETTE.danger}) {
@@ -595,8 +600,105 @@ int main(int argc, char **argv) {
                      view.page_layout_.parent, view.page_layout_.buffer, view.page_layout_.redeem,
                      view.page_layout_.refresh}) {
                     if (rect.w == 0) continue;
-                    require(rect.x >= 16 && rect.x + rect.w <= 432 && rect.y >= PTC_OVERLAY_CONTENT_Y && rect.y + rect.h <= 647,
+                    require(rect.x >= 16 && rect.x + rect.w <= 432 && rect.y >= PTC_OVERLAY_CONTENT_Y &&
+                        rect.y + rect.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_BOTTOM,
                         "fixed controls must remain inside the sidebar and above the host footer");
+                }
+                const auto region_has_ink = [&](int y0, int y1) {
+                    for (int py = y0; py < y1; ++py)
+                        for (int px = PTC_OVERLAY_CONTENT_X;
+                             px < PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W; ++px) {
+                            const size_t i = static_cast<size_t>((py * renderer.width + px) * 3);
+                            if (renderer.pixels[i] != 17 || renderer.pixels[i + 1] != 17 ||
+                                renderer.pixels[i + 2] != 17) return true;
+                        }
+                    return false;
+                };
+                require(region_has_ink(PTC_OVERLAY_CONTENT_Y,
+                    PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_HEADER_H + 2),
+                    "page header must be pixel-visible (no stale scissor)");
+                const bool child_root_page = view.parent_view_ == ParentView::Child &&
+                    !view.access_recovery_visible() && !view.success_visible_ &&
+                    !view.preview_ready_ && !view.status_expanded_ &&
+                    (!view.is_keypad_mode() || view.child_is_restricted());
+                if (!child_root_page) {
+                    require(view.page_layout_.viewport.y == PTC_OVERLAY_CONTENT_Y +
+                        PTC_OVERLAY_HEADER_H + 8, "top path header must leave the shared viewport start");
+                    require(view.page_layout_.viewport.h == PTC_OVERLAY_VIEWPORT_BOTTOM -
+                        (PTC_OVERLAY_HEADER_H + 8), "top path header must leave the shared viewport height");
+                    const char *current = nullptr;
+                    if (view.access_recovery_visible()) {
+                        if (view.parent_view_ == ParentView::Pin) current = ptc_ui_text(PTC_UI_T_NAV_VERIFY);
+                        else if (view.parent_view_ == ParentView::Actions) current = ptc_ui_text(PTC_UI_T_PARENT_ZONE);
+                        else if (view.parent_view_ == ParentView::Confirm) current = ptc_ui_text(PTC_UI_T_NAV_CONFIRM);
+                        else current = ptc_ui_text(PTC_UI_T_NAV_RESULT);
+                    } else if (view.success_visible_) current = ptc_ui_text(PTC_UI_T_NAV_RESULT);
+                    else if (view.preview_ready_) current = ptc_ui_text(PTC_UI_T_NAV_CONFIRM);
+                    else if (view.status_expanded_) current = ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS);
+                    else if (view.is_keypad_mode()) current = ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE);
+                    require(current != nullptr, "non-child pages must define a path current node");
+                    bool current_found = false, title_found = false;
+                    for (const auto &run : renderer.text_runs) {
+                        if (run.size == 22 && run.y <= 50 && run.text == current) {
+                            current_found = true;
+                            require(run.x >= PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_PATH_X &&
+                                run.x + static_cast<int>(measure_localized(&renderer,
+                                    run.text.c_str(), 22).first) <=
+                                    PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W,
+                                "path current node must stay inside the sidebar");
+                        }
+                        if (run.size == PTC_OVERLAY_FONT_TITLE && run.y < 60) title_found = true;
+                    }
+                    require(current_found, "top path bar must draw the current node");
+                    require(!title_found, "top path bar must not draw a 34px page title");
+                    if (view.is_keypad_mode()) {
+                        require(view.page_layout_.primary.y == PTC_OVERLAY_CONTENT_Y +
+                            PTC_OVERLAY_SUBMIT_Y && view.page_layout_.primary.h == PTC_OVERLAY_SUBMIT_H,
+                            "keypad submit uses the shared rail contract");
+                        require(view.page_layout_.primary.y + view.page_layout_.primary.h ==
+                            PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_VIEWPORT_BOTTOM,
+                            "keypad submit ends at the viewport bottom");
+                        require(view.page_layout_.secondary.y == PTC_OVERLAY_CONTENT_Y +
+                            PTC_OVERLAY_RAIL_Y && view.page_layout_.secondary.h == PTC_OVERLAY_RAIL_H &&
+                            view.page_layout_.parent.y == PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_Y &&
+                            view.page_layout_.parent.h == PTC_OVERLAY_RAIL_H,
+                            "keypad navigation uses the shared footer rail");
+                        require(region_has_ink(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_Y,
+                            PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_BOTTOM),
+                            "keypad navigation must be pixel-visible");
+                    } else {
+                        if (view.page_layout_.primary.w > 0)
+                            require(view.page_layout_.primary.y == PTC_OVERLAY_CONTENT_Y +
+                                PTC_OVERLAY_RAIL_Y && view.page_layout_.primary.h == PTC_OVERLAY_RAIL_H,
+                                "primary action uses the shared footer rail");
+                        if (view.page_layout_.secondary.w > 0)
+                            require(view.page_layout_.secondary.y == PTC_OVERLAY_CONTENT_Y +
+                                PTC_OVERLAY_RAIL_Y && view.page_layout_.secondary.h == PTC_OVERLAY_RAIL_H,
+                                "secondary action uses the shared footer rail");
+                        if (view.page_layout_.primary.w > 0 || view.page_layout_.secondary.w > 0)
+                            require(region_has_ink(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_Y,
+                                PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_BOTTOM),
+                                "fixed footer must be pixel-visible");
+                    }
+                } else {
+                    bool brand_found = false;
+                    for (const auto &run : renderer.text_runs)
+                        if (run.size == 22 && run.y <= 60 &&
+                            run.text.find(ptc_ui_text(PTC_UI_T_NAV_HOME)) != std::string::npos)
+                            brand_found = true;
+                    require(brand_found, "child root brand must carry the path root");
+                    if (view.page_layout_.buffer.w > 0)
+                        require(view.page_layout_.buffer.y == PTC_OVERLAY_CONTENT_Y +
+                            PTC_OVERLAY_RAIL_Y && view.page_layout_.buffer.h == PTC_OVERLAY_RAIL_H,
+                            "child buffer uses the shared footer rail");
+                    if (view.page_layout_.redeem.w > 0)
+                        require(view.page_layout_.redeem.y == PTC_OVERLAY_CONTENT_Y +
+                            PTC_OVERLAY_RAIL_Y && view.page_layout_.redeem.h == PTC_OVERLAY_RAIL_H,
+                            "child redeem uses the shared footer rail");
+                    if (view.page_layout_.buffer.w > 0 || view.page_layout_.redeem.w > 0)
+                        require(region_has_ink(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_Y,
+                            PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_BOTTOM),
+                            "child footer must be pixel-visible");
                 }
                 if (view.parent_view_ == ParentView::Actions) {
                     int previous_bottom = view.page_layout_.viewport.y;
@@ -604,7 +706,7 @@ int main(int argc, char **argv) {
                         int index = 0;
                         while (ptc_overlay_parent_action_slot(index) != slot) ++index;
                         const auto rect = view.page_layout_.actions[index];
-                        require(rect.h >= 104 && rect.y >= previous_bottom, "measured action cards must not overlap");
+                        require(rect.h >= PTC_OVERLAY_PARENT_CARD_MIN_H && rect.y >= previous_bottom, "measured action cards must not overlap");
                         const int offset = ptc_overlay_scroll_to_rect(view.page_layout_.viewport, rect, 0, view.page_layout_.scroll_max);
                         require(rect.y - offset >= view.page_layout_.viewport.y &&
                             rect.y + rect.h - offset <= view.page_layout_.viewport.y + view.page_layout_.viewport.h,

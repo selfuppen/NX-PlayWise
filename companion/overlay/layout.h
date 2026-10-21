@@ -30,17 +30,28 @@ enum {
     PTC_OVERLAY_CONTENT_W = 416,
     PTC_OVERLAY_CONTENT_H = 635,
     PTC_OVERLAY_PARENT_CONTENT_Y = 12,
-    PTC_OVERLAY_SLOT_Y = 108,
+    /* Unified fixed footer rail: content bottom 639, viewport bottom 563,
+       Tesla safe line 647. All non-child pages share this geometry. */
+    PTC_OVERLAY_RAIL_H = 68,
+    PTC_OVERLAY_RAIL_Y = PTC_OVERLAY_CONTENT_H - 8 - PTC_OVERLAY_RAIL_H,
+    PTC_OVERLAY_RAIL_BOTTOM = PTC_OVERLAY_CONTENT_H - 8,
+    PTC_OVERLAY_VIEWPORT_BOTTOM = PTC_OVERLAY_RAIL_Y - 8,
+    /* Top path bar (方案 A): 22px breadcrumb replaces the old page title. */
+    PTC_OVERLAY_HEADER_H = 44,
+    PTC_OVERLAY_PATH_X = 16,
+    PTC_OVERLAY_PATH_Y = 8,
+    PTC_OVERLAY_PARENT_CARD_MIN_H = 96,
+    PTC_OVERLAY_SLOT_Y = 104,
     PTC_OVERLAY_SLOT_W = 44,
     PTC_OVERLAY_SLOT_H = 64,
     PTC_OVERLAY_SLOT_GAP = 5,
-    PTC_OVERLAY_KEYPAD_Y = 236,
+    PTC_OVERLAY_KEYPAD_Y = 232,
     PTC_OVERLAY_KEYPAD_H = 248,
     PTC_OVERLAY_KEY_ROW_STEP = 64,
     PTC_OVERLAY_KEY_W = 124,
     PTC_OVERLAY_KEY_H = 56,
-    PTC_OVERLAY_SUBMIT_Y = 492,
-    PTC_OVERLAY_SUBMIT_H = 50,
+    PTC_OVERLAY_SUBMIT_Y = 491,
+    PTC_OVERLAY_SUBMIT_H = 60,
     /* Unified Typography Scale (掌机模式全局字体尺寸统一分级契约) */
     PTC_OVERLAY_FONT_HERO = 56,
     PTC_OVERLAY_FONT_DISPLAY = 44,
@@ -218,12 +229,13 @@ static inline PtcOverlayRect ptc_overlay_submit_rect(int origin_x, int origin_y,
 
 static inline PtcOverlayRect ptc_overlay_keypad_nav_back_rect(int origin_x, int origin_y)
 {
-    return ptc_overlay_rect(origin_x + 12, origin_y + 550, 190, 52);
+    return ptc_overlay_rect(origin_x + 12, origin_y + PTC_OVERLAY_RAIL_Y, 190, PTC_OVERLAY_RAIL_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_keypad_nav_parent_rect(int origin_x, int origin_y, int width)
 {
-    return ptc_overlay_rect(origin_x + 214, origin_y + 550, width - 226, 52);
+    return ptc_overlay_rect(origin_x + 214, origin_y + PTC_OVERLAY_RAIL_Y,
+                            width - 226, PTC_OVERLAY_RAIL_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_pin_wheel_rect(int origin_x, int origin_y, unsigned int index)
