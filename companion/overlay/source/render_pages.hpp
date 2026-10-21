@@ -316,6 +316,26 @@
         return height;
     }
 
+    // Section header shared by the scrolling pages: colour tick, measured label
+    // and a hairline that starts after the text instead of running under it.
+    void flow_section(tsl::gfx::Renderer *renderer, const char *label,
+        tsl::Color color, int gap_before = 14)
+    {
+        const auto &pal = current_palette();
+        const auto &vp = page_layout_.viewport;
+        const int line_h = (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5;
+        flow_y_ += gap_before;
+        const int y = flow_y_ - static_cast<int>(page_scroll_);
+        const int label_w = text_width(renderer, label, PTC_OVERLAY_FONT_CAPTION);
+        renderer->drawRect(vp.x + 4, y + 4, 4, PTC_OVERLAY_FONT_CAPTION - 4, renderer->a(color));
+        overlay_text(renderer, label, vp.x + 16, y, vp.w - 24, PTC_OVERLAY_FONT_CAPTION, color);
+        const int rule_x = vp.x + 16 + label_w + 12;
+        if (rule_x < vp.x + vp.w - 8)
+            renderer->drawRect(rule_x, y + line_h / 2, vp.x + vp.w - 8 - rule_x, 1,
+                renderer->a(pal.border_decorative));
+        flow_y_ += line_h + 6;
+    }
+
     PtcOverlayRect flow_card(tsl::gfx::Renderer *renderer, const char *label,
         const char *value, const char *note, int value_size, tsl::Color color,
         tsl::Color tone, PtcOverlayParentAction action, bool highlighted = false, bool disabled = false)
@@ -543,28 +563,22 @@
         }
         begin_page(renderer, cx, cy, cw, title, flow, parent_view_ == ParentView::Actions);
         const bool stale = !has_status_snapshot_ || status_is_stale();
-        const char *state = ptc_ui_text(stale ? PTC_UI_T_STATUS_PENDING_REFRESH :
-            bedtime_restricted() ? PTC_UI_T_BEDTIME_ACTIVE_3 : displayed_summary_.daily_restriction_active ? PTC_UI_T_DAILY_LIMIT_REACHED_2 :
-            eye_care_restricted() ? PTC_UI_T_EYE_CARE_RESTING : displayed_summary_.dock_restriction_active ?
-            PTC_UI_T_DOCK_TITLE : PTC_UI_T_NORMAL_PLAY_AVAILABLE);
-        const auto state_color = stale ? pal.warning :
-            bedtime_restricted() || displayed_summary_.daily_restriction_active ? pal.danger :
-            eye_care_restricted() ? pal.warning : displayed_summary_.dock_restriction_active ? pal.danger : pal.success;
-        const bool normal_state = !stale && !bedtime_restricted() &&
-            !displayed_summary_.daily_restriction_active && !eye_care_restricted() &&
-            !displayed_summary_.dock_restriction_active;
+        const auto state = current_state_line(stale);
         // PIN must stay one screen: fall back to 32px only when the 44px state wraps.
         const int state_size = (parent_view_ == ParentView::Pin &&
-            overlay_text_height(renderer, state, cw - 36, PTC_OVERLAY_FONT_DISPLAY) >
+            overlay_text_height(renderer, state.text, cw - 36, PTC_OVERLAY_FONT_DISPLAY) >
                 (PTC_OVERLAY_FONT_DISPLAY * 6 + 4) / 5)
             ? PTC_OVERLAY_FONT_BODY_LG : PTC_OVERLAY_FONT_DISPLAY;
-        if (parent_view_ == ParentView::Actions && !stale) {
+        // Confirm and result own their hero panel; repeating the state banner
+        // above them only competes with the decision the parent is making.
+        const bool shows_state_panel = parent_view_ == ParentView::Pin || parent_view_ == ParentView::Actions;
+        if (shows_state_panel && parent_view_ == ParentView::Actions && !stale) {
             char age[64];
             format_refresh_age(age, sizeof(age));
-            dashboard_panel(renderer, {{state, state_size, state_color},
-                {age, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary}}, state_color, normal_state);
-        } else {
-            dashboard_panel(renderer, {{state, state_size, state_color}}, state_color, normal_state);
+            dashboard_panel(renderer, {{state.text, state_size, state.color},
+                {age, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary}}, state.color, state.normal);
+        } else if (shows_state_panel) {
+            dashboard_panel(renderer, {{state.text, state_size, state.color}}, state.color, state.normal);
         }
         if (parent_view_ == ParentView::Pin) {
             std::memset(page_layout_.pin_keys, 0, sizeof(page_layout_.pin_keys));
@@ -659,26 +673,37 @@
             return;
         }
         if (parent_view_ == ParentView::Actions) {
-            const PtcUiTextId labels[] = {PTC_UI_T_QUICK_GRANT, PTC_UI_T_NO_LIMIT_TODAY, PTC_UI_T_SKIP_BEDTIME,
-                PTC_UI_T_EYE_CARE_SKIP, PTC_UI_T_RESTORE_THIS_BEDTIME, PTC_UI_T_TURN_OFF_BEDTIME_PLAN,
-                PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE, PTC_UI_T_DOCK_WAIVE};
-            const PtcUiTextId groups[] = {PTC_UI_T_CARD_QUOTA_ADJUST, PTC_UI_T_CARD_RESTRICTION_ACTIONS, PTC_UI_T_CARD_RECOVERY_ACTIONS};
+            // Groups answer "what am I trying to change today?" and stay in the
+            // same order as ptc_overlay_parent_action_order() so focus never jumps.
+            const PtcUiTextId groups[] = {PTC_UI_T_OVERLAY_GROUP_TODAY_ALLOWANCE,
+                PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES, PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY};
+            const PtcUiTextId hints[] = {PTC_UI_T_OVERLAY_GROUP_TODAY_ALLOWANCE_HINT,
+                PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES_HINT, PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY_HINT};
+            const int *order = ptc_overlay_parent_action_order();
             for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
-                int index = 0;
-                while (ptc_overlay_parent_action_slot(index) != slot) ++index;
-                if (slot == 0 || slot == 2 || slot == 7) {
-                    const auto group_color = slot == 7 ? pal.danger : pal.accent;
+                const int group = ptc_overlay_parent_action_group(slot);
+                const int index = order[slot];
+                if (group >= 0 && (slot == 0 || ptc_overlay_parent_action_group(slot - 1) != group)) {
+                    const auto group_color = group == 2 ? pal.danger : group == 1 ? pal.warning : pal.accent;
                     if (slot != 0) {
                         renderer->drawRect(page_layout_.viewport.x + 4,
                             flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 12, 1,
                             renderer->a(pal.border_decorative));
-                        flow_y_ += 10;
+                        flow_y_ += 12;
                     }
-                    renderer->drawRect(page_layout_.viewport.x + 4,
-                        flow_y_ - static_cast<int>(page_scroll_) + 4, 4,
+                    const int label_y = flow_y_ - static_cast<int>(page_scroll_);
+                    renderer->drawRect(page_layout_.viewport.x + 4, label_y + 4, 4,
                         PTC_OVERLAY_FONT_CAPTION - 4, renderer->a(group_color));
-                    flow_text(renderer, ptc_ui_text(groups[slot == 0 ? 0 : slot == 2 ? 1 : 2]),
-                        PTC_OVERLAY_FONT_CAPTION, group_color, 12);
+                    overlay_text(renderer, ptc_ui_text(groups[group]), page_layout_.viewport.x + 16,
+                        label_y, page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION, group_color);
+                    flow_y_ += overlay_text_height(renderer, ptc_ui_text(groups[group]),
+                        page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION);
+                    // The hint is context only; it never becomes a hit target.
+                    overlay_text(renderer, ptc_ui_text(hints[group]), page_layout_.viewport.x + 16,
+                        flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 24,
+                        PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+                    flow_y_ += overlay_text_height(renderer, ptc_ui_text(hints[group]),
+                        page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION) + 8;
                 }
                 const auto action = static_cast<PtcOverlayParentAction>(index);
                 const char *reason = parent_action_reason(action);
@@ -697,7 +722,7 @@
                 }
                 const int start = flow_y_;
                 const auto tone = reason ? pal.text_disabled : parent_action_requires_hold(action) ? pal.danger : pal.accent;
-                page_layout_.actions[index] = flow_card(renderer, ptc_ui_text(labels[index]), value, note,
+                page_layout_.actions[index] = flow_card(renderer, ptc_ui_text(parent_action_label_id(index)), value, note,
                     PTC_OVERLAY_FONT_TITLE, reason ? pal.text_disabled : pal.text_primary,
                     tone, action, parent_action_ == index, reason != nullptr);
                 if (parent_action_ == index && !reason && parent_action_requires_hold(action)) {
@@ -721,10 +746,18 @@
         if (parent_view_ == ParentView::Confirm) {
             const bool waive = parent_action_ == PTC_OVERLAY_PARENT_WAIVE_DOCK;
             const bool immediate = !waive && displayed_summary_.bedtime_active && displayed_summary_.bedtime_skipped;
-            dashboard_panel(renderer, {{ptc_ui_text(waive ? PTC_UI_T_DOCK_WAIVE_BODY : immediate ?
-                PTC_UI_T_CURRENTLY_DURING_BEDTIME_CONFIRMING_WILL_RESTRICT_USE : PTC_UI_T_SKIP_WILL_BE_CLEARED_BEDTIME_RESTRICTIONS_WILL),
-                PTC_OVERLAY_FONT_BODY_LG, immediate ? pal.danger : pal.text_primary}}, immediate ? pal.danger : pal.accent);
-            const char *reason = parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_));
+            const auto action = static_cast<PtcOverlayParentAction>(parent_action_);
+            // Confirm answers three questions in order: what will change, what
+            // still applies, and (only when relevant) why it is risky. The
+            // current-state banner stays on the actions page; repeating it here
+            // can contradict the warning (e.g. bedtime already skipped).
+            dashboard_panel(renderer, {{ptc_ui_text(parent_action_label_id(parent_action_)),
+                PTC_OVERLAY_FONT_TITLE, immediate ? pal.danger : pal.accent},
+                {ptc_ui_text(waive ? PTC_UI_T_DOCK_WAIVE_BODY : immediate ?
+                    PTC_UI_T_CURRENTLY_DURING_BEDTIME_CONFIRMING_WILL_RESTRICT_USE : PTC_UI_T_SKIP_WILL_BE_CLEARED_BEDTIME_RESTRICTIONS_WILL),
+                PTC_OVERLAY_FONT_BODY_LG, immediate ? pal.danger : pal.text_primary}},
+                immediate ? pal.danger : pal.accent);
+            const char *reason = parent_action_reason(action);
             if (reason) flow_text(renderer, reason, PTC_OVERLAY_FONT_BODY, pal.warning);
             end_page(renderer);
             const char *cancel_label = ptc_ui_text(PTC_UI_T_B_CANCEL_2);
@@ -740,27 +773,31 @@
             if (immediate) draw_hold(renderer, page_layout_.primary, pal.danger);
             return;
         }
+        // Result page: one verdict first, then what changed, then the current
+        // state. Only the verdict keeps the hero treatment; everything the
+        // parent does not need to act on drops to body/caption weight.
         const auto result_color = bridge_->waiting ? pal.warning : parent_action_succeeded_ ? pal.success : pal.danger;
-        dashboard_panel(renderer, {{ptc_ui_text(bridge_->waiting ? PTC_UI_T_PROCESSING_REQUEST : parent_action_succeeded_ ?
-            PTC_UI_T_OPERATION_COMPLETED : PTC_UI_T_OPERATION_INCOMPLETE), PTC_OVERLAY_FONT_TITLE_LG,
-            result_color}}, result_color);
+        const char *verdict = ptc_ui_text(bridge_->waiting ? PTC_UI_T_PROCESSING_REQUEST : parent_action_succeeded_ ?
+            PTC_UI_T_OPERATION_COMPLETED : PTC_UI_T_OPERATION_INCOMPLETE);
+        dashboard_panel(renderer, {{verdict, PTC_OVERLAY_FONT_TITLE_LG, result_color},
+            {request_label(), PTC_OVERLAY_FONT_BODY, pal.text_secondary}}, result_color);
         if (!bridge_->waiting && parent_action_succeeded_) {
             if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer) {
                 std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_SELF_BUFFER_CLAIMED_ADDED_D_MIN), displayed_summary_.daily_buffer_minutes);
                 flow_text(renderer, line, PTC_OVERLAY_FONT_BODY_LG, pal.success);
             } else if (last_request_kind_ == OverlayRequestKind::SkipEyeCare)
-                flow_text(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY), PTC_OVERLAY_FONT_BODY_LG, pal.success);
+                flow_text(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY), PTC_OVERLAY_FONT_BODY, pal.text_secondary);
             flow_text(renderer, ptc_ui_text(!displayed_summary_.access_recovery_required ? PTC_UI_T_PCTL_RELOADED_RESTRICTIONS_CLEARED :
                 bedtime_restricted() ? PTC_UI_T_STILL_RESTRICTED_BY_BEDTIME : displayed_summary_.daily_restriction_active ?
                 PTC_UI_T_STILL_RESTRICTED_BY_DAILY_LIMIT : PTC_UI_T_PLEASE_CHECK_CURRENT_RESTRICTION_STATUS),
-                PTC_OVERLAY_FONT_BODY_LG, displayed_summary_.access_recovery_required ? pal.warning : pal.success);
+                PTC_OVERLAY_FONT_BODY, displayed_summary_.access_recovery_required ? pal.warning : pal.success);
         } else if (!bridge_->waiting) {
             flow_text(renderer, ptc_overlay_bridge_error_message_zh(bridge_), PTC_OVERLAY_FONT_BODY_LG, pal.danger);
             if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
                 std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_ERROR_CODE_D), bridge_->summary.error_code);
-                flow_text(renderer, line, PTC_OVERLAY_FONT_BODY, pal.danger);
+                flow_text(renderer, line, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
             }
-            flow_text(renderer, ptc_ui_text(PTC_UI_T_WHEN_BACKGROUND_IS_UNAVAILABLE_PLEASE_RECOVER_VIA), PTC_OVERLAY_FONT_BODY, pal.text_secondary);
+            flow_text(renderer, ptc_ui_text(PTC_UI_T_WHEN_BACKGROUND_IS_UNAVAILABLE_PLEASE_RECOVER_VIA), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
         }
         end_page(renderer);
         const char *reverify_label = ptc_ui_text(PTC_UI_T_Y_RE_VERIFY);
@@ -780,9 +817,6 @@
         char line[384];
         begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS),
             PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS)}, 2}, true);
-        char age[64];
-        format_refresh_age(age, sizeof(age));
-        flow_text(renderer, age, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary, 6);
         if (error_) {
             dashboard_panel(renderer, {
                 {request_label(), PTC_OVERLAY_FONT_BODY_LG, pal.text_primary},
@@ -796,40 +830,25 @@
                 last_request_kind_ == OverlayRequestKind::PreviewOfflineCode ? PTC_UI_T_PLEASE_RE_ENTER_Y_RETURNS_TO_INPUT : PTC_UI_T_PRESS_Y_TO_TRY_AGAIN),
                 PTC_OVERLAY_FONT_BODY, pal.danger, 10);
         } else if (has_status_snapshot_) {
-            if (summary.usage_present) {
-                const bool used = summary.valid && summary.played_minutes_available && summary.played_minutes >= 0;
-                if (used) std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_CONSOLE_USAGE_D_MIN), summary.played_minutes);
-                else std::snprintf(line, sizeof(line), "%s: %s", ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
-                flow_text(renderer, line, PTC_OVERLAY_FONT_BODY_LG, used ? pal.text_primary : pal.warning);
-                // The backend timestamp belongs to the counter, not this UI refresh.
-                const std::time_t captured = static_cast<std::time_t>(summary.usage_captured_at);
-                const std::tm *utc = summary.usage_captured_at > 0 ? std::gmtime(&captured) : nullptr;
-                char timestamp[64];
-                if (utc && static_cast<int64_t>(captured) == summary.usage_captured_at &&
-                    std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S UTC", utc))
-                    std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_USAGE_CAPTURE), timestamp);
-                else std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_USAGE_CAPTURE), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
-                flow_text(renderer, line, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
-            }
-            // Logical Block 1: 今日核心状态 (Core Status)
-            renderer->drawRect(page_layout_.viewport.x + 4,
-                flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 12, 1,
-                renderer->a(pal.border_decorative));
-            flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_GROUP_CORE_STATUS), PTC_OVERLAY_FONT_BODY, pal.accent, 6);
+            // 1. What is true right now: one verdict, then the allowance it comes from.
+            const bool stale = !has_status_snapshot_ || status_is_stale();
+            const auto state = current_state_line(stale);
+            char age[64];
+            format_refresh_age(age, sizeof(age));
+            dashboard_panel(renderer, {{state.text, PTC_OVERLAY_FONT_DISPLAY, state.color},
+                {age, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary}}, state.color, state.normal);
+
             char label[128], value[128], note[128];
             int day, second;
             ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), value, sizeof(value), note, sizeof(note));
+            const bool fresh = child_status_fresh(summary, day, second);
             child_card(renderer, label, value, note, PTC_OVERLAY_FONT_DISPLAY,
-                child_status_fresh(summary, day, second) ? pal.success : pal.warning,
-                PTC_OVERLAY_FONT_BODY_LG, ChildCardKind::Time);
+                fresh ? pal.success : pal.warning, PTC_OVERLAY_FONT_BODY_LG, ChildCardKind::Time);
             ptc_overlay_format_child_restriction_detail(&summary, line, sizeof(line));
             if (line[0]) flow_text(renderer, line, PTC_OVERLAY_FONT_BODY_LG, pal.warning, 6);
 
-            // Logical Block 2: 控制规则与策略 (Rules & Policies)
-            renderer->drawRect(page_layout_.viewport.x + 4,
-                flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 12, 1,
-                renderer->a(pal.border_decorative));
-            flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_GROUP_RULES), PTC_OVERLAY_FONT_BODY, pal.accent, 6);
+            // 2. Why: the three rules, each with its own state.
+            flow_section(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_GROUP_RULES), pal.accent);
             const auto policies = child_policy_status(summary);
             const auto eye = child_eye_care_status(summary);
             child_rule(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye.compact, eye.detail,
@@ -839,10 +858,8 @@
             child_rule(renderer, ptc_ui_text(PTC_UI_T_POLICY_DOCK_LABEL), policies.dock.detail, nullptr,
                 policy_color(policies.dock), ChildCardKind::Dock);
 
-            // Logical Block 3: 技术诊断与通道细节 (Collapsible secondary details)
-            renderer->drawRect(page_layout_.viewport.x + 4,
-                flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 12, 1,
-                renderer->a(pal.border_decorative));
+            // 3. Background numbers and transport detail stay collapsed by default.
+            flow_section(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_GROUP_DIAGNOSTICS), pal.text_secondary);
             const auto toggle_rect = ptc_overlay_rect(page_layout_.viewport.x + 4, flow_y_, page_layout_.viewport.w - 8, 52);
             auto visible_toggle = toggle_rect;
             visible_toggle.y -= static_cast<int>(page_scroll_);
@@ -853,12 +870,27 @@
             flow_y_ += 60;
 
             if (details_tech_expanded_) {
+                if (summary.usage_present) {
+                    const bool used = summary.valid && summary.played_minutes_available && summary.played_minutes >= 0;
+                    if (used) std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_CONSOLE_USAGE_D_MIN), summary.played_minutes);
+                    else std::snprintf(line, sizeof(line), "%s: %s", ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+                    flow_text(renderer, line, PTC_OVERLAY_FONT_BODY, used ? pal.text_primary : pal.warning, 4);
+                    // The backend timestamp belongs to the counter, not this UI refresh.
+                    const std::time_t captured = static_cast<std::time_t>(summary.usage_captured_at);
+                    const std::tm *utc = summary.usage_captured_at > 0 ? std::gmtime(&captured) : nullptr;
+                    char timestamp[64];
+                    if (utc && static_cast<int64_t>(captured) == summary.usage_captured_at &&
+                        std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S UTC", utc))
+                        std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_USAGE_CAPTURE), timestamp);
+                    else std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_USAGE_CAPTURE), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+                    flow_text(renderer, line, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary, 4);
+                }
                 flow_text(renderer, ptc_overlay_rule_source_label(summary.rule_source), PTC_OVERLAY_FONT_BODY, pal.text_secondary, 4);
                 ptc_overlay_format_child_buffer_status(&summary, line, sizeof(line));
                 flow_text(renderer, line, PTC_OVERLAY_FONT_BODY, pal.text_secondary, 4);
-                flow_text(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_FOOTNOTE), PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary, 4);
-                if (summary.dock_available) flow_text(renderer, ptc_ui_text(PTC_UI_T_DOCK_RULE_EXPLANATION), PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary, 4);
-                flow_text(renderer, ptc_overlay_bridge_transport_label(bridge_), PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary, 4);
+                flow_text(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_FOOTNOTE), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary, 4);
+                if (summary.dock_available) flow_text(renderer, ptc_ui_text(PTC_UI_T_DOCK_RULE_EXPLANATION), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary, 4);
+                flow_text(renderer, ptc_overlay_bridge_transport_label(bridge_), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary, 4);
                 if (bridge_->waiting) flow_text(renderer, transport_stage(bridge_), PTC_OVERLAY_FONT_BODY, pal.warning, 4);
             }
         } else {

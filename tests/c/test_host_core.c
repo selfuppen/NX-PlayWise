@@ -1296,6 +1296,19 @@ static void test_overlay_layout_geometry(void)
     check_int(action, PTC_OVERLAY_PARENT_ADD_MINUTES, "overlay action traversal wraps");
     check_int(ptc_overlay_parent_action_move(PTC_OVERLAY_PARENT_WAIVE_DOCK, 1),
         PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, "TV waiver precedes dangerous recovery group");
+    /* Groups must follow the visual order so a group header never appears twice. */
+    int previous_group = -1;
+    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+        const int group = ptc_overlay_parent_action_group(slot);
+        check_true(group >= 0 && group <= 2, "every visual slot belongs to one of three groups");
+        check_true(group >= previous_group, "action groups never interleave in visual order");
+        previous_group = group;
+    }
+    check_int(ptc_overlay_parent_action_group(0), 0, "today allowance group comes first");
+    check_int(ptc_overlay_parent_action_group(PTC_OVERLAY_PARENT_ACTION_COUNT - 1), 2,
+        "system recovery stays the last group");
+    check_int(ptc_overlay_parent_action_group(ptc_overlay_parent_action_slot(
+        PTC_OVERLAY_PARENT_WAIVE_DOCK)), 1, "TV waiver sits with the active rules");
     PtcOverlayRect viewport = ptc_overlay_rect(16, 104, 416, 452);
     PtcOverlayRect first = ptc_overlay_rect(20, 104, 404, 104);
     PtcOverlayRect last = ptc_overlay_rect(20, 1004, 404, 156);

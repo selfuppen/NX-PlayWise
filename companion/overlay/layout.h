@@ -164,19 +164,47 @@ static inline bool ptc_overlay_rect_contains(PtcOverlayRect rect, int x, int y)
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
 }
 
-/* Visual order differs from the stable action enum; all input uses this map. */
+/* Visual order differs from the stable action enum; all input uses this map.
+   Slots group the actions by what a parent is trying to do today:
+   0..1 adjust today's allowance, 2..6 relax a rule that is restricting now,
+   7 is the destructive system recovery that must stay apart. */
+static inline const int *ptc_overlay_parent_action_order(void)
+{
+    static const int order[PTC_OVERLAY_PARENT_ACTION_COUNT] = {
+        PTC_OVERLAY_PARENT_ADD_MINUTES,
+        PTC_OVERLAY_PARENT_UNLIMITED,
+        PTC_OVERLAY_PARENT_SKIP_BEDTIME,
+        PTC_OVERLAY_PARENT_SKIP_EYE_CARE,
+        PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP,
+        PTC_OVERLAY_PARENT_DISABLE_BEDTIME,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK,
+        PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT
+    };
+    return order;
+}
+
+static inline int ptc_overlay_parent_action_group(int slot)
+{
+    if (slot < 0 || slot >= PTC_OVERLAY_PARENT_ACTION_COUNT) return -1;
+    if (slot < 2) return 0;
+    return slot < 7 ? 1 : 2;
+}
+
 static inline int ptc_overlay_parent_action_slot(int action)
 {
-    static const int slots[PTC_OVERLAY_PARENT_ACTION_COUNT] = {0, 1, 2, 3, 4, 5, 7, 6};
-    return action >= 0 && action < PTC_OVERLAY_PARENT_ACTION_COUNT ? slots[action] : -1;
+    const int *order = ptc_overlay_parent_action_order();
+    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot)
+        if (order[slot] == action) return slot;
+    return -1;
 }
 
 static inline int ptc_overlay_parent_action_move(int action, int direction)
 {
-    static const int order[PTC_OVERLAY_PARENT_ACTION_COUNT] = {0, 1, 2, 3, 4, 5, 7, 6};
+    const int *order = ptc_overlay_parent_action_order();
     int slot = ptc_overlay_parent_action_slot(action);
-    if (slot < 0) return PTC_OVERLAY_PARENT_ADD_MINUTES;
-    return order[(slot + (direction < 0 ? 7 : 1)) % PTC_OVERLAY_PARENT_ACTION_COUNT];
+    if (slot < 0) return order[0];
+    return order[(slot + (direction < 0 ? PTC_OVERLAY_PARENT_ACTION_COUNT - 1 : 1)) %
+        PTC_OVERLAY_PARENT_ACTION_COUNT];
 }
 
 static inline bool ptc_overlay_remaining_refresh_pending(bool waiting, bool offline_code_request)

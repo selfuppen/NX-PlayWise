@@ -508,6 +508,9 @@ int main(int argc, char **argv) {
                     status.remaining_available = scene == 56 || scene == 58;
                     if (scene >= 58) {
                         view.status_expanded_ = true;
+                        // Console usage lives in the collapsed diagnostics group;
+                        // these scenes exist to verify it once expanded.
+                        view.details_tech_expanded_ = true;
                         status.bedtime_active = true;
                         status.usage_captured_at = scene == 58 ? 1791983569 : 0;
                     }
@@ -702,10 +705,12 @@ int main(int argc, char **argv) {
                 }
                 if (view.parent_view_ == ParentView::Actions) {
                     int previous_bottom = view.page_layout_.viewport.y;
+                    int previous_group = -1;
                     for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
-                        int index = 0;
-                        while (ptc_overlay_parent_action_slot(index) != slot) ++index;
-                        const auto rect = view.page_layout_.actions[index];
+                        const int group = ptc_overlay_parent_action_group(slot);
+                        require(group >= previous_group, "action group headers must follow the visual order");
+                        previous_group = group;
+                        const auto rect = view.page_layout_.actions[ptc_overlay_parent_action_order()[slot]];
                         require(rect.h >= PTC_OVERLAY_PARENT_CARD_MIN_H && rect.y >= previous_bottom, "measured action cards must not overlap");
                         const int offset = ptc_overlay_scroll_to_rect(view.page_layout_.viewport, rect, 0, view.page_layout_.scroll_max);
                         require(rect.y - offset >= view.page_layout_.viewport.y &&

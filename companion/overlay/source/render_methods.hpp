@@ -338,6 +338,41 @@
         return parent_view_ != ParentView::Child;
     }
 
+    // Single source for "what is happening right now". The parent band and the
+    // status-details hero must never disagree about the current restriction.
+    struct OverlayCurrentState {
+        const char *text;
+        tsl::Color color;
+        bool normal;
+    };
+
+    OverlayCurrentState current_state_line(bool stale) const
+    {
+        const auto &pal = current_palette();
+        if (stale) return {ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH), pal.warning, false};
+        if (bedtime_restricted()) return {ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_3), pal.danger, false};
+        if (displayed_summary_.daily_restriction_active)
+            return {ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_2), pal.danger, false};
+        if (eye_care_restricted()) return {ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING), pal.warning, false};
+        if (displayed_summary_.dock_restriction_active) return {ptc_ui_text(PTC_UI_T_DOCK_TITLE), pal.danger, false};
+        return {ptc_ui_text(PTC_UI_T_NORMAL_PLAY_AVAILABLE), pal.success, true};
+    }
+
+    static PtcUiTextId parent_action_label_id(int action)
+    {
+        switch (action) {
+        case PTC_OVERLAY_PARENT_ADD_MINUTES: return PTC_UI_T_QUICK_GRANT;
+        case PTC_OVERLAY_PARENT_UNLIMITED: return PTC_UI_T_NO_LIMIT_TODAY;
+        case PTC_OVERLAY_PARENT_SKIP_BEDTIME: return PTC_UI_T_SKIP_BEDTIME;
+        case PTC_OVERLAY_PARENT_SKIP_EYE_CARE: return PTC_UI_T_EYE_CARE_SKIP;
+        case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP: return PTC_UI_T_RESTORE_THIS_BEDTIME;
+        case PTC_OVERLAY_PARENT_DISABLE_BEDTIME: return PTC_UI_T_TURN_OFF_BEDTIME_PLAN;
+        case PTC_OVERLAY_PARENT_WAIVE_DOCK: return PTC_UI_T_DOCK_WAIVE;
+        case PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT: return PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE;
+        default: return PTC_UI_T_ACTION_NOT_AVAILABLE;
+        }
+    }
+
     bool is_keypad_mode() const
     {
         return keypad_active_ || (input_ != nullptr && input_->length > 0);
@@ -364,13 +399,22 @@
     {
         OverlayRequestKind kind = active_request_kind_ != OverlayRequestKind::None
             ? active_request_kind_ : last_request_kind_;
-        if (kind == OverlayRequestKind::Status) return ptc_ui_text(PTC_UI_T_REFRESH_TODAY_S_STATUS);
-        if (kind == OverlayRequestKind::PreviewOfflineCode) return ptc_ui_text(PTC_UI_T_PREVIEW_TODAY_S_GRANT);
-        if (kind == OverlayRequestKind::OfflineCode) return ptc_ui_text(PTC_UI_T_SUBMIT_TODAY_S_GRANT);
-        if (kind == OverlayRequestKind::ClaimDailyBuffer) return ptc_ui_text(PTC_UI_T_RECEIVE_INDEPENDENT_BUFFERING);
-        if (kind == OverlayRequestKind::WaiveDock) return ptc_ui_text(PTC_UI_T_DOCK_WAIVE);
-        if (kind == OverlayRequestKind::ClearBedtimeSkip) return ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME);
-        return ptc_ui_text(PTC_UI_T_NOT_STARTED);
+        switch (kind) {
+        case OverlayRequestKind::Status: return ptc_ui_text(PTC_UI_T_REFRESH_TODAY_S_STATUS);
+        case OverlayRequestKind::PreviewOfflineCode: return ptc_ui_text(PTC_UI_T_PREVIEW_TODAY_S_GRANT);
+        case OverlayRequestKind::OfflineCode: return ptc_ui_text(PTC_UI_T_SUBMIT_TODAY_S_GRANT);
+        case OverlayRequestKind::ClaimDailyBuffer: return ptc_ui_text(PTC_UI_T_RECEIVE_INDEPENDENT_BUFFERING);
+        case OverlayRequestKind::AddTodayMinutes: return ptc_ui_text(PTC_UI_T_QUICK_GRANT);
+        case OverlayRequestKind::DisableTodayLimit: return ptc_ui_text(PTC_UI_T_NO_LIMIT_TODAY);
+        case OverlayRequestKind::SkipBedtime: return ptc_ui_text(PTC_UI_T_SKIP_BEDTIME);
+        case OverlayRequestKind::SkipEyeCare: return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP);
+        case OverlayRequestKind::WaiveDock: return ptc_ui_text(PTC_UI_T_DOCK_WAIVE);
+        case OverlayRequestKind::ClearBedtimeSkip: return ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME);
+        case OverlayRequestKind::DisableBedtime: return ptc_ui_text(PTC_UI_T_TURN_OFF_BEDTIME_PLAN);
+        case OverlayRequestKind::RestoreInstallSnapshot:
+            return ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE);
+        default: return ptc_ui_text(PTC_UI_T_NOT_STARTED);
+        }
     }
 
     void format_refresh_age(char *out, size_t out_size) const
