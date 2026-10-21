@@ -13,6 +13,32 @@ static void setup_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
     draw_button_label(pixels, stride, r, label, 18, text_color);
 }
 
+/* Wizard cards stack rows from measured wrapped line counts instead of fixed
+   baselines: English strings wrap where Chinese ones do not, and a fixed grid
+   left one row crowded while the next floated in empty space. */
+static int setup_line_height(int size)
+{
+    return size * 3 / 2;
+}
+
+static int setup_block_height(const char *text, int size, int width, int max_lines)
+{
+    int lines = count_wrapped_lines(text, size, width, max_lines);
+    if (lines < 1) lines = 1;
+    return lines * setup_line_height(size);
+}
+
+/* Draws one block whose ink starts at `top` and returns the next block's top. */
+static int setup_block(uint32_t *pixels, uint32_t stride, int x, int top,
+    const char *text, int size, int width, int max_lines, uint32_t color)
+{
+    int lines = count_wrapped_lines(text, size, width, max_lines);
+    if (lines < 1) lines = 1;
+    draw_wrapped_text(pixels, stride, x, top + size, text, size, width,
+        setup_line_height(size), max_lines, color);
+    return top + lines * setup_line_height(size);
+}
+
 void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_PREPARE;
@@ -29,13 +55,26 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         fill_round_rect(pixels, stride, (UiRect){94 + i * 372, 165, 340, 4}, 2, i < step ? UI_ACCENT : UI_RAISED);
     }
     if (step == PTC_UI_SETUP_PREPARE) {
-        /* Card 1: Interface Language (Y=185..299, H=114) */
-        UiRect lang_card = {74, 185, 1132, 114};
+        /* Card 1: Interface Language (Y=185..298). Content block (title, then the
+           44px option row) keeps equal 13/14px padding top and bottom. */
+        UiRect lang_card = {74, 185, 1132, 113};
         fill_round_rect(pixels, stride, lang_card, 12, UI_RAISED);
         draw_rect_outline(pixels, stride, lang_card, 12, 1, UI_BORDER);
-        draw_text(pixels, stride, 94, 208, ptc_ui_text(PTC_UI_T_SETUP_CARD_LANG), 17, UI_INK);
-        draw_text(pixels, stride, 210, 209, ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_ZH), 13, UI_MUTED);
-        draw_text(pixels, stride, 480, 209, ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_EN), 13, UI_MUTED);
+        const char *lang_title = ptc_ui_text(PTC_UI_T_SETUP_CARD_LANG);
+        draw_text(pixels, stride, 94, 214, lang_title, 17, UI_INK);
+        /* Hints follow the measured title so the English card name cannot run
+           into the Chinese hint (it used to start at a fixed X=210). */
+        int hint_x = 94 + measure_text(lang_title, 17) + 28;
+        const char *hint_zh = ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_ZH);
+        const char *hint_en = ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_EN);
+        char fitted_hint[256];
+        fit_text(fitted_hint, sizeof(fitted_hint), hint_zh, 13, 380);
+        draw_text(pixels, stride, hint_x, 215, fitted_hint, 13, UI_MUTED);
+        hint_x += measure_text(fitted_hint, 13) + 32;
+        if (hint_x < 1060) {
+            fit_text(fitted_hint, sizeof(fitted_hint), hint_en, 13, 1190 - hint_x);
+            draw_text(pixels, stride, hint_x, 215, fitted_hint, 13, UI_MUTED);
+        }
         for (int i = 0; i < 4; ++i) {
             PtcUiRect r = ptc_ui_setup_language_rect(i);
             bool chosen = model->language_preference == (PtcUiLanguagePreference)i;
@@ -49,38 +88,40 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 i == 2 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HANT) : "English", 16, chosen ? UI_ACCENT : UI_INK);
         }
 
-        /* Card 2: Environment and Console Time (Y=314..618, H=304) */
-        UiRect env_card = {74, 314, 1132, 304};
+        /* Card 2: Environment and Console Time (Y=312..618). The three bands are
+           sized from their measured content plus one shared 24px padding, so no
+           band ends up tight while another floats in empty space. */
+        UiRect env_card = {74, 312, 1132, 306};
         fill_round_rect(pixels, stride, env_card, 12, UI_RAISED);
         draw_rect_outline(pixels, stride, env_card, 12, 1, UI_BORDER);
 
-        /* Section 1: Running Environment (Y=314..408) */
-        draw_text(pixels, stride, 94, 336, ptc_ui_text(PTC_UI_T_SETUP_CARD_ENV), 17, UI_INK);
+        /* Section 1: Running Environment (Y=312..432) */
+        draw_text(pixels, stride, 94, 352, ptc_ui_text(PTC_UI_T_SETUP_CARD_ENV), 17, UI_INK);
         snprintf(text, sizeof(text), "HOS %s  |  Atmosphère %s  |  %s",
             model->environment_available && model->environment_hos[0] ? model->environment_hos : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
             model->environment_available && model->environment_atmosphere_version[0] ? model->environment_atmosphere_version : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
             model->environment_available && model->environment_model[0] ?
                 (strcmp(model->environment_model, "mariko-oled") == 0 ? "OLED" : model->environment_model) : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
-        draw_text(pixels, stride, 94, 364, text, 17, UI_INK);
-        draw_text(pixels, stride, 94, 390, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE), 14, UI_MUTED);
-        draw_text(pixels, stride, 460, 390, ptc_ui_text(ptc_ui_setup_reference_matches(model)
+        draw_text(pixels, stride, 94, 379, text, 17, UI_INK);
+        draw_text(pixels, stride, 94, 403, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE), 14, UI_MUTED);
+        draw_text(pixels, stride, 460, 403, ptc_ui_text(ptc_ui_setup_reference_matches(model)
             ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 14, UI_MUTED);
 
         /* Separator line 1 */
-        fill_round_rect(pixels, stride, (UiRect){94, 408, 1092, 1}, 0, UI_BORDER);
+        fill_round_rect(pixels, stride, (UiRect){94, 432, 1092, 1}, 0, UI_BORDER);
 
-        /* Section 2: Parental Control row (Y=408..494) */
-        draw_text(pixels, stride, 94, 438, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
+        /* Section 2: Parental Control row (Y=432..524) */
+        draw_text(pixels, stride, 94, 471, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
             model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 18,
             model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING_TEXT);
         setup_button(pixels, stride, ptc_ui_setup_pctl_help_rect(), ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_BUTTON),
             model->setup_focus == 2, false);
-        draw_text(pixels, stride, 94, 466, ptc_ui_text(PTC_UI_T_SETUP_PAUSE_OVERLAY), 14, UI_MUTED);
+        draw_text(pixels, stride, 94, 494, ptc_ui_text(PTC_UI_T_SETUP_PAUSE_OVERLAY), 14, UI_MUTED);
 
         /* Separator line 2 */
-        fill_round_rect(pixels, stride, (UiRect){94, 494, 1092, 1}, 0, UI_BORDER);
+        fill_round_rect(pixels, stride, (UiRect){94, 524, 1092, 1}, 0, UI_BORDER);
 
-        /* Section 3: Console Time & Direct Time Guide (Y=494..618) */
+        /* Section 3: Console Time & Direct Time Guide (Y=524..618) */
 #ifdef PTC_UI_PREVIEW_WALL_TIME
         uint16_t year, minute = ptc_ui_render_minute_of_day(ptc_ui_render_now());
         uint8_t month, day;
@@ -93,13 +134,13 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         if (local) strftime(text, sizeof(text), "%Y-%m-%d  %H:%M", local);
         else snprintf(text, sizeof(text), "%s", ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
 #endif
-        draw_text(pixels, stride, 94, 524, ptc_ui_text(PTC_UI_T_SETUP_TIME_HELP), 15, UI_MUTED);
-        draw_text(pixels, stride, 94, 554, text, 24, UI_ACCENT);
+        draw_text(pixels, stride, 94, 563, ptc_ui_text(PTC_UI_T_SETUP_TIME_HELP), 15, UI_MUTED);
+        draw_text(pixels, stride, 94, 592, text, 24, UI_ACCENT);
 
-        draw_wrapped_text(pixels, stride, 360, 520, ptc_ui_text(PTC_UI_T_SETUP_TIME_HINT), 14, 820, 20, 1, UI_INK);
-        draw_wrapped_text(pixels, stride, 360, 548, ptc_ui_text(PTC_UI_T_SETUP_TIME_INSTRUCTIONS), 13, 820, 20, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, 360, 562, ptc_ui_text(PTC_UI_T_SETUP_TIME_HINT), 14, 820, 20, 1, UI_INK);
+        draw_wrapped_text(pixels, stride, 360, 586, ptc_ui_text(PTC_UI_T_SETUP_TIME_INSTRUCTIONS), 13, 820, 20, 2, UI_MUTED);
         if (model->setup_focus == 3) {
-            draw_focus_ring(pixels, stride, (UiRect){90, 502, 1100, 108}, 8);
+            draw_focus_ring(pixels, stride, (UiRect){90, 536, 1100, 76}, 8);
         }
     } else if (step == PTC_UI_SETUP_PARENT) {
         /* Left Card: Security & PIN */
@@ -206,84 +247,180 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text(pixels, stride, bed_sw.x - bed_st_w - 10, bed_rect.y + 29, bed_st, 14, bed_on ? UI_SUCCESS : UI_MUTED);
         draw_text(pixels, stride, 676, 580, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_HINT), 12, UI_MUTED);
     } else {
-        /* Card 1: Configuration Summary Board (Y=185..421, H=236) */
-        UiRect sum_card = {74, 185, 1132, 236};
-        fill_round_rect(pixels, stride, sum_card, 12, UI_RAISED);
-        draw_rect_outline(pixels, stride, sum_card, 12, 1, UI_BORDER);
-        draw_text(pixels, stride, 94, 210, ptc_ui_text(PTC_UI_T_SETUP_CARD_SUMMARY), 20, UI_INK);
+        /* Step 3 stacks two cards whose rows are measured, so a two-line English
+           notice does not collide with the row above or leave a dead band below.
+           Card 1: Configuration Summary (Y=185..), Card 2: Management & Protection. */
+        const int card_x = 74, card_w = 1132;
+        const int inner_x = 94, inner_w = 1092;
+        const int column_x = 656, column_w = 530;
+        const int left_w = column_x - inner_x - 36;
 
-        /* Row 1: Environment & Today's Quota (Y=234..284) */
         snprintf(text, sizeof(text), "HOS %s  |  AMS %s  |  %s",
             model->environment_available && model->environment_hos[0] ? model->environment_hos : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
             model->environment_available && model->environment_atmosphere_version[0] ? model->environment_atmosphere_version : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
             model->environment_available && model->environment_model[0] ?
                 (strcmp(model->environment_model, "mariko-oled") == 0 ? "OLED" : model->environment_model) : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
-        draw_text(pixels, stride, 94, 252, text, 16, UI_INK);
-        draw_text(pixels, stride, 94, 274, ptc_ui_text(ptc_ui_setup_reference_matches(model)
-            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 13, UI_MUTED);
+        const char *reference = ptc_ui_text(ptc_ui_setup_reference_matches(model)
+            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN);
+        const char *pctl = ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
+            model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF);
+        const char *pin = ptc_ui_text(model->setup_pin_ready ?
+            PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED);
+        bool eye_on = model->setup_eye_care_enabled || model->draft_eye_care_policy.enabled;
+        bool bed_on = model->setup_bedtime_enabled || model->draft_bedtime_policy.enabled;
+        const char *eye_head = ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_ON : PTC_UI_T_SETUP_EYE_CARE_SUMMARY_OFF);
+        const char *eye_note = ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_DEFAULT_PARAMS : PTC_UI_T_SETUP_EYE_CARE_HINT);
+        const char *bed_head = ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_ON : PTC_UI_T_SETUP_BEDTIME_SUMMARY_OFF);
+        const char *bed_note = ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_DEFAULT_PARAMS : PTC_UI_T_SETUP_BEDTIME_HINT);
 
+        /* Row 1's right column shares its first line between mode and quota, so
+           the strings are prepared before measuring the row. */
+        char mode_text[64], quota_text[64];
         if (model->status_loaded) {
-            char mode_text[64];
-            char quota_text[64];
             ptc_ui_format_today_mode(model, mode_text, sizeof(mode_text));
             ptc_ui_format_quota_remaining(model, quota_text, sizeof(quota_text));
-            draw_text(pixels, stride, 656, 252, mode_text, 16, UI_INK);
-            draw_text(pixels, stride, 880, 252, quota_text, 16, UI_ACCENT);
-            draw_text(pixels, stride, 656, 274, ptc_ui_text(PTC_UI_T_QUOTA_RULES), 13, UI_MUTED);
         } else {
-            draw_text(pixels, stride, 656, 252, ptc_ui_text(PTC_UI_T_SETUP_STATUS_UNKNOWN), 16, UI_WARNING_TEXT);
-            draw_text(pixels, stride, 656, 274, ptc_ui_text(PTC_UI_T_THE_STATUS_NEEDS_TO_BE_CONFIRMED_PLEASE), 13, UI_MUTED);
+            snprintf(mode_text, sizeof(mode_text), "%s", ptc_ui_text(PTC_UI_T_SETUP_STATUS_UNKNOWN));
         }
 
-        /* Separator line 1 */
-        fill_round_rect(pixels, stride, (UiRect){94, 288, 1092, 1}, 0, UI_BORDER);
+        /* Each of the three rows is as tall as its taller column; the left column
+           is narrower than the right one, so measure with its real width. */
+        int heights[3];
+        heights[0] = setup_block_height(text, 16, left_w, 2) +
+            setup_block_height(reference, 13, left_w, 2);
+        {
+            const char *right1_note = model->status_loaded ? ptc_ui_text(PTC_UI_T_QUOTA_RULES)
+                : ptc_ui_text(PTC_UI_T_THE_STATUS_NEEDS_TO_BE_CONFIRMED_PLEASE);
+            int right1 = setup_block_height(mode_text, 16, column_w, 2) +
+                setup_block_height(right1_note, 13, column_w, 2);
+            if (right1 > heights[0]) heights[0] = right1;
+        }
+        heights[1] = setup_block_height(pctl, 16, left_w, 2) +
+            setup_block_height(ptc_ui_text(PTC_UI_T_SETUP_PCTL_PATH), 13, left_w, 2);
+        {
+            int right2 = setup_block_height(pin, 16, column_w, 2) +
+                setup_block_height(ptc_ui_text(PTC_UI_T_SETUP_PIN_DESC), 13, column_w, 2);
+            if (right2 > heights[1]) heights[1] = right2;
+        }
+        heights[2] = setup_block_height(eye_head, 16, left_w, 2) +
+            setup_block_height(eye_note, 13, left_w, 2);
+        {
+            int right3 = setup_block_height(bed_head, 16, column_w, 2) +
+                setup_block_height(bed_note, 13, column_w, 2);
+            if (right3 > heights[2]) heights[2] = right3;
+        }
 
-        /* Row 2: Parental Control & PlayWise PIN (Y=294..344) */
-        draw_text(pixels, stride, 94, 312, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
-            model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 16,
-            model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING_TEXT);
-        draw_text(pixels, stride, 94, 334, ptc_ui_text(PTC_UI_T_SETUP_PCTL_PATH), 13, UI_MUTED);
+        /* Rows are separated by a shared gap. Both cards are measured first, then
+           the pair is centred in the 185..630 panel so leftover space splits
+           evenly above, between and below instead of pooling at the bottom. */
+        const int row_gap = 12;
+        const int rows_h = heights[0] + heights[1] + heights[2] + row_gap * 2;
+        /* 18px card padding, a title on a shared 40px band, then the rows. The
+           band keeps the title clear of the first row in every language. */
+        const int card_pad = 18;
+        const int title_band = 40;
+        const int card1_h = card_pad + title_band + rows_h + card_pad;
 
-        draw_text(pixels, stride, 656, 312, ptc_ui_text(model->setup_pin_ready ?
-            PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED), 16, model->setup_pin_ready ? UI_SUCCESS : UI_WARNING_TEXT);
-        draw_text(pixels, stride, 656, 334, ptc_ui_text(PTC_UI_T_SETUP_PIN_DESC), 13, UI_MUTED);
-
-        /* Separator line 2 */
-        fill_round_rect(pixels, stride, (UiRect){94, 348, 1092, 1}, 0, UI_BORDER);
-
-        /* Row 3: Eye Care & Bedtime toggles status (Y=354..408) */
-        bool eye_on = model->setup_eye_care_enabled || model->draft_eye_care_policy.enabled;
-        draw_text(pixels, stride, 94, 372, ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_ON : PTC_UI_T_SETUP_EYE_CARE_SUMMARY_OFF),
-            16, eye_on ? UI_SUCCESS : UI_MUTED);
-        draw_text(pixels, stride, 94, 394, ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_DEFAULT_PARAMS : PTC_UI_T_SETUP_EYE_CARE_HINT), 13, UI_MUTED);
-
-        bool bed_on = model->setup_bedtime_enabled || model->draft_bedtime_policy.enabled;
-        draw_text(pixels, stride, 656, 372, ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_ON : PTC_UI_T_SETUP_BEDTIME_SUMMARY_OFF),
-            16, bed_on ? UI_SUCCESS : UI_MUTED);
-        draw_text(pixels, stride, 656, 394, ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_DEFAULT_PARAMS : PTC_UI_T_SETUP_BEDTIME_HINT), 13, UI_MUTED);
-
-        /* Card 2: Protection and Safety Notes (Y=436..618, H=182) */
-        UiRect note_card = {74, 436, 1132, 182};
-        fill_round_rect(pixels, stride, note_card, 12, UI_RAISED);
-        draw_rect_outline(pixels, stride, note_card, 12, 1, UI_BORDER);
-        draw_text(pixels, stride, 94, 458, ptc_ui_text(PTC_UI_T_SETUP_CARD_TAKEOVER), 18, UI_INK);
-        draw_wrapped_text(pixels, stride, 94, 486, ptc_ui_text(PTC_UI_T_SETUP_BACKUP_NOTE), 15, 1092, 22, 2, UI_INK);
-        draw_wrapped_text(pixels, stride, 94, 536, ptc_ui_text(PTC_UI_T_SETUP_CHECK_NOTICE), 14, 1092, 20, 1, UI_MUTED);
+        const char *backup_note = ptc_ui_text(PTC_UI_T_SETUP_BACKUP_NOTE);
+        const char *check_notice = ptc_ui_text(PTC_UI_T_SETUP_CHECK_NOTICE);
+        const char *status_note;
+        char status_buf[160];
+        bool status_warning = false;
         if (ptc_ui_setup_has_issues(model)) {
             int count = 0;
             for (int i = 0; i < PTC_UI_SETUP_ISSUE_COUNT; ++i) if (model->setup_issue_mask & (1U << i)) ++count;
-            if (count) {
-                unsigned int save_issues = (1U << PTC_UI_SETUP_ISSUE_LANGUAGE) | (1U << PTC_UI_SETUP_ISSUE_THEME) |
-                    (1U << PTC_UI_SETUP_ISSUE_SHORTCUT) | (1U << PTC_UI_SETUP_ISSUE_PROGRESS) | (1U << PTC_UI_SETUP_ISSUE_DEFAULTS);
-                if (model->setup_issue_mask & save_issues)
-                    snprintf(text, sizeof(text), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_PROBLEM));
-                else snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_SETUP_ISSUE_COUNT), count);
-                draw_text(pixels, stride, 94, 562, text, 15, UI_WARNING_TEXT);
-            }
+            unsigned int save_issues = (1U << PTC_UI_SETUP_ISSUE_LANGUAGE) | (1U << PTC_UI_SETUP_ISSUE_THEME) |
+                (1U << PTC_UI_SETUP_ISSUE_SHORTCUT) | (1U << PTC_UI_SETUP_ISSUE_PROGRESS) | (1U << PTC_UI_SETUP_ISSUE_DEFAULTS);
+            if (count && (model->setup_issue_mask & save_issues))
+                snprintf(status_buf, sizeof(status_buf), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_PROBLEM));
+            else if (count) snprintf(status_buf, sizeof(status_buf), ptc_ui_text(PTC_UI_T_SETUP_ISSUE_COUNT), count);
+            else status_buf[0] = '\0';
+            status_note = status_buf;
+            status_warning = count > 0;
         } else {
-            draw_wrapped_text(pixels, stride, 94, 562, ptc_ui_text(model->setup_activation_pending
-                ? PTC_UI_T_SETUP_ACTIVATING : PTC_UI_T_SETUP_CONTROLS_INACTIVE), 14, 1092, 20, 1, UI_MUTED);
+            status_note = ptc_ui_text(model->setup_activation_pending
+                ? PTC_UI_T_SETUP_ACTIVATING : PTC_UI_T_SETUP_CONTROLS_INACTIVE);
         }
+        /* A page-level save message is the same failure the generic status note
+           describes, so it replaces it instead of stacking a second line on top. */
+        if (model->message[0]) {
+            status_note = model->message;
+            status_warning = true;
+        }
+        /* Only count the 8px separator when another block follows it, so an
+           empty status note does not leave a dead band at the card's bottom. */
+        int note_blocks = setup_block_height(backup_note, 15, inner_w, 2) + 8 +
+            setup_block_height(check_notice, 14, inner_w, 2);
+        if (status_note[0]) note_blocks += 8 + setup_block_height(status_note, 14, inner_w, 2);
+        const int card2_h = card_pad + title_band + note_blocks + card_pad;
+
+        const int card_gap = 16;
+        const int panel_top = 185, panel_bottom = 630;
+        int stack = panel_top + (panel_bottom - panel_top - (card1_h + card_gap + card2_h)) / 2;
+        if (stack < panel_top) stack = panel_top;
+
+        UiRect sum_card = {card_x, stack, card_w, card1_h};
+        fill_round_rect(pixels, stride, sum_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, sum_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, inner_x, stack + card_pad + 20, ptc_ui_text(PTC_UI_T_SETUP_CARD_SUMMARY), 20, UI_INK);
+
+        int y = stack + card_pad + title_band;
+        /* Row 1: Environment & Today's Quota */
+        setup_block(pixels, stride, inner_x, y, text, 16, left_w, 2, UI_INK);
+        setup_block(pixels, stride, inner_x, y + setup_block_height(text, 16, left_w, 2),
+            reference, 13, left_w, 2, UI_MUTED);
+        /* Draw the mode through the same helper used for measuring, so a wrapped
+           mode string can never overflow the measured row. The quota shares the
+           first line and the rule note sits on the second. */
+        const int mode_top = y;
+        (void)setup_block(pixels, stride, column_x, mode_top, mode_text, 16, column_w, 2,
+            model->status_loaded ? UI_INK : UI_WARNING_TEXT);
+        if (model->status_loaded) {
+            const int quota_w = measure_text(quota_text, 16);
+            draw_text(pixels, stride, column_x + column_w - quota_w, mode_top + 16, quota_text, 16, UI_ACCENT);
+            draw_text(pixels, stride, column_x, mode_top + setup_line_height(16) + 13, ptc_ui_text(PTC_UI_T_QUOTA_RULES), 13, UI_MUTED);
+        } else {
+            setup_block(pixels, stride, column_x, mode_top + setup_block_height(mode_text, 16, column_w, 2),
+                ptc_ui_text(PTC_UI_T_THE_STATUS_NEEDS_TO_BE_CONFIRMED_PLEASE), 13, column_w, 2, UI_MUTED);
+        }
+        y += heights[0] + row_gap;
+        fill_round_rect(pixels, stride, (UiRect){inner_x, y - row_gap / 2, inner_w, 1}, 0, UI_BORDER);
+
+        /* Row 2: Parental Control & PlayWise PIN */
+        setup_block(pixels, stride, inner_x, y, pctl, 16, left_w, 2,
+            model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING_TEXT);
+        setup_block(pixels, stride, inner_x, y + setup_block_height(pctl, 16, left_w, 2),
+            ptc_ui_text(PTC_UI_T_SETUP_PCTL_PATH), 13, left_w, 2, UI_MUTED);
+        setup_block(pixels, stride, column_x, y, pin, 16, column_w, 2,
+            model->setup_pin_ready ? UI_SUCCESS : UI_WARNING_TEXT);
+        setup_block(pixels, stride, column_x, y + setup_block_height(pin, 16, column_w, 2),
+            ptc_ui_text(PTC_UI_T_SETUP_PIN_DESC), 13, column_w, 2, UI_MUTED);
+        y += heights[1] + row_gap;
+        fill_round_rect(pixels, stride, (UiRect){inner_x, y - row_gap / 2, inner_w, 1}, 0, UI_BORDER);
+
+        /* Row 3: Eye Care & Bedtime status */
+        setup_block(pixels, stride, inner_x, y, eye_head, 16, left_w, 2, eye_on ? UI_SUCCESS : UI_MUTED);
+        setup_block(pixels, stride, inner_x, y + setup_block_height(eye_head, 16, left_w, 2),
+            eye_note, 13, left_w, 2, UI_MUTED);
+        setup_block(pixels, stride, column_x, y, bed_head, 16, column_w, 2, bed_on ? UI_SUCCESS : UI_MUTED);
+        setup_block(pixels, stride, column_x, y + setup_block_height(bed_head, 16, column_w, 2),
+            bed_note, 13, column_w, 2, UI_MUTED);
+        y += heights[2];
+
+        /* Card 2: Protection and Safety Notes, also measured top-down. */
+        const int note_top = stack + card1_h + card_gap;
+        const int note_inner_top = note_top + card_pad;
+        UiRect note_card = {card_x, note_top, card_w, card2_h};
+        fill_round_rect(pixels, stride, note_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, note_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, inner_x, note_inner_top + 20, ptc_ui_text(PTC_UI_T_SETUP_CARD_TAKEOVER), 18, UI_INK);
+        int draw_y = note_inner_top + title_band;
+        draw_y = setup_block(pixels, stride, inner_x, draw_y, backup_note, 15, inner_w, 2, UI_INK) + 8;
+        draw_y = setup_block(pixels, stride, inner_x, draw_y, check_notice, 14, inner_w, 2, UI_MUTED) + 8;
+        if (status_note[0])
+            (void)setup_block(pixels, stride, inner_x, draw_y, status_note, 14, inner_w, 2,
+                status_warning ? UI_WARNING_TEXT : UI_MUTED);
+
         char skip_label[96];
         snprintf(skip_label, sizeof(skip_label), "X  %s", ptc_ui_text(PTC_UI_T_SETUP_SKIP));
         draw_footer_button(pixels, stride, ptc_ui_setup_skip_rect(), skip_label);
@@ -291,7 +428,14 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_rect_outline(pixels, stride, to_uirect(ptc_ui_setup_skip_rect()), 12, 3, UI_ACCENT);
         }
     }
-    if (model->message[0]) draw_wrapped_text(pixels, stride, 94, 589, model->message, 16, 1092, 21, 2, UI_WARNING_TEXT);
+    /* Save failures are reported in-page. Step 3 carries them inside its notes
+       card; steps 1 and 2 use the free strip between their cards (bottom 618)
+       and the stage divider (Y=652) instead of overprinting card content. */
+    if (model->message[0] && step != PTC_UI_SETUP_CONFIRM) {
+        char fitted[256];
+        fit_text(fitted, sizeof(fitted), model->message, 14, 1092);
+        draw_text(pixels, stride, 94, 642, fitted, 14, UI_WARNING_TEXT);
+    }
     draw_footer_button(pixels, stride, ptc_ui_setup_back_rect(), ptc_ui_text(PTC_UI_T_B_PREVIOUS_STEP));
     char primary_label[96];
     snprintf(primary_label, sizeof(primary_label), "A  %s", ptc_ui_text(step == PTC_UI_SETUP_PREPARE

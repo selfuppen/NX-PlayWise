@@ -887,9 +887,15 @@
         else std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
         format_refresh_age(age, sizeof(age));
         const bool default_scheme = navbar_scheme_ == OverlayNavbarScheme::Default;
-        const int status_y = default_scheme ? 64 : 88;
-        const int meta_y = default_scheme ? 174 : 198;
-        const int date_y = default_scheme ? 201 : 226;
+        // The whole block is clipped to the scrolling viewport, whose top edge is
+        // cy + PTC_OVERLAY_HEADER_H + 8 (absolute Y=64). A 28px line draws its ink
+        // from baseline-16, so a baseline at cy+76 lost the glyph tops; cy+84 keeps
+        // the row whole and still leaves 19px above the code slots (absolute 116).
+        // Count and console date then fill the 180..244 band between the slots and
+        // the keypad instead of running into the slot outlines.
+        const int status_y = default_scheme ? 84 : 100;
+        const int meta_y = default_scheme ? 192 : 208;
+        const int date_y = default_scheme ? 218 : 234;
         draw_localized(renderer, line, false, cx + 14, cy + status_y, PTC_OVERLAY_FONT_BODY, renderer->a(pal.success));
         const int left_width = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
         if (left_width + static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_SECONDARY).first) + 40 <= cw)

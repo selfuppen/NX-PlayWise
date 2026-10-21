@@ -1595,6 +1595,16 @@ static void test_release_hit_targets(void)
               "parental control help touch target");
     check_true(!rects_overlap(ptc_ui_setup_pctl_help_rect(), ptc_ui_setup_time_help_rect()),
                "parental control and clock help targets do not overlap");
+    /* The step-1 cards and the footer must keep their measured bands: the help
+       button stays inside the parental-control row (452..490), the clock help
+       stays inside the console-time band (536..612), and neither touches the
+       fixed footer at Y=664. */
+    check_true(ptc_ui_setup_pctl_help_rect().y >= 432 && ptc_ui_setup_pctl_help_rect().y + ptc_ui_setup_pctl_help_rect().h <= 524,
+               "parental control help stays inside its step-1 row");
+    check_true(ptc_ui_setup_time_help_rect().y >= 524 && ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h <= 618,
+               "clock help stays inside the console-time band");
+    check_true(ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h < ptc_ui_setup_primary_rect().y,
+               "clock help never reaches the fixed footer");
     model.restriction_enabled_available = false;
     model.setup_focus = 2;
     ptc_ui_open_setup_pctl_help(&model);

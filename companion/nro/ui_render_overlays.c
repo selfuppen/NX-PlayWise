@@ -111,7 +111,15 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
         draw_text(pixels, stride, hint_box.x + 12, hint_box.y + 44, ptc_ui_text(PTC_UI_T_Y_REFRESH), 12, UI_ACCENT);
     } else {
         /* ======================== Tab 1: 从备份恢复 ======================== */
-        draw_text(pixels, stride, 54, 154, model->config_metadata[0] ? model->config_metadata : ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SELECTION), 14, UI_MUTED);
+        /* 备份标识放在胶囊标签右侧的同一行：Y=120..158 已被标签占用，原先
+           画在 Y=154 会盖住按钮，因此改为与标签垂直居中对齐并右移让位。 */
+        if (model->config_metadata[0]) {
+            char meta[160];
+            fit_text(meta, sizeof(meta), model->config_metadata, 14, 740);
+            draw_text(pixels, stride, 470, 146, meta, 14, UI_MUTED);
+        } else {
+            draw_text(pixels, stride, 470, 146, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SELECTION), 14, UI_MUTED);
+        }
 
         const PtcUiTextId titles[] = {PTC_UI_T_QUOTA_RULES, PTC_UI_T_CONFIG_SECTION_POLICIES, PTC_UI_T_CONFIG_SECTION_SECURITY};
         for (int section = 0; section < 3; ++section) {

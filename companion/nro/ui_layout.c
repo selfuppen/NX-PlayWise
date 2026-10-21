@@ -84,8 +84,8 @@ PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){236, 664, 280, 44}; 
 PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 320, 510, 54}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){0, 0, 0, 0}; }
 PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){676, 334, 510, 44}; }
-PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){94, 502, 1092, 108}; }
-PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){914, 424, 272, 38}; }
+PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){94, 536, 1092, 76}; }
+PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){914, 452, 272, 38}; }
 PtcUiRect ptc_ui_setup_theme_rect(int index)
 {
     if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};

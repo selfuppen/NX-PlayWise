@@ -580,6 +580,42 @@ void fit_text(char *out, size_t out_size, const char *text, int size, int max_wi
     }
 }
 
+/* Splits off the next line of `cursor`. Both the drawing and measuring paths use
+   this so a measured height can never disagree with what gets drawn. */
+static const char *next_wrapped_line(const char *cursor, int size, int max_width,
+    const char **line_end)
+{
+    const char *end = cursor;
+    const char *newline = strchr(cursor, '\n');
+    const char *last_space = NULL;
+    int width = 0;
+    while (*end && end != newline) {
+        if (*end == ' ') last_space = end;
+        const char *next = end;
+        uint32_t codepoint = ui_decode_utf8(&next);
+        int advance = 0;
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
+        if (entry) {
+            advance = (int)entry->advance;
+        }
+        if (end > cursor && width + advance > max_width) {
+            if (last_space && last_space > cursor) {
+                end = last_space;
+            }
+            break;
+        }
+        width += advance;
+        end = next;
+    }
+    if (end == cursor) {
+        const char *next = cursor;
+        (void)ui_decode_utf8(&next);
+        end = next;
+    }
+    *line_end = end;
+    return *end == '\n' ? end + 1 : (*end == ' ' ? end + 1 : end);
+}
+
 int draw_wrapped_text(
     uint32_t *pixels,
     uint32_t stride,
@@ -596,43 +632,29 @@ int draw_wrapped_text(
     const char *cursor = ptc_ui_localize(text ? text : "", localized, sizeof(localized));
     int line = 0;
     while (*cursor && line < max_lines) {
-        const char *end = cursor;
-        const char *newline = strchr(cursor, '\n');
-        const char *last_space = NULL;
-        int width = 0;
+        const char *end = NULL;
+        const char *next = next_wrapped_line(cursor, size, max_width, &end);
         char buffer[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
-        while (*end && end != newline) {
-            if (*end == ' ') last_space = end;
-            const char *next = end;
-            uint32_t codepoint = ui_decode_utf8(&next);
-            int advance = 0;
-            const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
-            if (entry) {
-                advance = (int)entry->advance;
-            }
-            if (end > cursor && width + advance > max_width) {
-                if (last_space && last_space > cursor) {
-                    end = last_space;
-                }
-                break;
-            }
-            width += advance;
-            end = next;
-        }
-        if (end == cursor) {
-            const char *next = cursor;
-            (void)ui_decode_utf8(&next);
-            end = next;
-        }
-        {
-            size_t bytes = (size_t)(end - cursor);
-            if (bytes >= sizeof(buffer)) bytes = sizeof(buffer) - 1;
-            memcpy(buffer, cursor, bytes);
-            buffer[bytes] = '\0';
-        }
+        size_t bytes = (size_t)(end - cursor);
+        if (bytes >= sizeof(buffer)) bytes = sizeof(buffer) - 1;
+        memcpy(buffer, cursor, bytes);
+        buffer[bytes] = '\0';
         draw_text(pixels, stride, x, baseline + line * line_height, buffer, size, color);
-        cursor = *end == '\n' ? end + 1 : (*end == ' ' ? end + 1 : end);
+        cursor = next;
         ++line;
     }
     return baseline + line * line_height;
+}
+
+int count_wrapped_lines(const char *text, int size, int max_width, int max_lines)
+{
+    char localized[4096];
+    const char *cursor = ptc_ui_localize(text ? text : "", localized, sizeof(localized));
+    int line = 0;
+    while (*cursor && line < max_lines) {
+        const char *end = NULL;
+        cursor = next_wrapped_line(cursor, size, max_width, &end);
+        ++line;
+    }
+    return line;
 }

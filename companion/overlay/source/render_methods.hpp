@@ -251,9 +251,12 @@
         int cursor = x + 12;
         for (int i = start; i < count; ++i) {
             if (i > start) {
-                overlay_text(renderer, ">", cursor, y, 16, PTC_OVERLAY_FONT_CAPTION,
+                // Keep 8px on both sides of the separator. Drawing it at the slot
+                // start left 0px before and 16px after, which crowded the node text.
+                const int sep = node_width(">");
+                overlay_text(renderer, ">", cursor + 8, y, 16, PTC_OVERLAY_FONT_CAPTION,
                     pal.text_disabled);
-                cursor += 8 + node_width(">") + 8;
+                cursor += 8 + sep + 8;
             }
             const int available = width - (cursor - x);
             const bool current = i == count - 1;

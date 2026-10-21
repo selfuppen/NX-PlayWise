@@ -194,6 +194,10 @@ void draw_dialog_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
 int draw_wrapped_text(uint32_t *pixels, uint32_t stride, int x, int baseline,
                       const char *text, int size, int max_width, int line_height,
                       int max_lines, uint32_t color);
+/* Same wrapping rules as draw_wrapped_text, without drawing: returns how many
+   lines the text occupies. Wizard layout uses it so uneven strings (ZH vs EN)
+   do not leave a fixed row too tight or too loose. */
+int count_wrapped_lines(const char *text, int size, int max_width, int max_lines);
 void draw_candidate_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
                            const char *label, uint32_t background, uint32_t foreground,
                            bool selected, bool disabled);

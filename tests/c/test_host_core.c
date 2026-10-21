@@ -1349,6 +1349,10 @@ static void test_overlay_layout_geometry(void)
     check_int(PTC_OVERLAY_SUBMIT_H, 60, "submit ends at 563 absolute");
     check_true(PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H < PTC_OVERLAY_KEYPAD_Y,
         "input count and date fit between slots and keypad");
+    /* Slots end at 168 and the keypad starts at 232; the 22px count and date
+       lines need 8+20+6+20 = 54px of that 64px band, leaving 5px below. */
+    check_true(PTC_OVERLAY_KEYPAD_Y - (PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H) >= 54,
+        "slot-to-keypad band still fits the count and console date");
     check_true(PTC_OVERLAY_KEYPAD_Y + 3 * PTC_OVERLAY_KEY_ROW_STEP + PTC_OVERLAY_KEY_H <=
         PTC_OVERLAY_SUBMIT_Y, "keypad ends above submit");
     const int keypad_origin_y = PTC_OVERLAY_CONTENT_Y;
