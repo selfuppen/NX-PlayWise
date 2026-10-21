@@ -17,6 +17,7 @@ getSystemLanguage) reply with a single newline-terminated line (hex for binary).
 from __future__ import annotations
 
 import argparse
+import re
 import socket
 from pathlib import Path
 
@@ -130,11 +131,23 @@ class SysBotBaseClient:
         self._send(f"configure {name} {value}")
 
     # --- data (reply) ---
+    def _checked_reply(self, command: str, reply: str, valid: bool) -> str:
+        if not valid:
+            # Debug Result prints can precede a query reply. Do not let a queued
+            # line acknowledge a later command, retry input, or reinitialize HID.
+            self.close()
+            raise SysBotBaseError(f"invalid {command} reply; connection closed, no retry")
+        return reply
+
     def get_title_id(self) -> str:
-        return self._query("getTitleID")
+        reply = self._query("getTitleID")
+        return self._checked_reply("getTitleID", reply,
+                                   re.fullmatch(r"[0-9A-Fa-f]{16}", reply) is not None)
 
     def get_system_language(self) -> str:
-        return self._query("getSystemLanguage")
+        reply = self._query("getSystemLanguage")
+        valid = re.fullmatch(r"(?:0|[1-9][0-9]{0,9})", reply) is not None and int(reply) <= 0x7fffffff
+        return self._checked_reply("getSystemLanguage", reply, valid)
 
     def peek(self, address: str, size: int) -> str:
         return self._query(f"peek {address} {int(size)}")

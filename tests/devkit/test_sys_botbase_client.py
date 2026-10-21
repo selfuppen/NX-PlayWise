@@ -40,7 +40,7 @@ class FakeSysBotBase:
 
     BASE_REPLIES = {
         "getTitleID": "0100000000010000",
-        "getSystemLanguage": "en-US",
+        "getSystemLanguage": "15",
         "peek": "0011223344",
     }
 
@@ -142,10 +142,65 @@ def test_capture_screenshot() -> None:
                 check(not out.exists(), "no file is written when the capture is empty")
 
 
+def test_typed_reply_guards() -> None:
+    for command, method, bad in (
+        ("getTitleID", "get_title_id", "hiddbgSetHdlsState: 123"),
+        ("getTitleID", "get_title_id", "010000000001000"),
+        ("getTitleID", "get_title_id", "010000000001000G"),
+        *[("getSystemLanguage", "get_system_language", reply) for reply in
+          ("hiddbgAttachHdlsVirtualDevice: 123", "", "en-US", "-1", "+15", "015", "2147483648")],
+    ):
+        with FakeSysBotBase() as fake:
+            # A pending valid line must not be consumed as a new query's reply.
+            fake.REPLIES[command] = bad + "\n15"
+            with sbb.SysBotBaseClient("127.0.0.1", fake.port, timeout=3.0) as client:
+                try:
+                    getattr(client, method)()
+                except sbb.SysBotBaseError:
+                    pass
+                else:
+                    check(False, "malformed typed reply rejected: " + repr(bad))
+                check(client._sock is None, "invalid reply closes the unsynchronized connection")
+                try:
+                    client.press("Y")
+                except sbb.SysBotBaseError:
+                    pass
+                else:
+                    check(False, "closed invalid connection cannot send another input")
+        check(fake.commands == [command], "invalid reply never retries or sends input")
+    with FakeSysBotBase() as fake:
+        with sbb.SysBotBaseClient("127.0.0.1", fake.port, timeout=3.0) as client:
+            check(client.get_system_language() == "15", "numeric language reply remains a string")
+
+
+def test_bad_barrier_stops_bounded_input() -> None:
+    import json
+    from tools.device.bounded_input_batch import BoundedInputBatch
+    with tempfile.TemporaryDirectory() as tmp, FakeSysBotBase() as fake:
+        fake.REPLIES["getSystemLanguage"] = "hiddbgSetHdlsState: 123\n15"
+        out = Path(tmp) / "batch"
+        try:
+            with sbb.SysBotBaseClient("127.0.0.1", fake.port, timeout=3.0) as client:
+                with BoundedInputBatch(client, out, health=lambda: None, max_actions=1,
+                                       sleep=lambda _: None) as batch:
+                    batch.hold(["Y"])
+        except sbb.SysBotBaseError:
+            pass
+        else:
+            check(False, "diagnostic output cannot satisfy an input wire barrier")
+        value = json.loads((out / "summary.json").read_bytes())
+        check(value["failed"] and value["cleanup"] == "unknown_stop_device_operations",
+              "unsynchronized socket retains unknown cleanup without reinitializing HID")
+    check(fake.commands == ["press Y", "release Y", "getSystemLanguage"],
+          "bad barrier follows release and sends no further input or detach")
+
+
 def main() -> int:
     test_sequence_builders()
     test_input_and_queries()
     test_capture_screenshot()
+    test_typed_reply_guards()
+    test_bad_barrier_stops_bounded_input()
     if FAILURES:
         print(f"{FAILURES} sys_botbase_client test(s) failed", file=sys.stderr)
         return 1
