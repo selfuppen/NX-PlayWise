@@ -58,6 +58,9 @@ typedef enum {
     UI_HERO = 0x02000000u + 27,
     UI_ON_HERO = 0x02000000u + 28,
     UI_HERO_SECONDARY = 0x02000000u + 29,
+    UI_NIGHT = 0x02000000u + 30,
+    UI_NIGHT_SOFT = 0x02000000u + 31,
+    UI_NIGHT_BORDER = 0x02000000u + 32,
 } UiColor;
 
 typedef struct {

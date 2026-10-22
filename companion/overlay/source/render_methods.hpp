@@ -134,12 +134,20 @@
         return pal.text_secondary;
     }
 
+    tsl::Color bedtime_policy_color(const PtcPolicyDisplay &policy) const
+    {
+        const auto &pal = current_palette();
+        if (policy.state == PTC_POLICY_ACTIVE) return pal.night;
+        return policy_color(policy);
+    }
+
     tsl::Color dashboard_soft(tsl::Color color) const
     {
         const auto &pal = current_palette();
         if (same_color(color, pal.danger)) return pal.danger_soft;
         if (same_color(color, pal.warning)) return pal.warning_soft;
         if (same_color(color, pal.success)) return pal.success_soft;
+        if (same_color(color, pal.night)) return pal.night_soft;
         return pal.accent_soft;
     }
 

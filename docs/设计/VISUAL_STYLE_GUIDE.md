@@ -32,14 +32,14 @@ All pages must adapt seamlessly to both color modes, matching system or user pre
 
 | Semantic Role | Light Mode | Dark Mode | Usage Description |
 | :--- | :--- | :--- | :--- |
-| **Page Background (`page_bg`)** | `#F0F3FA` | `#0B0F19` | Global canvas backdrop, cool-tinted to elevate cards |
-| **Base Surface (`surface`)** | `#FFFFFF` | `#162032` | Top-level cards, main informational panels |
-| **Raised Surface (`surface_raised`)** | `#E8EDF7` | `#1E2C44` | Secondary containers, result summary cards |
-| **Decorative Border (`border_decorative`)** | `#DBE1E9` | `#2A3B54` | Subtle card dividers and panel strokes (1px) |
-| **Control Border (`border_control`)** | `#79879D` | `#7E90AA` | Interactive buttons, inactive input frames |
-| **Primary Text (`text_primary`)** | `#172640` | `#F3F6FD` | Key headlines, major numbers, body emphasis |
-| **Secondary Text (`text_secondary`)** | `#53627A` | `#B6C4D9` | Subtitles, labels, auxiliary metrics |
-| **Disabled Text (`text_disabled`)** | `#9199A5` | `#818C98` | Disabled actions, placeholders, inactive rules |
+| **Page Background (`page_bg`)** | `#F2F6F5` | `#111122` | Global canvas backdrop, calm teal/night tint |
+| **Base Surface (`surface`)** | `#FFFFFF` | `#112233` | Top-level cards, main panels (4-bit RGBA4444 safe) |
+| **Raised Surface (`surface_raised`)** | `#E5EFEB` | `#223344` | Secondary containers, result summary cards |
+| **Decorative Border (`border_decorative`)** | `#D2DFDB` | `#334455` | Subtle card dividers and panel strokes (1px) |
+| **Control Border (`border_control`)** | `#6E8A83` | `#778899` | Interactive buttons, inactive input frames |
+| **Primary Text (`text_primary`)** | `#132521` | `#EEEEFF` | Key headlines, major numbers, body emphasis |
+| **Secondary Text (`text_secondary`)** | `#49655F` | `#AABBCC` | Subtitles, labels, auxiliary metrics |
+| **Disabled Text (`text_disabled`)** | `#8A9E99` | `#667788` | Disabled actions, placeholders, decorative glyphs |
 
 ---
 
@@ -50,42 +50,48 @@ PlayWise follows modern UI principles pairing **saturated foregrounds with ultra
 #### A. Active / Success / Sufficient (Success)
 * **Context**: Quota active, grant confirmed, rules satisfied, schedule running.
 * **Light Mode**:
-  * Soft Background (`UI_SUCCESS_SOFT`): `#F6FFED` (subtle mint)
-  * Border: `#B7EB8F` (soft bright green, 1–2px)
-  * Solid / Text / Foreground (`UI_SUCCESS`): `#52C41A` (vivid emerald) or `#16734E`
+  * Soft Background (`UI_SUCCESS_SOFT`): `#EDF9F0` (subtle mint)
+  * Border: `#86EFAC` (soft bright green, 1–2px)
+  * Solid / Text / Foreground (`UI_SUCCESS`): `#15803D` (vivid emerald green)
 * **Dark Mode**:
-  * Soft Background: `#193C32` / `#1B382B` (deep jade)
-  * Border: `#274916`
-  * Solid / Text / Foreground: `#5CCB8A` / `#49AA19` (high-visibility bright green)
+  * Soft Background: `#113322` (deep jade green)
+  * Border: `#226633`
+  * Solid / Text / Foreground: `#55DD77` (high-visibility bright green)
 
 #### B. Warning / Rest / Pending (Warning)
 * **Context**: Eye-care rest underway, quota running low, pending changes, bedtime approaching.
 * **Light Mode**:
-  * Soft Background (`UI_WARNING_SOFT`): `#FFF7E6` (warm soft apricot/cream)
-  * Border: `#F59E0B` (warm amber border, 1–2px, reinforcing outer contour)
-  * Solid / Text / Foreground (`UI_WARNING`): `#D95A00` (high-contrast deep warm amber orange, resolving washed-out readability issues), deep emphasis `#B24400`
+  * Soft Background (`UI_WARNING_SOFT`): `#FFFBEB` (warm soft apricot/cream)
+  * Border: `#FCD34D` (warm amber border, 1–2px, reinforcing outer contour)
+  * Solid / Text / Foreground (`UI_WARNING`): `#B45309` (high-contrast amber orange, WCAG AA >= 4.5:1 compliant)
 * **Dark Mode**:
-  * Soft Background: `#332211` / `#40351F` (deep warm sepia)
-  * Border: `#874D00`
-  * Solid / Text / Foreground: `#FFA940` / `#F2C14E` (bright golden orange)
+  * Soft Background: `#332211` (deep warm sepia)
+  * Border: `#885511`
+  * Solid / Text / Foreground: `#FFBB33` (bright golden orange)
 
 #### C. Restriction / Danger / Exhausted (Danger)
 * **Context**: Daily limit reached, bedtime lock active, quota exhausted, safety error.
 * **Light Mode**:
-  * Soft Background (`UI_DANGER_SOFT`): `#FFE9ED` / `#FFF1F0` (light rose)
-  * Border: `#FFA39E` (rose pink)
-  * Solid / Text / Foreground (`UI_DANGER`): `#B92F46` / `#F5222D` (vivid ruby crimson)
+  * Soft Background (`UI_DANGER_SOFT`): `#FEF2F2` (light rose)
+  * Border: `#FCA5A5` (rose pink)
+  * Solid / Text / Foreground (`UI_DANGER`): `#C42B45` (vivid ruby crimson)
 * **Dark Mode**:
-  * Soft Background: `#462936` (deep roseate)
-  * Border: `#78061A`
-  * Solid / Text / Foreground: `#FF7A85` / `#FF4D4F` (fluorescent coral red)
+  * Soft Background: `#441122` (deep roseate)
+  * Border: `#882233`
+  * Solid / Text / Foreground: `#FF7788` (fluorescent coral red)
 
 #### D. Brand Accent & Information (Accent / Info)
 * **Context**: Focus rings, decision sequence pills, keyframe dots, default active segments.
-* **Light Mode**: Accent `#245BC4` / `#1890FF`, Soft background `#E4EDFF` / `#BAE7FF`.
-* **Dark Mode**: Accent `#91B9FF` / `#69C0FF`, Soft background `#273E60` / `#113559`.
+* **Light Mode**: Accent `#126B5B` (Teal), Soft background `#E2F1ED`.
+* **Dark Mode**: Accent `#33DDBB` (Cyan-Teal), Soft background `#113333`.
 
 ---
+
+
+#### E. Night & Bedtime Schedule (Night)
+* **Context**: Bedtime schedule active, nightly curfew countdown, peaceful wind-down.
+* **Light Mode**: Solid `#5B47D6` (night star purple), Soft background `#F0EDFF`, Border `#C4B5FD`.
+* **Dark Mode**: Solid `#AA99FF`, Soft background `#221144`, Border `#5544AA`.
 
 ## 3. Spatial Typography & Dynamic Alignment Contracts
 
@@ -149,13 +155,13 @@ Across the Nintendo Switch 1280x720 global canvas, all main pages (Child Home, P
 * **Segments**:
   * **Played Segment**: Brand accent (`UI_ACCENT`).
   * **Bedtime Lock Segment**: Dark slate / danger-soft diagonal strip with crescent moon icon.
-  * **Remaining Playable**: Soft mint (`#B7EB8F`) or translucent accent.
+  * **Remaining Playable**: Soft mint (`#86EFAC`) or translucent accent.
 * **Current Time Needle**: Vertical high-contrast line with subtle outer shadow and indicator tip.
 
 ### 4.3 Continuous Play Forecast Bar
 * **Alternating Session & Rest Chunks**:
   * Play Session: Vivid blue (`#1890FF` / `#245BC4`), rounded rectangle.
-  * Rest Period: Warm amber (`#FFF7E6` bg + `#FA8C16` border), displaying rest duration clearly.
+  * Rest Period: Warm amber (`#FFFBEB` bg + `#FA8C16` border), displaying rest duration clearly.
   * Exhaustion Point: Pulsing micro-circle paired with an endpoint time balloon.
 
 ![Today: plan and status composite control preview](../images/usage-en/parent/today-planning-light.png)
@@ -190,8 +196,8 @@ The view moves beyond rigid and cramped layouts, adopting conversational, parent
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
   * Child and parent cards, code slots, keypad keys and buttons share closed rounded outlines (radius r=4 for cards/buttons, full half-height for pills). CPU span calculations render smooth rounded fills and outer borders; both normal 1px and emphasized 2px borders remain continuous without jagged seams.
-  * Card Surface: `#131B2A` with high `0xE6` opacity, effectively shielding background game graphics.
-  * Decorative Border: `#233047` with subtle `0xB0` opacity, providing restrained, clean edges.
+  * Card Surface: `#112233` with high `0xE6` opacity, effectively shielding background game graphics.
+  * Decorative Border: `#334455` with subtle `0xB0` opacity, providing restrained, clean edges.
   * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm sepia warning `#332211`, dark jade success `#193C32`).
 * **Font, Glyph & Handheld Legibility Contract**:
   * Due to Tesla sysmodule memory constraints (~6MB heap allocation), overlays cannot bundle external TTF/OTF fonts.
@@ -250,7 +256,7 @@ When authoring or updating Companion NRO pages or overlays:
 - [ ] **Overlay Dark Baseline**: Overlay strictly locks to the dark palette, with surfaces tuned to Tesla's translucent black background.
 - [ ] **Overlay Zero-Emoji Contract**: Overlay strings contain no 4-byte emojis; controller prompts strictly use official Switch font glyphs (`\uE0E0`, etc.).
 - [ ] **Contrast & Luminance**: Text passes legibility standards on handheld screens (Light mode primary text $\ge$ `#172640`, Dark mode primary text $\ge$ `#F3F6FD`).
-- [ ] **Semantic Color Harmony**: Active/success uses fresh green (`#52C41A` / `#F6FFED`), rest/warning uses high-contrast warm amber (`#D95A00` / `#FFF7E6`), limits use crimson (`#B92F46` / `#FFE9ED`). Avoid muddy yellow/brown tones.
+- [ ] **Semantic Color Harmony**: Active/success uses fresh green (`#52C41A` / `#EDF9F0`), rest/warning uses high-contrast warm amber (`#D95A00` / `#FFFBEB`), limits use crimson (`#B92F46` / `#FFE9ED`). Avoid muddy yellow/brown tones.
 - [ ] **Dynamic Text Measurement**: Adjacent items and badges calculate positions dynamically using `measure_text(...)`.
 - [ ] **Edge-to-Edge Right Alignment**: Right-hand descriptions and metrics align strictly via `card_x + card_w - padding - desc_w`.
 - [ ] **Text Overflow Protection**: Long strings or localized variations use `fit_text(...)` with ellipses to prevent layout breaking.

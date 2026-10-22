@@ -57,6 +57,10 @@ typedef struct {
     uint32_t warning_border;
     uint32_t danger_border;
     uint32_t warning_text;
+    /* 就寝/夜间作息语义色（星夜紫） */
+    uint32_t night;
+    uint32_t night_soft;
+    uint32_t night_border;
 } PtcUiPalette;
 
 typedef struct {

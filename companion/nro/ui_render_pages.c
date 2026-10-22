@@ -255,19 +255,19 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     bool bedtime_focused = (model->selected_index == 9 && !model->parent_footer_focused);
     fill_round_rect(pixels, stride, bedtime_card, 8, bedtime_focused ? UI_ACCENT_SOFT : UI_RAISED);
     if (bedtime_focused) draw_focus_ring(pixels, stride, bedtime_card, 8);
-    else draw_rect_outline(pixels, stride, bedtime_card, 8, 1, bedtime_enforcing ? UI_DANGER : UI_BORDER);
+    else draw_rect_outline(pixels, stride, bedtime_card, 8, 1, bedtime_enforcing ? UI_NIGHT : UI_BORDER);
     draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 20, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_INK);
     PtcPolicyStatus policies;
     ptc_ui_render_policy_status(model, &policies);
     const char *bedtime_badge = ptc_ui_text(policies.bedtime.badge);
-    uint32_t b_badge_color = policy_display_color(policies.bedtime.state);
+    uint32_t b_badge_color = policies.bedtime.state == PTC_POLICY_ACTIVE ? UI_NIGHT : policy_display_color(policies.bedtime.state);
     int bb_w = measure_text(bedtime_badge, 12) + 16;
     int b_ch_x = bedtime_card.x + bedtime_card.width - 16;
     draw_chevron_right(pixels, stride, b_ch_x, bedtime_card.y + bedtime_card.height / 2, 5,
         bedtime_focused ? UI_ACCENT : UI_MUTED);
     UiRect bb_rect = {b_ch_x - 12 - bb_w, bedtime_card.y + 8, bb_w, 20};
     fill_round_rect(pixels, stride, bb_rect, 4,
-        policies.bedtime.state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT : UI_PAGE);
+        policies.bedtime.state == PTC_POLICY_ACTIVE ? UI_NIGHT_SOFT : UI_PAGE);
     draw_text_center(pixels, stride, bb_rect, bedtime_badge, 12, b_badge_color);
     char fitted_bedtime[256];
     fit_text(fitted_bedtime, sizeof(fitted_bedtime), policies.bedtime.detail, 12, bedtime_card.width - 24);

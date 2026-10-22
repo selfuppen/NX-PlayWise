@@ -158,7 +158,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     uint32_t ring_color = UI_SUCCESS;
     if (fraction < 0.0f) fraction = 0.0f;
     if (fraction > 1.0f) fraction = 1.0f;
-    if (bedtime_enforcing || eye_resting || (model->remaining_available && model->remaining_minutes <= 10)) ring_color = UI_DANGER;
+    if (bedtime_enforcing) ring_color = UI_NIGHT;
+    else if (eye_resting) ring_color = UI_WARNING;
+    else if (model->remaining_available && model->remaining_minutes <= 10) ring_color = UI_DANGER;
     else if (model->remaining_available && model->remaining_minutes <= 30) ring_color = UI_WARNING;
 
     ptc_ui_format_home_remaining(model, ptc_ui_render_now(), remaining, sizeof(remaining));
@@ -173,8 +175,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
          model->remaining_minutes >= 0 && model->remaining_minutes <= 10) ||
         bedtime_enforcing || eye_resting) {
         int phase = get_breathing_phase();
+        uint32_t breath_c = bedtime_enforcing ? UI_BLENDED(night) : (eye_resting ? UI_BLENDED(warning) : UI_BLENDED(danger));
         draw_rect_outline(pixels, stride, top_box, 16, 2,
-                          UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
+                          UI_RGB(ui_mix_rgb(breath_c, 0xFFFFFF, phase * 3)));
     }
 
     /* 左列 (宽度 330)：剩余时间、主数值、额度进度槽、状态说明 */
@@ -236,8 +239,8 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         snprintf(gauge_right, sizeof(gauge_right), ptc_ui_text(PTC_UI_T_D_MIN_LEFT), model->remaining_minutes);
     }
     if (gauge_left[0]) {
-        draw_text(pixels, stride, slot.x, slot.y + 18, gauge_left, 12, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
-        draw_text(pixels, stride, slot.x + slot.width - measure_text(gauge_right, 12), slot.y + 18, gauge_right, 12, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+        draw_text(pixels, stride, slot.x, slot.y + 18, gauge_left, 12, bedtime_enforcing ? UI_NIGHT : UI_RGB(UI_BLENDED(hero_secondary)));
+        draw_text(pixels, stride, slot.x + slot.width - measure_text(gauge_right, 12), slot.y + 18, gauge_right, 12, bedtime_enforcing ? UI_NIGHT : UI_RGB(UI_BLENDED(hero_secondary)));
     }
 
     if (bedtime_enforcing) {
@@ -288,8 +291,8 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     /* 守护卡 2：就寝计划周期 */
     const PtcPolicyDisplay *bed_policy = &policies.bedtime;
     UiRect card2 = {c_x, top_box.y + 96, c_w, c_h};
-    uint32_t bed_fg = policy_display_color(bed_policy->state);
-    uint32_t bed_bg = bed_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT :
+    uint32_t bed_fg = bed_policy->state == PTC_POLICY_ACTIVE ? UI_NIGHT : policy_display_color(bed_policy->state);
+    uint32_t bed_bg = bed_policy->state == PTC_POLICY_ACTIVE ? UI_NIGHT_SOFT :
         bed_policy->state == PTC_POLICY_PENDING || bed_policy->state == PTC_POLICY_WAITING ||
         bed_policy->state == PTC_POLICY_EXHAUSTED ? UI_WARNING_SOFT : UI_ACCENT_SOFT;
     fill_round_rect(pixels, stride, card2, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
@@ -305,7 +308,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     char fitted_bed[256];
     fit_text(fitted_bed, sizeof(fitted_bed), bed_policy->detail, 13, card2.width - 28);
     draw_text(pixels, stride, card2.x + 14, card2.y + 48, fitted_bed, 13,
-        bed_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER : UI_RGB(UI_BLENDED(on_hero)));
+        bed_policy->state == PTC_POLICY_ACTIVE ? UI_NIGHT : UI_RGB(UI_BLENDED(on_hero)));
 
     /* 守护卡 3：电视/底座限制 */
     const PtcPolicyDisplay *dock_policy = &policies.dock;

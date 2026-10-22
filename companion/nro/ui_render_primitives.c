@@ -89,6 +89,9 @@ uint32_t resolve_color(uint32_t source)
     case UI_HERO: return pack_rgb(UI_BLENDED(hero));
     case UI_ON_HERO: return pack_rgb(UI_BLENDED(on_hero));
     case UI_HERO_SECONDARY: return pack_rgb(UI_BLENDED(hero_secondary));
+    case UI_NIGHT: return pack_rgb(UI_BLENDED(night));
+    case UI_NIGHT_SOFT: return pack_rgb(UI_BLENDED(night_soft));
+    case UI_NIGHT_BORDER: return pack_rgb(UI_BLENDED(night_border));
     default: return pack_rgb(source);
     }
 }

@@ -854,7 +854,7 @@
             child_rule(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye.compact, eye.detail,
                 eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary, ChildCardKind::Eye);
             child_rule(renderer, ptc_ui_text(PTC_UI_T_POLICY_BED_LABEL), policies.bedtime.detail, nullptr,
-                policy_color(policies.bedtime), ChildCardKind::Bedtime);
+                bedtime_policy_color(policies.bedtime), ChildCardKind::Bedtime);
             child_rule(renderer, ptc_ui_text(PTC_UI_T_POLICY_DOCK_LABEL), policies.dock.detail, nullptr,
                 policy_color(policies.dock), ChildCardKind::Dock);
 
@@ -1123,7 +1123,7 @@
         const char *num_label = nullptr;
         const char *sub = nullptr; const char *note = nullptr;
         if (bedtime) {
-            head = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_TITLE); tone = pal.danger;
+            head = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_TITLE); tone = pal.night;
             sub = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_HERO);
             std::snprintf(window, sizeof(window), ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_WINDOW),
                 summary.bedtime_start_minute / 60, summary.bedtime_start_minute % 60,
@@ -1277,7 +1277,7 @@
         std::snprintf(bed_text, sizeof(bed_text), "%s", policies.bedtime.compact);
         std::snprintf(dock_text, sizeof(dock_text), "%s", policies.dock.compact);
         const auto eye_color = eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary;
-        const auto bed_color = policy_color(policies.bedtime);
+        const auto bed_color = bedtime_policy_color(policies.bedtime);
         const auto dock_color = policy_color(policies.dock);
         const bool bed_on = policies.bedtime.state != PTC_POLICY_OFF && policies.bedtime.state != PTC_POLICY_NONE_TODAY;
         const bool dock_on = policies.dock.state != PTC_POLICY_OFF && policies.dock.state != PTC_POLICY_NONE_TODAY;

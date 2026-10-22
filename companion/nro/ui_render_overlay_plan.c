@@ -337,9 +337,8 @@ static void draw_bedtime_timeline_strip(
         if (x_eve_start < bar.x) x_eve_start = bar.x;
         if (x_eve_start > bar.x + bar.width) x_eve_start = bar.x + bar.width;
 
-        bool is_dark = (g_theme.resolved == PTC_UI_RESOLVED_DARK);
-        uint32_t bed_block_bg = is_dark ? UI_RGB(0x2C2140) : UI_RGB(0xEAE6F5);
-        uint32_t bed_block_fg = is_dark ? UI_RGB(0xDFD8F5) : UI_RGB(0x564875);
+        uint32_t bed_block_bg = UI_NIGHT_SOFT;
+        uint32_t bed_block_fg = UI_NIGHT;
 
         /* 清晨就寝区间 [bar.x, x_morn_end] */
         if (x_morn_end > bar.x) {
@@ -367,8 +366,8 @@ static void draw_bedtime_timeline_strip(
 
         /* 立断与解禁指示线 */
         if (x_eve_start >= bar.x && x_eve_start <= bar.x + bar.width) {
-            fill_rect(pixels, stride, (UiRect){x_eve_start - 1, bar.y, 2, bar.height}, UI_DANGER);
-            fill_round_rect(pixels, stride, (UiRect){x_eve_start - 3, bar.y, 6, 4}, 1, UI_DANGER);
+            fill_rect(pixels, stride, (UiRect){x_eve_start - 1, bar.y, 2, bar.height}, UI_NIGHT);
+            fill_round_rect(pixels, stride, (UiRect){x_eve_start - 3, bar.y, 6, 4}, 1, UI_NIGHT);
         }
         if (x_morn_end >= bar.x && x_morn_end <= bar.x + bar.width) {
             fill_rect(pixels, stride, (UiRect){x_morn_end - 1, bar.y, 2, bar.height}, UI_SUCCESS);
