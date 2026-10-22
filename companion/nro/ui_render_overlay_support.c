@@ -3,51 +3,53 @@
 
 static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     char status[192];
     char shortcut_hint[160];
     int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_PARENT_SHORTCUT),
+                             ptc_ui_text(PTC_UI_T_PARENT_AREA_SHORTCUT_KEY_MANAGEMENT));
     for (index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
         UiRect option = to_uirect(ptc_ui_shortcut_option_rect(index));
         bool selected = index == model->setup_shortcut_index;
         bool chosen = model->shortcut_draft_enabled && selected;
-        fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 12, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
-        draw_text(pixels, stride, option.x + 14, option.y + 23,
-                  ptc_ui_shortcut_common_label(index), 16,
+        fill_round_rect(pixels, stride, option, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 10, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+        draw_text(pixels, stride, option.x + 16, option.y + 28,
+                  ptc_ui_shortcut_common_label(index), 17,
                   selected ? UI_ACCENT : UI_INK);
         if (chosen) {
             const char *save_text = ptc_ui_text(PTC_UI_T_PENDING_SAVE);
-            int tw = measure_text(save_text, 15);
-            draw_text(pixels, stride, option.x + option.width - tw - 16, option.y + 23,
-                      save_text, 15, UI_SUCCESS);
+            int tw = measure_text(save_text, 14);
+            draw_text(pixels, stride, option.x + option.width - tw - 16, option.y + 28,
+                      save_text, 14, UI_SUCCESS);
         }
     }
-    draw_dialog_button(pixels, stride, ptc_ui_shortcut_disable_rect(),
-                       ptc_ui_text(PTC_UI_T_ZL_CLOSE_CUSTOM_SHORTCUT_KEYS), UI_DANGER_SOFT, UI_DANGER, true);
-    draw_dialog_button(pixels, stride, ptc_ui_shortcut_hint_rect(),
-                       model->shortcut_draft_show_hint ? ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_DISPLAY) : ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_HIDE),
-                       UI_PAGE, UI_INK, true);
     ptc_ui_format_custom_shortcut_hint(model->shortcut_draft_label, shortcut_hint, sizeof(shortcut_hint));
     snprintf(status, sizeof(status), "%s",
              model->shortcut_draft_enabled ? shortcut_hint : ptc_ui_text(PTC_UI_T_THE_CUSTOM_ENTRANCE_HAS_BEEN_CLOSED_FIXED));
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 516, status, 18,
-              model->shortcut_draft_enabled ? UI_SUCCESS : UI_DANGER);
-    draw_overlay_actions(pixels, stride, model, ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE));
+    draw_wrapped_text(pixels, stride, 54, 544, status, 14, 1172, 18, 1,
+                      model->shortcut_draft_enabled ? UI_SUCCESS : UI_DANGER);
+
+    home_button(pixels, stride, ptc_ui_shortcut_disable_rect(),
+                ptc_ui_text(PTC_UI_T_ZL_CLOSE_CUSTOM_SHORTCUT_KEYS), false, false, false);
+    home_button(pixels, stride, ptc_ui_shortcut_hint_rect(),
+                model->shortcut_draft_show_hint ? ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_DISPLAY) : ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_HIDE),
+                false, false, false);
+    home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE), true, false, model->waiting);
 }
 
 static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     UiRect details;
     char value[128];
     const char *status = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
     uint32_t status_color = UI_MUTED;
-    draw_dialog_shell(pixels, stride, model, &dialog, 960, 560);
-    details = (UiRect){dialog.x + 34, dialog.y + 106, dialog.width - 68, 326};
-    fill_round_rect(pixels, stride, details, 16, UI_RAISED);
-    draw_rect_outline(pixels, stride, details, 16, 1, UI_BORDER);
+    bool pending = model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only;
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_SOFTWARE_INFO),
+                             ptc_ui_text(PTC_UI_T_VERSION_PROJECT_REPOSITORY_AND_PARENT_PAGE));
+    details = (UiRect){54, 176, 1172, 468};
+    draw_plan_card(pixels, stride, details, false);
     const char *lbl_host = ptc_ui_text(PTC_UI_T_HOST_APPLICATION);
     const char *lbl_bg = ptc_ui_text(PTC_UI_T_CURRENT_BACKGROUND);
     const char *lbl_status = ptc_ui_text(PTC_UI_T_LOADING_STATUS);
@@ -60,19 +62,21 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     w = measure_text(lbl_repo, 18); if (w > max_lbl_w) max_lbl_w = w;
     w = measure_text(lbl_parent, 18); if (w > max_lbl_w) max_lbl_w = w;
 
-    int val_offset = 24 + max_lbl_w + 16;
-    if (val_offset < 180) val_offset = 180;
-    int val_max_w = details.width - val_offset - 20;
+    int val_offset = 34 + max_lbl_w + 28;
+    if (val_offset < 220) val_offset = 220;
+    int val_max_w = details.width - val_offset - 34;
 
-    draw_text(pixels, stride, details.x + 24, details.y + 38, lbl_host, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + 34, details.y + 56, lbl_host, 18, UI_MUTED);
     snprintf(value, sizeof(value), "%.24s  (%.88s)", model->software_version,
              model->app_release_id[0] ? model->app_release_id : ptc_ui_text(PTC_UI_T_UNKNOWN_IDENTITY));
     fit_text(value, sizeof(value), value, 18, val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 38, value, 18, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 82, lbl_bg, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 56, value, 18, UI_ACCENT);
+
+    draw_text(pixels, stride, details.x + 34, details.y + 118, lbl_bg, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->backend_release_id[0] ? model->backend_release_id : ptc_ui_text(PTC_UI_T_UNABLE_TO_TRUSTWORTHY_CONFIRMATION), 18,
              val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 82, value, 18, UI_INK);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 118, value, 18, UI_INK);
+
     if (model->hot_reload_status == PTC_UI_HOT_RELOAD_CURRENT ||
         model->hot_reload_status == PTC_UI_HOT_RELOAD_SUCCESS) {
         status = ptc_ui_text(PTC_UI_T_LOADED); status_color = UI_SUCCESS;
@@ -87,46 +91,60 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_UNAVAILABLE) {
         status = ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_CANNOT_BE_LOADED_YET); status_color = UI_WARNING;
     }
-    draw_text(pixels, stride, details.x + 24, details.y + 126, lbl_status, 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 126, status, 20, status_color);
-    draw_wrapped_text(pixels, stride, details.x + val_offset, details.y + 154,
+    draw_text(pixels, stride, details.x + 34, details.y + 182, lbl_status, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 182, status, 20, status_color);
+    draw_wrapped_text(pixels, stride, details.x + val_offset, details.y + 212,
         model->hot_reload_detail, 15, val_max_w, 20, 2, UI_MUTED);
-    draw_text(pixels, stride, details.x + 24, details.y + 216, lbl_repo, 18, UI_MUTED);
+
+    draw_text(pixels, stride, details.x + 34, details.y + 300, lbl_repo, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->repository_url, 17, val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 216, value, 17, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 266, lbl_parent, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 300, value, 17, UI_ACCENT);
+
+    draw_text(pixels, stride, details.x + 34, details.y + 362, lbl_parent, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->pwa_url, 17, val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 266, value, 17, UI_SUCCESS);
-    if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only) {
-        draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_NOT_YET),
-                           UI_RAISED, UI_INK, false);
-        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(model->hot_reload_capture_restart
-            ? PTC_UI_T_CAPTURE_RESTART_BUTTON : PTC_UI_T_A_LOAD_NEW_VERSION),
-                           UI_ACCENT, UI_ON_ACCENT, false);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 362, value, 17, UI_SUCCESS);
+
+    if (pending) {
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1), ptc_ui_text(PTC_UI_T_B_NOT_YET),
+                    false, false, false);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                    ptc_ui_text(model->hot_reload_capture_restart
+                        ? PTC_UI_T_CAPTURE_RESTART_BUTTON : PTC_UI_T_A_LOAD_NEW_VERSION),
+                    true, false, false);
     } else {
-        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_CLOSE),
-                           UI_ACCENT, UI_ON_ACCENT, false);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                    ptc_ui_text(PTC_UI_T_A_CLOSE), true, false, false);
     }
 }
 
 static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     const char *state = model->album_restriction_state == 0 ? ptc_ui_text(PTC_UI_T_NOT_ENABLED) :
                         model->album_restriction_state == 1 ? ptc_ui_text(PTC_UI_T_ENABLED) :
                         model->album_restriction_state == 2 ? ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2) :
                         model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURED) : ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
     const char *status_lbl = ptc_ui_text(PTC_UI_T_CURRENT_STATUS);
-    int status_lbl_w = measure_text(status_lbl, 17);
-    int state_x = dialog.x + 38 + status_lbl_w + 12;
-    draw_dialog_shell(pixels, stride, model, &dialog, 980, 560);
-    draw_text(pixels, stride, dialog.x + 38, dialog.y + 126, status_lbl, 17, UI_MUTED);
-    draw_text(pixels, stride, state_x, dialog.y + 126, state, 19,
-              model->album_restriction_state == 1 ? UI_SUCCESS :
-              model->album_restriction_state == 2 ? UI_WARNING :
-              model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? UI_ACCENT : UI_MUTED);
-    draw_candidate_button(pixels, stride, ptc_ui_album_refresh_rect(), ptc_ui_text(PTC_UI_T_Y_RETEST),
-                          UI_PAGE, UI_ACCENT, false, false);
+    int status_lbl_w;
+    int state_x;
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS),
+                             ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
+
+    /* 状态条：当前状态 + Y 重新检测 */
+    {
+        UiRect bar = {54, 176, 1172, 72};
+        fill_round_rect(pixels, stride, bar, 12, UI_PAGE);
+        draw_rect_outline(pixels, stride, bar, 12, 1, UI_BORDER);
+        status_lbl_w = measure_text(status_lbl, 17);
+        state_x = bar.x + 22 + status_lbl_w + 14;
+        draw_text(pixels, stride, bar.x + 22, bar.y + 44, status_lbl, 17, UI_MUTED);
+        draw_text(pixels, stride, state_x, bar.y + 44, state, 19,
+                  model->album_restriction_state == 1 ? UI_SUCCESS :
+                  model->album_restriction_state == 2 ? UI_WARNING :
+                  model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? UI_ACCENT : UI_MUTED);
+        home_button(pixels, stride, ptc_ui_album_refresh_rect(), ptc_ui_text(PTC_UI_T_Y_RETEST),
+                    false, false, false);
+    }
+
     for (int index = 0; index < 2; ++index) {
         UiRect card = to_uirect(ptc_ui_album_action_rect(index));
         bool selected = model->overlay_selection == index;
@@ -141,24 +159,30 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
                                 (model->album_restriction_state == 2 && model->album_backup_valid ? ptc_ui_text(PTC_UI_T_FORCE_RECOVERY_OF_TRUSTED_BACKUPS) : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_STARTUP_MODE));
         int title_size = 21;
         while (title_size > 16 && measure_text(card_title, title_size) > card.width - 48) --title_size;
-        draw_text(pixels, stride, card.x + 24, card.y + 40, card_title, title_size, enabled ? UI_INK : UI_DISABLED);
+        draw_text(pixels, stride, card.x + 24, card.y + 44, card_title, title_size, enabled ? UI_INK : UI_DISABLED);
         const char *card_desc = index == 0
             ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
                 ? ptc_ui_text(PTC_UI_T_THE_CURRENT_DISK_CONFIGURATION_ALREADY_PROVIDES_THE)
                 : ptc_ui_text(PTC_UI_T_FIRST_MAKE_A_COMPLETE_BACKUP_OF_RELEVANT))
             : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_CONFIGURATION_ACCORDING_TO_THE);
-        draw_wrapped_text(pixels, stride, card.x + 24, card.y + 76, card_desc,
-                          14, card.width - 48, 20, 3, enabled ? UI_MUTED : UI_DISABLED);
-        draw_text(pixels, stride, card.x + 24, card.y + 194,
-                  enabled ? ptc_ui_text(PTC_UI_T_A_CONTINUE) : ptc_ui_text(PTC_UI_T_CURRENT_STATUS_IS_NOT_AVAILABLE), 16,
-                  enabled ? UI_ACCENT : UI_DISABLED);
+        draw_wrapped_text(pixels, stride, card.x + 24, card.y + 82, card_desc,
+                          15, card.width - 48, 22, 4, enabled ? UI_MUTED : UI_DISABLED);
+
+        /* 底部行动胶囊：与护眼页卡片内按钮同一语义 */
+        {
+            UiRect pill = {card.x + 24, card.y + card.height - 62, card.width - 48, 40};
+            const char *pill_label = enabled ? ptc_ui_text(PTC_UI_T_A_CONTINUE)
+                                             : ptc_ui_text(PTC_UI_T_CURRENT_STATUS_IS_NOT_AVAILABLE);
+            fill_round_rect(pixels, stride, pill, 20, enabled ? (selected ? UI_ACCENT : UI_ACCENT_SOFT) : UI_RAISED);
+            draw_rect_outline(pixels, stride, pill, 20, 1, enabled ? UI_ACCENT : UI_BORDER);
+            draw_text_center(pixels, stride, pill, pill_label, 16,
+                             enabled ? (selected ? UI_ON_ACCENT : UI_ACCENT) : UI_DISABLED);
+        }
     }
+
     if (model->album_restriction_detail[0]) {
-        draw_wrapped_text(pixels, stride, dialog.x + 38, dialog.y + 432,
-                          model->album_restriction_detail, 14, dialog.width - 76, 20, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, 54, 600, model->album_restriction_detail, 14, 1172, 20, 2, UI_MUTED);
     }
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
-                       UI_RAISED, UI_INK, true);
 }
 
 static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -173,9 +197,11 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         ptc_ui_text(PTC_UI_T_REFRESHING_LIGHT_BACKGROUND),
         ptc_ui_text(PTC_UI_T_SOFT_DARK_BACKGROUND)
     };
-    UiRect dialog;
     int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1160, 600);
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_APPEARANCE_THEME),
+                             !g_theme.system_theme_available
+                                 ? ptc_ui_text(PTC_UI_T_THE_SYSTEM_THEME_IS_TEMPORARILY_UNAVAILABLE_AND)
+                                 : ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B));
 
     for (index = 0; index < 3; ++index) {
         UiRect option = to_uirect(ptc_ui_theme_option_rect(index));
@@ -200,11 +226,11 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         }
 
         // Subtitle description (measured or wrapped)
-        draw_wrapped_text(pixels, stride, option.x + 20, option.y + 68, DETAILS[index],
+        draw_wrapped_text(pixels, stride, option.x + 20, option.y + 62, DETAILS[index],
                           15, option.width - 40, 22, 2, UI_MUTED);
 
         // Realistic UI Miniature Preview Screen inside the card
-        UiRect preview = {option.x + 18, option.y + 116, option.width - 36, 204};
+        UiRect preview = {option.x + 18, option.y + 90, option.width - 36, 204};
         draw_rect_outline(pixels, stride, preview, 12, 1, selected ? UI_ACCENT : UI_BORDER);
 
         if (index == PTC_UI_THEME_LIGHT) {
@@ -269,20 +295,15 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         }
 
         // Selection pill / button at bottom of card
-        UiRect select_btn = {option.x + 24, option.y + option.height - 52, option.width - 48, 38};
+        UiRect select_btn = {option.x + 24, option.y + option.height - 74, option.width - 48, 38};
         fill_round_rect(pixels, stride, select_btn, 19, selected ? UI_ACCENT : UI_SURFACE);
         draw_rect_outline(pixels, stride, select_btn, 19, 1, selected ? UI_FOCUS : UI_CONTROL);
         draw_text_center(pixels, stride, (UiRect){select_btn.x, select_btn.y + 6, select_btn.width, select_btn.height},
                          selected ? ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE) : (is_current ? ptc_ui_text(PTC_UI_T_CURRENT) : ptc_ui_text(PTC_UI_T_A_CONFIRM)),
                          16, selected ? UI_ON_ACCENT : UI_INK);
     }
-
-    // Bottom guidance footer
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 550,
-              !g_theme.system_theme_available && model->overlay_selection == PTC_UI_THEME_SYSTEM
-                  ? ptc_ui_text(PTC_UI_T_THE_SYSTEM_THEME_IS_TEMPORARILY_UNAVAILABLE_AND)
-                  : ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B),
-              18, !g_theme.system_theme_available ? UI_WARNING : UI_MUTED);
+    home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE), true, false, model->waiting);
 }
 
 static void draw_language_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -291,26 +312,28 @@ static void draw_language_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
     const char *DETAILS[] = {
         ptc_ui_text(PTC_UI_T_USE_SWITCH_SYSTEM_LANGUAGE), ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_SIMPLIFIED_CHINESE), ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_TRADITIONAL_CHINESE), "Always use English"
     };
-    UiRect dialog;
-    draw_dialog_shell(pixels, stride, model, &dialog, 820, 360);
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_UI_LANGUAGE),
+                             ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B));
     for (int index = 0; index < 4; ++index) {
         UiRect option = to_uirect(ptc_ui_language_option_rect(index));
         bool selected = index == model->overlay_selection;
-        fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 12, selected ? 3 : 1,
-            selected ? UI_ACCENT : UI_CONTROL);
-        int label_size = 20;
-        while (label_size > 14 && measure_text(LABELS[index], label_size) > option.width - 16) --label_size;
-        draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 12, option.width, 30}, LABELS[index], label_size, UI_INK);
+        fill_round_rect(pixels, stride, option, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 14, selected ? 2 : 1,
+            selected ? UI_ACCENT : UI_BORDER);
 
-        int detail_size = 14;
-        while (detail_size > 11 && measure_text(DETAILS[index], detail_size) > option.width - 16) --detail_size;
-        draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 44, option.width, 24}, DETAILS[index], detail_size, UI_MUTED);
+        /* Radio indicator on the right keeps the long label column wide. */
+        UiRect radio = {option.x + option.width - 62, option.y + (option.height - 26) / 2, 26, 26};
+        fill_round_rect(pixels, stride, radio, 13, selected ? UI_ACCENT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, radio, 13, 2, selected ? UI_ACCENT : UI_BORDER);
+        if (selected) fill_round_rect(pixels, stride, (UiRect){radio.x + 7, radio.y + 7, 12, 12}, 6, UI_ON_ACCENT);
+
+        draw_text(pixels, stride, option.x + 28, option.y + 46, LABELS[index], 20,
+                  selected ? UI_ACCENT : UI_INK);
+        draw_wrapped_text(pixels, stride, option.x + 28, option.y + 80, DETAILS[index], 14,
+                          option.width - 130, 19, 1, UI_MUTED);
     }
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 306,
-        ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B), 16, UI_MUTED);
+    home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE), true, false, model->waiting);
 }
 
 static void draw_support_event_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

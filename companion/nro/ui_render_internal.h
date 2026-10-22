@@ -179,6 +179,12 @@ void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char
 void fit_text(char *out, size_t out_size, const char *text, int size, int max_width);
 void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const char *subtitle);
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+void draw_subpage_nav(uint32_t *pixels, uint32_t stride, const char *back_label, const char *path);
+/* Full-page shell for the safety & preferences secondary pages. Repaints the
+   whole screen (the parent settings page is already drawn underneath), then the
+   header, breadcrumb row and footer anchors. */
+void draw_settings_page_shell(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                              const char *page_name, const char *subtitle);
 uint32_t time_projection_color(PtcUiTimeState state);
 void draw_shoulder_key_glyph(uint32_t *pixels, uint32_t stride, int x, int y,
                              int width, int height, const char *key_str, bool disabled);

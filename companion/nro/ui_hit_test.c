@@ -130,7 +130,24 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&
             ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&
+            ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(1), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    /* The QR export button reuses the dialog confirm slot but keeps its own
+       action id so the export path never goes through the generic confirm. */
+    if (model->overlay == PTC_UI_OVERLAY_QR &&
+        ptc_ui_rect_contains(ptc_ui_qr_export_rect(), x, y)) {
+        return make_hit(PTC_UI_HIT_QR_EXPORT, 0);
+    }
+    if (model->overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
+        if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(1), x, y))
+            return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
+        if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y))
+            return make_hit(PTC_UI_HIT_HISTORY_NEXT, 0);
+        if (ptc_ui_rect_contains(ptc_ui_settings_page_primary_rect(), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
         (model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
@@ -156,7 +173,6 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     }
     switch (model->overlay) {
     case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
-    case PTC_UI_OVERLAY_ACTIVITY_HISTORY:
         if (ptc_ui_rect_contains(ptc_ui_redemption_history_prev_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
         }
@@ -401,8 +417,6 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_QR:
-        if (ptc_ui_rect_contains(ptc_ui_qr_export_rect(), x, y))
-            return make_hit(PTC_UI_HIT_QR_EXPORT, 0);
         break;
     case PTC_UI_OVERLAY_PARENT_EXPORT_RESULT:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
@@ -542,6 +556,13 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
     }
     bool plan_subpage = model->parent_page == PTC_UI_PARENT_PLAN &&
         model->plan_page != PTC_UI_PLAN_PAGE_ROOT;
+    /* The dock page keeps save/waive in the footer action row, so its hit test
+       has to run before the generic plan footer buttons. */
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
+        for (i = 3; i <= 4; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
+    }
     if (ptc_ui_rect_contains(plan_subpage ? ptc_ui_parent_subpage_footer_rect(0) :
                              ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);

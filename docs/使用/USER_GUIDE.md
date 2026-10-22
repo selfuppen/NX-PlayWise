@@ -357,7 +357,7 @@ The parental web generator calculates 8-digit codes locally inside your browser,
 3. Scan the QR code with your parental device to open the web page, verify the device ID, and tap "Import This Device"; if another device configuration exists in the browser, confirm the replacement. The QR code contains your grant secret and must only be scanned by trusted parental devices.
 4. Select the Switch local date and duration, generate the 8-digit code, and share it via phone, message, or in person. Children redeem codes completely offline on the Switch.
 
-![Phone or PC QR code pairing preview (demo secret)](../images/usage/parent/pairing-qr-demo.png)
+![Phone or PC QR code pairing preview (demo secret)](../images/usage/parent/pairing-qr-demo-light.png)
 
 The QR code shown in the image uses a public demo configuration and cannot be used on real home consoles. Scanning simply imports settings into your browser; code calculation is performed entirely client-side. If the webpage is unreachable, use the standalone offline file below or [generate directly on the Switch](#generating-on-switch).
 
@@ -667,7 +667,7 @@ Documentation images fall into two categories, with paths relative to repository
 | Source | Image Paths | Update Method |
 | --- | --- | --- |
 | Automatically Generated Console and Overlay UI Previews | Selected PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support,overlay}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/build/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
-| Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/pairing-qr-demo.png`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
+| Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
 
 Automated previews are generated from production C/C++ rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](../开发/TESTING_GUIDE.md) for details.
 

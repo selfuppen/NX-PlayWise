@@ -1310,7 +1310,7 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     char value[96], line[192];
     int step = compact ? 22 : 24;
     draw_plan_card(pixels, stride, card, false);
-    draw_text(pixels, stride, card.x + 16, card.y + 24, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 16, UI_INK);
+    draw_text(pixels, stride, card.x + 20, card.y + 32, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 17, UI_INK);
     const char *mode = !fresh ? ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM) :
         strcmp(model->operation_mode, "docked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_TV) :
         strcmp(model->operation_mode, "undocked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) : ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
@@ -1321,8 +1321,8 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     if (fresh) snprintf(line, sizeof(line), "%s / %s", mode, state);
     else snprintf(line, sizeof(line), "%s", mode);
     char fitted[192];
-    fit_text(fitted, sizeof(fitted), line, 12, card.width - 32);
-    draw_text(pixels, stride, card.x + 16, card.y + 46, fitted, 12,
+    fit_text(fitted, sizeof(fitted), line, 13, card.width - 40);
+    draw_text(pixels, stride, card.x + 20, card.y + 54, fitted, 13,
         fresh && model->dock_restriction_active ? UI_DANGER : UI_ACCENT);
     const PtcUiTextId labels[] = {PTC_UI_T_DOCK_USED_VALUE_NAMED, PTC_UI_T_DOCK_LEFT_VALUE_NAMED,
         PTC_UI_T_DOCK_LIMIT_VALUE_NAMED, PTC_UI_T_TOTAL_LEFT_VALUE_NAMED};
@@ -1351,11 +1351,11 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         }
         PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("value", value)};
         (void)ptc_ui_text_format(labels[i], line, sizeof(line), args, 1);
-        fit_text(fitted, sizeof(fitted), line, 13, card.width - 32);
-        draw_text(pixels, stride, card.x + 16, card.y + 64 + i * step, fitted, 13, UI_INK);
+        fit_text(fitted, sizeof(fitted), line, 14, card.width - 40);
+        draw_text(pixels, stride, card.x + 20, card.y + 84 + i * step, fitted, 14, UI_INK);
     }
     if (!compact) {
-        UiRect bar = {card.x + 16, card.y + 150, card.width - 32, 6};
+        UiRect bar = {card.x + 20, card.y + 164, card.width - 40, 6};
         fill_round_rect(pixels, stride, bar, 3, UI_RAISED);
         if (known && model->dock_policy.undocked_limit_enabled && !model->dock_policy.force_docked && model->dock_policy.undocked_daily_minutes > 0) {
             int used = model->undocked_used_minutes;
@@ -1365,9 +1365,9 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             if (width > 0) fill_round_rect(pixels, stride, (UiRect){bar.x, bar.y, width, bar.height}, 3, UI_ACCENT);
         }
     }
-    draw_wrapped_text(pixels, stride, card.x + 16, card.y + (compact ? 151 : 172),
-        ptc_ui_text(compact ? PTC_UI_T_DOCK_TOTAL_RELATION_SHORT : PTC_UI_T_DOCK_TOTAL_RELATION), compact ? 10 : 12, card.width - 32, compact ? 12 : 15,
-        compact ? 1 : 3, UI_MUTED);
+    draw_wrapped_text(pixels, stride, card.x + 20, card.y + (compact ? 151 : 188),
+        ptc_ui_text(compact ? PTC_UI_T_DOCK_TOTAL_RELATION_SHORT : PTC_UI_T_DOCK_TOTAL_RELATION), 13, card.width - 40, 17,
+        compact ? 1 : 2, UI_MUTED);
 }
 
 static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1375,77 +1375,114 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
     const PtcDockPolicy *draft = &model->draft_dock_policy;
     int current_mode = (draft->force_docked) ? 1 : (draft->undocked_limit_enabled ? 2 : 0);
 
-    /* --- 左侧配置卡片 --- */
+    /* --- 左侧配置卡：标题 + 意图 + 三个模式行 --- */
+    UiRect config_card = {54, 176, 744, 420};
+    draw_plan_card(pixels, stride, config_card, false);
+    draw_text(pixels, stride, config_card.x + 22, config_card.y + 34,
+              ptc_ui_text(PTC_UI_T_DOCK_INTENT_TITLE), 19, UI_INK);
+    {
+        const char *mode_pill = current_mode == 1 ? ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE) :
+                                current_mode == 2 ? ptc_ui_text(PTC_UI_T_DOCK_LIMIT) : ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF);
+        int pill_w = measure_text(mode_pill, 12) + 24;
+        UiRect pill = {config_card.x + config_card.width - pill_w - 22, config_card.y + 14, pill_w, 24};
+        fill_round_rect(pixels, stride, pill, 6, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, pill, 6, 1, UI_ACCENT);
+        draw_text_center(pixels, stride, pill, mode_pill, 12, UI_ACCENT);
+    }
+    draw_wrapped_text(pixels, stride, config_card.x + 22, config_card.y + 62,
+                      ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT), 13, config_card.width - 44, 18, 2, UI_MUTED);
+
     for (int i = 0; i < 3; ++i) {
         UiRect row = to_uirect(ptc_ui_dock_field_rect(i));
-        bool focus = model->dock_field_focus == i;
+        bool focus = model->dock_field_focus == i && !model->parent_footer_focused;
         bool selected = (current_mode == i);
         bool lite_unsupported = (i == 1) && model->dock_supported_available && !model->dock_supported;
         bool row_disabled = model->disable_flag_present || (i == 1 && lite_unsupported);
-        draw_plan_card(pixels, stride, row, focus);
+        uint32_t title_color = row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK);
 
-        /* 单选圆圈指示器 (Radio Indicator) */
-        UiRect radio = {row.x + row.width - 48, row.y + (row.height - 24) / 2, 24, 24};
-        fill_round_rect(pixels, stride, radio, 12, selected ? UI_ACCENT : UI_RAISED);
-        draw_rect_outline(pixels, stride, radio, 12, 2, selected ? UI_ACCENT : UI_BORDER);
-        if (selected) {
-            fill_round_rect(pixels, stride, (UiRect){radio.x + 6, radio.y + 6, 12, 12}, 6, UI_ON_ACCENT);
+        if (focus) {
+            fill_round_rect(pixels, stride, row, 10, UI_ACCENT_SOFT);
+            draw_focus_ring(pixels, stride, row, 10);
+        } else {
+            fill_round_rect(pixels, stride, row, 10, selected ? UI_RGB(UI_BLENDED(surface_raised)) : UI_RGB(UI_BLENDED(surface)));
+            draw_rect_outline(pixels, stride, row, 10, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
         }
 
-        if (i == 0) {
-            /* 选项 0：不限制屏幕形态 */
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
-            const char *note = ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT);
-            char fitted[192];
-            fit_text(fitted, sizeof(fitted), note, 13, row.width - 80);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, UI_MUTED);
-        } else if (i == 1) {
-            /* 选项 1：仅允许电视大屏 */
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
-            const char *note = lite_unsupported ? ptc_ui_text(PTC_UI_T_DOCK_LITE) : ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE_HINT);
-            char fitted[192];
-            fit_text(fitted, sizeof(fitted), note, 13, row.width - 80);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, row_disabled ? UI_DISABLED : UI_MUTED);
-        } else {
-            /* 选项 2：允许少量掌机应急 */
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
-            
-            uint16_t mins = (draft->undocked_daily_minutes == 0) ? 30 : draft->undocked_daily_minutes;
-            char text[64];
-            snprintf(text, sizeof(text), "%u %s", mins, ptc_ui_text(PTC_UI_T_MINUTES));
-            int tw = measure_text(text, 18);
-            if (selected) {
-                draw_text(pixels, stride, row.x + row.width - 70 - tw - 20, row.y + 32, "◀", 14, focus ? UI_ACCENT : UI_MUTED);
-                draw_text(pixels, stride, row.x + row.width - 70 - tw, row.y + 32, text, 18, UI_ACCENT);
-                draw_text(pixels, stride, row.x + row.width - 64, row.y + 32, "▶", 14, focus ? UI_ACCENT : UI_MUTED);
-            } else {
-                draw_text(pixels, stride, row.x + row.width - 70 - tw, row.y + 32, text, 18, UI_MUTED);
-            }
+        /* 单选指示器固定在行右端，第三行把分钟步进器排在它左侧。 */
+        UiRect radio = {row.x + row.width - 42, row.y + (row.height - 24) / 2, 24, 24};
+        fill_round_rect(pixels, stride, radio, 12, selected ? UI_ACCENT : UI_RAISED);
+        draw_rect_outline(pixels, stride, radio, 12, 2, selected ? UI_ACCENT : UI_BORDER);
+        if (selected) fill_round_rect(pixels, stride, (UiRect){radio.x + 6, radio.y + 6, 12, 12}, 6, UI_ON_ACCENT);
 
-            char hint_buf[192];
-            snprintf(hint_buf, sizeof(hint_buf), ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT_HINT), mins);
-            char fitted[192];
-            fit_text(fitted, sizeof(fitted), hint_buf, 13, row.width - 80);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, selected ? UI_ACCENT : UI_MUTED);
+        if (i == 0) {
+            draw_text(pixels, stride, row.x + 18, row.y + 30,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED), 18, title_color);
+            draw_wrapped_text(pixels, stride, row.x + 18, row.y + 54,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT), 12, row.width - 80, 16, 2, UI_MUTED);
+        } else if (i == 1) {
+            draw_text(pixels, stride, row.x + 18, row.y + 30,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE), 18, title_color);
+            draw_wrapped_text(pixels, stride, row.x + 18, row.y + 54,
+                lite_unsupported ? ptc_ui_text(PTC_UI_T_DOCK_LITE) : ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE_HINT), 12,
+                row.width - 80, 16, 2, row_disabled ? UI_DISABLED : UI_MUTED);
+        } else {
+            draw_text(pixels, stride, row.x + 18, row.y + 30,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT), 18, title_color);
+
+            /* Minus / value / plus capsule stepper, replacing the old text arrows. */
+            uint16_t mins = (draft->undocked_daily_minutes == 0) ? 30 : draft->undocked_daily_minutes;
+            char value_text[32];
+            /* Keep the stepper clear of the radio and vertically centered in
+               the row: 8px gap on the right, 24px top/bottom. */
+            UiRect dec = {row.x + row.width - 242, row.y + 24, 34, 34};
+            UiRect val = {dec.x + 40, row.y + 24, 112, 34};
+            UiRect inc = {val.x + val.width + 6, row.y + 24, 34, 34};
+            snprintf(value_text, sizeof(value_text), "%u %s", mins, ptc_ui_text(PTC_UI_T_MINUTES));
+            fill_round_rect(pixels, stride, dec, 10, selected ? UI_RAISED : UI_SURFACE);
+            draw_rect_outline(pixels, stride, dec, 10, 1, selected ? UI_ACCENT : UI_BORDER);
+            draw_text_center(pixels, stride, dec, "-", 20, selected ? UI_ACCENT : UI_MUTED);
+            fill_round_rect(pixels, stride, val, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
+            draw_rect_outline(pixels, stride, val, 10, 1, selected ? UI_ACCENT : UI_BORDER);
+            fit_text(value_text, sizeof(value_text), value_text, 16, val.width - 12);
+            draw_text_center(pixels, stride, val, value_text, 16, selected ? UI_ACCENT : UI_MUTED);
+            fill_round_rect(pixels, stride, inc, 10, selected ? UI_RAISED : UI_SURFACE);
+            draw_rect_outline(pixels, stride, inc, 10, 1, selected ? UI_ACCENT : UI_BORDER);
+            draw_text_center(pixels, stride, inc, "+", 20, selected ? UI_ACCENT : UI_MUTED);
+
+            {
+                char hint_buf[192];
+                snprintf(hint_buf, sizeof(hint_buf), ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT_HINT), mins);
+                draw_wrapped_text(pixels, stride, row.x + 18, row.y + 54, hint_buf, 12,
+                                  row.width - 300, 16, 2, selected ? UI_ACCENT : UI_MUTED);
+            }
         }
     }
 
-    draw_dock_usage_card(pixels, stride, model, (UiRect){824, 230, 402, 220});
-    UiRect rules_panel = {824, 464, 402, 158};
-    draw_plan_card(pixels, stride, rules_panel, false);
-    draw_wrapped_text(pixels, stride, 840, 480, ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT),
-        12, 370, 15, 2, UI_INK);
-    draw_text(pixels, stride, 840, 514, ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_ACCENT);
-    draw_wrapped_text(pixels, stride, 840, 534, ptc_ui_text(PTC_UI_T_DETAIL_RELATION),
-        11, 370, 15, 2, UI_MUTED);
-    home_button(pixels, stride, ptc_ui_dock_field_rect(5), ptc_ui_text(PTC_UI_T_DOCK_RULES_EXPLAIN_BTN),
-        false, model->dock_field_focus == 5 && !model->parent_footer_focused, false);
-    char preview[192];
-    ptc_ui_format_dock_preview(model, ptc_ui_render_now(), preview, sizeof(preview));
-    draw_wrapped_text(pixels, stride, 54, 198, preview, 14, 744, 18, 1, UI_ACCENT);
+    /* 左卡底部固定一行：保存后非电视额度的预计结果 */
+    {
+        char preview[192];
+        ptc_ui_format_dock_preview(model, ptc_ui_render_now(), preview, sizeof(preview));
+        draw_wrapped_text(pixels, stride, config_card.x + 22, config_card.y + config_card.height - 22,
+                          preview, 13, config_card.width - 44, 17, 1, UI_ACCENT);
+    }
+
+    draw_dock_usage_card(pixels, stride, model, (UiRect){824, 176, 402, 220});
+
+    /* --- 右侧规则卡：规则要点 + 与总额度的关系 + 规则详解入口 --- */
+    {
+        UiRect rules_panel = {824, 410, 402, 186};
+        draw_plan_card(pixels, stride, rules_panel, false);
+        draw_text(pixels, stride, rules_panel.x + 20, rules_panel.y + 32,
+                  ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 16, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, rules_panel.x + 20, rules_panel.y + 62,
+                          ptc_ui_text(PTC_UI_T_DOCK_RULE_EXPLANATION), 13,
+                          rules_panel.width - 40, 17, 2, UI_INK);
+        draw_wrapped_text(pixels, stride, rules_panel.x + 20, rules_panel.y + 106,
+                          ptc_ui_text(PTC_UI_T_DETAIL_RELATION), 13,
+                          rules_panel.width - 40, 17, 2, UI_MUTED);
+        home_button(pixels, stride, ptc_ui_dock_field_rect(5), ptc_ui_text(PTC_UI_T_DOCK_RULES_EXPLAIN_BTN),
+            false, model->dock_field_focus == 5 && !model->parent_footer_focused, false);
+    }
 
 #if defined(PLAYWISE_EDEN) || defined(PTC_UI_PREVIEW_ANIM_CLOCK_MS)
     if (model->eden_mode_controls) {
@@ -1455,6 +1492,7 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
             false, model->dock_field_focus == 8 && !model->parent_footer_focused, model->waiting);
     }
 #endif
+    /* --- 底栏动作：今日解除（次要） + 保存规则（主操作） --- */
     bool hold = ptc_ui_dock_save_requires_hold(model, ptc_ui_render_now());
     home_button(pixels, stride, ptc_ui_dock_field_rect(3),
         ptc_ui_text(model->dock_dirty ? PTC_UI_T_DOCK_SAVE : PTC_UI_T_RULE_SAVED),

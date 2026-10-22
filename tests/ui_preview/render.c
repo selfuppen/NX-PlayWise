@@ -1449,6 +1449,30 @@ static int render_dock_previews(const char *directory, const PtcUiModel *baselin
     return failed;
 }
 
+static int render_pairing_qr_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    /* Documentation screenshot only: the QR always encodes the reserved
+       example.invalid demo page, never a real pairing URL or grant secret. */
+    const char *demo_url = "https://example.invalid/playwise";
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiModel model = *baseline;
+        uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_GRANT;
+        model.overlay = PTC_UI_OVERLAY_QR;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s",
+                 ptc_ui_text(PTC_UI_T_MOBILE_PHONE_COMPUTER_GENERATES_GRANT_CODE));
+        snprintf(model.overlay_body, sizeof(model.overlay_body), "%s",
+                 ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
+        snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", demo_url);
+        if (!qrcodegen_encodeText(demo_url, temp, model.qr_code,
+                qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
+        failed |= save_preview(directory, "parent", "pairing-qr-demo", &model, dark);
+    }
+    return failed;
+}
+
 static int render_policy_previews(const char *directory, const PtcUiModel *baseline)
 {
     int failed = 0;
@@ -1577,6 +1601,7 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
     failed |= render_eye_care_previews(target_dir, &model);
     failed |= render_dock_previews(target_dir, &model);
     failed |= render_config_backup_previews(target_dir, &model);
+    failed |= render_pairing_qr_previews(target_dir, &model);
     failed |= render_policy_previews(target_dir, &model);
     failed |= render_parent_pin_error_previews(target_dir, &model);
     return failed;

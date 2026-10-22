@@ -38,6 +38,7 @@ PREVIEW_FILES = (
     "grant/grant-entry-light.png",
     "grant/grant-duration-editor-light.png",
     "grant/grant-issued-light.png",
+    "parent/pairing-qr-demo-light.png",
     "redeem/redeem-input-light.png",
     "redeem/redeem-confirm-light.png",
     "redeem/redeem-confirm-hold-dark.png",

@@ -1,5 +1,32 @@
 #include "ui_render_internal.h"
 
+void draw_settings_page_shell(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                              const char *page_name, const char *subtitle)
+{
+    char path[128];
+    PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("name", page_name)};
+
+    /* The parent settings page is rendered first, so the whole console shell has
+       to be repainted before the page content goes on top of it. */
+    fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, pack_rgb(UI_BLENDED(page_bg)));
+    ui_background_draw_frame(pixels, stride);
+    draw_header(pixels, stride, page_name, subtitle);
+    draw_time_status_bar(pixels, stride, model);
+
+    (void)ptc_ui_text_format(PTC_UI_T_SECURITY_PREFS_S, path, sizeof(path), args, 1);
+    draw_subpage_nav(pixels, stride, ptc_ui_text(PTC_UI_T_B_BACK_TO_SETTINGS), path);
+
+    draw_footer_button(pixels, stride, ptc_ui_settings_page_back_rect(),
+                       ptc_ui_text(PTC_UI_T_B_BACK_TO_SETTINGS));
+    if (model->message[0]) {
+        /* Secondary pages keep extra footer actions (not-yet / save / load), so
+           the status message sits between the back pill and the primary button. */
+        char fitted[256];
+        fit_text(fitted, sizeof(fitted), model->message, 14, 380);
+        draw_text(pixels, stride, 640, 692, fitted, 14, UI_WARNING_TEXT);
+    }
+}
+
 static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     static const PtcUiTextId GROUPS[] = {

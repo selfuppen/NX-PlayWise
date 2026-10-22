@@ -2247,10 +2247,12 @@ static void test_balanced_feature_state(void)
         "two hundred family activity rows use twenty-five pages");
     model.view = PTC_UI_PARENT;
     model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
-    check_hit(hit_center(&model, ptc_ui_redemption_history_next_rect()),
+    check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(2)),
         PTC_UI_HIT_HISTORY_NEXT, 0, "family activity next-page button is touchable");
-    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)),
+    check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()),
         PTC_UI_HIT_OVERLAY_CONFIRM, 0, "family activity clear button is touchable");
+    check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "family activity back button is touchable");
 }
 
 static void test_home_redesign(void)
@@ -3748,19 +3750,23 @@ static void test_language_and_short_weekly_limits(void)
     ptc_ui_format_actual_added(15, formatted, sizeof(formatted));
     check_true(strcmp(formatted, "本次增加 15 分钟") == 0, "simplified actual added");
 
-    /* 2x2 Language overlay options layout and hit tests */
+    /* Language overlay: four full-width rows inside the secondary-page stage */
     opt0 = ptc_ui_language_option_rect(0);
     opt1 = ptc_ui_language_option_rect(1);
     opt2 = ptc_ui_language_option_rect(2);
     opt3 = ptc_ui_language_option_rect(3);
-    check_true(opt0.w == 350 && opt0.h == 76, "option 0 size");
-    check_true(opt1.w == 350 && opt1.h == 76, "option 1 size");
-    check_true(opt2.w == 350 && opt2.h == 76, "option 2 size");
-    check_true(opt3.w == 350 && opt3.h == 76, "option 3 size");
+    check_true(opt0.w == 1172 && opt0.h == 106, "option 0 size");
+    check_true(opt1.w == 1172 && opt1.h == 106, "option 1 size");
+    check_true(opt2.w == 1172 && opt2.h == 106, "option 2 size");
+    check_true(opt3.w == 1172 && opt3.h == 106, "option 3 size");
     check_true(!rects_overlap(opt0, opt1), "opt0 and opt1 do not overlap");
     check_true(!rects_overlap(opt0, opt2), "opt0 and opt2 do not overlap");
     check_true(!rects_overlap(opt1, opt3), "opt1 and opt3 do not overlap");
     check_true(!rects_overlap(opt2, opt3), "opt2 and opt3 do not overlap");
+    check_true(opt0.y >= 176 && opt3.y + opt3.h <= 651,
+        "language rows stay inside the secondary-page stage");
+    check_true(opt3.y + opt3.h <= ptc_ui_settings_page_back_rect().y,
+        "language rows do not reach the footer bar");
 
     memset(&model, 0, sizeof(model));
     model.overlay = PTC_UI_OVERLAY_LANGUAGE;
@@ -3779,6 +3785,23 @@ static void test_language_and_short_weekly_limits(void)
     model.overlay = PTC_UI_OVERLAY_QR;
     check_hit(hit_center(&model, ptc_ui_qr_export_rect()), PTC_UI_HIT_QR_EXPORT, 0,
         "QR instructions provide touch export button");
+    {
+        PtcUiRect confirm = ptc_ui_confirm_rect(PTC_UI_OVERLAY_QR);
+        PtcUiRect left = ptc_ui_qr_panel_rect(0);
+        PtcUiRect right = ptc_ui_qr_panel_rect(1);
+        PtcUiRect code = ptc_ui_qr_code_rect();
+        PtcUiRect address = ptc_ui_qr_address_rect();
+        PtcUiRect warning = ptc_ui_qr_warning_rect();
+        check_true(!rects_overlap(left, right), "QR solution cards do not overlap");
+        check_true(left.y + left.h < confirm.y, "QR cards stay above the dialog button row");
+        check_true(code.x >= left.x && code.y >= left.y && code.x + code.w <= left.x + left.w &&
+            code.y + code.h <= left.y + left.h, "QR canvas stays inside the left card");
+        check_true(!rects_overlap(code, address) && !rects_overlap(address, warning),
+            "QR address and warning blocks do not overlap");
+        check_true(warning.y + warning.h <= left.y + left.h, "QR warning stays inside the left card");
+        check_true(ptc_ui_qr_export_rect().x != ptc_ui_cancel_rect(PTC_UI_OVERLAY_QR).x,
+            "QR export and back occupy different button slots");
+    }
 }
 
 static void test_calendar_manager_surface(void)
@@ -3926,6 +3949,23 @@ static void test_dock_ui(void)
     for (int i = 0; i < 6; ++i) {
         PtcUiRect field = ptc_ui_dock_field_rect(i);
         check_hit(ptc_ui_hit_test_at(&model, field.x + 5, field.y + 5, 1000), PTC_UI_HIT_DOCK_FIELD, i, "dock field touch");
+    }
+    {
+        PtcUiRect row0 = ptc_ui_dock_field_rect(0);
+        PtcUiRect row1 = ptc_ui_dock_field_rect(1);
+        PtcUiRect row2 = ptc_ui_dock_field_rect(2);
+        PtcUiRect rules_pill = ptc_ui_dock_field_rect(5);
+        PtcUiRect waive = ptc_ui_dock_field_rect(4);
+        PtcUiRect save = ptc_ui_dock_field_rect(3);
+        check_true(!rects_overlap(row0, row1) && !rects_overlap(row1, row2),
+            "dock mode rows do not overlap");
+        check_true(row2.y + row2.h <= 651, "dock mode rows stay inside the stage");
+        check_true(rules_pill.x >= 824 && rules_pill.y + rules_pill.h <= 651,
+            "dock rules pill sits in the rules card");
+        check_true(!rects_overlap(waive, save) && waive.y >= 652 && save.y >= 652,
+            "dock save and waive live in the footer action row");
+        check_hit(hit_center(&model, waive), PTC_UI_HIT_DOCK_FIELD, 4, "dock footer waive hits dock field");
+        check_hit(hit_center(&model, save), PTC_UI_HIT_DOCK_FIELD, 3, "dock footer save hits dock field");
     }
     model.overlay = PTC_UI_OVERLAY_DOCK_RULES;
     PtcUiRect dock_rules_cancel = ptc_ui_cancel_rect(model.overlay);

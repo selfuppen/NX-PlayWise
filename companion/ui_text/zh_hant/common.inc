@@ -486,7 +486,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT, "掌機與電視均可�
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_FORCE, "僅允許電視大螢幕")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_FORCE_HINT, "為了保護視力，完全禁止掌機與桌面小螢幕直接遊玩")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_LIMIT, "允許少量掌機應急")
-PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_LIMIT_HINT, "每日限掌機 %u 分鐘（用盡後需連接電視） · ◀ ▶ 調節")
+PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_LIMIT_HINT, "每日限掌機 %u 分鐘（用盡後需連接電視） · 用左右鍵調節分鐘")
 PTC_UI_TEXT_VALUE(PTC_UI_T_PLAYED, "已用約")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RECORDED_NAMED, "非電視已用約 {used} 分鐘 / 生效額度 {limit} 分鐘")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_PREVIEW_NAMED, "儲存後非電視額度預計剩餘 {remaining} 分鐘")

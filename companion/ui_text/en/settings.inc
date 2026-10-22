@@ -220,3 +220,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_CONFIG_BACKUP_USAGE, "\nPlayed: %u min / Expected lef
 PTC_UI_TEXT_VALUE(PTC_UI_T_PARENT_PIN_ERROR_CHOICE, "Please re-enter your PIN, or go to Support & Recovery for help.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_X_SUPPORT_RECOVERY, "X Support & Recovery")
 PTC_UI_TEXT_VALUE(PTC_UI_T_PARENT_PIN_SUPPORT_READ_ONLY, "Support offers help and sanitized diagnostics; it does not unlock Parent Zone.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_QR_TITLE_ONLINE, "Scan the code online")
+PTC_UI_TEXT_VALUE(PTC_UI_T_QR_TITLE_OFFLINE, "Offline single-file version")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SECURITY_PREFS_S, "Safety & Preferences / {name}")
+PTC_UI_TEXT_VALUE(PTC_UI_T_B_BACK_TO_SETTINGS, "B  Back to Safety & Preferences")

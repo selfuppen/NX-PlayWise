@@ -325,6 +325,15 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
     return TODAY_ACTIONS;
 }
 
+/* Shared secondary-page navigation row: back pill on the left, breadcrumb on
+   the right. Time-plan sub-pages and safety-preference pages use the same row
+   so "back one level" never moves between sections. */
+void draw_subpage_nav(uint32_t *pixels, uint32_t stride, const char *back_label, const char *path)
+{
+    home_button(pixels, stride, ptc_ui_advanced_back_rect(), back_label, false, false, false);
+    draw_text(pixels, stride, 278, 146, path, 22, UI_MUTED);
+}
+
 static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const char *LABELS[] = {ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE), ptc_ui_text(PTC_UI_T_TIME_PLANS), ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS), ptc_ui_text(PTC_UI_T_SECURITY_PREFS), ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)};
@@ -333,14 +342,14 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
             (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY ? (ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAYS)) :
             (model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME ? (ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE)) :
             (model->plan_page == PTC_UI_PLAN_PAGE_DOCK ? ptc_ui_text(PTC_UI_T_DOCK_TITLE) : ptc_ui_text(PTC_UI_T_EYE_CARE))));
-        home_button(pixels, stride, ptc_ui_advanced_back_rect(), ptc_ui_text(model->today_settings_origin ? PTC_UI_T_BACK_TO_TODAY : PTC_UI_T_B_BACK_TO_PLANS), false, false, false);
         {
             char path[96];
             if (model->today_settings_origin) {
                 PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("name", name)};
                 (void)ptc_ui_text_format(PTC_UI_T_TODAY_SETTINGS_PATH_NAMED, path, sizeof(path), args, 1);
             } else snprintf(path, sizeof(path), ptc_ui_text(PTC_UI_T_TIME_PLANS_S), name);
-            draw_text(pixels, stride, 278, 146, path, 22, UI_MUTED);
+            draw_subpage_nav(pixels, stride,
+                ptc_ui_text(model->today_settings_origin ? PTC_UI_T_BACK_TO_TODAY : PTC_UI_T_B_BACK_TO_PLANS), path);
         }
         return;
     }

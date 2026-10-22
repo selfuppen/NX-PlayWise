@@ -187,10 +187,59 @@ PtcUiRect ptc_ui_settings_card_rect(int index)
     return rect;
 }
 
+/* Pairing QR page shares the standard dialog button row so the drawn button,
+   the touch target and the tests always agree. */
 PtcUiRect ptc_ui_qr_export_rect(void)
 {
+    return ptc_ui_confirm_rect(PTC_UI_OVERLAY_QR);
+}
+
+/* Two side-by-side solution cards: index 0 = online scan, index 1 = offline file. */
+PtcUiRect ptc_ui_qr_panel_rect(int index)
+{
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_QR);
-    return (PtcUiRect){dialog.x + 470, dialog.y + 510, 352, 48};
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 34 + index * 556, dialog.y + 148, 536, 462};
+}
+
+/* Fixed white QR canvas (12px quiet zone included) inside the left card. */
+PtcUiRect ptc_ui_qr_code_rect(void)
+{
+    PtcUiRect panel = ptc_ui_qr_panel_rect(0);
+    return (PtcUiRect){panel.x + 122, panel.y + 52, 292, 292};
+}
+
+PtcUiRect ptc_ui_qr_address_rect(void)
+{
+    PtcUiRect panel = ptc_ui_qr_panel_rect(0);
+    return (PtcUiRect){panel.x + 22, panel.y + 350, panel.w - 44, 60};
+}
+
+PtcUiRect ptc_ui_qr_warning_rect(void)
+{
+    PtcUiRect panel = ptc_ui_qr_panel_rect(0);
+    return (PtcUiRect){panel.x + 22, panel.y + 414, panel.w - 44, 40};
+}
+
+/* Safety & preferences secondary pages: full-page shell with the same footer
+   anchors as the time-plan sub-pages. */
+PtcUiRect ptc_ui_settings_page_back_rect(void)
+{
+    return (PtcUiRect){54, 664, 230, 44};
+}
+
+PtcUiRect ptc_ui_settings_page_primary_rect(void)
+{
+    return (PtcUiRect){1026, 664, 200, 44};
+}
+
+PtcUiRect ptc_ui_settings_page_footer_rect(int index)
+{
+    if (index == 0) return ptc_ui_settings_page_back_rect();
+    if (index == 1) return (PtcUiRect){300, 664, 150, 44};
+    if (index == 2) return (PtcUiRect){466, 664, 150, 44};
+    if (index == 3) return ptc_ui_settings_page_primary_rect();
+    return (PtcUiRect){0, 664, 0, 44};
 }
 
 void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
@@ -886,8 +935,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 540;
         break;
     case PTC_UI_OVERLAY_QR:
-        *width = 1120;
-        *height = 650;
+        *width = 1160;
+        *height = 700;
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
         *width = 1120;
@@ -1186,9 +1235,26 @@ PtcUiRect ptc_ui_pin_keyboard_rect(void)
     return (PtcUiRect){dialog.x + 794, dialog.y + 516, 210, 48};
 }
 
+/* Safety & preferences rows that open a full-page secondary view instead of a
+   modal dialog. Their confirm/cancel anchors live in the page footer, so the
+   existing overlay-button hit tests keep working without a second geometry. */
+static bool settings_page_overlay(PtcUiOverlay overlay)
+{
+    return overlay == PTC_UI_OVERLAY_THEME || overlay == PTC_UI_OVERLAY_LANGUAGE ||
+           overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER || overlay == PTC_UI_OVERLAY_ALBUM_MANAGER ||
+           overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY || overlay == PTC_UI_OVERLAY_SOFTWARE_INFO;
+}
+
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
+    if (settings_page_overlay(overlay)) {
+        /* The album and activity pages have no single "confirm" action; their
+           A key acts on the focused row instead. */
+        if (overlay == PTC_UI_OVERLAY_ALBUM_MANAGER || overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY)
+            return (PtcUiRect){0, 0, 0, 0};
+        return ptc_ui_settings_page_primary_rect();
+    }
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
         overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE)
         return (PtcUiRect){0, 0, 0, 0};
@@ -1201,6 +1267,7 @@ PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
+    if (settings_page_overlay(overlay)) return ptc_ui_settings_page_back_rect();
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
         return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
@@ -1514,10 +1581,7 @@ int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minu
 
 PtcUiRect ptc_ui_shortcut_option_rect(int index)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
-    int column = index / 7;
-    int row = index % 7;
-    PtcUiRect rect = {dialog.x + 36 + column * 524, dialog.y + 128 + row * 40, 500, 34};
+    PtcUiRect rect = {54 + (index / 7) * 594, 176 + (index % 7) * 50, 578, 44};
     if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
         rect.w = 0;
         rect.h = 0;
@@ -1527,16 +1591,12 @@ PtcUiRect ptc_ui_shortcut_option_rect(int index)
 
 PtcUiRect ptc_ui_shortcut_disable_rect(void)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
-    PtcUiRect rect = {dialog.x + 120, dialog.y + 430, 400, 46};
-    return rect;
+    return (PtcUiRect){54, 560, 574, 44};
 }
 
 PtcUiRect ptc_ui_shortcut_hint_rect(void)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
-    PtcUiRect rect = {dialog.x + 600, dialog.y + 430, 400, 46};
-    return rect;
+    return (PtcUiRect){652, 560, 574, 44};
 }
 
 PtcUiRect ptc_ui_grant_adjust_rect(int index)
@@ -1612,41 +1672,39 @@ PtcUiRect ptc_ui_weekly_bulk_target_rect(int index)
 
 PtcUiRect ptc_ui_album_action_rect(int index)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_ALBUM_MANAGER);
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 38 + index * 450, dialog.y + 178, 420, 224};
+    return (PtcUiRect){54 + index * 594, 272, 578, 300};
 }
 
 PtcUiRect ptc_ui_album_refresh_rect(void)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_ALBUM_MANAGER);
-    return (PtcUiRect){dialog.x + dialog.w - 226, dialog.y + 92, 188, 46};
+    return (PtcUiRect){1000, 190, 210, 44};
 }
 
 PtcUiRect ptc_ui_theme_option_rect(int index)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_THEME);
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 40 + index * 370, dialog.y + 130, 340, 390};
+    return (PtcUiRect){54 + index * 396, 176, 380, 380};
 }
 
 PtcUiRect ptc_ui_language_option_rect(int index)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_LANGUAGE);
-    int col, row;
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    col = index % 2;
-    row = index / 2;
-    return (PtcUiRect){dialog.x + 40 + col * 390, dialog.y + 110 + row * 94, 350, 76};
+    return (PtcUiRect){54, 176 + index * 118, 1172, 106};
 }
 
 PtcUiRect ptc_ui_dock_field_rect(int index)
 {
-    if (index == 7 || index == 8) return (PtcUiRect){54 + (index - 7) * 380, 620, 364, 44};
-    if (index == 5) return (PtcUiRect){840, 570, 370, 40};
+    /* Eden simulation buttons sit between the rule card and the footer divider. */
+    if (index == 7 || index == 8) return (PtcUiRect){54 + (index - 7) * 384, 602, 364, 40};
+    /* "Rules explained" pill sits in the bottom-right corner of the rules card. */
+    if (index == 5) return (PtcUiRect){1026, 548, 184, 34};
     if (index < 0 || index > 4) return (PtcUiRect){0,0,0,0};
-    if (index < 3) return (PtcUiRect){54, 230 + index * 100, 744, 84};
-    return (PtcUiRect){54 + (index - 3) * 380, 550, 364, 58};
+    /* Three mode rows inside the left configuration card (Y=176..596). */
+    if (index < 3) return (PtcUiRect){66, 276 + index * 88, 720, 82};
+    /* Save (3) and waive-today (4) live in the fixed footer action row. */
+    if (index == 4) return (PtcUiRect){810, 664, 200, 44};
+    return (PtcUiRect){1026, 664, 200, 44};
 }
 
 PtcUiRect ptc_ui_today_status_rect(int index)

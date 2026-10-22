@@ -486,7 +486,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT, "Handheld and TV modes c
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_FORCE, "TV Mode Only")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_FORCE_HINT, "Protects eyesight by disallowing handheld and tabletop screens")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_LIMIT, "Allow Limited Handheld")
-PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_LIMIT_HINT, "Daily limit of %u min for handheld (TV required after) · ◀ ▶ Adjust")
+PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_LIMIT_HINT, "Daily limit of %u min for handheld (TV required after) · Use left/right to adjust")
 PTC_UI_TEXT_VALUE(PTC_UI_T_PLAYED, "Used")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RECORDED_NAMED, "Non-TV used ~{used} min / Active quota {limit} min")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_PREVIEW_NAMED, "After saving: ~{remaining} min of non-TV quota left")
