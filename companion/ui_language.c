@@ -34,14 +34,19 @@ static const char *const UI_TEXT_NAMES[PTC_UI_TEXT_COUNT] = {
 };
 #undef PTC_UI_TEXT_KEY
 
-const char *ptc_ui_text(PtcUiTextId id)
+const char *ptc_ui_text_in_language(PtcUiTextId id, PtcUiLanguagePreference lang)
 {
     if ((unsigned)id >= PTC_UI_TEXT_COUNT) return "[missing text]";
-    switch (g_resolved_language) {
+    switch (lang) {
     case PTC_UI_LANGUAGE_TRADITIONAL: return UI_TEXT_HANT[id];
     case PTC_UI_LANGUAGE_ENGLISH: return UI_TEXT_EN[id];
     default: return UI_TEXT_HANS[id];
     }
+}
+
+const char *ptc_ui_text(PtcUiTextId id)
+{
+    return ptc_ui_text_in_language(id, g_resolved_language);
 }
 
 const char *ptc_ui_text_resolve(const char *value)

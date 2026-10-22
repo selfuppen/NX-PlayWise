@@ -310,8 +310,10 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             snprintf(model.auth_error_title, sizeof(model.auth_error_title), ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT));
             snprintf(model.auth_error_message, sizeof(model.auth_error_message), ptc_ui_text(PTC_UI_T_PLEASE_CHECK_AND_RE_ENTER));
             snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
-            if (!qrcodegen_encodeText(model.pairing_base_url, temp, model.qr_code,
-                    qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
+            model.demo_secret_enabled = true;
+            if (!ptc_build_pairing_url("kid-switch", PTC_DEMO_GRANT_SECRET, model.pairing_url, sizeof(model.pairing_url)) ||
+                !qrcodegen_encodeText(model.pairing_url, temp, model.qr_code,
+                    qrcodegen_Ecc_LOW, 1, 40, qrcodegen_Mask_AUTO, true)) return 1;
             snprintf(name, sizeof(name), "matrix-overlay-%02d", overlay);
             failed |= save_preview(directory, "matrix", name, &model, dark != 0);
             if (overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
@@ -1463,7 +1465,9 @@ static int render_pairing_qr_previews(const char *directory, const PtcUiModel *b
         snprintf(model.overlay_body, sizeof(model.overlay_body), "%s",
                  ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
         snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
-        if (!qrcodegen_encodeText(PTC_PAIRING_BASE_URL, temp, model.qr_code,
+        model.demo_secret_enabled = true;
+        if (!ptc_build_pairing_url("kid-switch", PTC_DEMO_GRANT_SECRET, model.pairing_url, sizeof(model.pairing_url)) ||
+            !qrcodegen_encodeText(model.pairing_url, temp, model.qr_code,
                 qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true)) return 1;
         failed |= save_preview(directory, "parent", "pairing-qr-demo", &model, dark);
     }
