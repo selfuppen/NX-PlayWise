@@ -308,30 +308,104 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
 static void draw_language_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    const char *LABELS[] = {ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM), ptc_ui_text(PTC_UI_T_SIMPLIFIED_CHINESE), ptc_ui_text(PTC_UI_T_TRADITIONAL_CHINESE), "English"};
+    const char *LABELS[] = {
+        ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM),
+        ptc_ui_text(PTC_UI_T_SIMPLIFIED_CHINESE),
+        ptc_ui_text(PTC_UI_T_TRADITIONAL_CHINESE),
+        "English"
+    };
     const char *DETAILS[] = {
-        ptc_ui_text(PTC_UI_T_USE_SWITCH_SYSTEM_LANGUAGE), ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_SIMPLIFIED_CHINESE), ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_TRADITIONAL_CHINESE), "Always use English"
+        ptc_ui_text(PTC_UI_T_USE_SWITCH_SYSTEM_LANGUAGE),
+        ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_SIMPLIFIED_CHINESE),
+        ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_TRADITIONAL_CHINESE),
+        "Always use English"
     };
     draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_UI_LANGUAGE),
                              ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B));
+
     for (int index = 0; index < 4; ++index) {
         UiRect option = to_uirect(ptc_ui_language_option_rect(index));
-        bool selected = index == model->overlay_selection;
+        bool selected = (index == model->overlay_selection);
+        bool is_current = (index == (int)model->language_preference);
+
         fill_round_rect(pixels, stride, option, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 14, selected ? 2 : 1,
-            selected ? UI_ACCENT : UI_BORDER);
+        draw_rect_outline(pixels, stride, option, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
 
-        /* Radio indicator on the right keeps the long label column wide. */
-        UiRect radio = {option.x + option.width - 62, option.y + (option.height - 26) / 2, 26, 26};
-        fill_round_rect(pixels, stride, radio, 13, selected ? UI_ACCENT : UI_SURFACE);
-        draw_rect_outline(pixels, stride, radio, 13, 2, selected ? UI_ACCENT : UI_BORDER);
-        if (selected) fill_round_rect(pixels, stride, (UiRect){radio.x + 7, radio.y + 7, 12, 12}, 6, UI_ON_ACCENT);
+        /* Realistic UI miniature preview screen on the left of each option card */
+        UiRect preview = {option.x + 16, option.y + 16, 178, 178};
+        fill_round_rect(pixels, stride, preview, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, preview, 10, 1, selected ? UI_ACCENT : UI_BORDER);
 
-        draw_text(pixels, stride, option.x + 28, option.y + 46, LABELS[index], 20,
+        if (index == 0) {
+            /* Follow system: Switch OS bar + dual language badges */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 16, 6, 14}, 2, UI_RGB(0x2E72D2));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + preview.width - 20, preview.y + 16, 6, 14}, 2, UI_RGB(0xE64A38));
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "Switch OS", 12, UI_INK);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 46, preview.width - 32, 66}, 8, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 16, preview.y + 46, preview.width - 32, 66}, 8, 1, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 16, preview.y + 54, preview.width - 32, 28}, "AUTO", 20, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 16, preview.y + 84, preview.width - 32, 18}, "Auto Sync", 12, UI_MUTED);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 122, preview.width - 32, 38}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 16, preview.y + 132, preview.width - 32, 18}, ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM), 13, UI_INK);
+        } else if (index == 1) {
+            /* Simplified Chinese miniature UI */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "PlayWise", 12, UI_ACCENT);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, 1, UI_BORDER);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 18, preview.y + 50, 42, 42}, "CN", 22, UI_ACCENT);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 70, ptc_ui_text(PTC_UI_T_CHILD_ZONE), 12, UI_INK);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 96, "120 min", 14, UI_SUCCESS);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 130, preview.width - 28, 32}, 6, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 14, preview.y + 136, preview.width - 28, 20}, ptc_ui_text(PTC_UI_T_SIMPLIFIED_CHINESE), 13, UI_ON_ACCENT);
+        } else if (index == 2) {
+            /* Traditional Chinese miniature UI */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "PlayWise", 12, UI_ACCENT);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, 1, UI_BORDER);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 18, preview.y + 50, 42, 42}, "HK", 22, UI_ACCENT);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 70, ptc_ui_text(PTC_UI_T_CHILD_ZONE), 12, UI_INK);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 96, "120 min", 14, UI_SUCCESS);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 130, preview.width - 28, 32}, 6, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 14, preview.y + 136, preview.width - 28, 20}, ptc_ui_text(PTC_UI_T_TRADITIONAL_CHINESE), 13, UI_ON_ACCENT);
+        } else {
+            /* English miniature UI */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "PlayWise", 12, UI_ACCENT);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, 1, UI_BORDER);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 18, preview.y + 50, 42, 42}, "EN", 22, UI_ACCENT);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 70, "Child Zone", 12, UI_INK);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 96, "120 min", 14, UI_SUCCESS);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 130, preview.width - 28, 32}, 6, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 14, preview.y + 136, preview.width - 28, 20}, "English", 13, UI_ON_ACCENT);
+        }
+
+        /* Information & action area on the right side of the card */
+        draw_text(pixels, stride, option.x + 214, option.y + 44, LABELS[index], 22,
                   selected ? UI_ACCENT : UI_INK);
-        draw_wrapped_text(pixels, stride, option.x + 28, option.y + 80, DETAILS[index], 14,
-                          option.width - 130, 19, 1, UI_MUTED);
+        draw_wrapped_text(pixels, stride, option.x + 214, option.y + 80, DETAILS[index], 14,
+                          option.width - 232, 20, 2, UI_MUTED);
+
+        /* Selection pill button */
+        UiRect select_btn = {option.x + 214, option.y + option.height - 54, 180, 36};
+        fill_round_rect(pixels, stride, select_btn, 18, selected ? UI_ACCENT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, select_btn, 18, 1, selected ? UI_FOCUS : UI_CONTROL);
+        draw_text_center(pixels, stride, (UiRect){select_btn.x, select_btn.y + 6, select_btn.width, select_btn.height},
+                         selected ? ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE) : (is_current ? ptc_ui_text(PTC_UI_T_CURRENT) : ptc_ui_text(PTC_UI_T_A_CONFIRM)),
+                         15, selected ? UI_ON_ACCENT : UI_INK);
     }
+
     home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
                 ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE), true, false, model->waiting);
 }

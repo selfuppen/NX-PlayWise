@@ -70,7 +70,7 @@ PREVIEW_FILES = (
     "settings/settings-album-dark.png",
     "settings/settings-activity-dark.png",
     "settings/settings-redemption-dark.png",
-    "settings/settings-grant-manager-dark.png",
+    "grant/grant-manager-dark.png",
     "settings/settings-software-info-dark.png",
     "overlay/overlay-code-entry.png",
     "overlay/overlay-code-confirm.png",

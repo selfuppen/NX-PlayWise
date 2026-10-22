@@ -190,10 +190,14 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
 
 static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
-    char fitted[192];
+    char path[128];
     int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("name", ptc_ui_text(PTC_UI_T_GRANT_SETTINGS))};
+    (void)ptc_ui_text_format(PTC_UI_T_OFFLINE_GRANTS_S, path, sizeof(path), args, 1);
+    draw_subpage_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_GRANT_SETTINGS),
+                       ptc_ui_text(PTC_UI_T_MANAGES_THE_DEVICE_INFORMATION_EXPORT_CONFIGURATION_AND),
+                       ptc_ui_text(PTC_UI_T_B_BACK_TO_OFFLINE_GRANTS), path);
+
     for (index = 0; index < PTC_UI_GRANT_MANAGER_COUNT; ++index) {
         draw_action_card(
             pixels,
@@ -204,12 +208,6 @@ static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const 
             PTC_UI_ACTION_AVAILABLE,
             0);
     }
-    fit_text(fitted, sizeof(fitted), model->message, 16, dialog.width - 330);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 506,
-              fitted[0] ? fitted : ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_A_CONFIRM_B_RETURN), 16,
-              fitted[0] ? UI_SUCCESS : UI_MUTED);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
-                       UI_RAISED, UI_INK, true);
 }
 
 static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -497,44 +495,47 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
             PTC_UI_T_5_SELECT_PARENT_IMPORT_JSON_THEN_IMPORT
         };
         int step = 0;
-        next_y = right.y + 56;
+        next_y = right.y + 60;
         for (step = 0; step < 5; ++step) {
-            next_y = draw_wrapped_text(pixels, stride, right.x + 22, next_y,
-                                       ptc_ui_text(STEPS[step]), 14, right.width - 44, 18, 2, UI_INK);
-            next_y += 4;
+            next_y = draw_wrapped_text(pixels, stride, right.x + 24, next_y,
+                                       ptc_ui_text(STEPS[step]), 14, right.width - 48, 20, 2, UI_INK);
+            next_y += 6;
             if (step == 1) {
                 /* The exported file name is the one thing users copy by hand. */
-                UiRect chip = {right.x + 22, next_y - 2, right.width - 44, 28};
+                UiRect chip = {right.x + 24, next_y, right.width - 48, 28};
                 char path[96];
                 snprintf(path, sizeof(path), "%s", PLAYWISE_SD_ROOT "/parent-import.json");
                 fill_round_rect(pixels, stride, chip, 8, UI_PAGE);
                 draw_rect_outline(pixels, stride, chip, 8, 1, UI_BORDER);
-                draw_text(pixels, stride, chip.x + 12, chip.y + 20, path, 14, UI_ACCENT);
-                /* The loop variable is a text baseline: leave room for the chip
-                   plus the next line's ascent so step 3 never prints on top. */
-                next_y = chip.y + chip.height + 18;
+                draw_text(pixels, stride, chip.x + 14, chip.y + 20, path, 14, UI_ACCENT);
+                next_y = chip.y + chip.height + 20;
             }
         }
 
-        /* Notes and the danger strip are anchored to the card bottom so the
-           uneven ZH/EN step heights never push them out of the card. */
-        draw_wrapped_text(pixels, stride, right.x + 22, right.y + 314,
-                          ptc_ui_text(PTC_UI_T_NO_NETWORK_REQUIRED_FOR_DAILY_GENERATION_NO), 12,
-                          right.width - 44, 15, 2, UI_SUCCESS);
-        draw_wrapped_text(pixels, stride, right.x + 22, right.y + 350,
-                          ptc_ui_text(PTC_UI_T_PLEASE_SAVE_THE_FILE_ON_YOUR_MOBILE), 12,
-                          right.width - 44, 15, 2, UI_MUTED);
-        draw_wrapped_text(pixels, stride, right.x + 22, right.y + 386,
-                          ptc_ui_text(PTC_UI_T_DO_NOT_USE_THE_BUILT_IN_PREVIEWER), 12,
-                          right.width - 44, 15, 2, UI_MUTED);
-        {
-            UiRect danger = {right.x + 22, right.y + 414, right.width - 44, 40};
-            fill_round_rect(pixels, stride, danger, 8, UI_DANGER_SOFT);
-            draw_rect_outline(pixels, stride, danger, 8, 1, UI_DANGER_BORDER);
-            draw_wrapped_text(pixels, stride, danger.x + 12, danger.y + 18,
-                              ptc_ui_text(PTC_UI_T_THE_CONFIGURATION_FILE_CONTAINS_A_TIME_CODED), 12,
-                              danger.width - 24, 15, 2, UI_DANGER);
-        }
+        /* Tip box grouping hints and security warning with comfortable breathing room. */
+        UiRect tip_box = {right.x + 20, right.y + 264, right.width - 40, 186};
+        fill_round_rect(pixels, stride, tip_box, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, tip_box, 10, 1, UI_BORDER);
+
+        int tip_y = tip_box.y + 24;
+        tip_y = draw_wrapped_text(pixels, stride, tip_box.x + 14, tip_y,
+                                  ptc_ui_text(PTC_UI_T_NO_NETWORK_REQUIRED_FOR_DAILY_GENERATION_NO), 13,
+                                  tip_box.width - 28, 18, 2, UI_SUCCESS);
+        tip_y += 8;
+        tip_y = draw_wrapped_text(pixels, stride, tip_box.x + 14, tip_y,
+                                  ptc_ui_text(PTC_UI_T_PLEASE_SAVE_THE_FILE_ON_YOUR_MOBILE), 13,
+                                  tip_box.width - 28, 18, 2, UI_MUTED);
+        tip_y += 6;
+        tip_y = draw_wrapped_text(pixels, stride, tip_box.x + 14, tip_y,
+                                  ptc_ui_text(PTC_UI_T_DO_NOT_USE_THE_BUILT_IN_PREVIEWER), 13,
+                                  tip_box.width - 28, 18, 2, UI_MUTED);
+
+        UiRect danger = {tip_box.x + 10, tip_box.y + tip_box.height - 48, tip_box.width - 20, 38};
+        fill_round_rect(pixels, stride, danger, 8, UI_DANGER_SOFT);
+        draw_rect_outline(pixels, stride, danger, 8, 1, UI_DANGER_BORDER);
+        draw_wrapped_text(pixels, stride, danger.x + 12, danger.y + 19,
+                          ptc_ui_text(PTC_UI_T_THE_CONFIGURATION_FILE_CONTAINS_A_TIME_CODED), 12,
+                          danger.width - 24, 15, 2, UI_DANGER);
     }
 
     draw_dialog_button(pixels, stride, ptc_ui_qr_export_rect(),

@@ -309,7 +309,7 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             snprintf(model.pin_text, sizeof(model.pin_text), "1234");
             snprintf(model.auth_error_title, sizeof(model.auth_error_title), ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT));
             snprintf(model.auth_error_message, sizeof(model.auth_error_message), ptc_ui_text(PTC_UI_T_PLEASE_CHECK_AND_RE_ENTER));
-            snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "https://example.invalid/playwise");
+            snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
             if (!qrcodegen_encodeText(model.pairing_base_url, temp, model.qr_code,
                     qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
             snprintf(name, sizeof(name), "matrix-overlay-%02d", overlay);
@@ -1259,7 +1259,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_SETTINGS));
-            failed |= save_preview(directory, "settings", "settings-grant-manager", &settings_dlg, dark);
+            failed |= save_preview(directory, "grant", "grant-manager", &settings_dlg, dark);
 
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
@@ -1452,9 +1452,6 @@ static int render_dock_previews(const char *directory, const PtcUiModel *baselin
 static int render_pairing_qr_previews(const char *directory, const PtcUiModel *baseline)
 {
     int failed = 0;
-    /* Documentation screenshot only: the QR always encodes the reserved
-       example.invalid demo page, never a real pairing URL or grant secret. */
-    const char *demo_url = "https://example.invalid/playwise";
     for (int dark = 0; dark < 2; ++dark) {
         PtcUiModel model = *baseline;
         uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
@@ -1465,9 +1462,9 @@ static int render_pairing_qr_previews(const char *directory, const PtcUiModel *b
                  ptc_ui_text(PTC_UI_T_MOBILE_PHONE_COMPUTER_GENERATES_GRANT_CODE));
         snprintf(model.overlay_body, sizeof(model.overlay_body), "%s",
                  ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
-        snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", demo_url);
-        if (!qrcodegen_encodeText(demo_url, temp, model.qr_code,
-                qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
+        snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
+        if (!qrcodegen_encodeText(PTC_PAIRING_BASE_URL, temp, model.qr_code,
+                qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true)) return 1;
         failed |= save_preview(directory, "parent", "pairing-qr-demo", &model, dark);
     }
     return failed;

@@ -3750,15 +3750,15 @@ static void test_language_and_short_weekly_limits(void)
     ptc_ui_format_actual_added(15, formatted, sizeof(formatted));
     check_true(strcmp(formatted, "本次增加 15 分钟") == 0, "simplified actual added");
 
-    /* Language overlay: four full-width rows inside the secondary-page stage */
+    /* Language overlay: 2x2 grid inside the secondary-page stage */
     opt0 = ptc_ui_language_option_rect(0);
     opt1 = ptc_ui_language_option_rect(1);
     opt2 = ptc_ui_language_option_rect(2);
     opt3 = ptc_ui_language_option_rect(3);
-    check_true(opt0.w == 1172 && opt0.h == 106, "option 0 size");
-    check_true(opt1.w == 1172 && opt1.h == 106, "option 1 size");
-    check_true(opt2.w == 1172 && opt2.h == 106, "option 2 size");
-    check_true(opt3.w == 1172 && opt3.h == 106, "option 3 size");
+    check_true(opt0.w == 574 && opt0.h == 210, "option 0 size");
+    check_true(opt1.w == 574 && opt1.h == 210, "option 1 size");
+    check_true(opt2.w == 574 && opt2.h == 210, "option 2 size");
+    check_true(opt3.w == 574 && opt3.h == 210, "option 3 size");
     check_true(!rects_overlap(opt0, opt1), "opt0 and opt1 do not overlap");
     check_true(!rects_overlap(opt0, opt2), "opt0 and opt2 do not overlap");
     check_true(!rects_overlap(opt1, opt3), "opt1 and opt3 do not overlap");

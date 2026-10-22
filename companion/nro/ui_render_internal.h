@@ -183,6 +183,9 @@ void draw_subpage_nav(uint32_t *pixels, uint32_t stride, const char *back_label,
 /* Full-page shell for the safety & preferences secondary pages. Repaints the
    whole screen (the parent settings page is already drawn underneath), then the
    header, breadcrumb row and footer anchors. */
+void draw_subpage_shell(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                        const char *page_name, const char *subtitle,
+                        const char *back_label, const char *path);
 void draw_settings_page_shell(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                               const char *page_name, const char *subtitle);
 uint32_t time_projection_color(PtcUiTimeState state);

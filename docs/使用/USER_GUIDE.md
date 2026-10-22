@@ -529,7 +529,7 @@ Always refer to buttons and prompts in your installed version. This guide does n
 ![Album and capture restriction preview](../images/usage-en/settings/settings-album-dark.png)
 ![Family activity history preview](../images/usage-en/settings/settings-activity-dark.png)
 ![Offline grant redemption history preview](../images/usage-en/settings/settings-redemption-dark.png)
-![Offline grant generation manager preview](../images/usage-en/settings/settings-grant-manager-dark.png)
+![Offline grant generation manager preview](../images/usage-en/grant/grant-manager-dark.png)
 
 </details>
 

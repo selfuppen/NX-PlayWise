@@ -1242,16 +1242,18 @@ static bool settings_page_overlay(PtcUiOverlay overlay)
 {
     return overlay == PTC_UI_OVERLAY_THEME || overlay == PTC_UI_OVERLAY_LANGUAGE ||
            overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER || overlay == PTC_UI_OVERLAY_ALBUM_MANAGER ||
-           overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY || overlay == PTC_UI_OVERLAY_SOFTWARE_INFO;
+           overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY || overlay == PTC_UI_OVERLAY_SOFTWARE_INFO ||
+           overlay == PTC_UI_OVERLAY_GRANT_MANAGER;
 }
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (settings_page_overlay(overlay)) {
-        /* The album and activity pages have no single "confirm" action; their
+        /* The album, activity and grant manager pages have no single "confirm" action; their
            A key acts on the focused row instead. */
-        if (overlay == PTC_UI_OVERLAY_ALBUM_MANAGER || overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY)
+        if (overlay == PTC_UI_OVERLAY_ALBUM_MANAGER || overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY ||
+            overlay == PTC_UI_OVERLAY_GRANT_MANAGER)
             return (PtcUiRect){0, 0, 0, 0};
         return ptc_ui_settings_page_primary_rect();
     }
@@ -1336,14 +1338,13 @@ PtcUiRect ptc_ui_credential_demo_rect(void)
 
 PtcUiRect ptc_ui_grant_manager_card_rect(int index)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_GRANT_MANAGER);
-    int column = index % 2;
-    int row = index / 2;
-    PtcUiRect rect = {dialog.x + 34 + column * 530, dialog.y + 126 + row * 116, 510, 100};
-    if (index < 0 || index >= PTC_UI_GRANT_MANAGER_COUNT) {
-        rect.w = 0;
-        rect.h = 0;
-    }
+    int column;
+    int row;
+    PtcUiRect rect;
+    if (index < 0 || index >= PTC_UI_GRANT_MANAGER_COUNT) return (PtcUiRect){0, 0, 0, 0};
+    column = index % 2;
+    row = index / 2;
+    rect = (PtcUiRect){54 + column * 598, 186 + row * 136, 574, 116};
     return rect;
 }
 
@@ -1689,8 +1690,12 @@ PtcUiRect ptc_ui_theme_option_rect(int index)
 
 PtcUiRect ptc_ui_language_option_rect(int index)
 {
+    int col;
+    int row;
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54, 176 + index * 118, 1172, 106};
+    col = index % 2;
+    row = index / 2;
+    return (PtcUiRect){54 + col * 598, 186 + row * 228, 574, 210};
 }
 
 PtcUiRect ptc_ui_dock_field_rect(int index)

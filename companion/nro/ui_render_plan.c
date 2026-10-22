@@ -1414,19 +1414,65 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
         draw_rect_outline(pixels, stride, radio, 12, 2, selected ? UI_ACCENT : UI_BORDER);
         if (selected) fill_round_rect(pixels, stride, (UiRect){radio.x + 6, radio.y + 6, 12, 12}, 6, UI_ON_ACCENT);
 
+        /* 选项直观微缩图案卡 (Intuitive option pattern illustration tile) */
+        UiRect icon_tile = {row.x + 12, row.y + (row.height - 60) / 2, 74, 60};
+        fill_round_rect(pixels, stride, icon_tile, 8, selected ? UI_SURFACE : UI_PAGE);
+        draw_rect_outline(pixels, stride, icon_tile, 8, 1, selected ? UI_ACCENT : UI_BORDER);
+
         if (i == 0) {
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
+            /* Mode 0: 掌机与电视均可自由游玩 (Both Handheld and TV illuminated) */
+            /* Mini Switch console */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 6, icon_tile.y + 20, 6, 20}, 2, UI_RGB(0x2E72D2));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 13, icon_tile.y + 20, 13, 20}, pack_rgb(UI_BLENDED(page_bg)));
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 27, icon_tile.y + 20, 6, 20}, 2, UI_RGB(0xE64A38));
+            /* Plus symbol */
+            draw_text(pixels, stride, icon_tile.x + 35, icon_tile.y + 35, "+", 12, UI_MUTED);
+            /* Mini TV Screen */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 44, icon_tile.y + 18, 22, 18}, 3, UI_INK);
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 46, icon_tile.y + 20, 18, 14}, pack_rgb(0x5CCB8A));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 53, icon_tile.y + 36, 4, 3}, pack_rgb(UI_BLENDED(text_primary)));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 50, icon_tile.y + 39, 10, 2}, pack_rgb(UI_BLENDED(text_primary)));
+
+            int text_x = row.x + 98;
+            draw_text(pixels, stride, text_x, row.y + 30,
                 ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED), 18, title_color);
-            draw_wrapped_text(pixels, stride, row.x + 18, row.y + 54,
-                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT), 12, row.width - 80, 16, 2, UI_MUTED);
+            draw_wrapped_text(pixels, stride, text_x, row.y + 54,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT), 12, row.width - 150, 16, 2, UI_MUTED);
         } else if (i == 1) {
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
+            /* Mode 1: 仅允许电视模式 (TV dock prominent, handheld prohibited) */
+            /* Prominent TV dock display */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 12, icon_tile.y + 12, 34, 24}, 3, UI_ACCENT);
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 14, icon_tile.y + 14, 30, 20}, pack_rgb(0x245BC4));
+            draw_text_center(pixels, stride, (UiRect){icon_tile.x + 14, icon_tile.y + 16, 30, 16}, "TV", 11, UI_ON_ACCENT);
+            /* Dock base */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 18, icon_tile.y + 36, 22, 6}, 2, UI_INK);
+            /* Small prohibited handheld indicator */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 50, icon_tile.y + 24, 18, 14}, 2, UI_BORDER);
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 48, icon_tile.y + 30, 22, 2}, 1, UI_DANGER);
+
+            int text_x = row.x + 98;
+            draw_text(pixels, stride, text_x, row.y + 30,
                 ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE), 18, title_color);
-            draw_wrapped_text(pixels, stride, row.x + 18, row.y + 54,
+            draw_wrapped_text(pixels, stride, text_x, row.y + 54,
                 lite_unsupported ? ptc_ui_text(PTC_UI_T_DOCK_LITE) : ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE_HINT), 12,
-                row.width - 80, 16, 2, row_disabled ? UI_DISABLED : UI_MUTED);
+                row.width - 150, 16, 2, row_disabled ? UI_DISABLED : UI_MUTED);
         } else {
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
+            /* Mode 2: 限制非电视模式时长 (Timed handheld countdown leading to TV) */
+            /* Handheld console with countdown badge */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 6, icon_tile.y + 18, 6, 24}, 2, UI_RGB(0x2E72D2));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 13, icon_tile.y + 18, 18, 24}, pack_rgb(UI_BLENDED(page_bg)));
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 32, icon_tile.y + 18, 6, 24}, 2, UI_RGB(0xE64A38));
+            /* Timer circle in handheld screen */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 16, icon_tile.y + 23, 12, 12}, 6, UI_ACCENT);
+            /* Transition arrow to TV */
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 40, icon_tile.y + 29, 8, 2}, pack_rgb(UI_BLENDED(accent)));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 46, icon_tile.y + 28, 2, 4}, pack_rgb(UI_BLENDED(accent)));
+            /* Mini TV dock target */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 52, icon_tile.y + 22, 16, 14}, 2, UI_INK);
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 54, icon_tile.y + 24, 12, 10}, pack_rgb(0x245BC4));
+
+            int text_x = row.x + 98;
+            draw_text(pixels, stride, text_x, row.y + 30,
                 ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT), 18, title_color);
 
             /* Minus / value / plus capsule stepper, replacing the old text arrows. */
@@ -1452,8 +1498,8 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
             {
                 char hint_buf[192];
                 snprintf(hint_buf, sizeof(hint_buf), ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT_HINT), mins);
-                draw_wrapped_text(pixels, stride, row.x + 18, row.y + 54, hint_buf, 12,
-                                  row.width - 300, 16, 2, selected ? UI_ACCENT : UI_MUTED);
+                draw_wrapped_text(pixels, stride, text_x, row.y + 54, hint_buf, 12,
+                                  row.width - 360, 16, 2, selected ? UI_ACCENT : UI_MUTED);
             }
         }
     }

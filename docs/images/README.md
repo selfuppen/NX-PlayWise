@@ -14,7 +14,7 @@ python tools/package_remote.py --with-previews
 
 此命令执行统一构建门禁、生成预览并同步中文 `usage/` 与英文 `usage-en/`，默认同时打包和校验 Eden 测试应用。只更新图片可用 `python tools/package_remote.py --previews`；它不构建安装包，也不运行完整测试。生成后可运行 `python tools/build/sync_doc_previews.py --check`，逐字节核对两种文档图片与本轮生成物一致。
 
-路径映射：简体中文 `build/ui-previews/<场景>` → `docs/images/usage/<场景>`；英文 `build/ui-previews/en/<场景>` → `docs/images/usage-en/<场景>`。繁体中文与其余主题/边界场景仍由生成器输出到 `build/ui-previews/`，文档按用途选图，不全量复制。配对二维码页面由同一渲染器生成（`parent/pairing-qr-demo-light.png`），二维码只编码保留的 `https://example.invalid/playwise` 演示地址，不使用真实家庭配置；历史真机照片与网页示意仍按使用指南单独维护。
+路径映射：简体中文 `build/ui-previews/<场景>` → `docs/images/usage/<场景>`；英文 `build/ui-previews/en/<场景>` → `docs/images/usage-en/<场景>`。繁体中文与其余主题/边界场景仍由生成器输出到 `build/ui-previews/`，文档按用途选图，不全量复制。配对二维码页面由同一渲染器生成（`parent/pairing-qr-demo-light.png`），二维码编码官方网页应用地址（`https://selfuppen.github.io/NX-PlayWise/`），不使用真实家庭凭据；历史真机照片与网页示意仍按使用指南单独维护。
 
 ## 从 174 张复核预览选取的补充场景
 
