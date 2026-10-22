@@ -127,7 +127,8 @@ typedef enum {
     PTC_UI_HIT_DOCK_FIELD,
     PTC_UI_HIT_DAY_DECISION_REFRESH,
     PTC_UI_HIT_DAY_DECISION_PREV,
-    PTC_UI_HIT_DAY_DECISION_NEXT
+    PTC_UI_HIT_DAY_DECISION_NEXT,
+    PTC_UI_HIT_LANGUAGE_SWITCH
 } PtcUiHitKind;
 
 typedef struct {
@@ -160,6 +161,7 @@ PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_time_status_bar_rect(void);
 PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model);
+PtcUiRect ptc_ui_header_language_rect(void);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);

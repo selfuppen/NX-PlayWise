@@ -283,6 +283,9 @@ static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int
         draw_line(pixels, stride, cx + 7, cy - 6, cx + 10, cy, 2, color);
         draw_line(pixels, stride, cx + 10, cy, cx + 7, cy + 6, 2, color);
         break;
+    case UI_ACTION_ICON_LANGUAGE:
+        draw_globe_icon(pixels, stride, cx, cy, 11, color);
+        break;
     default:
         draw_circle_outline(pixels, stride, cx, cy, 8, 2, color);
         break;

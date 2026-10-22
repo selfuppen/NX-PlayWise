@@ -865,3 +865,58 @@ void draw_status_symbol(
         fill_rect(pixels, stride, (UiRect){left + 8, top + 9, 4, 8}, color);
     }
 }
+
+void draw_globe_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color)
+{
+    if (radius <= 3) return;
+    /* 1. Outer circle outline */
+    draw_circle_outline(pixels, stride, cx, cy, radius, radius >= 10 ? 2 : 1, color);
+
+    /* 2. Equator line */
+    int eq_span = radius - 1;
+    draw_line(pixels, stride, cx - eq_span, cy, cx + eq_span, cy, 1, color);
+
+    /* 3. Vertical prime meridian line */
+    draw_line(pixels, stride, cx, cy - eq_span, cx, cy + eq_span, 1, color);
+
+    /* 4. Elliptical curved meridian lines on both sides */
+    float rx = (float)radius * 0.48f;
+    const int steps = 16;
+    float prev_x_r = (float)cx;
+    float prev_y_r = (float)(cy - radius + 1);
+    float prev_x_l = (float)cx;
+    float prev_y_l = (float)(cy - radius + 1);
+    for (int i = 1; i <= steps; ++i) {
+        float angle = -1.5707963f + 3.14159265f * ((float)i / (float)steps);
+        float y = (float)cy + ((float)radius - 1.0f) * sinf(angle);
+        float x_offset = rx * cosf(angle);
+        float xr = (float)cx + x_offset;
+        float xl = (float)cx - x_offset;
+        draw_line(pixels, stride, (int)(prev_x_r + 0.5f), (int)(prev_y_r + 0.5f),
+                  (int)(xr + 0.5f), (int)(y + 0.5f), 1, color);
+        draw_line(pixels, stride, (int)(prev_x_l + 0.5f), (int)(prev_y_l + 0.5f),
+                  (int)(xl + 0.5f), (int)(y + 0.5f), 1, color);
+        prev_x_r = xr;
+        prev_y_r = y;
+        prev_x_l = xl;
+        prev_y_l = y;
+    }
+}
+
+void draw_language_switcher_badge(uint32_t *pixels, uint32_t stride, UiRect rect, bool focused)
+{
+    int corner_r = rect.height / 2;
+    fill_round_rect(pixels, stride, rect, corner_r, focused ? UI_ACCENT_SOFT : UI_SURFACE);
+    draw_rect_outline(pixels, stride, rect, corner_r, focused ? 2 : 1, focused ? UI_ACCENT : UI_BORDER);
+
+    int icon_r = (rect.height <= 26) ? 5 : 7;
+    int font_sz = (rect.height <= 26) ? 11 : 13;
+    int icon_cx = rect.x + (rect.height <= 26 ? 12 : 16);
+    int icon_cy = rect.y + rect.height / 2;
+    draw_globe_icon(pixels, stride, icon_cx, icon_cy, icon_r, UI_ACCENT);
+
+    const char *label = ptc_ui_text(PTC_UI_T_LANG_BADGE);
+    int text_x = icon_cx + icon_r + (rect.height <= 26 ? 5 : 7);
+    int text_y = rect.y + rect.height / 2 + (rect.height <= 26 ? 4 : 5);
+    draw_text(pixels, stride, text_x, text_y, label, font_sz, focused ? UI_ACCENT : UI_INK);
+}

@@ -32,7 +32,7 @@ static const UiAction SETTINGS_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CHANGE_PIN), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_ENABLED), UI_ACCENT, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_APPEARANCE_THEME), "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_PARENT_SHORTCUT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CURRENT_MINUS_2), UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_UI_LANGUAGE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_FOLLOW_SYSTEM), UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_UI_LANGUAGE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_FOLLOW_SYSTEM), UI_ACCENT, UI_ACTION_ICON_LANGUAGE, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOMEBREW_ACCESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NOT_ENABLED), UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SOUND_EFFECTS), "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_FAMILY_ACTIVITIES), PTC_UI_TEXT_REFERENCE(PTC_UI_T_LAST_200), UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
@@ -730,6 +730,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
           ptc_ui_text(PTC_UI_T_LOCAL_RULES_AND_DEVICE_SECURITY_SETTINGS))));
     draw_time_status_bar(pixels, stride, model);
     draw_tabs(pixels, stride, model);
+    if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()), false);
+    }
     if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
         actions = actions_for_page(model->parent_page, &action_count);
         if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -905,6 +908,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 dynamic_action = *action;
                 dynamic_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
                 action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+                UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
+                draw_language_switcher_badge(pixels, stride, badge, false);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 dynamic_action = *action;
                 dynamic_action.subtitle = ptc_audio_is_enabled() ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_MUTED));
@@ -1007,6 +1013,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 fill_round_rect(pixels, stride, badge, 6, st_bg);
                 draw_rect_outline(pixels, stride, badge, 6, 1, st_bd);
                 draw_text_center(pixels, stride, badge, state_label, 12, state_color);
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+                UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
+                draw_language_switcher_badge(pixels, stride, badge, false);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 bool enabled = ptc_audio_is_enabled();
                 const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
@@ -1170,9 +1179,13 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
         /* Render Status Badge */
         UiRect badge = {help.x + help.width - 130, help.y + 24, 106, 26};
-        fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
-        draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
-        draw_text_center(pixels, stride, badge, status_text, 12, status_color);
+        if (sel == 3) {
+            draw_language_switcher_badge(pixels, stride, badge, true);
+        } else {
+            fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+            draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
+            draw_text_center(pixels, stride, badge, status_text, 12, status_color);
+        }
 
         /* Divider line */
         UiRect div = {help.x + 24, help.y + 92, help.width - 48, 1};

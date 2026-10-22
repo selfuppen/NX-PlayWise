@@ -740,7 +740,11 @@ function render() {
     return '<option value="' + v + '" ' + (Math.round(scale * 100) === v ? 'selected' : '') + '>' + v + '%</option>';
   }).join('') + '</select></label>';
   html += '<span class="sep"></span>';
-  html += '<button id="lang" class="' + (lang === 'en' ? 'on' : '') + '">' + (lang === 'zh' ? '中文 / EN' : 'EN / 中文') + '</button>';
+  html += '<button id="lang" class="' + (lang === 'en' ? 'on' : '') + '" style="display:inline-flex;align-items:center;gap:5px;">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line>' +
+    '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' +
+    (lang === 'zh' ? '中文 / EN' : 'EN / 中文') + '</button>';
   bar.innerHTML = html;
 
   bar.querySelectorAll('button[data-s]').forEach(function(b) {

@@ -435,6 +435,7 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped));
     draw_header(pixels, stride, ptc_ui_text(PTC_UI_T_SELF_DISCIPLINE_IS_FREEDOM), ptc_ui_text(PTC_UI_T_ARRANGE_TIME_REASONABLY_AND_BE_THE_MASTER));
     draw_time_status_bar(pixels, stride, model);
+    draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()), false);
     draw_child_task_summary(pixels, stride, model);
 
     /* 右侧动作栏 (4 个紧凑功能项目) */

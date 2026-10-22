@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#126b5b">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-TVgBMmoPu0NfWJKJ3R5fQZMJT4zcT+ruiUx2pYGRccA='; style-src 'sha256-hhoJUXMwoGF3Fu043SXrtAIAisuYUat5c68/RjuCcBs='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-7si8RqAKiIe2yoCvoVRioFMVIEUKea6mO2+CC2dTUSk='; style-src 'sha256-nVaW2ggtjciWqM6P6jj4JmFPAcqae+vAdpxWqdRVt28='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
   <title>任我玩 · PlayWise</title>
   <style>
 :root {
@@ -90,6 +90,9 @@ button { cursor: pointer; }
 .eyebrow { margin: 0 0 2px; color: var(--accent); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .header-actions { display: flex; align-items: center; gap: 10px; }
 .lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--border-control);
   border-radius: 999px;
   background: var(--bg-surface);
@@ -99,6 +102,10 @@ button { cursor: pointer; }
   font-weight: 700;
   line-height: 1.2;
   transition: all 0.15s ease;
+  cursor: pointer;
+}
+.lang-toggle .globe-icon {
+  flex-shrink: 0;
 }
 .lang-toggle:hover {
   background: var(--bg-raised);
@@ -190,7 +197,14 @@ footer a { color: var(--accent); font-weight: 700; }
       <strong data-i18n="brand_name">任我玩</strong>
     </div>
     <div class="header-actions">
-      <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language" data-i18n="lang_toggle_btn">English</button>
+      <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language">
+        <svg class="globe-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+        <span data-i18n="lang_toggle_btn">English</span>
+      </button>
       <span id="offlineBadge" class="badge" data-i18n="badge_standalone">单文件离线版</span>
     </div>
   </header>
@@ -990,7 +1004,12 @@ function applyTranslations(lang) {
   });
 
   if (langToggle) {
-    langToggle.textContent = t("lang_toggle_btn", {}, lang);
+    const textNode = langToggle.querySelector("[data-i18n='lang_toggle_btn']");
+    if (textNode) {
+      textNode.textContent = t("lang_toggle_btn", {}, lang);
+    } else {
+      langToggle.textContent = t("lang_toggle_btn", {}, lang);
+    }
     langToggle.setAttribute("aria-label", t("lang_toggle_aria", {}, lang));
   }
 

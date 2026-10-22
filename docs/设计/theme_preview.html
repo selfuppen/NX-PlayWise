@@ -893,11 +893,21 @@
       <div class="theme-toggle-group">
         <button class="toggle-btn active" id="btnLight" onclick="setTheme('light')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-          浅色 (Light)
+          <span id="txtBtnLight">浅色 (Light)</span>
         </button>
         <button class="toggle-btn" id="btnDark" onclick="setTheme('dark')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-          深色 (Dark)
+          <span id="txtBtnDark">深色 (Dark)</span>
+        </button>
+      </div>
+      <div class="lang-toggle-group">
+        <button class="toggle-btn" id="btnLang" onclick="toggleLanguage()" title="切换语言 / Switch Language" style="display:inline-flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+          <span id="txtBtnLang">中文 / EN</span>
         </button>
       </div>
     </div>
@@ -1384,6 +1394,91 @@
       updateSemanticCodes();
     }
 
+    let currentLang = 'zh';
+
+    const I18N = {
+      zh: {
+        brand_name: "视觉风格与调色板交互预览",
+        brand_sub: "Nintendo Switch 界面调色与微几何规范",
+        style_indigo: "沉静靛蓝",
+        style_teal: "清爽青绿",
+        style_amethyst: "暮紫星夜",
+        style_slate: "极简冷灰",
+        mode_light: "浅色模式 (Light Mode)",
+        mode_dark: "深色模式 (Dark Mode)",
+        btn_light: "浅色 (Light)",
+        btn_dark: "深色 (Dark)",
+        btn_lang: "中文 / EN",
+        sec1_title: "Switch 真机界面实时模拟 (Live UI Simulator)",
+        sec1_desc: "基于 1280x720 纯 CPU 软件渲染约束与 1064px (108px 居中留白) 两端对齐规范",
+        sec2_title: "双主题全量调色板 (Full Light / Dark Color Palettes)",
+        sec2_desc: "点击色卡可直接复制对应十六进制 HEX 颜色值与 C 宏定义命名",
+        sec3_title: "状态语义色与层级规范 (Semantic States & Levels)",
+        sec3_desc: "高饱和实体配极浅软底，严格杜绝发灰脏黄色，强化 OLED 与液晶屏辨识度",
+        copy_hint: "点击复制",
+        toast_copy: "已复制",
+        color_val: "颜色值"
+      },
+      en: {
+        brand_name: "Visual Design & Palette Explorer",
+        brand_sub: "Nintendo Switch UI Palettes & Micro-Geometry Specification",
+        style_indigo: "Serene Indigo",
+        style_teal: "Fresh Teal",
+        style_amethyst: "Twilight Amethyst",
+        style_slate: "Minimal Slate",
+        mode_light: "Light Mode",
+        mode_dark: "Dark Mode",
+        btn_light: "Light",
+        btn_dark: "Dark",
+        btn_lang: "EN / 中文",
+        sec1_title: "Live Nintendo Switch UI Simulator",
+        sec1_desc: "Based on 1280x720 pure CPU rendering & 1064px justified alignment specifications",
+        sec2_title: "Full Light / Dark Color Palettes",
+        sec2_desc: "Click any color swatch to copy its HEX value and C constant name",
+        sec3_title: "Semantic States & Contrast Hierarchy",
+        sec3_desc: "High-saturation solids with ultra-soft tints for optimal readability on OLED & LCD screens",
+        copy_hint: "Click to copy",
+        toast_copy: "Copied",
+        color_val: "Color value"
+      }
+    };
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'zh' ? 'en' : 'zh';
+      applyLanguage();
+    }
+
+    function applyLanguage() {
+      const dict = I18N[currentLang];
+      const isDark = currentTheme === 'dark';
+      document.getElementById('currentModeLabel').textContent = isDark ? dict.mode_dark : dict.mode_light;
+      document.getElementById('txtBtnLight').textContent = dict.btn_light;
+      document.getElementById('txtBtnDark').textContent = dict.btn_dark;
+      document.getElementById('txtBtnLang').textContent = dict.btn_lang;
+
+      document.getElementById('btnStyleIndigo').textContent = dict.style_indigo;
+      document.getElementById('btnStyleTeal').textContent = dict.style_teal;
+      document.getElementById('btnStyleAmethyst').textContent = dict.style_amethyst;
+      document.getElementById('btnStyleSlate').textContent = dict.style_slate;
+
+      const brandName = document.querySelector('.brand-name');
+      if (brandName) brandName.textContent = dict.brand_name;
+      const brandSub = document.querySelector('.brand-sub');
+      if (brandSub) brandSub.textContent = dict.brand_sub;
+
+      const secTitles = document.querySelectorAll('.section-title');
+      if (secTitles[0]) secTitles[0].childNodes[secTitles[0].childNodes.length - 1].textContent = ' ' + dict.sec1_title;
+      if (secTitles[1]) secTitles[1].childNodes[secTitles[1].childNodes.length - 1].textContent = ' ' + dict.sec2_title;
+      if (secTitles[2]) secTitles[2].childNodes[secTitles[2].childNodes.length - 1].textContent = ' ' + dict.sec3_title;
+
+      const secDescs = document.querySelectorAll('.section-desc');
+      if (secDescs[0]) secDescs[0].textContent = dict.sec1_desc;
+      if (secDescs[1]) secDescs[1].textContent = dict.sec2_desc;
+      if (secDescs[2]) secDescs[2].textContent = dict.sec3_desc;
+
+      renderPaletteGrid();
+    }
+
     function setTheme(theme) {
       currentTheme = theme;
       document.documentElement.setAttribute('data-theme', theme);
@@ -1391,7 +1486,8 @@
       const isDark = theme === 'dark';
       document.getElementById('btnLight').classList.toggle('active', !isDark);
       document.getElementById('btnDark').classList.toggle('active', isDark);
-      document.getElementById('currentModeLabel').textContent = isDark ? '深色模式 (Dark Mode)' : '浅色模式 (Light Mode)';
+      const dict = I18N[currentLang];
+      document.getElementById('currentModeLabel').textContent = isDark ? dict.mode_dark : dict.mode_light;
 
       renderPaletteGrid();
       updateSemanticCodes();
@@ -1421,7 +1517,7 @@
             <div class="swatch-desc">${item.desc}</div>
             <div class="swatch-hex-row">
               <span class="swatch-hex">${item.hex}</span>
-              <span class="copy-hint">点击复制</span>
+              <span class="copy-hint">${I18N[currentLang].copy_hint}</span>
             </div>
           </div>
         `;

@@ -313,16 +313,49 @@ let mode='single', cur='ok', guides=false, scale=1;
 function frame(fn,s,sc){
   return `<div class="wrap" style="width:${448*sc}px;height:${720*sc}px"><div class="screen ${guides?'guides':''}" style="transform:scale(${sc})">${fn(s)}</div></div>`;
 }
+let lang = 'zh';
+const S = {
+  zh: {
+    all_states: "全部状态",
+    guidelines: "布局参考线",
+    zoom: "缩放",
+    today_status: "今日状态",
+    just_refreshed: "刚刚刷新",
+    guardian_rules: "守护规则",
+    other_rules: "其他规则",
+    today_rules: "今日规则",
+    ask_parent: "想继续玩，请找爸爸妈妈",
+    enter_code: "输入加时码"
+  },
+  en: {
+    all_states: "All States",
+    guidelines: "Guidelines",
+    zoom: "Zoom",
+    today_status: "Today's Status",
+    just_refreshed: "Just refreshed",
+    guardian_rules: "Active Rules",
+    other_rules: "Other Rules",
+    today_rules: "Today's Rules",
+    ask_parent: "Ask parents for more time",
+    enter_code: "Enter Code"
+  }
+};
+const t = k => (S[lang] && S[lang][k]) || k;
+
 function render(){
   const bar=document.getElementById('bar');
   bar.innerHTML=STATES.map(s=>`<button class="${mode==='single'&&cur===s.id?'on':''}" data-s="${s.id}">${s.name}</button>`).join('')
-   +`<button class="${mode==='all'?'on':''}" data-s="__all">全部状态</button><span class="sep"></span>`
-   +`<label><input type="checkbox" id="gd" ${guides?'checked':''}>布局参考线</label>`
-   +`<label>缩放 <select id="sc">${[1,.85,.7,.55].map(v=>`<option value="${v}" ${v===scale?'selected':''}>${Math.round(v*100)}%</option>`).join('')}</select></label>`;
-  bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+   +`<button class="${mode==='all'?'on':''}" data-s="__all">${t('all_states')}</button><span class="sep"></span>`
+   +`<label><input type="checkbox" id="gd" ${guides?'checked':''}>${t('guidelines')}</label>`
+   +`<label>${t('zoom')} <select id="sc">${[1,.85,.7,.55].map(v=>`<option value="${v}" ${v===scale?'selected':''}>${Math.round(v*100)}%</option>`).join('')}</select></label>`
+   +`<span class="sep"></span>`
+   +`<button id="lang" class="${lang==='en'?'on':''}" style="display:inline-flex;align-items:center;gap:5px;">`
+   +`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>${lang==='zh'?'中文 / EN':'EN / 中文'}</button>`;
+  bar.querySelectorAll('button[data-s]').forEach(b=>b.onclick=()=>{
     if(b.dataset.s==='__all'){mode='all';scale=.55}else{mode='single';cur=b.dataset.s;scale=1}render()});
   document.getElementById('gd').onchange=e=>{guides=e.target.checked;render()};
   document.getElementById('sc').onchange=e=>{scale=+e.target.value;render()};
+  document.getElementById('lang').onclick=()=>{lang=lang==='zh'?'en':'zh';render()};
   const o=document.getElementById('opts');
   const meta={A:['方案 A · 卡片层级（保守升级）','沿用现有卡片体系：分区标签建立“状态 → 规则”逻辑层级；规则分生效 / 待命 / 闲置三档，闲置项降噪。改动集中在 render_pages.hpp 的 begin_page / child_card，输入命中区基本不变。'],
               B:['方案 B · 状态横幅 + 规则链（更大胆）','当前状态直接占据顶部“大标题”位，品牌名降为 overline；规则以竖向链条呈现，节点亮 / 空心 / 灰点表达生效 / 待命 / 闲置，无卡片边框省高度。需重写 child_overview 的布局与命中区。']};

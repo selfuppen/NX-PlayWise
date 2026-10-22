@@ -131,6 +131,11 @@ PtcUiRect ptc_ui_time_status_bar_rect(void)
     return (PtcUiRect){754, 18, 472, 66};
 }
 
+PtcUiRect ptc_ui_header_language_rect(void)
+{
+    return (PtcUiRect){632, 28, 110, 36};
+}
+
 PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
 {
     PtcUiRect rect = ptc_ui_time_status_bar_rect();

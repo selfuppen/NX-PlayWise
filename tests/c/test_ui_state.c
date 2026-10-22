@@ -1388,6 +1388,7 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "disabled child code button is not actionable");
     model.disable_flag_present = false;
     check_hit(hit_center(&model, ptc_ui_child_refresh_rect()), PTC_UI_HIT_CHILD_REFRESH, 0, "child refresh button");
+    check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "child header language switcher");
     model.show_parent_shortcut_hint = true;
     model.custom_shortcut_enabled = true;
     check_hit(hit_center(&model, ptc_ui_child_footer_rect(1)), PTC_UI_HIT_CHILD_PARENT, 0,
@@ -1399,6 +1400,7 @@ static void test_release_hit_targets(void)
 
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
+    check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "parent today header language switcher");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_REFRESH, 0,
               "parent global refresh occupies the fourth footer slot");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_NONE, 0,
@@ -1740,6 +1742,7 @@ static void test_release_hit_targets(void)
               "numpad finish retains purpose for closing animation");
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
+    check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "parent today header language switcher");
     ptc_ui_open_home_details(&model);
     check_int(model.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "open home details sets overlay");
     check_int(model.home_details_page, 0, "open home details resets page to 0");
@@ -2266,6 +2269,7 @@ static void test_home_redesign(void)
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
+    check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "parent today header language switcher");
     const PtcUiRect quota_group = {548, 176, 696, 230};
     const PtcUiRect other_group = {548, 416, 696, 212};
     check_true(!rects_overlap(quota_group, other_group) &&
@@ -4059,6 +4063,7 @@ static void test_today_settings_links(void)
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
+    check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "parent today header language switcher");
     const PtcUiPlanPage pages[] = {PTC_UI_PLAN_PAGE_EYE_CARE, PTC_UI_PLAN_PAGE_BEDTIME, PTC_UI_PLAN_PAGE_DOCK};
     for (int i = 8; i <= 10; ++i) {
         PtcUiRect card = ptc_ui_today_status_rect(i);
