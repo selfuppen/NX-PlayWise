@@ -18,17 +18,17 @@
       --meta-accent: #58a6ff;
 
       /* PlayWise Light Palette */
-      --pw-light-page-bg: #F2F6F5;
+      --pw-light-page-bg: #F0F3FA;
       --pw-light-surface: #FFFFFF;
-      --pw-light-surface-raised: #E5EFEB;
-      --pw-light-border-decorative: #D2DFDB;
+      --pw-light-surface-raised: #E8EDF7;
+      --pw-light-border-decorative: #DBE1E9;
       --pw-light-border-control: #7A968F;
-      --pw-light-text-primary: #132521;
-      --pw-light-text-secondary: #49655F;
-      --pw-light-text-disabled: #8A9E99;
-      --pw-light-accent: #126B5B;
-      --pw-light-accent-soft: #E2F1ED;
-      --pw-light-focus: #0A4D41;
+      --pw-light-text-primary: #172640;
+      --pw-light-text-secondary: #53627A;
+      --pw-light-text-disabled: #9199A5;
+      --pw-light-accent: #245BC4;
+      --pw-light-accent-soft: #E4EDFF;
+      --pw-light-focus: #1247A8;
       --pw-light-on-accent: #FFFFFF;
       --pw-light-success: #15803D;
       --pw-light-success-vivid: #16A34A;
@@ -52,10 +52,10 @@
       --pw-dark-text-primary: #EEEEFF;
       --pw-dark-text-secondary: #AABBCC;
       --pw-dark-text-disabled: #667788;
-      --pw-dark-accent: #33DDBB;
-      --pw-dark-accent-soft: #113333;
-      --pw-dark-focus: #77FFEE;
-      --pw-dark-on-accent: #003322;
+      --pw-dark-accent: #77AAFF;
+      --pw-dark-accent-soft: #223355;
+      --pw-dark-focus: #AACCFF;
+      --pw-dark-on-accent: #112244;
       --pw-dark-success: #55DD77;
       --pw-dark-success-vivid: #55DD77;
       --pw-dark-success-soft: #113322;
@@ -190,7 +190,7 @@
       gap: 12px;
     }
 
-    .theme-toggle-group {
+    .theme-toggle-group, .style-toggle-group {
       display: flex;
       background: #21262d;
       padding: 3px;
@@ -883,6 +883,12 @@
       <div class="brand-sub">Visual Design & Palette Explorer</div>
     </div>
     <div class="header-controls">
+      <div class="style-toggle-group">
+        <button class="toggle-btn active" id="btnStyleIndigo" onclick="setStyle('indigo')">沉静靛蓝</button>
+        <button class="toggle-btn" id="btnStyleTeal" onclick="setStyle('teal')">清爽青绿</button>
+        <button class="toggle-btn" id="btnStyleAmethyst" onclick="setStyle('amethyst')">暮紫星夜</button>
+        <button class="toggle-btn" id="btnStyleSlate" onclick="setStyle('slate')">极简冷灰</button>
+      </div>
       <span class="mode-tag" id="currentModeLabel">浅色模式 (Light Mode)</span>
       <div class="theme-toggle-group">
         <button class="toggle-btn active" id="btnLight" onclick="setTheme('light')">
@@ -1187,15 +1193,15 @@
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--accent-soft); border-color: var(--accent); color: var(--accent);">
             <span class="status-swatch-role">软底 (UI_ACCENT_SOFT)</span>
-            <span class="status-swatch-code" id="hexAccentSoft">#E2F1ED</span>
+            <span class="status-swatch-code" id="hexAccentSoft">#E4EDFF</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--accent); color: var(--text-primary);">
             <span class="status-swatch-role">高亮轮廓 (Focus Outline)</span>
-            <span class="status-swatch-code" id="hexFocus">#0A4D41</span>
+            <span class="status-swatch-code" id="hexFocus">#1247A8</span>
           </div>
           <div class="status-swatch-item" style="background: var(--accent); border-color: var(--accent); color: var(--on-accent);">
             <span class="status-swatch-role">品牌主色 (UI_ACCENT)</span>
-            <span class="status-swatch-code" id="hexAccentSolid">#126B5B</span>
+            <span class="status-swatch-code" id="hexAccentSolid">#245BC4</span>
           </div>
         </div>
       </div>
@@ -1227,7 +1233,7 @@
         <span class="check-icon">✓</span>
         <div>
           <div class="check-title">高可读性明度对比</div>
-          <div class="check-desc">浅色模式正文字色 ≥ <code>#132521</code>，深色模式正文字色 ≥ <code>#EEEEFF</code>，无昏暗发沉现象。</div>
+          <div class="check-desc">浅色模式正文字色 ≥ <code>#172640</code>，深色模式正文字色 ≥ <code>#EEEEFF</code>，无昏暗发沉现象。</div>
         </div>
       </div>
 
@@ -1272,17 +1278,17 @@
   <script>
     const PALETTE_DATA = {
       light: [
-        { key: "page_bg", cName: ".page_bg", hex: "#F2F6F5", name: "页面底色", desc: "全局背景色，微偏蓝冷调，衬托前景卡片", textCol: "#132521" },
-        { key: "surface", cName: ".surface", hex: "#FFFFFF", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#132521" },
-        { key: "surface_raised", cName: ".surface_raised", hex: "#E5EFEB", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#132521" },
-        { key: "border_decorative", cName: ".border_decorative", hex: "#D2DFDB", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#132521" },
+        { key: "page_bg", cName: ".page_bg", hex: "#F0F3FA", name: "页面底色", desc: "全局背景色，微偏蓝冷调，衬托前景卡片", textCol: "#172640" },
+        { key: "surface", cName: ".surface", hex: "#FFFFFF", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#172640" },
+        { key: "surface_raised", cName: ".surface_raised", hex: "#E8EDF7", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#172640" },
+        { key: "border_decorative", cName: ".border_decorative", hex: "#DBE1E9", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#172640" },
         { key: "border_control", cName: ".border_control", hex: "#7A968F", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#FFFFFF" },
-        { key: "text_primary", cName: ".text_primary", hex: "#132521", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#FFFFFF" },
-        { key: "text_secondary", cName: ".text_secondary", hex: "#49655F", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#FFFFFF" },
-        { key: "text_disabled", cName: ".text_disabled", hex: "#8A9E99", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#FFFFFF" },
-        { key: "accent", cName: ".accent", hex: "#126B5B", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#FFFFFF" },
-        { key: "accent_soft", cName: ".accent_soft", hex: "#E2F1ED", name: "主色软底", desc: "主色对应浅色软背景", textCol: "#126B5B" },
-        { key: "focus", cName: ".focus", hex: "#0A4D41", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#FFFFFF" },
+        { key: "text_primary", cName: ".text_primary", hex: "#172640", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#FFFFFF" },
+        { key: "text_secondary", cName: ".text_secondary", hex: "#53627A", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#FFFFFF" },
+        { key: "text_disabled", cName: ".text_disabled", hex: "#9199A5", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#FFFFFF" },
+        { key: "accent", cName: ".accent", hex: "#245BC4", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#FFFFFF" },
+        { key: "accent_soft", cName: ".accent_soft", hex: "#E4EDFF", name: "主色软底", desc: "主色对应浅色软背景", textCol: "#245BC4" },
+        { key: "focus", cName: ".focus", hex: "#1247A8", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#FFFFFF" },
         { key: "success", cName: ".success", hex: "#15803D", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#FFFFFF" },
         { key: "success_soft", cName: ".success_soft", hex: "#EDF9F0", name: "成功极浅软底", desc: "极浅薄荷浅绿软底", textCol: "#15803D" },
         { key: "warning", cName: ".warning", hex: "#FA8C16", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#FFFFFF" },
@@ -1299,9 +1305,9 @@
         { key: "text_primary", cName: ".text_primary", hex: "#EEEEFF", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#111122" },
         { key: "text_secondary", cName: ".text_secondary", hex: "#AABBCC", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#111122" },
         { key: "text_disabled", cName: ".text_disabled", hex: "#667788", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#111122" },
-        { key: "accent", cName: ".accent", hex: "#33DDBB", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#003322" },
-        { key: "accent_soft", cName: ".accent_soft", hex: "#113333", name: "主色软底", desc: "主色对应暗蓝软背景", textCol: "#33DDBB" },
-        { key: "focus", cName: ".focus", hex: "#77FFEE", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#003322" },
+        { key: "accent", cName: ".accent", hex: "#77AAFF", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#112244" },
+        { key: "accent_soft", cName: ".accent_soft", hex: "#223355", name: "主色软底", desc: "主色对应暗蓝软背景", textCol: "#77AAFF" },
+        { key: "focus", cName: ".focus", hex: "#AACCFF", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#112244" },
         { key: "success", cName: ".success", hex: "#55DD77", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#111122" },
         { key: "success_soft", cName: ".success_soft", hex: "#113322", name: "成功极浅软底", desc: "暗翡翠绿软底", textCol: "#55DD77" },
         { key: "warning", cName: ".warning", hex: "#FFBB33", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#111122" },
@@ -1311,7 +1317,72 @@
       ]
     };
 
+    const STYLE_DATA = {
+      indigo: {
+        name: '沉静靛蓝 (Serene Indigo)',
+        light: { accent: '#245BC4', accentSoft: '#E4EDFF', focus: '#1247A8', hero: '#214EA3' },
+        dark:  { accent: '#77AAFF', accentSoft: '#223355', focus: '#AACCFF', hero: '#223388', onAccent: '#112244' }
+      },
+      teal: {
+        name: '清爽青绿 (Ocean Teal)',
+        light: { accent: '#0D7A70', accentSoft: '#E0F4F2', focus: '#08544D', hero: '#0B665E' },
+        dark:  { accent: '#44DDCC', accentSoft: '#113333', focus: '#77FFEE', hero: '#115555', onAccent: '#002222' }
+      },
+      amethyst: {
+        name: '暮紫星夜 (Night Amethyst)',
+        light: { accent: '#6340B8', accentSoft: '#F1ECFC', focus: '#482B96', hero: '#5332A0' },
+        dark:  { accent: '#BB99FF', accentSoft: '#332255', focus: '#DDCCFF', hero: '#442277', onAccent: '#221144' }
+      },
+      slate: {
+        name: '极简冷灰 (Slate Neutral)',
+        light: { accent: '#3B5270', accentSoft: '#EAF0F6', focus: '#25364D', hero: '#30435C' },
+        dark:  { accent: '#99BBDD', accentSoft: '#223344', focus: '#CCDDEE', hero: '#224466', onAccent: '#112233' }
+      }
+    };
+
     let currentTheme = 'light';
+    let currentStyle = 'indigo';
+
+    function setStyle(style) {
+      if (!STYLE_DATA[style]) return;
+      currentStyle = style;
+
+      ['Indigo', 'Teal', 'Amethyst', 'Slate'].forEach(s => {
+        const btn = document.getElementById('btnStyle' + s);
+        if (btn) btn.classList.toggle('active', s.toLowerCase() === style);
+      });
+
+      const s = STYLE_DATA[style];
+      const root = document.documentElement;
+      root.style.setProperty('--pw-light-accent', s.light.accent);
+      root.style.setProperty('--pw-light-accent-soft', s.light.accentSoft);
+      root.style.setProperty('--pw-light-focus', s.light.focus);
+      root.style.setProperty('--pw-light-hero', s.light.hero);
+
+      root.style.setProperty('--pw-dark-accent', s.dark.accent);
+      root.style.setProperty('--pw-dark-accent-soft', s.dark.accentSoft);
+      root.style.setProperty('--pw-dark-focus', s.dark.focus);
+      root.style.setProperty('--pw-dark-hero', s.dark.hero);
+      root.style.setProperty('--pw-dark-on-accent', s.dark.onAccent);
+
+      // Update palette data
+      const la = PALETTE_DATA.light.find(x => x.key === 'accent');
+      if (la) { la.hex = s.light.accent; la.desc = s.name + ' 强调色'; }
+      const las = PALETTE_DATA.light.find(x => x.key === 'accent_soft');
+      if (las) { las.hex = s.light.accentSoft; }
+      const lf = PALETTE_DATA.light.find(x => x.key === 'focus');
+      if (lf) { lf.hex = s.light.focus; }
+
+      const da = PALETTE_DATA.dark.find(x => x.key === 'accent');
+      if (da) { da.hex = s.dark.accent; da.desc = s.name + ' 4-bit 严格安全强调色'; }
+      const das = PALETTE_DATA.dark.find(x => x.key === 'accent_soft');
+      if (das) { das.hex = s.dark.accentSoft; }
+      const df = PALETTE_DATA.dark.find(x => x.key === 'focus');
+      if (df) { df.hex = s.dark.focus; }
+
+      renderPaletteGrid();
+      updateSemanticCodes();
+    }
 
     function setTheme(theme) {
       currentTheme = theme;
@@ -1372,9 +1443,9 @@
       document.getElementById('hexDangerBorder').textContent = isDark ? '#882233' : '#FCA5A5';
       document.getElementById('hexDangerSolid').textContent = isDark ? '#FF7788' : '#C42B45';
 
-      document.getElementById('hexAccentSoft').textContent = isDark ? '#113333' : '#E2F1ED';
-      document.getElementById('hexFocus').textContent = isDark ? '#77FFEE' : '#0A4D41';
-      document.getElementById('hexAccentSolid').textContent = isDark ? '#33DDBB' : '#126B5B';
+      document.getElementById('hexAccentSoft').textContent = isDark ? '#223355' : '#E4EDFF';
+      document.getElementById('hexFocus').textContent = isDark ? '#AACCFF' : '#1247A8';
+      document.getElementById('hexAccentSolid').textContent = isDark ? '#77AAFF' : '#245BC4';
     }
 
     function copyText(text, label) {

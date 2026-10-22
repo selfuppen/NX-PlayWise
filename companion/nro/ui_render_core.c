@@ -3,10 +3,11 @@
 UiRuntime g_ui;
 const PtcUiPalette *g_palette;
 PtcUiThemeView g_theme = {
-    PTC_UI_THEME_SYSTEM,
-    PTC_UI_RESOLVED_LIGHT,
-    NULL,
-    false
+    .preference = PTC_UI_THEME_SYSTEM,
+    .style = PTC_UI_THEME_STYLE_INDIGO,
+    .resolved = PTC_UI_RESOLVED_LIGHT,
+    .palette = NULL,
+    .system_theme_available = false
 };
 
 int64_t ptc_ui_render_now(void)

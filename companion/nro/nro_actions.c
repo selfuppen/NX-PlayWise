@@ -61,7 +61,7 @@ void refresh_theme(UiState *ui)
 {
     if (!ui) return;
     ui->system_theme = read_system_theme();
-    ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
+    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, ui->theme_style, ui->system_theme);
     ui->theme_refresh_pending = false;
 }
 
@@ -114,7 +114,7 @@ bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
     if (!ui) return false;
     previous = ui->theme_preference;
     ui->theme_preference = preference;
-    ui->theme_view = ptc_ui_theme_make_view(preference, ui->system_theme);
+    ui->theme_view = ptc_ui_theme_make_styled_view(preference, ui->theme_style, ui->system_theme);
     if (save_ui_preferences(ui)) return true;
     if (ui->model.view == PTC_UI_SETUP) {
         ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_THEME, PTC_ERR_STORAGE_WRITE_FAILED);
@@ -122,7 +122,22 @@ bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
         return false;
     }
     ui->theme_preference = previous;
-    ui->theme_view = ptc_ui_theme_make_view(previous, ui->system_theme);
+    ui->theme_view = ptc_ui_theme_make_styled_view(previous, ui->theme_style, ui->system_theme);
+    return false;
+}
+
+bool apply_theme_style(UiState *ui, PtcUiThemeStyle style)
+{
+    PtcUiThemeStyle previous;
+    if (!ui) return false;
+    previous = ui->theme_style;
+    ui->theme_style = style;
+    ptc_ui_theme_set_style(style);
+    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, style, ui->system_theme);
+    if (save_ui_preferences(ui)) return true;
+    ui->theme_style = previous;
+    ptc_ui_theme_set_style(previous);
+    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, previous, ui->system_theme);
     return false;
 }
 

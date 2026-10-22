@@ -21,6 +21,14 @@ typedef enum {
     PTC_UI_RESOLVED_DARK = 1
 } PtcUiResolvedTheme;
 
+typedef enum {
+    PTC_UI_THEME_STYLE_INDIGO = 0,   /* 沉静靛蓝 (Serene Indigo) - 默认 */
+    PTC_UI_THEME_STYLE_TEAL = 1,     /* 清爽青绿 (Ocean Teal) */
+    PTC_UI_THEME_STYLE_AMETHYST = 2, /* 暮紫星夜 (Night Amethyst) */
+    PTC_UI_THEME_STYLE_SLATE = 3,    /* 极简冷灰 (Slate Neutral) */
+    PTC_UI_THEME_STYLE_COUNT = 4
+} PtcUiThemeStyle;
+
 /* Colors are stored as platform-independent 0xRRGGBB values. */
 typedef struct {
     uint32_t page_bg;
@@ -65,6 +73,7 @@ typedef struct {
 
 typedef struct {
     PtcUiThemePreference preference;
+    PtcUiThemeStyle style;
     PtcUiResolvedTheme resolved;
     const PtcUiPalette *palette;
     bool system_theme_available;
@@ -76,9 +85,27 @@ const char *ptc_ui_theme_preference_label(PtcUiThemePreference preference);
 PtcUiResolvedTheme ptc_ui_theme_resolve(
     PtcUiThemePreference preference,
     PtcUiSystemTheme system_theme);
+
+/* 主题风格解析与本地化辅助 */
+bool ptc_ui_theme_parse_style(const char *text, PtcUiThemeStyle *out);
+const char *ptc_ui_theme_style_name(PtcUiThemeStyle style);
+const char *ptc_ui_theme_style_label(PtcUiThemeStyle style);
+const char *ptc_ui_theme_style_desc(PtcUiThemeStyle style);
+
+/* 全局活动风格控制 */
+void ptc_ui_theme_set_style(PtcUiThemeStyle style);
+PtcUiThemeStyle ptc_ui_theme_get_style(void);
+
+/* 调色板查询：支持指定风格以及默认活动风格 */
+const PtcUiPalette *ptc_ui_theme_style_palette(PtcUiResolvedTheme theme, PtcUiThemeStyle style);
 const PtcUiPalette *ptc_ui_theme_palette(PtcUiResolvedTheme theme);
+
 PtcUiThemeView ptc_ui_theme_make_view(
     PtcUiThemePreference preference,
+    PtcUiSystemTheme system_theme);
+PtcUiThemeView ptc_ui_theme_make_styled_view(
+    PtcUiThemePreference preference,
+    PtcUiThemeStyle style,
     PtcUiSystemTheme system_theme);
 
 #endif

@@ -53,6 +53,12 @@ static void load_overlay_config(PtcStorage *storage)
         const cJSON *theme_item = cJSON_GetObjectItemCaseSensitive(root, "theme");
         if (cJSON_IsString(theme_item))
             (void)ptc_ui_theme_parse_preference(theme_item->valuestring, &theme_preference);
+        const cJSON *style_item = cJSON_GetObjectItemCaseSensitive(root, "theme_style");
+        if (cJSON_IsString(style_item)) {
+            PtcUiThemeStyle style;
+            if (ptc_ui_theme_parse_style(style_item->valuestring, &style))
+                set_overlay_theme_style(style);
+        }
         cJSON_Delete(root);
     }
     if (R_SUCCEEDED(setInitialize())) {

@@ -1685,7 +1685,13 @@ PtcUiRect ptc_ui_album_refresh_rect(void)
 PtcUiRect ptc_ui_theme_option_rect(int index)
 {
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + index * 396, 176, 380, 380};
+    return (PtcUiRect){54 + index * 396, 178, 380, 226};
+}
+
+PtcUiRect ptc_ui_theme_style_rect(int index)
+{
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + index * 297, 452, 281, 174};
 }
 
 PtcUiRect ptc_ui_language_option_rect(int index)

@@ -883,8 +883,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 action = &dynamic_action;
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 1) {
+                static char theme_subtitle[96];
                 dynamic_action = *action;
-                dynamic_action.subtitle = ptc_ui_theme_preference_label(g_theme.preference);
+                snprintf(theme_subtitle, sizeof(theme_subtitle), "%s / %s",
+                         ptc_ui_theme_preference_label(g_theme.preference),
+                         ptc_ui_theme_style_label(ptc_ui_theme_get_style()));
+                dynamic_action.subtitle = theme_subtitle;
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 2) {
                 static char shortcut_detail[112];

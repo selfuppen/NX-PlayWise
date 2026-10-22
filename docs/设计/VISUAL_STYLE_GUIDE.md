@@ -28,18 +28,29 @@ All pages must adapt seamlessly to both color modes, matching system or user pre
 
 ## 2. Color Palette & Semantic System
 
-### 2.1 Base Surface & Layering (`companion/nro/ui_theme.c`)
+### 2.1 Base Surface & Brand Styles (`companion/nro/ui_theme.c`)
+
+PlayWise supports real-time runtime switching across 4 calibrated brand styles with zero code changes, adhering strictly to the 4-bit RGBA4444 dark contract (each channel is a multiple of 0x11, contrast $\ge 6.7:1$ against `#112233` surface):
+
+| Brand Style | Light Accent (`accent`) | Light Soft (`accent_soft`) | Dark Accent (4-bit) | Dark Soft (4-bit) | Aesthetic & Concept |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **0. Serene Indigo (Default)** | `#245BC4` | `#E4EDFF` | `#77AAFF` | `#223355` | Rational, focused, deep digital aesthetic |
+| **1. Ocean Teal** | `#0D7A70` | `#E0F4F2` | `#44DDCC` | `#113333` | Organic, refreshing, vitality & eye-comfort |
+| **2. Night Amethyst** | `#6340B8` | `#F1ECFC` | `#BB99FF` | `#332255` | Gentle, dreamy, elegant night-sky violet |
+| **3. Slate Neutral** | `#3B5270` | `#EAF0F6` | `#99BBDD` | `#223344` | Understated, modern, clean industrial slate |
+
+#### Global Surface & Structural Colors
 
 | Semantic Role | Light Mode | Dark Mode | Usage Description |
 | :--- | :--- | :--- | :--- |
-| **Page Background (`page_bg`)** | `#F2F6F5` | `#111122` | Global canvas backdrop, calm teal/night tint |
+| **Page Background (`page_bg`)** | `#F0F3FA` | `#111122` | Global canvas backdrop, calm teal/night tint |
 | **Base Surface (`surface`)** | `#FFFFFF` | `#112233` | Top-level cards, main panels (4-bit RGBA4444 safe) |
-| **Raised Surface (`surface_raised`)** | `#E5EFEB` | `#223344` | Secondary containers, result summary cards |
-| **Decorative Border (`border_decorative`)** | `#D2DFDB` | `#334455` | Subtle card dividers and panel strokes (1px) |
-| **Control Border (`border_control`)** | `#6E8A83` | `#778899` | Interactive buttons, inactive input frames |
-| **Primary Text (`text_primary`)** | `#132521` | `#EEEEFF` | Key headlines, major numbers, body emphasis |
-| **Secondary Text (`text_secondary`)** | `#49655F` | `#AABBCC` | Subtitles, labels, auxiliary metrics |
-| **Disabled Text (`text_disabled`)** | `#8A9E99` | `#667788` | Disabled actions, placeholders, decorative glyphs |
+| **Raised Surface (`surface_raised`)** | `#E8EDF7` | `#223344` | Secondary containers, result summary cards |
+| **Decorative Border (`border_decorative`)** | `#DBE1E9` | `#334455` | Subtle card dividers and panel strokes (1px) |
+| **Control Border (`border_control`)** | `#6E7D94` | `#778899` | Interactive buttons, inactive input frames |
+| **Primary Text (`text_primary`)** | `#172640` | `#EEEEFF` | Key headlines, major numbers, body emphasis |
+| **Secondary Text (`text_secondary`)** | `#53627A` | `#AABBCC` | Subtitles, labels, auxiliary metrics |
+| **Disabled Text (`text_disabled`)** | `#9199A5` | `#667788` | Disabled actions, placeholders, decorative glyphs |
 
 ---
 
@@ -82,8 +93,8 @@ PlayWise follows modern UI principles pairing **saturated foregrounds with ultra
 
 #### D. Brand Accent & Information (Accent / Info)
 * **Context**: Focus rings, decision sequence pills, keyframe dots, default active segments.
-* **Light Mode**: Accent `#126B5B` (Teal), Soft background `#E2F1ED`.
-* **Dark Mode**: Accent `#33DDBB` (Cyan-Teal), Soft background `#113333`.
+* **Light Mode**: Accent `#126B5B` (Teal), Soft background `#E4EDFF`.
+* **Dark Mode**: Accent `#33DDBB` (Cyan-Teal), Soft background `#223355`.
 
 ---
 

@@ -409,6 +409,11 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_THEME_OPTION, i);
             }
         }
+        for (i = 0; i < 4; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_theme_style_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_THEME_OPTION, 3 + i);
+            }
+        }
         break;
     case PTC_UI_OVERLAY_LANGUAGE:
         for (i = 0; i < 4; ++i) {
