@@ -417,14 +417,9 @@ static void draw_bedtime_window_value(char *out, size_t out_size, const PtcBedti
         (unsigned int)(window->end_minute / 60), (unsigned int)(window->end_minute % 60));
 }
 
-static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+static void draw_bedtime_sections(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
     const char *SECTIONS[] = {ptc_ui_text(PTC_UI_T_WEEKLY_2), ptc_ui_text(PTC_UI_T_HOLIDAYS), ptc_ui_text(PTC_UI_T_GO_TO_BED_ON_THE_SPECIFIED_DATE)};
-    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
-    char line[128];
-    int64_t raw_now = ptc_ui_render_now();
-    uint16_t minute_of_day = ptc_ui_render_minute_of_day(raw_now);
     for (int i = 0; i < 3; ++i) {
         UiRect rect = to_uirect(ptc_ui_bedtime_section_rect(i));
         bool selected = model->bedtime_section == (PtcUiBedtimeSection)i;
@@ -435,17 +430,12 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         else draw_rect_outline(pixels, stride, rect, 12, 1, selected ? UI_ACCENT : UI_BORDER);
         draw_text_center(pixels, stride, rect, SECTIONS[i], 18, selected ? UI_ON_ACCENT : UI_INK);
     }
+}
 
-    bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
-    PtcUiBedtimeImpact bedtime_impact = ptc_ui_bedtime_save_impact(model,
-        minute_of_day, (int64_t)raw_now);
-    bool bedtime_save_danger = model->bedtime_dirty &&
-        (bedtime_impact == PTC_UI_BEDTIME_IMPACT_RESTRICT ||
-         bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN);
-    const char *section_name = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY
-        ? (ptc_ui_text(PTC_UI_T_WEEKLY_BEDTIME)) : (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR
-            ? (ptc_ui_text(PTC_UI_T_HOLIDAY_BEDTIME)) : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_BEDTIME)));
-
+static void draw_bedtime_master_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                     bool is_en, bool bedtime_enforcing)
+{
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
     /* 独立醒目的就寝管控总闸卡片 (Bedtime Master Circuit Breaker Card) */
     UiRect master_card = to_uirect(ptc_ui_bedtime_master_switch_rect());
     bool master_focused = model->bedtime_master_focused && !model->parent_footer_focused;
@@ -462,9 +452,6 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     }
     draw_text(pixels, stride, master_card.x + 18, master_card.y + 24, ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH), 20, UI_INK);
 
-    bool is_skipped_active = ptc_ui_status_is_fresh(model, raw_now) &&
-        (bedtime_impact == PTC_UI_BEDTIME_IMPACT_SKIPPED ||
-         ptc_ui_bedtime_skip_matches_policy(model, draft));
 
     {
         bool switch_dirty = draft->enabled != model->bedtime_policy.enabled;
@@ -510,402 +497,458 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled, false, model->disable_flag_present, NULL, NULL);
     draw_text(pixels, stride, master_card.x + master_card.width - (is_en ? 206 : 196), master_card.y + 24,
                ptc_ui_text(PTC_UI_T_A_TOGGLE), 13, UI_ACCENT);
+}
 
-    {
-        bool fresh = ptc_ui_status_is_fresh(model, raw_now);
-        bool can_skip = fresh && !model->bedtime_skipped &&
-            ((model->bedtime_active && model->bedtime_window_instance_id != 0) ||
-             model->bedtime_next_available);
-        bool can_restore = fresh && ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(0),
-            ptc_ui_text(PTC_UI_T_Y_SKIP_ONCE), UI_PAGE, UI_ACCENT, false,
-            !can_skip || model->waiting || model->disable_flag_present);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(1),
-            ptc_ui_text(PTC_UI_T_X_RESTORE_ONCE), UI_PAGE, can_restore ? UI_DANGER : UI_INK, false,
-            !can_restore || model->waiting || model->disable_flag_present);
-    }
+static void draw_bedtime_manage_buttons(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                        int64_t raw_now)
+{
+    bool fresh = ptc_ui_status_is_fresh(model, raw_now);
+    bool can_skip = fresh && !model->bedtime_skipped &&
+        ((model->bedtime_active && model->bedtime_window_instance_id != 0) ||
+         model->bedtime_next_available);
+    bool can_restore = fresh && ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy);
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(0),
+        ptc_ui_text(PTC_UI_T_Y_SKIP_ONCE), UI_PAGE, UI_ACCENT, false,
+        !can_skip || model->waiting || model->disable_flag_present);
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(1),
+        ptc_ui_text(PTC_UI_T_X_RESTORE_ONCE), UI_PAGE, can_restore ? UI_DANGER : UI_INK, false,
+        !can_restore || model->waiting || model->disable_flag_present);
+}
 
-    /* 页面状态、预测与风险统一在右侧卡片中 */
-    {
-        UiRect eval_card = {838, 276, 388, 350};
-        uint32_t state_color = strcmp(model->result_status, "error") == 0 ? UI_DANGER :
-            (model->waiting || model->bedtime_dirty ? UI_WARNING :
-             (bedtime_enforcing ? UI_DANGER : UI_SUCCESS));
-        uint32_t state_bg = state_color == UI_DANGER ? UI_DANGER_SOFT :
-            (state_color == UI_WARNING ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
-        char state_text[96];
-        snprintf(state_text, sizeof(state_text), ptc_ui_text(PTC_UI_T_CURRENTLY_ACTIVE_S_S),
-            model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ON_2) : ptc_ui_text(PTC_UI_T_CLOSE),
-            strcmp(model->result_status, "error") == 0 ? ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED) :
-            (model->waiting ? ptc_ui_text(PTC_UI_T_SAVING_3) :
-             (model->bedtime_dirty ? ptc_ui_text(PTC_UI_T_DRAFT_TO_BE_SAVED) : ptc_ui_text(PTC_UI_T_RULE_SAVED))));
-        draw_card_shadow(pixels, stride, eval_card, 12);
-        fill_round_rect(pixels, stride, eval_card, 12, UI_RGB(UI_BLENDED(surface)));
-        draw_rect_outline(pixels, stride, eval_card, 12, 1, UI_BORDER);
-        char preview_title[64];
-        snprintf(preview_title, sizeof(preview_title), "%s%s",
-                 model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_DRAFT_PREVIEW)) : "", section_name);
-        draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 24,
-                  preview_title, 17, UI_RGB(UI_BLENDED(text_primary)));
-        UiRect state_pill = {eval_card.x + 16, eval_card.y + 36, eval_card.width - 32, 32};
-        fill_round_rect(pixels, stride, state_pill, 9, state_bg);
-        draw_rect_outline(pixels, stride, state_pill, 9, 1, state_color);
-        draw_text_center(pixels, stride, state_pill, state_text, 14, state_color);
+static void draw_bedtime_preview(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                 uint16_t minute_of_day, PtcUiBedtimeImpact bedtime_impact,
+                                 bool is_skipped_active)
+{
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
+    bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
+    const char *section_name = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY
+        ? (ptc_ui_text(PTC_UI_T_WEEKLY_BEDTIME)) : (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR
+            ? (ptc_ui_text(PTC_UI_T_HOLIDAY_BEDTIME)) : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_BEDTIME)));
+    UiRect eval_card = {838, 276, 388, 350};
+    uint32_t state_color = strcmp(model->result_status, "error") == 0 ? UI_DANGER :
+        (model->waiting || model->bedtime_dirty ? UI_WARNING :
+         (bedtime_enforcing ? UI_DANGER : UI_SUCCESS));
+    uint32_t state_bg = state_color == UI_DANGER ? UI_DANGER_SOFT :
+        (state_color == UI_WARNING ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
+    char state_text[96];
+    snprintf(state_text, sizeof(state_text), ptc_ui_text(PTC_UI_T_CURRENTLY_ACTIVE_S_S),
+        model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ON_2) : ptc_ui_text(PTC_UI_T_CLOSE),
+        strcmp(model->result_status, "error") == 0 ? ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED) :
+        (model->waiting ? ptc_ui_text(PTC_UI_T_SAVING_3) :
+         (model->bedtime_dirty ? ptc_ui_text(PTC_UI_T_DRAFT_TO_BE_SAVED) : ptc_ui_text(PTC_UI_T_RULE_SAVED))));
+    draw_card_shadow(pixels, stride, eval_card, 12);
+    fill_round_rect(pixels, stride, eval_card, 12, UI_RGB(UI_BLENDED(surface)));
+    draw_rect_outline(pixels, stride, eval_card, 12, 1, UI_BORDER);
+    char preview_title[64];
+    snprintf(preview_title, sizeof(preview_title), "%s%s",
+             model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_DRAFT_PREVIEW)) : "", section_name);
+    draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 24,
+              preview_title, 17, UI_RGB(UI_BLENDED(text_primary)));
+    UiRect state_pill = {eval_card.x + 16, eval_card.y + 36, eval_card.width - 32, 32};
+    fill_round_rect(pixels, stride, state_pill, 9, state_bg);
+    draw_rect_outline(pixels, stride, state_pill, 9, 1, state_color);
+    draw_text_center(pixels, stride, state_pill, state_text, 14, state_color);
 
-        PtcRules eval_rules;
-        memset(&eval_rules, 0, sizeof(eval_rules));
-        eval_rules.bedtime = *draft;
-        PtcBedtimeEvaluation eval = ptc_bedtime_evaluate(
-            &eval_rules, model->day_index, ptc_weekday_from_day_index(model->day_index), minute_of_day);
+    PtcRules eval_rules;
+    memset(&eval_rules, 0, sizeof(eval_rules));
+    eval_rules.bedtime = *draft;
+    PtcBedtimeEvaluation eval = ptc_bedtime_evaluate(
+        &eval_rules, model->day_index, ptc_weekday_from_day_index(model->day_index), minute_of_day);
 
-        char forecast_line1[96];
-        char forecast_line2[96];
-        uint32_t f1_color = UI_RGB(UI_BLENDED(text_primary));
+    char forecast_line1[96];
+    char forecast_line2[96];
+    uint32_t f1_color = UI_RGB(UI_BLENDED(text_primary));
 
-        if (!draft->enabled) {
-            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_S_BEDTIME_DISABLED_NO_NIGHTTIME_LIMITS),
-                     model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_FORECAST_AFTER_SAVE))
-                                          : (ptc_ui_text(PTC_UI_T_CURRENT_STATE)));
-            f1_color = UI_MUTED;
-        } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_RESTRICT) {
-            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_IN_BEDTIME_HOURS_SAVING_WILL_RESTRICT_IMMEDIATELY));
-            f1_color = UI_DANGER;
-        } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN) {
-            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_MAY_RESTRICT_IMMEDIATELY_HOLD_TO));
-            f1_color = UI_DANGER;
-        } else if (is_skipped_active) {
-            uint16_t skipped_start = model->bedtime_skipped_window_available
-                ? model->bedtime_skipped_start_minute : eval.start_minute;
-            uint16_t skipped_end = model->bedtime_skipped_window_available
-                ? model->bedtime_skipped_end_minute : eval.end_minute;
-            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_SKIPPED_THIS_TIME_02U_02U_TO_NEXT),
-                (unsigned int)(skipped_start / 60), (unsigned int)(skipped_start % 60),
-                (unsigned int)(skipped_end / 60), (unsigned int)(skipped_end % 60));
-            f1_color = UI_SUCCESS;
-        } else if (eval.active) {
-            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_CURRENT_BEDTIME_RESTRICTION_ACTIVE));
-            f1_color = UI_DANGER;
-        } else {
-            PtcEffectiveBedtime eff_today = ptc_bedtime_resolve_start_day(
-                &eval_rules, model->day_index, ptc_weekday_from_day_index(model->day_index));
-            if (eff_today.window.enabled) {
-                int diff_m = (int)eff_today.window.start_minute - (int)minute_of_day;
-                if (diff_m < 0) diff_m += 1440;
-                snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_BEDTIME_STARTS_AT_02U_02U_TONIGHT_ABOUT),
-                         (unsigned int)(eff_today.window.start_minute / 60),
-                         (unsigned int)(eff_today.window.start_minute % 60),
-                         (unsigned int)(diff_m / 60), (unsigned int)(diff_m % 60));
-                f1_color = UI_SUCCESS;
-            } else {
-                snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_TONIGHT_WINDOW_CLOSED_NO_LIMITS));
-                f1_color = UI_MUTED;
-            }
-        }
-        draw_wrapped_text(pixels, stride, eval_card.x + 16, eval_card.y + 92,
-                          forecast_line1, 13, eval_card.width - 32, 19, 2, f1_color);
-
-        int enabled_count = 0;
-        int total_span_m = 0;
-        for (int d = 0; d < 7; ++d) {
-            if (draft->week[d].enabled) {
-                enabled_count++;
-                total_span_m += (int)(draft->week[d].end_minute + 1440 - draft->week[d].start_minute) % 1440;
-            }
-        }
-        if (draft->enabled) {
-            snprintf(forecast_line2, sizeof(forecast_line2), ptc_ui_text(PTC_UI_T_WEEKLY_STATS_D_7_DAYS_ON_U),
-                     enabled_count, (unsigned int)(total_span_m / 60));
-        } else {
-            snprintf(forecast_line2, sizeof(forecast_line2), ptc_ui_text(PTC_UI_T_S_D_7_DAYS_PRESET),
-                     model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_PAUSED_WEEKLY_AFTER_SAVE))
-                                          : (ptc_ui_text(PTC_UI_T_WEEKLY_DISABLED_INACTIVE)),
-                     enabled_count);
-        }
-        draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 138,
-                  forecast_line2, 13, UI_MUTED);
-
-        const char *cal_str = draft->calendar_enabled
-            ? (draft->enabled ? (ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_ON))
-                              : (ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_INACTIVE)))
-            : (ptc_ui_text(PTC_UI_T_HOLIDAYS_FOLLOW_WEEKLY_PLAN));
-        const char *sch_str = draft->scheduled_override.present
-            ? (draft->enabled ? (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_ACTIVE))
-                              : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_INACTIVE)))
-            : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_NOT_SET));
-        char special_line[128];
-        snprintf(special_line, sizeof(special_line), ptc_ui_text(PTC_UI_T_SPECIAL_RULES_S_S), cal_str, sch_str);
-        draw_wrapped_text(pixels, stride, eval_card.x + 16, eval_card.y + 166,
-                          special_line, 12, eval_card.width - 32, 18, 2, UI_MUTED);
-
-        UiRect risk = {eval_card.x + 16, eval_card.y + 206, eval_card.width - 32, 60};
-        fill_round_rect(pixels, stride, risk, 8,
-            model->bedtime_official_setting_confirmed && model->bedtime_overlay_verified
-                ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
-        draw_wrapped_text(pixels, stride, risk.x + 12, risk.y + 20,
-            model->bedtime_official_setting_confirmed
-                ? (model->bedtime_overlay_verified
-                    ? (ptc_ui_text(PTC_UI_T_OFFICIAL_SUSPEND_SETTING_CONFIRMED_OVERLAY_VERIFIED))
-                    : (ptc_ui_text(PTC_UI_T_OFFICIAL_SUSPEND_CONFIRMED_SAVE_ACCEPTS_UNVERIFIED_OVERLAY)))
-                : (ptc_ui_text(PTC_UI_T_BEFORE_ENABLING_CONFIRM_NINTENDO_PARENTAL_CONTROLS_HAS)),
-            12, risk.width - 24, 18, 2,
-            model->bedtime_official_setting_confirmed && model->bedtime_overlay_verified
-                ? UI_SUCCESS : UI_WARNING);
-
-        draw_text(pixels, stride, eval_card.x + 16,
-                  eval_card.y + eval_card.height - 18,
-                  ptc_ui_text(PTC_UI_T_TOGGLE_SAVE_ZL_DISCARD),
-                  14, UI_ACCENT);
-    }
-
-    if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY) {
-        int today_weekday = ptc_weekday_from_day_index(model->day_index);
-        for (int slot = 0; slot < 7; ++slot) {
-            int day = ptc_ui_weekday_for_display_slot(slot);
-            UiRect card = to_uirect(ptc_ui_bedtime_field_rect(PTC_UI_BEDTIME_WEEKLY, slot));
-            char value[64];
-            int diff = day - today_weekday;
-            uint16_t slot_day_idx = (uint16_t)(model->day_index + diff);
-            uint16_t c_y; uint8_t c_m, c_d;
-            bool has_date = ptc_date_from_day_index(slot_day_idx, &c_y, &c_m, &c_d);
-            bool is_today = (day == today_weekday);
-            bool is_active_day = (bedtime_enforcing && is_today);
-
-            draw_plan_card(pixels, stride, card,
-                model->selected_index == slot && !model->bedtime_section_focused &&
-                !model->parent_footer_focused && !model->bedtime_master_focused);
-
-            if (is_today) {
-                uint32_t today_bg = is_active_day ? UI_DANGER_SOFT :
-                    (is_skipped_active ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT);
-                uint32_t today_color = is_active_day ? UI_DANGER :
-                    (is_skipped_active ? UI_SUCCESS : UI_ACCENT);
-                fill_round_rect(pixels, stride, card, 16, today_bg);
-                draw_rect_outline(pixels, stride, card, 16, 2, today_color);
-                if (model->selected_index == slot && !model->bedtime_section_focused &&
-                    !model->parent_footer_focused && !model->bedtime_master_focused) {
-                    draw_focus_ring(pixels, stride, card, 16);
-                }
-                int pill_w = is_en ? (is_skipped_active ? 88 : (is_active_day ? 58 : 50)) : (is_skipped_active ? 74 : 50);
-                UiRect today_pill = {card.x + (card.width - pill_w) / 2, card.y + 6, pill_w, 18};
-                fill_round_rect(pixels, stride, today_pill, 5, today_color);
-                draw_text_center(pixels, stride, today_pill,
-                                 is_active_day ? (ptc_ui_text(PTC_UI_T_ACTIVE_3)) : (is_skipped_active ? (ptc_ui_text(PTC_UI_T_SKIP)) : (ptc_ui_text(PTC_UI_T_TODAY_4))),
-                                 11, UI_ON_ACCENT);
-            }
-
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 25 : 13), card.width, 20},
-                             ptc_ui_weekday_label((unsigned)day), is_today ? 17 : 16,
-                             is_today ? (is_active_day ? UI_DANGER : (is_skipped_active ? UI_SUCCESS : UI_ACCENT)) : UI_INK);
-
-            if (has_date) {
-                char date_str[16];
-                snprintf(date_str, sizeof(date_str), "%02u/%02u", c_m, c_d);
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 44 : 33), card.width, 18},
-                                 date_str, 12,
-                                 is_today ? (is_active_day ? UI_DANGER : (is_skipped_active ? UI_SUCCESS : UI_ACCENT)) : UI_MUTED);
-            }
-
-            draw_bedtime_window_value(value, sizeof(value), &draft->week[day]);
-            if (draft->week[day].enabled) {
-                snprintf(line, sizeof(line), "%02u:%02u",
-                    (unsigned int)(draft->week[day].start_minute / 60),
-                    (unsigned int)(draft->week[day].start_minute % 60));
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 64, card.width, 22}, line, 18,
-                                 draft->enabled ? (is_active_day ? UI_DANGER : (is_skipped_active && is_today ? UI_SUCCESS : UI_ACCENT)) : UI_MUTED);
-                snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TO_02U_02U),
-                    (unsigned int)(draft->week[day].end_minute / 60),
-                    (unsigned int)(draft->week[day].end_minute % 60));
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 88, card.width, 18}, line, 13, UI_MUTED);
-
-                /* 开启状态微标 */
-                UiRect pill = {card.x + (card.width - 48) / 2, card.y + 114, 48, 20};
-                fill_round_rect(pixels, stride, pill, 6,
-                                is_active_day ? UI_DANGER_SOFT : (draft->enabled ? (is_skipped_active && is_today ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT) : UI_RAISED));
-                draw_text_center(pixels, stride, pill,
-                                 is_active_day ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE)) : (is_skipped_active && is_today ? (ptc_ui_text(PTC_UI_T_SKIPPED_2)) : (draft->enabled ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_PAUSED)))), 12,
-                                 is_active_day ? UI_DANGER : (is_skipped_active && is_today ? UI_SUCCESS : (draft->enabled ? UI_ACCENT : UI_MUTED)));
-            } else {
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 74, card.width, 24}, ptc_ui_text(PTC_UI_T_OFF), 18, UI_MUTED);
-                UiRect pill = {card.x + (card.width - 48) / 2, card.y + 114, 48, 20};
-                fill_round_rect(pixels, stride, pill, 6, UI_RAISED);
-                draw_text_center(pixels, stride, pill, ptc_ui_text(PTC_UI_T_OFF), 12, UI_MUTED);
-            }
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 148, card.width, 18}, ptc_ui_text(PTC_UI_T_A_SET), 11, UI_MUTED);
-        }
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 7), ptc_ui_text(PTC_UI_T_COPY_TO_WEEKDAYS),
-            UI_PAGE, UI_ACCENT, model->selected_index == 7 && !model->bedtime_section_focused && !model->bedtime_master_focused, model->disable_flag_present);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 8), ptc_ui_text(PTC_UI_T_COPY_TO_WEEKENDS),
-            UI_PAGE, UI_ACCENT, model->selected_index == 8 && !model->bedtime_section_focused && !model->bedtime_master_focused, model->disable_flag_present);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 9), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
-            UI_PAGE, UI_INK, model->selected_index == 9 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 10),
-            bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
-            bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
-            model->selected_index == 10 && !model->bedtime_section_focused && !model->bedtime_master_focused,
-            !model->bedtime_dirty || model->disable_flag_present || model->waiting);
-
-        /* 左下角就寝规则说明面板（与右侧预测卡片底部平齐对齐至 y=626） */
-        UiRect bedtime_guide = {54, 526, 752, 100};
-        draw_card_shadow(pixels, stride, bedtime_guide, 12);
-        fill_round_rect(pixels, stride, bedtime_guide, 12, UI_RGB(UI_BLENDED(surface)));
-        draw_rect_outline(pixels, stride, bedtime_guide, 12, 1, UI_BORDER);
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 22,
-                   ptc_ui_text(PTC_UI_T_HOW_BEDTIME_WORKS), 15, UI_RGB(UI_BLENDED(text_primary)));
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 44,
-                   ptc_ui_text(PTC_UI_T_RESTRICTS_IMMEDIATELY_AT_BEDTIME_EVEN_IF_QUOTA), 13, UI_MUTED);
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 66,
-                   ptc_ui_text(PTC_UI_T_FOR_EXCEPTIONS_SELECT_SKIP_TONIGHT_BEDTIME_IN), 13, UI_MUTED);
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 88,
-                   ptc_ui_text(PTC_UI_T_CAN_SPAN_OVERNIGHT_E_G_22_00), 13, UI_MUTED);
-    } else if (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR) {
-        UiRect master = to_uirect(ptc_ui_bedtime_field_rect(1, 0));
-        draw_plan_card(pixels, stride, master, model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused);
-        draw_text(pixels, stride, master.x + 20, master.y + 40, ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_CALENDAR), 20, UI_INK);
-        if (!draft->enabled) {
-            draw_text(pixels, stride, master.x + (is_en ? 260 : 190), master.y + 40,
-                draft->calendar_enabled ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE)) : (ptc_ui_text(PTC_UI_T_OFF_2)), 18, UI_MUTED);
-        } else {
-            draw_text(pixels, stride, master.x + (is_en ? 260 : 190), master.y + 40,
-                draft->calendar_enabled ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)), 18,
-                draft->calendar_enabled ? UI_SUCCESS : UI_MUTED);
-        }
-        UiRect cal_toggle = {master.x + master.width - 76, master.y + (master.height - 28) / 2, 58, 28};
-        draw_toggle_switch(pixels, stride, cal_toggle, draft->calendar_enabled,
-                           model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused,
-                           !draft->enabled || model->disable_flag_present, NULL, NULL);
-        draw_text(pixels, stride, master.x + master.width - (is_en ? 180 : 165), master.y + 39, ptc_ui_text(PTC_UI_T_A_TOGGLE_2), 13, UI_MUTED);
-
-        for (int i = 0; i < 2; ++i) {
-            const PtcBedtimeSpecialRule *rule = i == 0 ? &draft->holiday_rule : &draft->makeup_workday_rule;
-            UiRect card = to_uirect(ptc_ui_bedtime_field_rect(1, i + 1));
-            char value[64];
-            draw_plan_card(pixels, stride, card, model->selected_index == i + 1 && !model->bedtime_section_focused && !model->bedtime_master_focused);
-            draw_text(pixels, stride, card.x + 18, card.y + 30,
-                i == 0 ? (ptc_ui_text(PTC_UI_T_STATUTORY_HOLIDAY)) : (ptc_ui_text(PTC_UI_T_MAKEUP_WORKDAY)), 19, UI_INK);
-            draw_bedtime_window_value(value, sizeof(value), &rule->window);
-            if (!draft->enabled) {
-                snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_S_INACTIVE),
-                    bedtime_override_label(rule->mode),
-                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : (ptc_ui_text(PTC_UI_T_USE_MATCHING_MODE)));
-            } else {
-                snprintf(line, sizeof(line), "%s  |  %s", bedtime_override_label(rule->mode),
-                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : (ptc_ui_text(PTC_UI_T_USE_MATCHING_MODE)));
-            }
-            draw_text(pixels, stride, card.x + 18, card.y + 72, line, 15, UI_MUTED);
-        }
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 3), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
-            UI_PAGE, UI_INK, model->selected_index == 3 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 4),
-            bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
-            bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
-            model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused,
-            !model->bedtime_dirty || model->disable_flag_present || model->waiting);
-
-        /* 节假日日历规则与总闸状态指引面板（底部与右侧预测卡平齐至 y=626） */
-        UiRect cal_guide = {54, 526, 752, 100};
-        draw_card_shadow(pixels, stride, cal_guide, 12);
-        fill_round_rect(pixels, stride, cal_guide, 12,
-                        !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
-        draw_rect_outline(pixels, stride, cal_guide, 12, 1,
-                          !draft->enabled ? UI_WARNING : UI_BORDER);
-        if (!draft->enabled) {
-            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
-                      ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 15, UI_WARNING);
-            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
-                      ptc_ui_text(PTC_UI_T_WHEN_DISABLED_HOLIDAY_AND_MAKEUP_BEDTIME_RULES), 13, UI_MUTED);
-            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
-                      ptc_ui_text(PTC_UI_T_SETTINGS_ARE_SAVED_PRESS_OR_TURN_ON), 13, UI_MUTED);
-        } else {
-            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
-                      ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_RULE_PRIORITIES), 15, UI_RGB(UI_BLENDED(text_primary)));
-            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
-                      ptc_ui_text(PTC_UI_T_WHEN_ENABLED_HOLIDAYS_AND_WORKDAYS_TAKE_PRIORITY), 13, UI_MUTED);
-            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
-                      ptc_ui_text(PTC_UI_T_SUGGEST_STRICT_BEDTIME_ON_MAKEUP_WORKDAYS_RELAX), 13, UI_MUTED);
-        }
+    if (!draft->enabled) {
+        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_S_BEDTIME_DISABLED_NO_NIGHTTIME_LIMITS),
+                 model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_FORECAST_AFTER_SAVE))
+                                      : (ptc_ui_text(PTC_UI_T_CURRENT_STATE)));
+        f1_color = UI_MUTED;
+    } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_RESTRICT) {
+        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_IN_BEDTIME_HOURS_SAVING_WILL_RESTRICT_IMMEDIATELY));
+        f1_color = UI_DANGER;
+    } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN) {
+        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_MAY_RESTRICT_IMMEDIATELY_HOLD_TO));
+        f1_color = UI_DANGER;
+    } else if (is_skipped_active) {
+        uint16_t skipped_start = model->bedtime_skipped_window_available
+            ? model->bedtime_skipped_start_minute : eval.start_minute;
+        uint16_t skipped_end = model->bedtime_skipped_window_available
+            ? model->bedtime_skipped_end_minute : eval.end_minute;
+        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_SKIPPED_THIS_TIME_02U_02U_TO_NEXT),
+            (unsigned int)(skipped_start / 60), (unsigned int)(skipped_start % 60),
+            (unsigned int)(skipped_end / 60), (unsigned int)(skipped_end % 60));
+        f1_color = UI_SUCCESS;
+    } else if (eval.active) {
+        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_CURRENT_BEDTIME_RESTRICTION_ACTIVE));
+        f1_color = UI_DANGER;
     } else {
-        const PtcBedtimeScheduledOverride *scheduled = &draft->scheduled_override;
-        uint32_t duration = scheduled->end_day_index >= scheduled->start_day_index
-            ? (uint32_t)scheduled->end_day_index - scheduled->start_day_index + 1u : 1u;
-        const char *labels[] = {ptc_ui_text(PTC_UI_T_GO_TO_BED_ON_THE_SPECIFIED_DATE), ptc_ui_text(PTC_UI_T_START_DATE), ptc_ui_text(PTC_UI_T_NUMBER_OF_DAYS_TO_LAST), ptc_ui_text(PTC_UI_T_BEDTIME_RULES)};
-        char values[4][96];
-        if (!draft->enabled) {
-            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE_2)) : (ptc_ui_text(PTC_UI_T_OFF)));
+        PtcEffectiveBedtime eff_today = ptc_bedtime_resolve_start_day(
+            &eval_rules, model->day_index, ptc_weekday_from_day_index(model->day_index));
+        if (eff_today.window.enabled) {
+            int diff_m = (int)eff_today.window.start_minute - (int)minute_of_day;
+            if (diff_m < 0) diff_m += 1440;
+            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_BEDTIME_STARTS_AT_02U_02U_TONIGHT_ABOUT),
+                     (unsigned int)(eff_today.window.start_minute / 60),
+                     (unsigned int)(eff_today.window.start_minute % 60),
+                     (unsigned int)(diff_m / 60), (unsigned int)(diff_m % 60));
+            f1_color = UI_SUCCESS;
         } else {
-            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)));
+            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_TONIGHT_WINDOW_CLOSED_NO_LIMITS));
+            f1_color = UI_MUTED;
         }
-        {
-            uint16_t year;
-            uint8_t month, day;
-            if (ptc_date_from_day_index(scheduled->start_day_index, &year, &month, &day))
-                snprintf(values[1], sizeof(values[1]), "%04u-%02u-%02u", year, month, day);
-            else snprintf(values[1], sizeof(values[1]), ptc_ui_text(PTC_UI_T_WAITING_FOR_DATE));
+    }
+    draw_wrapped_text(pixels, stride, eval_card.x + 16, eval_card.y + 92,
+                      forecast_line1, 13, eval_card.width - 32, 19, 2, f1_color);
+
+    int enabled_count = 0;
+    int total_span_m = 0;
+    for (int d = 0; d < 7; ++d) {
+        if (draft->week[d].enabled) {
+            enabled_count++;
+            total_span_m += (int)(draft->week[d].end_minute + 1440 - draft->week[d].start_minute) % 1440;
         }
-        snprintf(values[2], sizeof(values[2]), ptc_ui_text(PTC_UI_T_U_DAYS), (unsigned int)duration);
-        if (scheduled->rule.mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {
-            char value[64];
-            draw_bedtime_window_value(value, sizeof(value), &scheduled->rule.window);
-            snprintf(values[3], sizeof(values[3]), "%s  %s%s",
-                bedtime_override_label(scheduled->rule.mode), value,
-                draft->enabled ? "" : (ptc_ui_text(PTC_UI_T_INACTIVE)));
-        } else {
-            snprintf(values[3], sizeof(values[3]), "%s%s",
-                bedtime_override_label(scheduled->rule.mode),
-                draft->enabled ? "" : (ptc_ui_text(PTC_UI_T_INACTIVE)));
-        }
-        for (int i = 0; i < 4; ++i) {
-            UiRect row = to_uirect(ptc_ui_bedtime_field_rect(2, i));
-            draw_plan_card(pixels, stride, row, model->selected_index == i && !model->bedtime_section_focused && !model->bedtime_master_focused);
-            if (i == 0) {
-                draw_text(pixels, stride, row.x + 18, row.y + 31, labels[0], 17, UI_MUTED);
-                if (!draft->enabled) {
-                    draw_text(pixels, stride, row.x + (is_en ? 200 : 150), row.y + 31,
-                              scheduled->present ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE_2)) : (ptc_ui_text(PTC_UI_T_OFF)), 18, UI_MUTED);
-                } else {
-                    draw_text(pixels, stride, row.x + (is_en ? 200 : 150), row.y + 31,
-                              scheduled->present ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)), 18,
-                              scheduled->present ? UI_SUCCESS : UI_MUTED);
-                }
-                UiRect sched_toggle = {row.x + row.width - 76, row.y + (row.height - 28) / 2, 58, 28};
-                draw_toggle_switch(pixels, stride, sched_toggle, scheduled->present,
-                                   model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused,
-                                   !draft->enabled || model->disable_flag_present, NULL, NULL);
-                draw_text(pixels, stride, row.x + row.width - (is_en ? 180 : 165), row.y + 31, ptc_ui_text(PTC_UI_T_A_TOGGLE_2), 13, UI_MUTED);
-            } else {
-                draw_text(pixels, stride, row.x + 18, row.y + 31, labels[i], 17, UI_MUTED);
-                draw_text(pixels, stride, row.x + (is_en ? 200 : 240), row.y + 31, values[i], 18, UI_INK);
-                if (i == 1 || i == 2)
-                    draw_text(pixels, stride, row.x + (is_en ? 450 : 484), row.y + 31,
-                              ptc_ui_text(PTC_UI_T_A_EDIT_ZL_ZR_7_DAYS), 11, UI_MUTED);
+    }
+    if (draft->enabled) {
+        snprintf(forecast_line2, sizeof(forecast_line2), ptc_ui_text(PTC_UI_T_WEEKLY_STATS_D_7_DAYS_ON_U),
+                 enabled_count, (unsigned int)(total_span_m / 60));
+    } else {
+        snprintf(forecast_line2, sizeof(forecast_line2), ptc_ui_text(PTC_UI_T_S_D_7_DAYS_PRESET),
+                 model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_PAUSED_WEEKLY_AFTER_SAVE))
+                                      : (ptc_ui_text(PTC_UI_T_WEEKLY_DISABLED_INACTIVE)),
+                 enabled_count);
+    }
+    draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 138,
+              forecast_line2, 13, UI_MUTED);
+
+    const char *cal_str = draft->calendar_enabled
+        ? (draft->enabled ? (ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_ON))
+                          : (ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_INACTIVE)))
+        : (ptc_ui_text(PTC_UI_T_HOLIDAYS_FOLLOW_WEEKLY_PLAN));
+    const char *sch_str = draft->scheduled_override.present
+        ? (draft->enabled ? (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_ACTIVE))
+                          : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_INACTIVE)))
+        : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_NOT_SET));
+    char special_line[128];
+    snprintf(special_line, sizeof(special_line), ptc_ui_text(PTC_UI_T_SPECIAL_RULES_S_S), cal_str, sch_str);
+    draw_wrapped_text(pixels, stride, eval_card.x + 16, eval_card.y + 166,
+                      special_line, 12, eval_card.width - 32, 18, 2, UI_MUTED);
+
+    UiRect risk = {eval_card.x + 16, eval_card.y + 206, eval_card.width - 32, 60};
+    fill_round_rect(pixels, stride, risk, 8,
+        model->bedtime_official_setting_confirmed && model->bedtime_overlay_verified
+            ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
+    draw_wrapped_text(pixels, stride, risk.x + 12, risk.y + 20,
+        model->bedtime_official_setting_confirmed
+            ? (model->bedtime_overlay_verified
+                ? (ptc_ui_text(PTC_UI_T_OFFICIAL_SUSPEND_SETTING_CONFIRMED_OVERLAY_VERIFIED))
+                : (ptc_ui_text(PTC_UI_T_OFFICIAL_SUSPEND_CONFIRMED_SAVE_ACCEPTS_UNVERIFIED_OVERLAY)))
+            : (ptc_ui_text(PTC_UI_T_BEFORE_ENABLING_CONFIRM_NINTENDO_PARENTAL_CONTROLS_HAS)),
+        12, risk.width - 24, 18, 2,
+        model->bedtime_official_setting_confirmed && model->bedtime_overlay_verified
+            ? UI_SUCCESS : UI_WARNING);
+
+    draw_text(pixels, stride, eval_card.x + 16,
+              eval_card.y + eval_card.height - 18,
+              ptc_ui_text(PTC_UI_T_TOGGLE_SAVE_ZL_DISCARD),
+              14, UI_ACCENT);
+}
+
+static void draw_bedtime_weekly_section(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                        bool is_en, bool bedtime_enforcing, bool is_skipped_active,
+                                        bool bedtime_save_danger)
+{
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
+    char line[128];
+    int today_weekday = ptc_weekday_from_day_index(model->day_index);
+    for (int slot = 0; slot < 7; ++slot) {
+        int day = ptc_ui_weekday_for_display_slot(slot);
+        UiRect card = to_uirect(ptc_ui_bedtime_field_rect(PTC_UI_BEDTIME_WEEKLY, slot));
+        char value[64];
+        int diff = day - today_weekday;
+        uint16_t slot_day_idx = (uint16_t)(model->day_index + diff);
+        uint16_t c_y; uint8_t c_m, c_d;
+        bool has_date = ptc_date_from_day_index(slot_day_idx, &c_y, &c_m, &c_d);
+        bool is_today = (day == today_weekday);
+        bool is_active_day = (bedtime_enforcing && is_today);
+
+        draw_plan_card(pixels, stride, card,
+            model->selected_index == slot && !model->bedtime_section_focused &&
+            !model->parent_footer_focused && !model->bedtime_master_focused);
+
+        if (is_today) {
+            uint32_t today_bg = is_active_day ? UI_DANGER_SOFT :
+                (is_skipped_active ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT);
+            uint32_t today_color = is_active_day ? UI_DANGER :
+                (is_skipped_active ? UI_SUCCESS : UI_ACCENT);
+            fill_round_rect(pixels, stride, card, 16, today_bg);
+            draw_rect_outline(pixels, stride, card, 16, 2, today_color);
+            if (model->selected_index == slot && !model->bedtime_section_focused &&
+                !model->parent_footer_focused && !model->bedtime_master_focused) {
+                draw_focus_ring(pixels, stride, card, 16);
             }
+            int pill_w = is_en ? (is_skipped_active ? 88 : (is_active_day ? 58 : 50)) : (is_skipped_active ? 74 : 50);
+            UiRect today_pill = {card.x + (card.width - pill_w) / 2, card.y + 6, pill_w, 18};
+            fill_round_rect(pixels, stride, today_pill, 5, today_color);
+            draw_text_center(pixels, stride, today_pill,
+                             is_active_day ? (ptc_ui_text(PTC_UI_T_ACTIVE_3)) : (is_skipped_active ? (ptc_ui_text(PTC_UI_T_SKIP)) : (ptc_ui_text(PTC_UI_T_TODAY_4))),
+                             11, UI_ON_ACCENT);
         }
 
-        /* 指定日期规则与总闸状态指引面板（与保存/放弃按钮同高对齐） */
-        UiRect sched_guide = {54, 526, 360, 50};
-        draw_card_shadow(pixels, stride, sched_guide, 12);
-        fill_round_rect(pixels, stride, sched_guide, 12,
-                        !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
-        draw_rect_outline(pixels, stride, sched_guide, 12, 1,
-                          !draft->enabled ? UI_WARNING : UI_BORDER);
-        if (!draft->enabled) {
-            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 20,
-                      ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 13, UI_WARNING);
-            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 38,
-                      ptc_ui_text(PTC_UI_T_CURRENTLY_INACTIVE_ACTIVATES_WHEN_BEDTIME_SWITCH_IS), 12, UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 25 : 13), card.width, 20},
+                         ptc_ui_weekday_label((unsigned)day), is_today ? 17 : 16,
+                         is_today ? (is_active_day ? UI_DANGER : (is_skipped_active ? UI_SUCCESS : UI_ACCENT)) : UI_INK);
+
+        if (has_date) {
+            char date_str[16];
+            snprintf(date_str, sizeof(date_str), "%02u/%02u", c_m, c_d);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 44 : 33), card.width, 18},
+                             date_str, 12,
+                             is_today ? (is_active_day ? UI_DANGER : (is_skipped_active ? UI_SUCCESS : UI_ACCENT)) : UI_MUTED);
+        }
+
+        draw_bedtime_window_value(value, sizeof(value), &draft->week[day]);
+        if (draft->week[day].enabled) {
+            snprintf(line, sizeof(line), "%02u:%02u",
+                (unsigned int)(draft->week[day].start_minute / 60),
+                (unsigned int)(draft->week[day].start_minute % 60));
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 64, card.width, 22}, line, 18,
+                             draft->enabled ? (is_active_day ? UI_DANGER : (is_skipped_active && is_today ? UI_SUCCESS : UI_ACCENT)) : UI_MUTED);
+            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TO_02U_02U),
+                (unsigned int)(draft->week[day].end_minute / 60),
+                (unsigned int)(draft->week[day].end_minute % 60));
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 88, card.width, 18}, line, 13, UI_MUTED);
+
+            /* 开启状态微标 */
+            UiRect pill = {card.x + (card.width - 48) / 2, card.y + 114, 48, 20};
+            fill_round_rect(pixels, stride, pill, 6,
+                            is_active_day ? UI_DANGER_SOFT : (draft->enabled ? (is_skipped_active && is_today ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT) : UI_RAISED));
+            draw_text_center(pixels, stride, pill,
+                             is_active_day ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE)) : (is_skipped_active && is_today ? (ptc_ui_text(PTC_UI_T_SKIPPED_2)) : (draft->enabled ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_PAUSED)))), 12,
+                             is_active_day ? UI_DANGER : (is_skipped_active && is_today ? UI_SUCCESS : (draft->enabled ? UI_ACCENT : UI_MUTED)));
         } else {
-            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 20,
-                      ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_BEDTIME_PRIORITY), 13, UI_RGB(UI_BLENDED(text_primary)));
-            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 38,
-                      ptc_ui_text(PTC_UI_T_TAKES_PRIORITY_OVER_HOLIDAYS_AND_WEEKLY_PLANS), 12, UI_MUTED);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 74, card.width, 24}, ptc_ui_text(PTC_UI_T_OFF), 18, UI_MUTED);
+            UiRect pill = {card.x + (card.width - 48) / 2, card.y + 114, 48, 20};
+            fill_round_rect(pixels, stride, pill, 6, UI_RAISED);
+            draw_text_center(pixels, stride, pill, ptc_ui_text(PTC_UI_T_OFF), 12, UI_MUTED);
         }
+        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 148, card.width, 18}, ptc_ui_text(PTC_UI_T_A_SET), 11, UI_MUTED);
+    }
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 7), ptc_ui_text(PTC_UI_T_COPY_TO_WEEKDAYS),
+        UI_PAGE, UI_ACCENT, model->selected_index == 7 && !model->bedtime_section_focused && !model->bedtime_master_focused, model->disable_flag_present);
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 8), ptc_ui_text(PTC_UI_T_COPY_TO_WEEKENDS),
+        UI_PAGE, UI_ACCENT, model->selected_index == 8 && !model->bedtime_section_focused && !model->bedtime_master_focused, model->disable_flag_present);
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 9), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
+        UI_PAGE, UI_INK, model->selected_index == 9 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 10),
+        bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
+        bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
+        model->selected_index == 10 && !model->bedtime_section_focused && !model->bedtime_master_focused,
+        !model->bedtime_dirty || model->disable_flag_present || model->waiting);
 
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
-            UI_PAGE, UI_INK, model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 5),
-            bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
-            bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
-            model->selected_index == 5 && !model->bedtime_section_focused && !model->bedtime_master_focused,
-            !model->bedtime_dirty || model->disable_flag_present || model->waiting);
+    /* 左下角就寝规则说明面板（与右侧预测卡片底部平齐对齐至 y=626） */
+    UiRect bedtime_guide = {54, 526, 752, 100};
+    draw_card_shadow(pixels, stride, bedtime_guide, 12);
+    fill_round_rect(pixels, stride, bedtime_guide, 12, UI_RGB(UI_BLENDED(surface)));
+    draw_rect_outline(pixels, stride, bedtime_guide, 12, 1, UI_BORDER);
+    draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 22,
+               ptc_ui_text(PTC_UI_T_HOW_BEDTIME_WORKS), 15, UI_RGB(UI_BLENDED(text_primary)));
+    draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 44,
+               ptc_ui_text(PTC_UI_T_RESTRICTS_IMMEDIATELY_AT_BEDTIME_EVEN_IF_QUOTA), 13, UI_MUTED);
+    draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 66,
+               ptc_ui_text(PTC_UI_T_FOR_EXCEPTIONS_SELECT_SKIP_TONIGHT_BEDTIME_IN), 13, UI_MUTED);
+    draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 88,
+               ptc_ui_text(PTC_UI_T_CAN_SPAN_OVERNIGHT_E_G_22_00), 13, UI_MUTED);
+}
+
+static void draw_bedtime_calendar_section(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                          bool is_en, bool bedtime_save_danger)
+{
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
+    char line[128];
+    UiRect master = to_uirect(ptc_ui_bedtime_field_rect(1, 0));
+    draw_plan_card(pixels, stride, master, model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused);
+    draw_text(pixels, stride, master.x + 20, master.y + 40, ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_CALENDAR), 20, UI_INK);
+    if (!draft->enabled) {
+        draw_text(pixels, stride, master.x + (is_en ? 260 : 190), master.y + 40,
+            draft->calendar_enabled ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE)) : (ptc_ui_text(PTC_UI_T_OFF_2)), 18, UI_MUTED);
+    } else {
+        draw_text(pixels, stride, master.x + (is_en ? 260 : 190), master.y + 40,
+            draft->calendar_enabled ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)), 18,
+            draft->calendar_enabled ? UI_SUCCESS : UI_MUTED);
+    }
+    UiRect cal_toggle = {master.x + master.width - 76, master.y + (master.height - 28) / 2, 58, 28};
+    draw_toggle_switch(pixels, stride, cal_toggle, draft->calendar_enabled,
+                       model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused,
+                       !draft->enabled || model->disable_flag_present, NULL, NULL);
+    draw_text(pixels, stride, master.x + master.width - (is_en ? 180 : 165), master.y + 39, ptc_ui_text(PTC_UI_T_A_TOGGLE_2), 13, UI_MUTED);
+
+    for (int i = 0; i < 2; ++i) {
+        const PtcBedtimeSpecialRule *rule = i == 0 ? &draft->holiday_rule : &draft->makeup_workday_rule;
+        UiRect card = to_uirect(ptc_ui_bedtime_field_rect(1, i + 1));
+        char value[64];
+        draw_plan_card(pixels, stride, card, model->selected_index == i + 1 && !model->bedtime_section_focused && !model->bedtime_master_focused);
+        draw_text(pixels, stride, card.x + 18, card.y + 30,
+            i == 0 ? (ptc_ui_text(PTC_UI_T_STATUTORY_HOLIDAY)) : (ptc_ui_text(PTC_UI_T_MAKEUP_WORKDAY)), 19, UI_INK);
+        draw_bedtime_window_value(value, sizeof(value), &rule->window);
+        if (!draft->enabled) {
+            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_S_INACTIVE),
+                bedtime_override_label(rule->mode),
+                rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : (ptc_ui_text(PTC_UI_T_USE_MATCHING_MODE)));
+        } else {
+            snprintf(line, sizeof(line), "%s  |  %s", bedtime_override_label(rule->mode),
+                rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : (ptc_ui_text(PTC_UI_T_USE_MATCHING_MODE)));
+        }
+        draw_text(pixels, stride, card.x + 18, card.y + 72, line, 15, UI_MUTED);
+    }
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 3), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
+        UI_PAGE, UI_INK, model->selected_index == 3 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 4),
+        bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
+        bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
+        model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused,
+        !model->bedtime_dirty || model->disable_flag_present || model->waiting);
+
+    /* 节假日日历规则与总闸状态指引面板（底部与右侧预测卡平齐至 y=626） */
+    UiRect cal_guide = {54, 526, 752, 100};
+    draw_card_shadow(pixels, stride, cal_guide, 12);
+    fill_round_rect(pixels, stride, cal_guide, 12,
+                    !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
+    draw_rect_outline(pixels, stride, cal_guide, 12, 1,
+                      !draft->enabled ? UI_WARNING : UI_BORDER);
+    if (!draft->enabled) {
+        draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
+                  ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 15, UI_WARNING);
+        draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
+                  ptc_ui_text(PTC_UI_T_WHEN_DISABLED_HOLIDAY_AND_MAKEUP_BEDTIME_RULES), 13, UI_MUTED);
+        draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
+                  ptc_ui_text(PTC_UI_T_SETTINGS_ARE_SAVED_PRESS_OR_TURN_ON), 13, UI_MUTED);
+    } else {
+        draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
+                  ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_RULE_PRIORITIES), 15, UI_RGB(UI_BLENDED(text_primary)));
+        draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
+                  ptc_ui_text(PTC_UI_T_WHEN_ENABLED_HOLIDAYS_AND_WORKDAYS_TAKE_PRIORITY), 13, UI_MUTED);
+        draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
+                  ptc_ui_text(PTC_UI_T_SUGGEST_STRICT_BEDTIME_ON_MAKEUP_WORKDAYS_RELAX), 13, UI_MUTED);
+    }
+}
+
+static void draw_bedtime_scheduled_section(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                           bool is_en, bool bedtime_save_danger)
+{
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
+    const PtcBedtimeScheduledOverride *scheduled = &draft->scheduled_override;
+    uint32_t duration = scheduled->end_day_index >= scheduled->start_day_index
+        ? (uint32_t)scheduled->end_day_index - scheduled->start_day_index + 1u : 1u;
+    const char *labels[] = {ptc_ui_text(PTC_UI_T_GO_TO_BED_ON_THE_SPECIFIED_DATE), ptc_ui_text(PTC_UI_T_START_DATE), ptc_ui_text(PTC_UI_T_NUMBER_OF_DAYS_TO_LAST), ptc_ui_text(PTC_UI_T_BEDTIME_RULES)};
+    char values[4][96];
+    if (!draft->enabled) {
+        snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE_2)) : (ptc_ui_text(PTC_UI_T_OFF)));
+    } else {
+        snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)));
+    }
+    {
+        uint16_t year;
+        uint8_t month, day;
+        if (ptc_date_from_day_index(scheduled->start_day_index, &year, &month, &day))
+            snprintf(values[1], sizeof(values[1]), "%04u-%02u-%02u", year, month, day);
+        else snprintf(values[1], sizeof(values[1]), ptc_ui_text(PTC_UI_T_WAITING_FOR_DATE));
+    }
+    snprintf(values[2], sizeof(values[2]), ptc_ui_text(PTC_UI_T_U_DAYS), (unsigned int)duration);
+    if (scheduled->rule.mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {
+        char value[64];
+        draw_bedtime_window_value(value, sizeof(value), &scheduled->rule.window);
+        snprintf(values[3], sizeof(values[3]), "%s  %s%s",
+            bedtime_override_label(scheduled->rule.mode), value,
+            draft->enabled ? "" : (ptc_ui_text(PTC_UI_T_INACTIVE)));
+    } else {
+        snprintf(values[3], sizeof(values[3]), "%s%s",
+            bedtime_override_label(scheduled->rule.mode),
+            draft->enabled ? "" : (ptc_ui_text(PTC_UI_T_INACTIVE)));
+    }
+    for (int i = 0; i < 4; ++i) {
+        UiRect row = to_uirect(ptc_ui_bedtime_field_rect(2, i));
+        draw_plan_card(pixels, stride, row, model->selected_index == i && !model->bedtime_section_focused && !model->bedtime_master_focused);
+        if (i == 0) {
+            draw_text(pixels, stride, row.x + 18, row.y + 31, labels[0], 17, UI_MUTED);
+            if (!draft->enabled) {
+                draw_text(pixels, stride, row.x + (is_en ? 200 : 150), row.y + 31,
+                          scheduled->present ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE_2)) : (ptc_ui_text(PTC_UI_T_OFF)), 18, UI_MUTED);
+            } else {
+                draw_text(pixels, stride, row.x + (is_en ? 200 : 150), row.y + 31,
+                          scheduled->present ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)), 18,
+                          scheduled->present ? UI_SUCCESS : UI_MUTED);
+            }
+            UiRect sched_toggle = {row.x + row.width - 76, row.y + (row.height - 28) / 2, 58, 28};
+            draw_toggle_switch(pixels, stride, sched_toggle, scheduled->present,
+                               model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused,
+                               !draft->enabled || model->disable_flag_present, NULL, NULL);
+            draw_text(pixels, stride, row.x + row.width - (is_en ? 180 : 165), row.y + 31, ptc_ui_text(PTC_UI_T_A_TOGGLE_2), 13, UI_MUTED);
+        } else {
+            draw_text(pixels, stride, row.x + 18, row.y + 31, labels[i], 17, UI_MUTED);
+            draw_text(pixels, stride, row.x + (is_en ? 200 : 240), row.y + 31, values[i], 18, UI_INK);
+            if (i == 1 || i == 2)
+                draw_text(pixels, stride, row.x + (is_en ? 450 : 484), row.y + 31,
+                          ptc_ui_text(PTC_UI_T_A_EDIT_ZL_ZR_7_DAYS), 11, UI_MUTED);
+        }
+    }
+
+    /* 指定日期规则与总闸状态指引面板（与保存/放弃按钮同高对齐） */
+    UiRect sched_guide = {54, 526, 360, 50};
+    draw_card_shadow(pixels, stride, sched_guide, 12);
+    fill_round_rect(pixels, stride, sched_guide, 12,
+                    !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
+    draw_rect_outline(pixels, stride, sched_guide, 12, 1,
+                      !draft->enabled ? UI_WARNING : UI_BORDER);
+    if (!draft->enabled) {
+        draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 20,
+                  ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 13, UI_WARNING);
+        draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 38,
+                  ptc_ui_text(PTC_UI_T_CURRENTLY_INACTIVE_ACTIVATES_WHEN_BEDTIME_SWITCH_IS), 12, UI_MUTED);
+    } else {
+        draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 20,
+                  ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_BEDTIME_PRIORITY), 13, UI_RGB(UI_BLENDED(text_primary)));
+        draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 38,
+                  ptc_ui_text(PTC_UI_T_TAKES_PRIORITY_OVER_HOLIDAYS_AND_WEEKLY_PLANS), 12, UI_MUTED);
+    }
+
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
+        UI_PAGE, UI_INK, model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
+    draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 5),
+        bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
+        bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
+        model->selected_index == 5 && !model->bedtime_section_focused && !model->bedtime_master_focused,
+        !model->bedtime_dirty || model->disable_flag_present || model->waiting);
+}
+
+static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
+    int64_t raw_now = ptc_ui_render_now();
+    uint16_t minute_of_day = ptc_ui_render_minute_of_day(raw_now);
+    draw_bedtime_sections(pixels, stride, model);
+
+    bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
+    PtcUiBedtimeImpact bedtime_impact = ptc_ui_bedtime_save_impact(model,
+        minute_of_day, (int64_t)raw_now);
+    bool bedtime_save_danger = model->bedtime_dirty &&
+        (bedtime_impact == PTC_UI_BEDTIME_IMPACT_RESTRICT ||
+         bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN);
+    bool is_skipped_active = ptc_ui_status_is_fresh(model, raw_now) &&
+        (bedtime_impact == PTC_UI_BEDTIME_IMPACT_SKIPPED ||
+         ptc_ui_bedtime_skip_matches_policy(model, draft));
+
+    draw_bedtime_master_card(pixels, stride, model, is_en, bedtime_enforcing);
+    draw_bedtime_manage_buttons(pixels, stride, model, raw_now);
+    draw_bedtime_preview(pixels, stride, model, minute_of_day, bedtime_impact, is_skipped_active);
+    if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY) {
+        draw_bedtime_weekly_section(pixels, stride, model, is_en, bedtime_enforcing,
+                                    is_skipped_active, bedtime_save_danger);
+    } else if (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR) {
+        draw_bedtime_calendar_section(pixels, stride, model, is_en, bedtime_save_danger);
+    } else {
+        draw_bedtime_scheduled_section(pixels, stride, model, is_en, bedtime_save_danger);
     }
 }
 

@@ -63,10 +63,11 @@ companion/nro/
 ├── ui_render_plan.c                   Weekly schedule, holiday allowance, bedtime, and 7-day preview
 ├── ui_render_dialogs.c                Generic dialog shells
 ├── ui_render_dialog_policy/input.c    Policy confirmation and numeric/PIN input overlays
-├── ui_render_overlay_*.c              Credentials/history, schedule editor, and support detail dialogs
+├── ui_render_overlay_*.c              Credentials/history, schedule editor, and settings/support dialogs
+├── ui_render_overlay_details.c        Today, rule-chain and day-decision details with private shared helpers
 ├── nro_runtime.c                      Runtime utilities, animations, notifications, and hot-reload state
 ├── nro_input_dialogs.c                Native OS keyboard, PIN, date, and minute input flows
-├── nro_preferences.c                  Shortcuts, themes, and initial setup preference persistence
+├── nro_preferences.c                  Shortcut/theme/language/setup preferences and language dialog entry
 ├── nro_actions/action_dispatch.c      System recovery refresh and user action/confirmation dispatch
 ├── nro_plan_actions.c                 Schedule drafts, saving, and exit navigation
 ├── nro_requests.c                     Generic request submission and rule draft projection
@@ -77,9 +78,12 @@ companion/nro/
 ├── nro_pairing.c                      Pairing credentials, on-console code generation, QR codes, and web export
 ├── nro_history.c                      Grant code and family activity history operations
 ├── nro_policy_requests.c              Temporary quotas, self-buffer, and bedtime request submission
-├── nro_support.c                      Sanitized diagnostics export
+├── nro_support.c                      Sanitized diagnostics export and support event detail entry
 ├── nro_actions.c                      Parent actions and navigation
-├── nro_input.c                        Overlay button semantics and shared interaction behavior
+├── nro_page_input.c                   Page button routing and weekly/bedtime/eye-care/TV editor input
+├── nro_input.c                        Overlay auth entry, shared audio, details and generic input/confirmation
+├── nro_overlay_plan_input.c           Schedule, bedtime and calendar dialog input
+├── nro_overlay_account_input.c        Appearance, security, backup, pairing and history dialog input
 ├── nro_touch_input.c                  Touch hit routing, reusing overlay interaction behavior
 └── main.c                             Initialization, main loop, rendering, and cleanup
 
@@ -97,6 +101,8 @@ sysmodule/
 ```
 
 `ui_render_internal.h`, `nro_app_internal.h`, and `sysmodule_internal.h` are strictly private to their respective translation units; public business code must not include these private headers. New helpers should default to `static`, exposed via private headers only when strictly necessary across units. Makefiles must explicitly enumerate modular source files used by host and Eden targets; tests must never directly `#include` implementation C files.
+
+Bedtime rendering uses private helpers for the master switch, forecast and weekly/holiday/scheduled sections. Parent rendering uses private helpers for headers, action cards, status badges, settings help and footers. These helpers remain `static` in their existing render files. Detail navigation and focus changes live in `ui_navigation_state.c`, weekly bulk draft operations in `ui_plan_state.c`, and status estimates in `ui_status_state.c`; `ui_layout.c` retains shared geometry, while `ui_state.h` declares state operations.
 
 IPC requests must be persisted before acceptance. Once accepted over IPC, clients must not re-submit; they must await the IPC response or read the SD result file matching the same request ID.
 

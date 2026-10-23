@@ -33,7 +33,10 @@ def main() -> None:
             "nro_actions.c",
             "nro_action_dispatch.c",
             "nro_plan_actions.c",
+            "nro_page_input.c",
             "nro_input.c",
+            "nro_overlay_plan_input.c",
+            "nro_overlay_account_input.c",
             "nro_touch_input.c",
         )
     )
@@ -55,6 +58,7 @@ def main() -> None:
             "ui_render_dialog_input.c",
             "ui_render_overlay_account.c",
             "ui_render_overlay_plan.c",
+            "ui_render_overlay_details.c",
             "ui_render_overlay_support.c",
             "ui_render_overlays.c",
         )

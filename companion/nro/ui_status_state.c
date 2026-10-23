@@ -1025,3 +1025,35 @@ void ptc_ui_project_policy_status(const PtcUiModel *model, int64_t now,
         ptc_ui_status_is_fresh(model, now) && !model->waiting && !model->home_details_refresh_failed,
         local_day_index, second_of_day, out);
 }
+
+bool ptc_ui_home_notice_expanded(const PtcUiModel *model)
+{
+    return model && (strcmp(model->result_status, "error") == 0 ||
+        model->disable_flag_present || model->recovery_active ||
+        model->apply_pending_confirmation || model->restricted_now == 1 ||
+        (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1) ||
+        (model->temporary_unlocked_available && model->temporary_unlocked) ||
+        (model->restriction_enabled_available && !model->restriction_enabled) ||
+        strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0);
+}
+
+int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped)
+{
+    int maximum_remaining;
+    int estimate;
+    if (capped) *capped = false;
+    if (!model || model->grant_status_refresh_failed || !model->played_minutes_available ||
+        model->played_minutes < 0) {
+        return -1;
+    }
+    if (model->unrestricted_today == 1) return (int)grant_minutes;
+    if (!model->remaining_available || model->remaining_minutes < 0) return -1;
+    maximum_remaining = 1440 - model->played_minutes;
+    if (maximum_remaining < 0) maximum_remaining = 0;
+    estimate = model->remaining_minutes + (int)grant_minutes;
+    if (estimate > maximum_remaining) {
+        estimate = maximum_remaining;
+        if (capped) *capped = true;
+    }
+    return estimate;
+}

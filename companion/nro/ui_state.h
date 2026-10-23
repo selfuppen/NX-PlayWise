@@ -215,4 +215,15 @@ void ptc_ui_format_dock_usage(const PtcUiModel *model, int64_t now, char *out, s
 void ptc_ui_format_dock_preview(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
 bool ptc_ui_dock_save_requires_hold(const PtcUiModel *model, int64_t now);
 
+void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical);
+void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels);
+void ptc_ui_home_details_move(PtcUiModel *model, int direction);
+void ptc_ui_home_details_activate(PtcUiModel *model, int index);
+void ptc_ui_home_details_back(PtcUiModel *model);
+PtcUiOperation ptc_ui_today_operation(int index);
+bool ptc_ui_open_home_details_page(PtcUiModel *model, int page);
+bool ptc_ui_open_home_details(PtcUiModel *model);
+bool ptc_ui_open_notice_details(PtcUiModel *model);
+bool ptc_ui_home_notice_expanded(const PtcUiModel *model);
+
 #endif

@@ -301,8 +301,10 @@ void export_parent_import(UiState *ui);
 void reveal_current_credential(UiState *ui);
 void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 void export_diagnostics(UiState *ui);
+void open_support_event(UiState *ui, int event_index);
 void refresh_theme(UiState *ui);
 void refresh_language(UiState *ui);
+void open_language_overlay(UiState *ui);
 void ptc_ui_refresh_recent_event_labels(PtcUiModel *model);
 bool apply_language_preference(UiState *ui, PtcUiLanguagePreference preference);
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms);
@@ -341,7 +343,14 @@ void request_bedtime_leave(UiState *ui, int target_page, bool leave_parent);
 void request_parent_navigation(UiState *ui, int target_page, bool leave_parent);
 void close_code_result(UiState *ui);
 void apply_bedtime_preset(UiState *ui, int preset);
+/* Called only without an overlay; false requests application exit. */
+bool handle_page_input(UiState *ui, u64 down, u64 held,
+                       bool custom_combo_candidate, bool parent_minus_released);
 void handle_overlay_input(UiState *ui, u64 down);
+/* Backup input precedes the common overlay audio; other routers return whether handled. */
+void handle_config_backup_input(UiState *ui, u64 down);
+bool handle_plan_overlay_input(UiState *ui, u64 down);
+bool handle_account_overlay_input(UiState *ui, u64 down);
 void handle_touch(UiState *ui, int x, int y);
 void draw(UiState *ui);
 void retry_error(UiState *ui);

@@ -49,7 +49,10 @@ OBJS := \
 	$(BUILD)/nro_actions.o \
 	$(BUILD)/nro_action_dispatch.o \
 	$(BUILD)/nro_plan_actions.o \
+	$(BUILD)/nro_page_input.o \
 	$(BUILD)/nro_input.o \
+	$(BUILD)/nro_overlay_plan_input.o \
+	$(BUILD)/nro_overlay_account_input.o \
 	$(BUILD)/nro_touch_input.o \
 	$(BUILD)/hot_reload.o \
 	$(BUILD)/hot_reload_guard.o \
@@ -72,6 +75,7 @@ OBJS := \
 	$(BUILD)/ui_render_dialog_input.o \
 	$(BUILD)/ui_render_overlay_account.o \
 	$(BUILD)/ui_render_overlay_plan.o \
+	$(BUILD)/ui_render_overlay_details.o \
 	$(BUILD)/ui_render_overlay_support.o \
 	$(BUILD)/ui_render_overlays.o \
 	$(BUILD)/ui_theme.o \
@@ -202,7 +206,16 @@ $(BUILD)/nro_action_dispatch.o: nro_action_dispatch.c nro_app_internal.h | $(BUI
 $(BUILD)/nro_plan_actions.o: nro_plan_actions.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/nro_page_input.o: nro_page_input.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/nro_input.o: nro_input.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_overlay_plan_input.o: nro_overlay_plan_input.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_overlay_account_input.o: nro_overlay_account_input.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/nro_touch_input.o: nro_touch_input.c nro_app_internal.h | $(BUILD)
@@ -269,6 +282,9 @@ $(BUILD)/ui_render_overlay_account.o: ui_render_overlay_account.c ui_render_inte
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_render_overlay_plan.o: ui_render_overlay_plan.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_overlay_details.o: ui_render_overlay_details.c ui_render_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_render_overlay_support.o: ui_render_overlay_support.c ui_render_internal.h | $(BUILD)

@@ -38,7 +38,10 @@ def main() -> None:
             "nro_policy_requests.c",
             "nro_support.c",
             "nro_actions.c",
+            "nro_page_input.c",
             "nro_input.c",
+            "nro_overlay_plan_input.c",
+            "nro_overlay_account_input.c",
             "nro_touch_input.c",
             "nro_app_internal.h",
         )
