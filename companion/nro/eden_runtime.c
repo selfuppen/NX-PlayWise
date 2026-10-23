@@ -1,5 +1,6 @@
 #include "eden_runtime.h"
 #include "eden_timer.h"
+#include "eden_observe.h"
 
 #ifdef PLAYWISE_EDEN
 
@@ -15,6 +16,30 @@
 #include "../../common/version.h"
 #include "../../platform/host/operation_mode_file.h"
 #include "release_manifest.h"
+
+static PtcStorage *eden_observe_storage;
+
+void ptc_eden_observe_ui(const PtcUiModel *model)
+{
+    static uint64_t instance, last_tick, sequence;
+    uint64_t tick = svcGetSystemTick();
+    char ui[1536], text[2048];
+    int n;
+    if (!eden_observe_storage || (last_tick && armTicksToNs(tick - last_tick) < 100000000ULL)) return;
+    last_tick = tick;
+    if (!eden_observe_storage->vtable->exists(eden_observe_storage,
+            PLAYWISE_EDEN_SD_ROOT "/support/automation-observe.flag")) return;
+    if (!ptc_eden_format_ui(model, ui, sizeof(ui))) return;
+    if (!instance) instance = tick;
+    n = snprintf(text, sizeof(text),
+        "{\"schema_version\":1,\"release_id\":\"%s\",\"instance\":\"%llx\","
+        "\"sequence\":%llu,\"tick\":\"%llu\",\"ui\":%s}",
+        PLAYWISE_BUILD_RELEASE_ID, (unsigned long long)instance,
+        (unsigned long long)++sequence, (unsigned long long)tick, ui);
+    if (n > 0 && (size_t)n < sizeof(text))
+        (void)eden_observe_storage->vtable->write_text_atomic(eden_observe_storage,
+            PLAYWISE_EDEN_SD_ROOT "/support/automation-ui.json", text);
+}
 
 /* The emulator has no reliable time service wrapper for the sysmodule path, but
    newlib's time(NULL) already works in the NRO, so reuse it instead of
@@ -44,6 +69,18 @@ static const PtcTimeProviderVTable EDEN_TIME_VTABLE = {
     eden_now,
     eden_sleep_ms,
 };
+
+static PtcErrorCode eden_read_grant_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)pctl->ctx;
+    PtcClockSnapshot now = eden_now(&runtime->time_provider);
+    uint64_t tick = armGetSystemTick();
+    uint64_t elapsed = tick >= runtime->last_usage_tick
+        ? armTicksToNs(tick - runtime->last_usage_tick) : 0;
+    runtime->last_usage_tick = tick;
+    return ptc_eden_read_grant_sample(&runtime->pctl, runtime->base_pctl_vtable,
+        weekday, now, elapsed, &runtime->usage_carry_ns, out);
+}
 
 static PtcOperationModeStatus eden_operation_mode(void *ctx)
 {
@@ -203,9 +240,12 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     if (!runtime || !storage || !seed_files(storage)) return false;
     memset(runtime, 0, sizeof(*runtime));
     ptc_pctl_stub_init(&runtime->pctl);
+    runtime->base_pctl_vtable = runtime->pctl.pctl.vtable;
+    runtime->pctl_vtable = *runtime->base_pctl_vtable;
+    runtime->pctl_vtable.read_grant_status = eden_read_grant_status;
+    runtime->pctl.pctl.vtable = &runtime->pctl_vtable;
     runtime->time_provider.vtable = &EDEN_TIME_VTABLE;
     runtime->time_provider.ctx = runtime;
-    runtime->usage_day_index = eden_now(&runtime->time_provider).day_index;
     runtime->last_usage_tick = armGetSystemTick();
     ptc_sysmodule_init(&runtime->sysmodule, PLAYWISE_EDEN_SD_ROOT, storage,
         ptc_pctl_stub_as_pctl(&runtime->pctl), &runtime->time_provider);
@@ -220,6 +260,7 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     runtime->sysmodule.operation_mode_provider = &runtime->operation_mode_provider;
     (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
     runtime->initialized = true;
+    eden_observe_storage = storage;
     return true;
 }
 
@@ -231,18 +272,10 @@ bool ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
     if (!runtime || !runtime->initialized) return false;
     now = eden_now(&runtime->time_provider);
     tick = armGetSystemTick();
-    if (now.day_index != runtime->usage_day_index) {
-        runtime->usage_day_index = now.day_index;
-        runtime->usage_carry_ns = 0;
-        ptc_pctl_stub_reset_daily_usage(&runtime->pctl);
-        usage_changed = true;
-    } else if (tick >= runtime->last_usage_tick) {
-        usage_changed = ptc_pctl_stub_advance_usage_ns(&runtime->pctl,
-            armTicksToNs(tick - runtime->last_usage_tick), &runtime->usage_carry_ns);
-    }
+    usage_changed = ptc_eden_refresh_usage(&runtime->pctl, now,
+        tick >= runtime->last_usage_tick ? armTicksToNs(tick - runtime->last_usage_tick) : 0,
+        &runtime->usage_carry_ns);
     runtime->last_usage_tick = tick;
-    runtime->pctl.status.usage_day_index = now.day_index;
-    runtime->pctl.status.usage_captured_at = now.unix_seconds;
     (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
     return usage_changed;
 }

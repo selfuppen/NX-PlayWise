@@ -1,6 +1,7 @@
 #include "nro_app_internal.h"
 #include "../../common/protocol/request_schema.h"
 #include "../../platform/host/mem_storage.h"
+#include "../../companion/nro/eden_observe.h"
 
 static int failures;
 static int glyph_refreshes;
@@ -564,6 +565,45 @@ int main(void)
     test_config_backup_ui();
     test_today_detail_refresh();
     test_parent_pin_error();
+    {
+        PtcUiModel model = {0};
+        char text[1536], small[8];
+        cJSON *json;
+        model.view = PTC_UI_SETUP;
+        model.overlay = PTC_UI_OVERLAY_PIN;
+        snprintf(model.pin_text, sizeof(model.pin_text), "987654");
+        snprintf(model.numpad_text, sizeof(model.numpad_text), "87654321");
+        check(ptc_eden_format_ui(&model, text, sizeof(text)), "Eden observation formats a PIN dialog");
+        json = cJSON_Parse(text);
+        check(json && cJSON_GetObjectItemCaseSensitive(json, "pin_length")->valueint == 6,
+              "Eden observation exposes length for bounded input assertions");
+        check(!strstr(text, "987654") && !strstr(text, "87654321"), "Eden observation excludes sensitive text");
+        check(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "overlay_animating")),
+              "new PIN dialog remains animating until its opening frames complete");
+        cJSON_Delete(json);
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        check(ptc_eden_format_ui(&model, text, sizeof(text)), "stable PIN observation formats");
+        json = cJSON_Parse(text);
+        check(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "overlay_animating")),
+              "completed opening frames are stable rather than perpetually animating");
+        cJSON_Delete(json);
+        model.overlay = PTC_UI_OVERLAY_NONE;
+        model.closing_overlay = PTC_UI_OVERLAY_PIN;
+        check(ptc_eden_format_ui(&model, text, sizeof(text)), "closing PIN observation formats");
+        json = cJSON_Parse(text);
+        check(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "overlay_animating")),
+              "closing overlay still blocks dependent input");
+        cJSON_Delete(json);
+        model.closing_overlay = PTC_UI_OVERLAY_NONE;
+        check(ptc_eden_format_ui(&model, text, sizeof(text)), "plain page observation formats");
+        json = cJSON_Parse(text);
+        check(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "overlay_animating")),
+              "plain page remains stable with saturated opening frames");
+        cJSON_Delete(json);
+        check(!ptc_eden_format_ui(&model, small, sizeof(small)) && small[0] == '\0',
+              "Eden observation never publishes truncated JSON");
+        check(!ptc_eden_format_ui(NULL, text, sizeof(text)), "Eden observation rejects missing model");
+    }
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;
 }

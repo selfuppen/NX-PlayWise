@@ -55,6 +55,10 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 测试以主机侧脚本为主，当前不依赖 pytest。新增测试文件建议命名为 `test_<feature>.py`，放在对应阶段目录下。测试必须可重复，不依赖真实时间、真实 Switch 服务或手写随机 fixture。涉及令牌、请求队列、nonce 消耗、PCTL 写入路径或错误码的改动，至少补充一个成功路径和一个失败路径。
 
+日常基础回归使用 Host 确定性边界、故障注入和必要的统一构建／产物校验，不启动 Eden、不执行模拟器业务或稳定性回归。Eden 场景回归集中到发版前，覆盖页面、PIN、离线码／nonce、规则优先级、模拟限制与恢复、备份导入和重开应用持久化，减少真机重复导航；默认执行一批最小回归及受变更影响的场景，不把多批稳定性探测作为日常或每次发版的固定步骤。具体范围与记录要求见[测试指南](docs/开发/测试指南.md#eden-模拟器快速测试)。Eden 不覆盖真实 `pctc:u` IPC、SD 队列原子移动、PCTL 私有协议／1952计时、系统阻断与解除、Tesla Overlay、后台自启动／热更新、真实休眠或底座拔插，也不替代生产构建门禁与候选真机资格。
+
+Eden NRO 构建／产物校验通过、模拟器启动成功和业务场景通过必须分别记录；`python tools/package_remote.py --only eden` 不会启动模拟器或自动完成场景断言。场景记录绑定实际加载的 NRO SHA-256、对应构建身份、Eden 版本、数据前提、操作、回执及预期结果；旧日志和虚拟 SD 中保留的 `build.json` 不自动证明当前 NRO 已通过。无人值守运行须具备隔离数据、输入驱动、超时／失败上限、JSON 断言和必要截图留存后才能声明自动回归通过；未执行及前提不满足单独记录，不扩大为真机结论。
+
 构建、核验、部署和提交按依赖顺序执行，任一步失败必须阻止后续依赖操作；PowerShell中须检查原生命令退出码，不能靠分号串接。派生报告封存前，在输入不变时从已写入JSON读回核对并复跑，schema键与类型须符合对应契约；首次成功不代表序列化往返或重复执行通过。已封存核验若需修正，另建补充材料并绑定原哈希，不改写原raw、截图或封存脚本。
 
 ## 真机验证与减少人员值守
@@ -93,4 +97,4 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 本仓库中文文档使用 UTF-8。PowerShell 默认编码或控制台显示可能把中文读成乱码；读取或写入 `AGENTS.md`、`docs/*.md` 等中文文档时，应显式使用 UTF-8，例如 `Get-Content <file> -Encoding utf8`，避免误判编码或把文档写坏。
 
-涉及 C 编译或 package 验证时运行 `python tools/package_remote.py`；每次回归默认启用 `--with-eden` 打包并校验 Eden 模拟器测试应用（`build/eden-test/pctc-eden.nro`），不要绕过其中的构建产物清理、C/Python/UI 测试、Eden 测试应用和 Zip 校验。Host 缺少本地 `make` 或 C 编译器时，仍须在满足项目契约的 devkitPro 环境完成验证，并在最终汇报中明确列出 Eden 应用的打包与校验状态。
+涉及 C 编译或 package 验证时运行 `python tools/package_remote.py`；保留默认 `--with-eden` 的 Eden NRO 构建／产物校验（`build/eden-test/pctc-eden.nro`），不要绕过其中的构建产物清理、C/Python/UI 测试和 Zip 校验。该构建不会启动模拟器，不等于 Eden 场景回归；名称含 Eden 的 Host 单元测试仍属日常确定性回归。Host 缺少本地 `make` 或 C 编译器时，仍须在满足项目契约的 devkitPro 环境完成验证。最终分别列出 Eden NRO 构建／校验和模拟器场景执行状态，日常场景注明“按策略未执行”，不记为失败或通过。

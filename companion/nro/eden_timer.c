@@ -1,6 +1,30 @@
 #include "eden_timer.h"
 #include "../../sysmodule/sysmodule_internal.h"
 
+bool ptc_eden_refresh_usage(PtcPctlStub *pctl, PtcClockSnapshot now,
+    uint64_t elapsed_ns, uint64_t *carry_ns)
+{
+    bool changed;
+    if (now.day_index != pctl->status.usage_day_index) {
+        ptc_pctl_stub_reset_daily_usage(pctl);
+        *carry_ns = 0;
+        changed = true;
+    } else {
+        changed = ptc_pctl_stub_advance_usage_ns(pctl, elapsed_ns, carry_ns);
+    }
+    pctl->status.usage_day_index = now.day_index;
+    pctl->status.usage_captured_at = now.unix_seconds;
+    return changed;
+}
+
+PtcErrorCode ptc_eden_read_grant_sample(PtcPctlStub *pctl,
+    const PtcPctlVTable *base, uint8_t weekday, PtcClockSnapshot now,
+    uint64_t elapsed_ns, uint64_t *carry_ns, PtcPctlStatus *out)
+{
+    (void)ptc_eden_refresh_usage(pctl, now, elapsed_ns, carry_ns);
+    return base->read_grant_status(&pctl->pctl, weekday, out);
+}
+
 bool ptc_eden_restore_timer(PtcSysmodule *core, PtcPctlStub *pctl,
     PtcClockSnapshot now, uint64_t *carry_ns)
 {

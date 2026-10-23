@@ -73,12 +73,50 @@ During a break, verify `daily_allowance:false` and `eye_care:true`, no false quo
 Host regression should cover default-off legacy rules, the 1–240/1–60 bounds, 40/10 cycles, unchanged usage during sleep, breaks spanning sleep and restart, day rollover, daily and bedtime priority, immediate policy changes, the 1440-minute unlimited mapping, current and stale `break_id` skips, and PCTL write, readback, and recovery failures. Run `python tools/test.py` and `python tools/package_remote.py`; the latter builds and validates `build/eden-test/pctc-eden.nro` by default.
 
 > [!NOTE]
-> Passing `python tools/package_remote.py --only eden` confirms UI layouts, controls, and local algorithms, but because Eden runs in-process with mock PCTL stubs, it cannot validate real cross-process IPC (`pctc:u`), genuine Horizon PCTL enforcement, or the production Sysmodule and Tesla Overlay. Eden testing does not substitute for the standard production build gate (`python tools/package_remote.py`).
+> `python tools/package_remote.py --only eden` builds and validates the Eden artifact; it does not launch Eden or establish that UI or business scenarios passed. Eden runs in-process with mock PCTL and cannot validate real cross-process IPC (`pctc:u`), Horizon PCTL enforcement, or production Sysmodule and Tesla Overlay integration. See [Eden testing](#eden-emulator-testing) for scenario evidence. The standard production build gate remains `python tools/package_remote.py`.
 
 Host UI regression should also check that the Time Plan Eye Care card badge follows its own switch regardless of the autonomy buffer, that ±1/±10 minute touch controls are distinct and reachable, and that Today's Schedule has eight navigable, touchable cards. Check the skip and TV waiver actions and disabled reasons, plus the details preview for minute-level use, break countdown, paused, unknown, stale, and elapsed states in all three languages and both themes. Verify the TV waiver under emergency disable and in the Overlay parent area. With 30 total and 180 non-TV minutes, usage must stop at 30, including when docking or waiving today's TV rules. Cover both weekly and today-override total sources. The seven-day forecast restores 44px rows at 51px spacing with matching touch and nearest-neighbor navigation.
 Focused previews are named `eye-care-resting-*`, `parent-details-eye-care-playing-*`, and `parent-details-eye-care-resting-*` under `build/ui-previews/parent/`, `en/parent/`, and `zh_hant/parent/`.
 
 For hardware A/B, record package hash, HOS/CFW, game, enabled Nintendo Parental Controls, and PCTL configured/remaining readings before and after awake HOME use and sleep. Compare original unlimited mode with the temporary 1440-minute mode; verify sleep does not consume use time. Observe actual software pause and resume when a break begins and ends, PIN-authorized overlay and Today's Schedule skips, handoff to daily allowance and bedtime restrictions, and restoration of the original unlimited rule after disabling. Check that an expired `break_id` after status refresh prompts a new look instead of releasing the wrong break. Keep the candidate `pending` until this evidence is complete.
+
+## Eden Emulator Testing
+
+Daily baseline testing uses deterministic Host tests, fault injection and the required unified build/artifact checks. Do not launch Eden or run emulator business or stability suites during daily development. Run Eden scenarios before release, bound to the candidate NRO and build identity: one minimum suite plus scenarios affected by the changes, including the corresponding rejection paths. Repeated stability batches are not a default daily or per-release requirement; schedule them only for a defined stability objective. Production build and hardware qualification gates remain mandatory for their applicable changes.
+
+Host unit tests with Eden in their names remain daily tests. The unified build also retains its default Eden NRO compilation and artifact validation; neither action launches the emulator. Record daily emulator scenarios as not executed by policy, and keep incomplete or failed pre-release scenarios separate from artifact build success.
+
+| Coverage | Preferred verification and limits |
+| --- | --- |
+| Boundaries, errors, rollback, day transitions and clock rollback | Host tests with fixed time, fixtures and fault injection; emulator wall-clock waits do not replace deterministic assertions |
+| Three languages, both themes, navigation, focus, touch targets and confirmation/cancellation | Host UI regression and Eden interaction; hardware glyphs, readability and input experience still need hardware acceptance |
+| PIN, offline codes, nonce reuse rejection, grace buffers and rule priority | Host success/failure cases plus Eden actions, receipts and persisted state |
+| Eye care, bedtime, TV mode and combined restrictions | Simulated triggers, displayed reasons and recovery state machines; no evidence of actual system blocking or release |
+| Save, backup/import and reopening the application | Isolated persistence; closing the NRO does not model a continuously running daemon |
+| Cross-process `pctc:u` and atomic SD queue moves | Relevant Host tests and hardware paths; Eden uses synchronous in-process calls |
+| PCTL private commands, 0x44 layout, 1952 usage and actual enforcement/recovery | Hardware evidence bound to the frozen production candidate |
+| Tesla Overlay, daemon startup/hot reload, real sleep and physical docking | Hardware integration and physical actions; editing simulated operation mode is insufficient |
+
+Build and validate the application through the unified entrypoint:
+
+```powershell
+python -X utf8 tools/package_remote.py --only eden
+```
+
+Load `build/eden-test/pctc-eden.nro` in Eden. It runs the real `sysmodule_core` with mock PCTL inside one NRO, using `sdmc:/switch/playwise-eden`. Official setup confirmation and Overlay handshake checks have Eden-only exemptions. Keep production `sdmc:/switch/playwise` data untouched. The lower-level `make eden-test-nro` target is available inside devkitPro for iteration. Final verification of C/NRO/Overlay/package changes still uses the default `python tools/package_remote.py`, retaining standard package and Eden validation; `--only eden`, `--skip-tests` and `--no-eden` cannot replace that gate.
+
+Select scenarios affected by the change, retaining success and corresponding rejection/failure cases:
+
+1. Initial setup, valid/invalid PIN, cancellation and hold confirmation, languages, themes and input feedback.
+2. Code preview/redemption/reuse rejection and grace-buffer claims, checking receipts, balances, nonce/eligibility and activity records together.
+3. Weekly/holiday/scheduled/today rule priority, simulated eye-care/bedtime/TV restrictions, concurrent reasons and recovery that preserves remaining restrictions.
+4. Rule persistence, backup/import and normal close/reopen. Reopening the NRO does not demonstrate daemon or console restart. Keep unsupported fault injection in Host coverage and mark it unexecuted in Eden.
+
+The current direct-usage model continues counting in genuinely unlimited mode even with timer=false, for simulated eye-care/non-TV policies. Its 1440-minute counter ceiling does not install a 1440-minute allowance. BLOCKED and temporary unlock freeze usage; a stopped timer also freezes ordinary limited-mode usage. Day rollover resets simulated use. Without a recoverable same-day baseline, initialization seeds `min(30, minutes since midnight)`; otherwise it uses saved dock usage and reliable same-day eye-care/dock high-water counters, including fractions. Closed-NRO intervals do not accrue use, and unreadable rules/state do not trigger a guessed restore. These are model behaviors, not Horizon timing evidence.
+
+Record artifact build/validation, emulator startup and scenario assertions separately. Bind each run to the loaded NRO SHA-256, matching generated manifest source/release identity, Eden version, isolated data prerequisites, actions, expected results, matching request ID/type receipts and persistence assertions. Keep necessary screenshots for visible effects. Startup logs, `status:ok` and counts of historical receipts do not prove complete scenarios. Eden seeds `build.json` only when missing, so a retained virtual-SD copy alone cannot identify the currently loaded NRO; do not overwrite business data to update identity. Distinguish passed, failed, unexecuted and unmet prerequisites; preserve original evidence and repeat offline verification before sealing. Emulator results do not grant hardware qualification.
+
+The unified builder currently has no Eden scenario driver. Unattended regression requires separate isolated-data preparation, input driving, timeouts/failure limits, JSON assertions, necessary screenshots and bounded cleanup, with the selected scenarios actually executed. Producing the NRO alone is insufficient. The [Chinese Eden guide](测试指南.md#eden-模拟器快速测试) also documents fixed test credentials and detailed controls.
 
 ## Console Application Visual Refresh Acceptance
 

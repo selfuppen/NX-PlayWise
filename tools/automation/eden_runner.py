@@ -1,0 +1,736 @@
+"""Isolated, bounded Eden UI/business smoke tests and offline evidence verification."""
+from __future__ import annotations
+
+import argparse
+import base64
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import queue
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import threading
+import time
+import uuid
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.lib.ptc_token_v2 import encode_token, tier_for_minutes
+
+ROOT = Path(__file__).resolve().parents[2]
+APP = Path("sdmc/switch/playwise-eden")
+SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_success", "code_replay")
+
+
+class GateError(RuntimeError):
+    pass
+
+
+def require(ok: bool, message: str) -> None:
+    if not ok:
+        raise GateError(message)
+
+
+def digest(path: Path) -> str:
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def decode(text: str) -> dict:
+    def pairs(items: list[tuple[str, object]]) -> dict:
+        result: dict = {}
+        for key, value in items:
+            require(key not in result, "duplicate JSON key")
+            result[key] = value
+        return result
+    result = json.loads(text, object_pairs_hook=pairs,
+                        parse_constant=lambda _: (_ for _ in ()).throw(GateError("non-finite JSON number")))
+    require(isinstance(result, dict), "JSON object required")
+    return result
+
+
+def read(path: Path) -> dict:
+    return decode(path.read_text(encoding="utf-8-sig"))
+
+
+def open_shared_read(path: Path):
+    """Do not block the emulator's delete/rename while observing its SD file."""
+    if os.name != "nt":
+        return path.open("rb")
+    import ctypes
+    from ctypes import wintypes
+    import msvcrt
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+                       wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    create.restype = wintypes.HANDLE
+    # GENERIC_READ, FILE_SHARE_READ|WRITE|DELETE, OPEN_EXISTING.
+    handle = create(str(path), 0x80000000, 7, None, 3, 0x80, None)
+    if handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+    except Exception:
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel.CloseHandle(handle)
+        raise
+    return os.fdopen(descriptor, "rb")
+
+
+def read_observation_file(path: Path) -> tuple[dict, float]:
+    with open_shared_read(path) as source:
+        raw = source.read(65537)
+        modified = os.fstat(source.fileno()).st_mtime
+    require(len(raw) <= 65536, "UI observation exceeds bounded size")
+    return decode(raw.decode("utf-8-sig")), modified
+
+
+def save(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8") as output:
+        json.dump(value, output, ensure_ascii=False, indent=2)
+
+
+def healthy_launch(status: dict) -> None:
+    require(status.get("running") is True and status.get("backend") == "eden-control" and
+            status.get("launch", {}).get("target_reached") is True and
+            status.get("launch", {}).get("phase") == "game_ready" and
+            type(status.get("pid")) is int, "NRO/control readiness failed; input prohibited")
+
+
+def healthy_exit(pid: int, reply: dict, audit: dict) -> None:
+    require(reply.get("stopped") is True and reply.get("pid") == pid and reply.get("return_code") == 0,
+            "owned emulator did not report a successful stop")
+    require(audit.get("query_ok") is True, "Windows event audit unavailable; exit health unknown")
+    require(not any(row.get("pid") == pid for row in audit.get("crashes", [])),
+            "PID-bound Windows crash overrides the zero exit code")
+
+
+def validate_observation(value: dict, release: str) -> None:
+    require(type(value.get("schema_version")) is int and value["schema_version"] == 1 and
+            value.get("release_id") == release and isinstance(value.get("instance"), str) and
+            re.fullmatch(r"[0-9a-f]+", value["instance"]) is not None and
+            type(value.get("sequence")) is int and value["sequence"] > 0 and
+            isinstance(value.get("ui"), dict), "invalid/stale UI observation identity")
+    require(not ({"pin_text", "pending_code", "grant_secret", "numpad_text"} & set(value["ui"])),
+            "sensitive UI text must not be exported")
+
+
+def receipt(path: Path, request_type: str, excluded: set[str]) -> dict:
+    value = read(path)
+    require(value.get("request_id") == path.stem and path.stem not in excluded and
+            value.get("type") == request_type, "receipt ID/type or freshness differs")
+    return value
+
+
+class McpClient:
+    """JSON-RPC stdio client; transport success never implies application success."""
+    def __init__(self, command: list[str], stderr: Path, output: Path) -> None:
+        self.log = stderr.open("x", encoding="utf-8")
+        self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=self.log, text=True, encoding="utf-8", bufsize=1)
+        self.messages: queue.Queue = queue.Queue()
+        self.output, self.counter = output, 0
+        threading.Thread(target=self._read, daemon=True).start()
+        self.request("initialize", {"protocolVersion": "2025-11-25", "capabilities": {},
+                     "clientInfo": {"name": "playwise-eden-runner", "version": "1"}})
+        self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+    def _read(self) -> None:
+        try:
+            while True:
+                line = self.process.stdout.readline(32 * 1024 * 1024)
+                if not line:
+                    raise GateError("MCP server ended stdout")
+                require(line.endswith("\n"), "MCP response exceeds bounded framing")
+                self.messages.put(decode(line))
+        except Exception as exc:
+            self.messages.put(exc)
+
+    def _send(self, value: dict) -> None:
+        self.process.stdin.write(json.dumps(value) + "\n")
+        self.process.stdin.flush()
+
+    def request(self, method: str, params: dict, timeout: float = 30) -> dict:
+        self.counter += 1
+        number = self.counter
+        self._send({"jsonrpc": "2.0", "id": number, "method": method, "params": params})
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                reply = self.messages.get(timeout=max(0.001, deadline - time.monotonic()))
+            except queue.Empty as exc:
+                raise GateError("MCP timeout; request outcome unknown, no replay") from exc
+            if isinstance(reply, Exception):
+                raise reply
+            if reply.get("id") != number:
+                require("method" in reply and "id" not in reply, "unexpected MCP response ID")
+                continue
+            require("error" not in reply, f"MCP protocol error: {reply.get('error')}")
+            result = reply["result"]
+            for index, block in enumerate(result.get("content", [])):
+                if block.get("type") == "image":
+                    raw = base64.b64decode(block.pop("data"), validate=True)
+                    require(raw[:8] == b"\x89PNG\r\n\x1a\n", "native screenshot is not PNG")
+                    name = f"screens/{number:04d}-{index}.png"
+                    target = self.output / name
+                    target.parent.mkdir(exist_ok=True)
+                    target.write_bytes(raw)
+                    block.update(path=name, sha256=digest(target), width=struct.unpack(">I", raw[16:20])[0],
+                                 height=struct.unpack(">I", raw[20:24])[0])
+            save(self.output / f"calls/{number:04d}.json", {"method": method, "params": params, "result": result})
+            return result
+
+    def tool(self, name: str, arguments: dict | None = None, timeout: float = 30) -> dict:
+        result = self.request("tools/call", {"name": name, "arguments": arguments or {}}, timeout)
+        require(not result.get("isError", False), f"MCP tool rejected {name}: {result.get('content')}")
+        if "structuredContent" in result:
+            return result["structuredContent"]
+        texts = [block["text"] for block in result.get("content", []) if block.get("type") == "text"]
+        return decode(texts[0]) if texts else result
+
+    def close(self) -> None:
+        self.process.stdin.close()
+        try:
+            self.process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            self.process.terminate()  # Only the Python MCP process this client created.
+            self.process.wait(timeout=5)
+        self.log.close()
+
+
+WINDOWS_EVENTS = r"""
+$ErrorActionPreference='Stop'
+$since=[DateTimeOffset]::Parse($env:PLAYWISE_AUDIT_SINCE).LocalDateTime
+$rows=@();$errorText=$null
+try {
+ $events=@(Get-WinEvent -FilterHashtable @{LogName='Application';Id=1000;StartTime=$since} -MaxEvents 256 -ErrorAction Stop)
+ foreach($e in $events) {
+  $v=@($e.Properties | ForEach-Object {$_.Value})
+  if($v.Count -ge 11 -and $v[10] -eq $env:PLAYWISE_AUDIT_EXE) {
+   $xml=Join-Path $env:PLAYWISE_AUDIT_DIR ($e.RecordId.ToString()+'.xml')
+   if(-not(Test-Path -LiteralPath $xml)){[IO.File]::WriteAllText($xml,$e.ToXml(),[Text.UTF8Encoding]::new($false))}
+   $rows+=@{pid=[Convert]::ToInt32($v[8],16);module=$v[3];exception=$v[6];time=$e.TimeCreated.ToString('o');xml=('windows/'+$e.RecordId.ToString()+'.xml')}
+  }
+ }
+} catch {if($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'){$errorText=$_.Exception.Message}}
+@{query_ok=($null -eq $errorText);error=$errorText;crashes=@($rows)} | ConvertTo-Json -Depth 5 -Compress
+"""
+
+
+def windows_events(executable: Path, since: str, output: Path) -> dict:
+    require(os.name == "nt", "live Eden runner currently requires Windows event auditing")
+    folder = output / "windows"
+    folder.mkdir(exist_ok=True)
+    environment = dict(os.environ, PLAYWISE_AUDIT_SINCE=since, PLAYWISE_AUDIT_EXE=str(executable),
+                       PLAYWISE_AUDIT_DIR=str(folder))
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_EVENTS],
+                            env=environment, text=True, encoding="utf-8", errors="replace",
+                            capture_output=True, timeout=20)
+    if result.returncode:
+        return {"query_ok": False, "error": result.stderr, "crashes": []}
+    try:
+        return decode(result.stdout)
+    except (ValueError, GateError):
+        return {"query_ok": False, "error": "event audit output could not be parsed", "crashes": []}
+
+
+def profile_settings(text: str) -> dict:
+    """Non-secret settings only; numeric renderer values remain version-specific."""
+    result = {}
+    for key in ("backend", "language_index", "region_index", "time_zone_index"):
+        value = re.search(rf"(?m)^{key}=(\d+)\r?$", text)
+        default = re.search(rf"(?m)^{key}\\default=(true|false)\r?$", text)
+        require(value is not None and default is not None, f"missing profile setting {key}")
+        result[key] = int(value.group(1))
+        result[key + "_default"] = default.group(1) == "true"
+    return result
+
+
+def set_profile_timezone(text: str, index: int | None) -> str:
+    if index is None:
+        return text
+    require(0 <= index <= 255, "time zone index outside bounded enum range")
+    profile_settings(text)
+    text = re.sub(r"(?m)^time_zone_index=.*$", f"time_zone_index={index}", text)
+    return re.sub(r"(?m)^time_zone_index\\default=.*$", r"time_zone_index\\default=false", text)
+
+
+def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
+    from tools.package_remote import verify_eden_nro
+    manifest = read(args.manifest)
+    verify_eden_nro(args.nro, manifest)
+    runtime = args.runtime_root.resolve() / uuid.uuid4().hex
+    profile = runtime / "user"
+    profile.mkdir(parents=True, exist_ok=False)
+    shutil.copy2(args.eden, runtime / "eden.exe")
+    for name in ("config", "keys", "nand"):
+        require((args.profile / name).is_dir(), f"profile component missing: {name}")
+        shutil.copytree(args.profile / name, profile / name, symlinks=False)
+    # Never seed the operator's SD or PlayWise authentication state.
+    if (args.eden.parent / "languages").is_dir():
+        shutil.copytree(args.eden.parent / "languages", runtime / "languages")
+    config = profile / "config/qt-config.ini"
+    text = config.read_text(encoding="utf-8-sig")
+    source_config_sha256 = digest(args.profile / "config/qt-config.ini")
+    source_settings = profile_settings(text)
+    for key, folder in [("nand_directory", "nand"), ("sdmc_directory", "sdmc"),
+                        ("load_directory", "load"), ("dump_directory", "dump"),
+                        ("tas_directory", "tas"), ("Screenshots\\screenshot_path", "screenshots")]:
+        require(re.search(rf"(?m)^{re.escape(key)}=", text) is not None, f"missing profile path {key}")
+        text = re.sub(rf"(?m)^{re.escape(key)}=.*$", lambda _: f"{key}={(profile / folder).as_posix()}", text)
+    text = re.sub(r"(?m)^check_for_updates=.*$", "check_for_updates=false", text)
+    if args.renderer_backend is not None:
+        require(re.search(r"(?m)^backend=", text) is not None, "missing renderer backend setting")
+        text = re.sub(r"(?m)^backend=.*$", f"backend={args.renderer_backend}", text)
+        text = re.sub(r"(?m)^backend\\default=.*$", r"backend\\default=false", text)
+    text = set_profile_timezone(text, args.time_zone_index)
+    config.write_text(text, encoding="utf-8")
+    save(output / "fixtures/profile-settings.json", {"source": source_settings,
+         "effective": profile_settings(text), "time_zone_override": args.time_zone_index})
+    save(output / "fixtures/renderer.json", {"requested_override": args.renderer_backend,
+         "backend": int(re.search(r"(?m)^backend=(\d+)$", text).group(1)),
+         "config_sha256": digest(config)})
+    app = profile / APP
+    (app / "support").mkdir(parents=True)
+    (app / "support/automation-observe.flag").write_text("eden-runner-v1\n", encoding="ascii")
+    rules = {"version": 1, "week": [{"mode": "limit", "minutes": 120} for _ in range(7)],
+             "today_override_present": False, "today_override_day_index": 0,
+             "today_override_mode": "limit", "today_override_minutes": 120}
+    save(app / "rules.json", rules)
+    save(output / "fixtures/rules.json", rules)
+    artifacts = output / "artifacts"
+    artifacts.mkdir()
+    shutil.copy2(args.nro, artifacts / "pctc-eden.nro")
+    shutil.copy2(args.manifest, artifacts / "manifest.json")
+    for name in ("eden_runner.py", "eden_mcp_bridge.py"):
+        shutil.copy2(Path(__file__).with_name(name), artifacts / name)
+    config_text = "[portable]\n" + "\n".join(f"{k} = {json.dumps(v)}" for k, v in {
+        "root": runtime.as_posix(), "executable": "eden.exe", "profile_template": "user",
+        "session_root": (runtime / "sessions").as_posix(),
+    }.items()) + "\nrequire_control = true\nauto_prune_sessions = false\n"
+    (runtime / "eden-mcp.toml").write_text(config_text, encoding="utf-8")
+    identity = {"schema_version": 1, "run_id": runtime.name, "started_at": datetime.now(timezone.utc).isoformat(),
+                "nro_sha256": digest(artifacts / "pctc-eden.nro"), "eden_sha256": digest(runtime / "eden.exe"),
+                "manifest": manifest, "runtime": str(runtime), "profile": str(profile),
+                "source_executable": str(args.eden.resolve()), "source_profile": str(args.profile.resolve()),
+                "source_config_sha256": source_config_sha256,
+                "launched_executable": str(runtime / "eden.exe"),
+                "runner_sha256": digest(artifacts / "eden_runner.py"),
+                "bridge_sha256": digest(artifacts / "eden_mcp_bridge.py"),
+                "scope": "Eden simulated UI/business only; no production qualification"}
+    save(output / "identity.json", identity)
+    return runtime, identity
+
+
+class Suite:
+    def __init__(self, client: McpClient, output: Path, runtime: Path, identity: dict, seconds: int) -> None:
+        self.client, self.output, self.runtime, self.identity = client, output, runtime, identity
+        self.app = runtime / "user" / APP
+        self.deadline = time.monotonic() + seconds
+        self.pid: int | None = None
+        self.step = 0
+        self.results = {name: {"status": "not_executed"} for name in SCENARIOS}
+        self.health: list[dict] = []
+
+    def bounded(self) -> None:
+        require(time.monotonic() < self.deadline and self.step < 180, "suite time/action limit reached")
+
+    def observe(self) -> dict:
+        self.bounded()
+        path = self.app / "support/automation-ui.json"
+        # Windows may briefly deny reads while Eden atomically replaces the
+        # snapshot. Retry this read only; never replay an input or transaction.
+        deadline = min(self.deadline, time.monotonic() + 1)
+        while True:
+            try:
+                value, modified = read_observation_file(path)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.02)
+        validate_observation(value, self.identity["manifest"]["release_id"])
+        require(time.time() - modified < 4,
+                "UI observation heartbeat stale; input prohibited")
+        return value
+
+    def wait_ui(self, **expected: object) -> dict:
+        deadline = min(self.deadline, time.monotonic() + 20)
+        while time.monotonic() < deadline:
+            try:
+                value = self.observe()
+                if not value["ui"].get("overlay_animating", True) and all(value["ui"].get(key) == item for key, item in expected.items()):
+                    save(self.output / f"observations/{self.step:03d}-{uuid.uuid4().hex[:8]}.json", value)
+                    return value
+            except (OSError, ValueError):
+                pass
+            time.sleep(0.1)
+        raise GateError(f"UI precondition timeout: {expected}; no dependent input")
+
+    def action(self, button: str | None = None, target: str | None = None) -> None:
+        self.bounded()
+        healthy_launch(self.client.tool("eden_status"))
+        value = self.observe()
+        self.step += 1
+        if button:
+            self.client.tool("eden_press_button", {"button": button, "hold_ms": 200})
+        else:
+            geometry = value["ui"]["targets"]
+            x, y = geometry[target]
+            self.client.tool("eden_touch_screen", {"x": x, "y": y, "duration_ms": 400,
+                             "source_width": geometry["width"], "source_height": geometry["height"]})
+        # Eden replies before its scheduled release. Allow both the pulse and
+        # a neutral interval to reach the slower guest; a missed input fails
+        # the following UI assertion and is never automatically repeated.
+        time.sleep(1.2)
+
+    def capture(self, name: str) -> None:
+        value = self.observe()
+        self.client.tool("eden_take_screenshot")
+        save(self.output / f"checkpoints/{name}.json", value)
+
+    def start(self) -> None:
+        observation = self.app / "support/automation-ui.json"
+        observation.unlink(missing_ok=True)  # One owned transient snapshot, while emulator is stopped.
+        status = self.client.tool("eden_start_game", {"base_path": str(self.output / "artifacts/pctc-eden.nro"),
+                                  "wait_until": "game_ready", "timeout_s": 35}, timeout=45)
+        healthy_launch(status)
+        self.pid = status["pid"]
+        require(Path(status.get("effective_profile_root", "")).resolve() == (self.runtime / "user").resolve(),
+                "MCP selected a different profile; input prohibited")
+        native_log = (self.runtime / "user/log/eden_log.txt").read_text(encoding="utf-8-sig", errors="replace")
+        for key, expected in (("ConfigDir", self.runtime / "user/config"),
+                              ("SDMCDir", self.runtime / "user/sdmc")):
+            matched = re.search(rf"(?m)LogSettings: {key}: (.+)\r?$", native_log)
+            require(matched is not None and Path(matched.group(1).strip()).resolve() == expected.resolve(),
+                    f"actual Eden {key} is not isolated; input prohibited")
+        self.wait_ui()
+        require(read(self.app / "build.json") == self.identity["manifest"], "fresh SD build identity differs")
+        self.capture(f"startup-{self.pid}")
+
+    def stop(self) -> None:
+        if self.pid is None:
+            return
+        pid, self.pid = self.pid, None
+        reply = self.client.tool("eden_stop", timeout=30)
+        time.sleep(8)  # Allow delayed WER events before sealing an exit verdict.
+        audit = windows_events(Path(self.identity["launched_executable"]), self.identity["started_at"], self.output)
+        record = {"pid": pid, "reply": reply, "events": audit}
+        self.health.append(record)
+        save(self.output / f"health/exit-{pid}.json", record)
+        healthy_exit(pid, reply, audit)
+
+    def ids(self) -> set[str]:
+        return {path.stem for path in (self.app / "results").glob("*.json")}
+
+    def wait_receipt(self, kind: str, before: set[str]) -> dict:
+        deadline = min(self.deadline, time.monotonic() + 20)
+        while time.monotonic() < deadline:
+            found = []
+            for path in (self.app / "results").glob("*.json"):
+                if path.stem not in before:
+                    try:
+                        value = read(path)
+                        if value.get("type") == kind:
+                            found.append(receipt(path, kind, before))
+                    except (OSError, ValueError):
+                        pass
+            require(len(found) <= 1, "ambiguous business receipts; stop without replay")
+            if found:
+                value = found[0]
+                save(self.output / f"receipts/{value['request_id']}.json", value)
+                return value
+            time.sleep(0.1)
+        raise GateError(f"{kind} receipt timeout; outcome unknown, no resubmission")
+
+    def run_case(self, name: str, function) -> None:
+        self.results[name] = {"status": "running"}
+        try:
+            function()
+            self.capture(name)
+            self.results[name] = {"status": "pass"}
+        except Exception as exc:
+            self.results[name] = {"status": "failed_or_unknown", "detail": str(exc)}
+            try:
+                self.capture(name + "_failed")
+            except Exception:
+                pass  # Evidence failure never prevents owned-process cleanup.
+            raise
+
+    def setup(self) -> None:
+        self.wait_ui(view=3, setup_step=1, overlay=0, waiting=False)
+        self.action(target="setup_primary")
+        self.wait_ui(view=3, setup_step=2, overlay=0)
+        self.action(target="setup_primary")
+        self.wait_ui(view=3, setup_step=3, overlay=0)
+        before = self.ids()
+        self.action(target="setup_primary")
+        reply = self.wait_receipt("complete_setup", before)
+        require(reply["status"] == "ok", "setup activation rejected")
+        self.wait_ui(view=1, overlay=0, waiting=False, setup_active=True)
+        require(read(self.app / "config.json")["setup_wizard_step"] == 0, "setup completion not persisted")
+
+    def reopen(self) -> None:
+        self.stop()
+        self.start()
+        self.wait_ui(view=0, overlay=0, waiting=False)
+        require(read(self.app / "config.json")["setup_wizard_step"] == 0, "reopen lost setup completion")
+
+    def enter_pin(self, digits: str) -> None:
+        for index, digit in enumerate(digits):
+            self.wait_ui(overlay=22, pin_length=index)
+            self.action(target=f"pin_{digit}")
+        self.wait_ui(overlay=22, pin_length=len(digits))
+        self.action(target="pin_confirm")
+
+    def pin_open(self) -> None:
+        self.wait_ui(view=0, overlay=0, waiting=False)
+        self.action(button="Minus")
+        self.wait_ui(overlay=22, pin_length=0)
+
+    def pin_cancel(self) -> None:
+        auth_path = self.app / "auth.json"
+        before_bytes = auth_path.read_bytes()
+        before = decode(before_bytes.decode("utf-8"))
+        self.pin_open()
+        self.action(button="B")
+        self.wait_ui(view=0, overlay=0)
+        require(auth_path.read_bytes() == before_bytes, "cancel changed authentication storage")
+        save(self.output / "assertions/pin_cancel.json", {"before": before["failed_attempts"],
+             "after": read(self.app / "auth.json")["failed_attempts"], "auth_bytes_unchanged": True})
+
+    def pin_wrong(self) -> None:
+        self.pin_open()
+        self.enter_pin("000")
+        self.wait_ui(view=0, overlay=13)
+        require(read(self.app / "auth.json")["failed_attempts"] == 1, "wrong PIN not recorded")
+        save(self.output / "assertions/pin_wrong.json", {"failed_attempts": 1})
+        self.capture("pin_wrong_error")
+        self.action(button="B")
+        self.wait_ui(view=0, overlay=0)
+
+    def pin_correct(self) -> None:
+        self.pin_open()
+        self.enter_pin("110")  # Fixed default created through the fresh Eden setup UI.
+        self.wait_ui(view=1, overlay=0)
+        require(read(self.app / "auth.json")["failed_attempts"] == 0, "correct PIN did not clear failures")
+        self.capture("pin_correct_parent")
+        save(self.output / "assertions/pin_correct.json", {"failed_attempts": 0})
+        self.action(button="B")
+        self.wait_ui(view=0, overlay=0)
+
+    def type_code(self, code: str) -> set[str]:
+        self.wait_ui(view=0, overlay=0, waiting=False)
+        self.action(target="child_code")
+        self.wait_ui(overlay=4, numpad_length=0)
+        for index, digit in enumerate(code):
+            self.wait_ui(overlay=4, numpad_length=index)
+            self.action(target=f"code_{digit}")
+        self.wait_ui(overlay=4, numpad_length=8)
+        before = self.ids()
+        self.action(button="Plus")
+        return before
+
+    def code_success(self) -> None:
+        statuses = [read(path) for path in (self.app / "results").glob("*.json")]
+        latest = max((row for row in statuses if row.get("type") == "status" and row.get("status") == "ok"),
+                     key=lambda row: row["completed_at"])
+        self.code_day = latest["state"]["day_index"]
+        self.code = encode_token(tier_for_minutes(30), 0, "eden-switch", "playwise-eden-test-secret-00000001", self.code_day)
+        before = self.type_code(self.code)
+        preview = self.wait_receipt("preview_offline_code", before)
+        require(preview["status"] == "ok", "grant preview rejected")
+        require(preview["preview"]["effective_add_minutes"] == 30, "grant preview amount differs")
+        self.wait_ui(overlay=3, waiting=False)
+        before = self.ids()
+        self.action(button="A")
+        self.grant = self.wait_receipt("offline_code", before)
+        require(self.grant["status"] == "ok", "grant transaction failed")
+        self.wait_ui(overlay=12, code_result_failed=False, code_result_pending=False)
+        self.ledger = (self.app / "ledger/used_nonces.jsonl").read_bytes()
+        entries = [decode(line) for line in self.ledger.decode("utf-8").splitlines()]
+        require(len(entries) == 1 and entries[0]["nonce"] == 0 and entries[0]["day_index"] == self.code_day and
+                entries[0]["token_version"] == 2,
+                "successful redemption did not persist exactly the expected nonce")
+        self.rules_after_grant = (self.app / "rules.json").read_bytes()
+        rules = decode(self.rules_after_grant.decode("utf-8"))
+        require(rules["today_override_present"] is True and rules["today_override_day_index"] == self.code_day and
+                rules["today_override_minutes"] == 150, "30-minute grant did not change the 120-minute fixture to 150")
+        require(preview["preview"]["remaining_after_minutes"] - 1 <= self.grant["state"]["remaining_minutes"] <=
+                preview["preview"]["remaining_after_minutes"], "post-grant balance differs from preview by more than one simulated minute")
+        activity = [decode(line) for line in (self.app / "activity/history.jsonl").read_text(encoding="utf-8").splitlines()]
+        require(sum(row["action"] == "offline_grant" and row["minutes"] == 30 and row["effective_minutes"] == 30
+                    for row in activity) == 1, "successful grant activity missing or duplicated")
+        save(self.output / "assertions/grant.json", {"day_index": self.code_day, "nonce": 0,
+             "grant": self.grant, "ledger_sha256": hashlib.sha256(self.ledger).hexdigest()})
+
+    def code_replay(self) -> None:
+        self.action(button="B")
+        self.wait_ui(view=0, overlay=0)
+        before = self.type_code(self.code)
+        denied = self.wait_receipt("preview_offline_code", before)
+        require(denied["status"] == "error" and denied.get("error", {}).get("code") == 206,
+                "replay was not explicitly rejected as used token")
+        require((self.app / "ledger/used_nonces.jsonl").read_bytes() == self.ledger, "rejected replay changed nonce ledger")
+        require((self.app / "rules.json").read_bytes() == self.rules_after_grant, "rejected replay changed rules")
+        self.wait_ui(overlay=4, waiting=False)
+
+    def execute(self) -> None:
+        self.start()
+        for name in SCENARIOS:
+            self.run_case(name, getattr(self, name))
+
+
+def seal(output: Path, summary: dict) -> None:
+    save(output / "summary.json", summary)
+    import html
+    pictures = [p.relative_to(output).as_posix() for p in sorted((output / "screens").glob("*.png"))]
+    gallery = '<!doctype html><meta charset="utf-8"><title>Eden automation</title><style>body{font:16px system-ui;max-width:1200px;margin:30px auto}img{width:100%}article{margin:30px 0}</style>'
+    gallery += f"<h1>Eden automation: {html.escape(summary['overall'])}</h1>"
+    gallery += "".join(f'<article><p>{html.escape(p)}</p><a href="{p}"><img src="{p}"></a></article>' for p in pictures)
+    (output / "gallery.html").write_text(gallery, encoding="utf-8")
+    files = [{"path": path.relative_to(output).as_posix(), "sha256": digest(path), "bytes": path.stat().st_size}
+             for path in sorted(output.rglob("*")) if path.is_file() and path.name != "evidence-manifest.json"]
+    save(output / "evidence-manifest.json", {"schema_version": 1, "files": files})
+
+
+def verify(output: Path) -> dict:
+    manifest = read(output / "evidence-manifest.json")
+    require(manifest.get("schema_version") == 1 and isinstance(manifest.get("files"), list), "invalid evidence manifest")
+    seen: set[str] = set()
+    for row in manifest["files"]:
+        path = (output / row["path"]).resolve()
+        require(path.is_relative_to(output.resolve()) and row["path"] not in seen, "unsafe/duplicate evidence path")
+        seen.add(row["path"])
+        require(path.stat().st_size == row["bytes"] and digest(path) == row["sha256"], "evidence bytes changed")
+    require("summary.json" in seen and "identity.json" in seen, "evidence identity/summary missing")
+    summary = read(output / "summary.json")
+    require(summary.get("schema_version") == 1 and set(summary["scenarios"]) == set(SCENARIOS), "invalid summary schema")
+    if summary["overall"] == "pass":
+        require(all(row["status"] == "pass" for row in summary["scenarios"].values()) and not summary["errors"] and
+                len(summary["health"]) == 2, "incomplete suite cannot pass")
+        for row in summary["health"]:
+            healthy_exit(row["pid"], row["reply"], row["events"])
+        require(read(output / "checkpoints/setup.json")["ui"]["view"] == 1 and
+                read(output / "checkpoints/reopen.json")["ui"]["view"] == 0 and
+                read(output / "checkpoints/pin_correct_parent.json")["ui"]["view"] == 1,
+                "setup/reopen/PIN page assertions differ")
+        require(read(output / "assertions/pin_cancel.json") == {"before": 0, "after": 0, "auth_bytes_unchanged": True} and
+                read(output / "assertions/pin_wrong.json")["failed_attempts"] == 1 and
+                read(output / "assertions/pin_correct.json")["failed_attempts"] == 0, "PIN evidence differs")
+        rows = [read(path) for path in (output / "receipts").glob("*.json")]
+        for path in (output / "receipts").glob("*.json"):
+            require(read(path)["request_id"] == path.stem, "archived receipt ID differs")
+        require(sum(row.get("type") == "offline_code" and row.get("status") == "ok" for row in rows) == 1 and
+                sum(row.get("type") == "preview_offline_code" and row.get("error", {}).get("code") == 206 for row in rows) == 1,
+                "successful redemption/replay rejection evidence incomplete")
+        require(read(output / "app-final/rules.json")["today_override_minutes"] == 150,
+                "persisted allowance assertion differs")
+        ledger = output / "app-final/ledger/used_nonces.jsonl"
+        require(digest(ledger) == read(output / "assertions/grant.json")["ledger_sha256"], "nonce evidence differs")
+    return summary
+
+
+def run(args: argparse.Namespace) -> int:
+    require(os.name == "nt", "live suite requires Windows; offline verify is portable")
+    output = args.out.resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    runtime, identity = prepare(args, output)
+    command = [str(args.mcp_python), str(output / "artifacts/eden_mcp_bridge.py"),
+               "--config", str(runtime / "eden-mcp.toml"), "--trace", str(output / "processes.jsonl"),
+               "--native-dir", str(output)]
+    if args.mcp_site:
+        command.extend(["--site", str(args.mcp_site)])
+    client = None
+    suite = None
+    errors = []
+    try:
+        client = McpClient(command, output / "server-stderr.log", output)
+        suite = Suite(client, output, runtime, identity, args.timeout)
+        suite.execute()
+    except Exception as exc:
+        errors.append(str(exc))
+    finally:
+        if suite:
+            try:
+                suite.stop()
+            except Exception as exc:
+                errors.append(f"cleanup: {exc}")
+        if client:
+            try:
+                client.tool("eden_stop", timeout=30)  # Also covers a failed launch with no ready PID.
+            except Exception as exc:
+                errors.append(f"final stop: {exc}")
+            client.close()
+    audit = windows_events(Path(identity["launched_executable"]), identity["started_at"], output)
+    save(output / "final-events.json", audit)
+    native_log = runtime / "user/log/eden_log.txt"
+    if native_log.is_file():
+        shutil.copy2(native_log, output / "eden-log.txt")
+    save(output / "profile-settings-final.json",
+         profile_settings((runtime / "user/config/qt-config.ini").read_text(encoding="utf-8-sig")))
+    app = runtime / "user" / APP
+    for name in ("config.json", "rules.json", "state.json", "build.json", "ledger/used_nonces.jsonl", "activity/history.jsonl"):
+        path = app / name
+        if path.is_file():
+            target = output / "app-final" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+    if (app / "auth.json").is_file():
+        auth = read(app / "auth.json")
+        save(output / "app-final/auth-counters.json", {key: auth[key] for key in ("failed_attempts", "cooldown_until")})
+    require_audit = audit.get("query_ok") and not audit.get("crashes")
+    if not require_audit:
+        errors.append("run contains Windows crash events or audit unavailable")
+    summary = {"schema_version": 1, "overall": "pass" if not errors else "partial",
+               "scenarios": suite.results if suite else {name: {"status": "not_executed"} for name in SCENARIOS},
+               "health": suite.health if suite else [], "errors": errors,
+               "scope": identity["scope"], "source_changes_do_not_qualify_real_device": True}
+    seal(output, summary)
+    require(verify(output) == verify(output) == summary, "offline serialization/repeat verification differs")
+    print(json.dumps({"overall": summary["overall"], "scenarios": summary["scenarios"], "errors": errors, "output": str(output)}, ensure_ascii=False))
+    return 0 if summary["overall"] == "pass" else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    live = commands.add_parser("run")
+    live.add_argument("--eden", type=Path, required=True)
+    live.add_argument("--profile", type=Path, required=True)
+    live.add_argument("--mcp-python", type=Path, required=True)
+    live.add_argument("--mcp-site", type=Path)
+    live.add_argument("--renderer-backend", type=int, choices=(0, 1),
+                      help="optional Eden renderer enum override in the private profile only")
+    live.add_argument("--time-zone-index", type=int,
+                      help="optional system timezone enum override in the private profile only (PRC=34 in this build)")
+    live.add_argument("--runtime-root", type=Path, default=ROOT / "build/eden-runtimes",
+                      help="parent directory for fresh private exe/profile copies")
+    live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
+    live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
+    live.add_argument("--out", type=Path, required=True)
+    live.add_argument("--timeout", type=int, default=300, choices=range(60, 901), metavar="60..900")
+    offline = commands.add_parser("verify")
+    offline.add_argument("--run", type=Path, required=True)
+    args = parser.parse_args()
+    try:
+        if args.command == "verify":
+            value = verify(args.run.resolve())
+            print(f"PASS: evidence verification; recorded overall={value['overall']}")
+            return 0
+        return run(args)
+    except (GateError, OSError, ValueError) as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

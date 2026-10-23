@@ -239,7 +239,7 @@ $(BUILD)/ptc_audio_data.o: ptc_audio_data.c ptc_audio_data.h ptc_audio.h | $(BUI
 $(BUILD)/ui_language.o: ../ui_language.c ../ui_language.h ../ui_text_keys.inc ../ui_text_zh_hans.inc ../ui_text_zh_hant.inc ../ui_text_en.inc $(wildcard ../ui_text/*/*.inc) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h | $(BUILD)
+$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h eden_observe.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_render_primitives.o: ui_render_primitives.c ui_render_internal.h | $(BUILD)
@@ -407,7 +407,7 @@ $(BUILD)/fs_storage.o: ../../platform/switch/fs_storage.c | $(BUILD)
 $(BUILD)/calendar_store.o: ../../platform/calendar_store.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/eden_runtime.o: eden_runtime.c eden_runtime.h | $(BUILD)
+$(BUILD)/eden_runtime.o: eden_runtime.c eden_runtime.h eden_observe.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/eden_timer.o: eden_timer.c eden_timer.h ../../sysmodule/sysmodule_internal.h | $(BUILD)

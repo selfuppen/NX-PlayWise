@@ -2,7 +2,7 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-19",
   "scope": "playwise/tools",
-  "script_count": 61,
+  "script_count": 63,
   "scripts": [
     {
       "path": "device/input_connection.py",
@@ -252,6 +252,16 @@
       "category": "lab",
       "purpose": "准备Lab SD目录",
       "legacy_path": "prepare_device_lab_sd.ps1"
+    },
+    {
+      "path": "automation/eden_runner.py",
+      "category": "automation",
+      "purpose": "隔离Eden业务烟测、运行健康门禁与离线证据核验"
+    },
+    {
+      "path": "automation/eden_mcp_bridge.py",
+      "category": "automation",
+      "purpose": "启动外部Eden MCP运行时并记录自建进程身份"
     },
     {
       "path": "automation/sys_botbase_client.py",

@@ -1,4 +1,7 @@
 #include "ui_render_internal.h"
+#ifdef PLAYWISE_EDEN
+#include "eden_observe.h"
+#endif
 
 static void ptc_ui_load_emoji_font(void)
 {
@@ -136,6 +139,9 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
     if (!model || !theme || !theme->palette || !g_ui.framebuffer_ready) {
         return;
     }
+#ifdef PLAYWISE_EDEN
+    ptc_eden_observe_ui(model);
+#endif
     g_palette = theme->palette;
     g_theme = *theme;
 #ifndef PTC_UI_PREVIEW_ANIM_CLOCK_MS

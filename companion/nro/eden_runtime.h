@@ -18,13 +18,14 @@
 #define PTC_EDEN_TEST_GRANT_SECRET "playwise-eden-test-secret-00000001"
 
 typedef struct {
-    PtcPctlStub pctl;
+    PtcPctlStub pctl; /* First member: the Eden read adapter recovers its owner. */
+    PtcPctlVTable pctl_vtable;
+    const PtcPctlVTable *base_pctl_vtable;
     PtcTimeProvider time_provider;
     PtcSysmodule sysmodule;
     PtcOperationModeProvider operation_mode_provider;
     uint64_t last_usage_tick;
     uint64_t usage_carry_ns;
-    uint16_t usage_day_index;
     bool initialized;
 } PtcEdenRuntime;
 

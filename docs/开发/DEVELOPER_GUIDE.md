@@ -167,7 +167,7 @@ Using `python tools/package_remote.py --only eden` yields rapid test builds, but
   - **Real Horizon PCTL Enforcement**: Eden uses `pctl_stub.c`; private PCTL IPC commands, native popups, and hardware-level sleep/blocking cannot be tested in Eden.
   - **CFW & Security Preflights**: `-DPLAYWISE_EDEN` relaxes parental controls setup requirements and Overlay handshake checks.
   - **Other Production Components**: `--only eden` completely omits building the production background Sysmodule (`exefs.nsp`) and Tesla Overlay (`playwise.ovl`).
-- **Tiered Verification Workflow**: Use `python tools/package_remote.py --only eden [--skip-tests]` for frequent UI/logic iterations; execute the default `python tools/package_remote.py` to build and validate the complete release suite before code integration or delivery.
+- **Tiered Verification Workflow**: Daily work uses deterministic Host tests, fault injection and focused UI previews. C/NRO/Overlay/package changes still require the default `python tools/package_remote.py` production-suite and Eden NRO build/artifact checks, without launching the emulator. Run Eden business scenarios only before release: one minimum suite plus affected scenarios. `--only eden` prepares the test artifact separately; it is not a daily regression entrypoint or a replacement for production gates.
 
 ## Security State Machine
 

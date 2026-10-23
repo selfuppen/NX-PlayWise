@@ -1407,6 +1407,37 @@ static void test_dock_midnight_allowance_change(void)
     }
 }
 
+static void test_eden_grant_sampling(void)
+{
+    Fixture f;
+    PtcPctlStatus status;
+    uint64_t carry = 0;
+    init_fixture(&f);
+    expect(ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry),
+        "Eden grant sampling starts from its simulated timer");
+    f.clock.snapshot.unix_seconds++;
+    expect(read_grant_status(&f.core, f.clock.snapshot, &status) == PTC_ERR_PCTL_READ_FAILED,
+        "cached UI poll timestamp cannot authorize a later-second grant");
+    expect(ptc_eden_read_grant_sample(&f.pctl, f.pctl.pctl.vtable, 0,
+        f.clock.snapshot, 1000000000ULL, &carry, &status) == PTC_ERR_OK &&
+        status.usage_captured_at == f.clock.snapshot.unix_seconds &&
+        status.usage_ns == 30ULL * 60000000000ULL + 1000000000ULL,
+        "Eden grant read advances and timestamps the actual cumulative sample");
+    expect(read_grant_status(&f.core, f.clock.snapshot, &status) == PTC_ERR_OK,
+        "fresh Eden sample passes unchanged production freshness guard");
+    f.pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
+    expect(ptc_eden_read_grant_sample(&f.pctl, f.pctl.pctl.vtable, 0,
+        f.clock.snapshot, 0, &carry, &status) == PTC_ERR_PCTL_READ_FAILED,
+        "Eden read sampling never masks injected PCTL failure");
+    f.clock.snapshot.day_index++;
+    f.clock.snapshot.unix_seconds += 86400;
+    expect(ptc_eden_refresh_usage(&f.pctl, f.clock.snapshot, 1000000000ULL, &carry) &&
+        carry == 0 && f.pctl.played_minutes_today == 0 &&
+        f.pctl.status.usage_day_index == f.clock.snapshot.day_index,
+        "new-day grant sample resets the old-day counter and fraction");
+    free(f.mem);
+}
+
 static void test_eden_timer_restart(void)
 {
     Fixture f;
@@ -1903,6 +1934,7 @@ int ptc_test_control_safety(void)
     test_direct_usage_history();
     test_dock_midnight_allowance_change();
     test_eden_timer_restart();
+    test_eden_grant_sampling();
     test_persisted_eden_mode();
     test_dock_policy();
     test_dock_daily_total_priority();

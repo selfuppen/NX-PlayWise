@@ -35,7 +35,7 @@ These tests run against fixed timestamps, deterministic fixtures, and host adapt
 
 ## Eden Emulator Fast Iteration (Optional)
 
-When iterating quickly on UI layouts and business workflows, run `make eden-test-nro` in the devkitPro environment to generate `build/eden-test/pctc-eden.nro`, and load this single NRO directly into Eden. It features an isolated `sdmc:/switch/playwise-eden` data root and an in-process simulated backend without needing a sysmodule or expanding packages. Full instructions, fixed test parameters, and constraints are documented in the [Testing Guide](TESTING_GUIDE.md). This is an optional iteration tool, does not belong to any release gate, and cannot serve as evidence for PCTL private commands or timing behavior.
+Run Eden scenarios before release, not as part of daily baseline testing. Use `make eden-test-nro` in devkitPro to generate `build/eden-test/pctc-eden.nro` and load that single NRO. It has an isolated `sdmc:/switch/playwise-eden` data root and an in-process simulated backend, without requiring a sysmodule or expanded packages. See the [Testing Guide](TESTING_GUIDE.md) for scenarios, fixed parameters and limits. Daily Host tests and the unified entrypoint's default Eden NRO build/artifact validation remain; neither launches the emulator. Simulator results do not establish PCTL private-command or timing behavior.
 
 ## Full Switch Build
 

@@ -166,6 +166,15 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | [legacy/usage_probe_analysis.py](legacy/usage_probe_analysis.py) | 旧时间线重建，派生候选不等于事实 |
 | [legacy/usage_probe_autostart.py](legacy/usage_probe_autostart.py) | 旧自启动实验协调器；已知旧BD23F1故障路径不得默认重走 |
 
+## Eden 自动化（发版前）
+
+| 文件 | 用途 |
+| --- | --- |
+| [automation/eden_runner.py](automation/eden_runner.py) | 发版前隔离首次设置、PIN、加时码业务烟测，关联Windows事件并离线核验证据 |
+| [automation/eden_mcp_bridge.py](automation/eden_mcp_bridge.py) | 在显式指定的外部Python/MCP环境启动定制Eden，记录自建PID |
+
+准备、命令、只读UI快照与证明边界见[开发说明](../docs/开发/Eden自动化测试.md)。日常基础测试不启动此执行器；Host单元测试和默认Eden NRO构建／产物校验继续保留，均不启动模拟器。这些工具不连接真实Switch。
+
 ## 产品源码和临时产物
 
 `ptc_frontend/`是实际家长网页源码与资源，不是测试临时页。离线HTML由打包工具生成，不能因“生成文件”就删除跟踪交付内容。

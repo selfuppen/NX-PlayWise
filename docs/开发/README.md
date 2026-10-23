@@ -10,6 +10,7 @@
 | 配置Host／devkitPro | [开发环境指南](开发环境指南.md)／[English](DEVELOPMENT_ENVIRONMENT_GUIDE.md) |
 | 修改代码及查上游 | [开发指南](开发指南.md)／[English](DEVELOPER_GUIDE.md) |
 | 选择回归和交付门禁 | [测试指南](测试指南.md)／[English](TESTING_GUIDE.md) |
+| 发版前模拟器业务自动回归 | [Eden自动化测试](Eden自动化测试.md) |
 | 真机稳定采集和恢复 | [真机稳定探测方法](真机稳定探测方法.md) |
 | 正常PIN安全更新 | [无人值守更新与测试指南](无人值守更新与测试指南.md) |
 | 同候选开启新有限采集 | [同候选采集安全重启](同候选采集安全重启-20261016.md) |
