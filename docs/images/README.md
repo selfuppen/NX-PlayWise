@@ -41,3 +41,25 @@ python tools/package_remote.py --with-previews
 | `overlay/overlay-console-details-unknown.png` | 累计暂不可用与刷新入口，缺失读数不作零 | 游戏内浮窗：典型场景 |
 
 README 只展示孩子首页、深色时间轴、额度来源与多项限制四张概览。使用指南在对应操作下展开示例；排版压力场景（密集时间轴、超长指定日期等）保留在开发预览中，不混入日常操作示例。
+
+## 操作过程的代表场景
+
+在已有概览、编辑、确认与成功页之外，补选以下 13 个场景，展示操作中间步骤和不同结果。每个场景都同步简体中文与英文，共新增 26 张文档图片；完整清单现为每种语言 107 张。选图依据为当前生成器的固定状态及实际画面，使用指南按备份、兑换和浮窗操作分别展开。
+
+| 场景（相对 `usage/` 或 `usage-en/`） | 选择理由与使用指南位置 |
+| --- | --- |
+| `settings/config-backup-create-light.png` | 配置备份与导入：创建页的保存路径、已有备份与安全提示 |
+| `settings/config-backup-invalid-dark.png` | 配置备份与导入：无效文件时的提示和不可用恢复按钮 |
+| `redeem/redeem-confirm-hold-progress-light.png` | 主机应用兑换：长按进行中的进度，补足确认到结果之间的步骤 |
+| `redeem/redeem-success-capped-light.png` | 主机应用兑换：每日上限截断后，实际只增加 5 分钟 |
+| `redeem/redeem-pending-light.png` | 主机应用兑换：结果确认中，继续等待同一笔事务 |
+| `redeem/redeem-failed-light.png` | 主机应用兑换：明确失败与状态仍待确认分别展示 |
+| `overlay/overlay-parent-top.png` | 浮窗操作过程：列表顶部的今日额度动作及分钟调整 |
+| `overlay/overlay-parent-bottom.png` | 浮窗操作过程：滚动到底部的系统恢复入口和长按提示 |
+| `overlay/overlay-code-pending.png` | 浮窗操作过程：提交后仍在核对最终结果 |
+| `overlay/overlay-code-failed.png` | 浮窗操作过程：后台已确认失败与具体错误提示 |
+| `overlay/overlay-rest-stale.png` | 浮窗操作过程：状态过期仍保留休息倒计时与刷新提醒 |
+| `overlay/overlay-rest-expired.png` | 浮窗操作过程：倒计时到零后等待后台确认，不表示已解除 |
+| `overlay/overlay-language-confirm.png` | 浮窗操作过程：语言选择、当前生效项与确认入口 |
+
+配置恢复中选择 PIN／配对资料的 `settings/config-backup-security-dark.png` 已在清单内，本次在备份过程示例中复用。所有图片仍由 `--with-previews`、`--previews`、`--release` 的同一流程生成与核验。

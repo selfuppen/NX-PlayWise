@@ -18,6 +18,17 @@ Selecting PIN also requires the backup PIN and ends the parent session after suc
 
 ![Eleven import groups and preview](../images/usage-en/settings/config-backup-light.png)
 
+<details>
+<summary>Backup and restore: creating a backup, sensitive data and invalid files</summary>
+
+| Create a backup: check the destination and existing backup | Restore sensitive data: review PIN and pairing notices |
+| --- | --- |
+| ![Create configuration backup](../images/usage-en/settings/config-backup-create-light.png) | ![Restore preview with security groups selected](../images/usage-en/settings/config-backup-security-dark.png) |
+
+![Invalid backup warning and unavailable restore button](../images/usage-en/settings/config-backup-invalid-dark.png)
+
+</details>
+
 Time Plan's independent column contains four compact cards: bedtime, eye care, TV rules, buffer. Public modes are TV and non-TV, which includes handheld/tabletop. Eden's TV rules page adds simulation buttons; switching keeps today's usage and the mode file survives restart. Daily allowance, bedtime and eye care still apply.
 
 ## TV mode rules (device validation pending)
@@ -385,6 +396,19 @@ When unrestricted and Homebrew Menu can still be launched, open PlayWise, enter 
 
 </details>
 
+<details>
+<summary>Redemption: hold progress, capped additions, pending results and failure</summary>
+
+| High-risk redemption: hold until confirmation completes | Daily cap: the success page shows the actual added minutes |
+| --- | --- |
+| ![Redemption hold progress](../images/usage-en/redeem/redeem-confirm-hold-progress-light.png) | ![Successful redemption capped to five added minutes](../images/usage-en/redeem/redeem-success-capped-light.png) |
+
+| Pending result: wait for the same transaction to finish | Confirmed failure: follow the error message |
+| --- | --- |
+| ![Grant result pending confirmation](../images/usage-en/redeem/redeem-pending-light.png) | ![Redemption failed with status awaiting confirmation](../images/usage-en/redeem/redeem-failed-light.png) |
+
+</details>
+
 ### Using In-Game Overlay When Restricted
 
 When daily limits expire or bedtime restrictions take effect, Nintendo's native system dialog may prevent ordinary software and the PlayWise console app from opening. Use your configured Tesla/Ultrahand hotkey to bring up the overlay menu, and select **PlayWise** (`playwise.ovl`). When playtime has run out, you can redeem 8-digit codes or claim the autonomy buffer if eligible; if bedtime restrictions are active, ask a parent to skip tonight's bedtime or adjust plans in the overlay first. Full overlay controls and shortcuts are detailed in [In-Game Overlay](#in-game-overlay-tesla-overlay).
@@ -418,6 +442,25 @@ When daily limits expire or bedtime restrictions take effect, Nintendo's native 
 | Usage details: cumulative usage and quota are separate; bedtime still applies | Unknown usage: press Y to refresh; missing readings are not zero |
 | --- | --- |
 | ![Overlay cumulative usage and original capture time](../images/usage-en/overlay/overlay-console-details.png) | ![Overlay usage temporarily unavailable](../images/usage-en/overlay/overlay-console-details-unknown.png) |
+
+</details>
+
+<details>
+<summary>Overlay workflow: scrolling actions, confirming results, break boundaries and language</summary>
+
+| Parent list top: today's allowance actions | Parent list bottom: recovery entry and hold reminder |
+| --- | --- |
+| ![Top of overlay parent actions](../images/usage-en/overlay/overlay-parent-top.png) | ![Bottom of overlay parent actions](../images/usage-en/overlay/overlay-parent-bottom.png) |
+
+| Pending redemption: wait for the same request's final result | Failed redemption: follow the confirmed result and error |
+| --- | --- |
+| ![Overlay redemption pending confirmation](../images/usage-en/overlay/overlay-code-pending.png) | ![Overlay confirmed redemption failure](../images/usage-en/overlay/overlay-code-failed.png) |
+
+| Stale break status: retain the countdown and refresh reminder | Countdown ended: wait for the backend to confirm release |
+| --- | --- |
+| ![Overlay break countdown with stale status](../images/usage-en/overlay/overlay-rest-stale.png) | ![Overlay break ended awaiting confirmation](../images/usage-en/overlay/overlay-rest-expired.png) |
+
+![Overlay language selection and confirmation](../images/usage-en/overlay/overlay-language-confirm.png)
 
 </details>
 
