@@ -185,12 +185,7 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
             "displaying a countdown never promotes cached status to fresh");
         renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 13});
         renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
-        const char *stale_back = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
-        const char *stale_lang = overlay_language_button_label(s_overlay_lang_setting);
-        const char *stale_ok = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
-        char stale_hints[96];
-        std::snprintf(stale_hints, sizeof(stale_hints), "%s   %s   %s", stale_back, stale_lang, stale_ok);
-        renderer.drawString(stale_hints, false, 30, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
+        draw_overlay_footer_hints(&renderer, {14, 14, 15, 15});
         renderer.drawString("12:34", false, 448 - 30 - 55, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
         renderer.save((dir / (std::string(names[i]) + ".ppm")).string());
     }
@@ -747,12 +742,7 @@ int main(int argc, char **argv) {
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
                 renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 13});
                 renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
-                const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
-                const char *lang_lbl = overlay_language_button_label(s_overlay_lang_setting);
-                const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
-                char nav_hints[96];
-                std::snprintf(nav_hints, sizeof(nav_hints), "%s   %s   %s", back_lbl, lang_lbl, ok_lbl);
-                renderer.drawString(nav_hints, false, 30, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
+                draw_overlay_footer_hints(&renderer, {14, 14, 15, 15});
 
                 char time_buf[16];
                 get_overlay_current_time(time_buf, sizeof(time_buf));

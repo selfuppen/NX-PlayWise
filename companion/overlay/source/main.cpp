@@ -176,12 +176,7 @@ public:
         renderer->drawRect(tsl::cfg::FramebufferWidth - 1, 0, 1, tsl::cfg::FramebufferHeight, a(0xF222));
         renderer->drawRect(15, tsl::cfg::FramebufferHeight - 73, tsl::cfg::FramebufferWidth - 30, 1,
             a(tsl::style::color::ColorText));
-        const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
-        const char *lang_lbl = overlay_language_button_label(s_overlay_lang_setting);
-        const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
-        char nav_hints[96];
-        std::snprintf(nav_hints, sizeof(nav_hints), "%s   %s   %s", back_lbl, lang_lbl, ok_lbl);
-        renderer->drawString(nav_hints, false, 30, 693, PTC_OVERLAY_FONT_BTN, a(tsl::style::color::ColorText));
+        draw_overlay_footer_hints(renderer, a(tsl::style::color::ColorText));
 
         char time_buf[16];
         get_overlay_current_time(time_buf, sizeof(time_buf));
