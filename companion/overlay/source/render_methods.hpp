@@ -134,12 +134,20 @@
         return pal.text_secondary;
     }
 
+    tsl::Color bedtime_policy_color(const PtcPolicyDisplay &policy) const
+    {
+        const auto &pal = current_palette();
+        if (policy.state == PTC_POLICY_ACTIVE) return pal.night;
+        return policy_color(policy);
+    }
+
     tsl::Color dashboard_soft(tsl::Color color) const
     {
         const auto &pal = current_palette();
         if (same_color(color, pal.danger)) return pal.danger_soft;
         if (same_color(color, pal.warning)) return pal.warning_soft;
         if (same_color(color, pal.success)) return pal.success_soft;
+        if (same_color(color, pal.night)) return pal.night_soft;
         return pal.accent_soft;
     }
 
@@ -209,8 +217,66 @@
         }
     }
 
+    // Read-only top path bar shared by every non-child page (方案 A). The last
+    // node is the current step; the root is dropped first when space is tight.
+    struct PtcFlowPath {
+        const char *nodes[3] = {nullptr, nullptr, nullptr};
+        int count = 0;
+    };
+
+    int fit_rail_button_size(tsl::gfx::Renderer *renderer, const char *text, int width)
+    {
+        const int sizes[] = {PTC_OVERLAY_FONT_BTN, 26, PTC_OVERLAY_FONT_SECONDARY};
+        for (const int size : sizes)
+            if (overlay_text_height(renderer, text, width - 24, size) <= PTC_OVERLAY_RAIL_H - 8)
+                return size;
+        return PTC_OVERLAY_FONT_SECONDARY;
+    }
+
+    int draw_flow_bar(tsl::gfx::Renderer *renderer, int x, int y, int width,
+        const PtcFlowPath &flow)
+    {
+        const auto &pal = current_palette();
+        int count = flow.count < 0 ? 0 : flow.count > 3 ? 3 : flow.count;
+        if (count == 0) return 0;
+        const int line_h = (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5;
+        auto node_width = [&](const char *key) {
+            return static_cast<int>(measure_localized(renderer, key,
+                PTC_OVERLAY_FONT_CAPTION).first);
+        };
+        auto total_width = [&](int start) {
+            int total = 4 + 8;
+            for (int i = start; i < count; ++i) {
+                if (i > start) total += 8 + node_width(">") + 8;
+                total += node_width(flow.nodes[i]);
+            }
+            return total;
+        };
+        int start = 0;
+        if (total_width(0) > width && count > 2) start = 1;
+        if (total_width(start) > width && count - start > 1) start = count - 1;
+        renderer->drawRect(x, y + 5, 4, 16, renderer->a(pal.accent));
+        int cursor = x + 12;
+        for (int i = start; i < count; ++i) {
+            if (i > start) {
+                // Keep 8px on both sides of the separator. Drawing it at the slot
+                // start left 0px before and 16px after, which crowded the node text.
+                const int sep = node_width(">");
+                overlay_text(renderer, ">", cursor + 8, y, 16, PTC_OVERLAY_FONT_CAPTION,
+                    pal.text_disabled);
+                cursor += 8 + sep + 8;
+            }
+            const int available = width - (cursor - x);
+            const bool current = i == count - 1;
+            overlay_text(renderer, flow.nodes[i], cursor, y, available,
+                PTC_OVERLAY_FONT_CAPTION, current ? pal.text_primary : pal.text_secondary);
+            cursor += node_width(flow.nodes[i]);
+        }
+        return line_h;
+    }
+
     void dashboard_panel(tsl::gfx::Renderer *renderer,
-        std::initializer_list<OverlayPanelLine> lines, tsl::Color color)
+        std::initializer_list<OverlayPanelLine> lines, tsl::Color color, bool quiet = false)
     {
         const auto &vp = page_layout_.viewport;
         const int gap = (parent_view_ == ParentView::Child || parent_view_ == ParentView::Pin) ? 6 : 12;
@@ -219,9 +285,10 @@
             height += overlay_text_height(renderer, line.text, vp.w - 36, line.size) + gap;
         draw_dashboard_surface(renderer, ptc_overlay_rect(vp.x + 4,
             flow_y_ - static_cast<int>(page_scroll_), vp.w - 8, height + 8),
-            dashboard_soft(color), current_palette().border_decorative);
+            quiet ? tsl::Color{1, 2, 3, 15} : dashboard_soft(color),
+            quiet ? color : current_palette().border_decorative, false);
         renderer->drawRect(vp.x + 4, flow_y_ + 6 - static_cast<int>(page_scroll_),
-            3, height - 4, renderer->a(color));
+            quiet ? 1 : 3, height - 4, renderer->a(color));
         flow_y_ += 4;
         for (const auto &line : lines) flow_text(renderer, line.text, line.size, line.color);
         flow_y_ += 8;
@@ -279,6 +346,41 @@
         return parent_view_ != ParentView::Child;
     }
 
+    // Single source for "what is happening right now". The parent band and the
+    // status-details hero must never disagree about the current restriction.
+    struct OverlayCurrentState {
+        const char *text;
+        tsl::Color color;
+        bool normal;
+    };
+
+    OverlayCurrentState current_state_line(bool stale) const
+    {
+        const auto &pal = current_palette();
+        if (stale) return {ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH), pal.warning, false};
+        if (bedtime_restricted()) return {ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_3), pal.danger, false};
+        if (displayed_summary_.daily_restriction_active)
+            return {ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_2), pal.danger, false};
+        if (eye_care_restricted()) return {ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING), pal.warning, false};
+        if (displayed_summary_.dock_restriction_active) return {ptc_ui_text(PTC_UI_T_DOCK_TITLE), pal.danger, false};
+        return {ptc_ui_text(PTC_UI_T_NORMAL_PLAY_AVAILABLE), pal.success, true};
+    }
+
+    static PtcUiTextId parent_action_label_id(int action)
+    {
+        switch (action) {
+        case PTC_OVERLAY_PARENT_ADD_MINUTES: return PTC_UI_T_QUICK_GRANT;
+        case PTC_OVERLAY_PARENT_UNLIMITED: return PTC_UI_T_NO_LIMIT_TODAY;
+        case PTC_OVERLAY_PARENT_SKIP_BEDTIME: return PTC_UI_T_SKIP_BEDTIME;
+        case PTC_OVERLAY_PARENT_SKIP_EYE_CARE: return PTC_UI_T_EYE_CARE_SKIP;
+        case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP: return PTC_UI_T_RESTORE_THIS_BEDTIME;
+        case PTC_OVERLAY_PARENT_DISABLE_BEDTIME: return PTC_UI_T_TURN_OFF_BEDTIME_PLAN;
+        case PTC_OVERLAY_PARENT_WAIVE_DOCK: return PTC_UI_T_DOCK_WAIVE;
+        case PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT: return PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE;
+        default: return PTC_UI_T_ACTION_NOT_AVAILABLE;
+        }
+    }
+
     bool is_keypad_mode() const
     {
         return keypad_active_ || (input_ != nullptr && input_->length > 0);
@@ -305,13 +407,22 @@
     {
         OverlayRequestKind kind = active_request_kind_ != OverlayRequestKind::None
             ? active_request_kind_ : last_request_kind_;
-        if (kind == OverlayRequestKind::Status) return ptc_ui_text(PTC_UI_T_REFRESH_TODAY_S_STATUS);
-        if (kind == OverlayRequestKind::PreviewOfflineCode) return ptc_ui_text(PTC_UI_T_PREVIEW_TODAY_S_GRANT);
-        if (kind == OverlayRequestKind::OfflineCode) return ptc_ui_text(PTC_UI_T_SUBMIT_TODAY_S_GRANT);
-        if (kind == OverlayRequestKind::ClaimDailyBuffer) return ptc_ui_text(PTC_UI_T_RECEIVE_INDEPENDENT_BUFFERING);
-        if (kind == OverlayRequestKind::WaiveDock) return ptc_ui_text(PTC_UI_T_DOCK_WAIVE);
-        if (kind == OverlayRequestKind::ClearBedtimeSkip) return ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME);
-        return ptc_ui_text(PTC_UI_T_NOT_STARTED);
+        switch (kind) {
+        case OverlayRequestKind::Status: return ptc_ui_text(PTC_UI_T_REFRESH_TODAY_S_STATUS);
+        case OverlayRequestKind::PreviewOfflineCode: return ptc_ui_text(PTC_UI_T_PREVIEW_TODAY_S_GRANT);
+        case OverlayRequestKind::OfflineCode: return ptc_ui_text(PTC_UI_T_SUBMIT_TODAY_S_GRANT);
+        case OverlayRequestKind::ClaimDailyBuffer: return ptc_ui_text(PTC_UI_T_RECEIVE_INDEPENDENT_BUFFERING);
+        case OverlayRequestKind::AddTodayMinutes: return ptc_ui_text(PTC_UI_T_QUICK_GRANT);
+        case OverlayRequestKind::DisableTodayLimit: return ptc_ui_text(PTC_UI_T_NO_LIMIT_TODAY);
+        case OverlayRequestKind::SkipBedtime: return ptc_ui_text(PTC_UI_T_SKIP_BEDTIME);
+        case OverlayRequestKind::SkipEyeCare: return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP);
+        case OverlayRequestKind::WaiveDock: return ptc_ui_text(PTC_UI_T_DOCK_WAIVE);
+        case OverlayRequestKind::ClearBedtimeSkip: return ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME);
+        case OverlayRequestKind::DisableBedtime: return ptc_ui_text(PTC_UI_T_TURN_OFF_BEDTIME_PLAN);
+        case OverlayRequestKind::RestoreInstallSnapshot:
+            return ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE);
+        default: return ptc_ui_text(PTC_UI_T_NOT_STARTED);
+        }
     }
 
     void format_refresh_age(char *out, size_t out_size) const

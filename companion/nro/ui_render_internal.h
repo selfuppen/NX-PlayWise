@@ -58,6 +58,9 @@ typedef enum {
     UI_HERO = 0x02000000u + 27,
     UI_ON_HERO = 0x02000000u + 28,
     UI_HERO_SECONDARY = 0x02000000u + 29,
+    UI_NIGHT = 0x02000000u + 30,
+    UI_NIGHT_SOFT = 0x02000000u + 31,
+    UI_NIGHT_BORDER = 0x02000000u + 32,
 } UiColor;
 
 typedef struct {
@@ -92,7 +95,8 @@ typedef enum {
     UI_ACTION_ICON_STOP,
     UI_ACTION_ICON_EXPORT,
     UI_ACTION_ICON_INFO,
-    UI_ACTION_ICON_AUDIO
+    UI_ACTION_ICON_AUDIO,
+    UI_ACTION_ICON_LANGUAGE
 } UiActionIcon;
 
 typedef enum {
@@ -178,7 +182,18 @@ void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, cons
 void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char *text, int size, uint32_t color);
 void fit_text(char *out, size_t out_size, const char *text, int size, int max_width);
 void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const char *subtitle);
+void draw_globe_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color);
+void draw_language_switcher_badge(uint32_t *pixels, uint32_t stride, UiRect rect, bool focused);
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+void draw_subpage_nav(uint32_t *pixels, uint32_t stride, const char *back_label, const char *path);
+/* Full-page shell for the safety & preferences secondary pages. Repaints the
+   whole screen (the parent settings page is already drawn underneath), then the
+   header, breadcrumb row and footer anchors. */
+void draw_subpage_shell(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                        const char *page_name, const char *subtitle,
+                        const char *back_label, const char *path);
+void draw_settings_page_shell(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                              const char *page_name, const char *subtitle);
 uint32_t time_projection_color(PtcUiTimeState state);
 void draw_shoulder_key_glyph(uint32_t *pixels, uint32_t stride, int x, int y,
                              int width, int height, const char *key_str, bool disabled);
@@ -194,6 +209,10 @@ void draw_dialog_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
 int draw_wrapped_text(uint32_t *pixels, uint32_t stride, int x, int baseline,
                       const char *text, int size, int max_width, int line_height,
                       int max_lines, uint32_t color);
+/* Same wrapping rules as draw_wrapped_text, without drawing: returns how many
+   lines the text occupies. Wizard layout uses it so uneven strings (ZH vs EN)
+   do not leave a fixed row too tight or too loose. */
+int count_wrapped_lines(const char *text, int size, int max_width, int max_lines);
 void draw_candidate_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
                            const char *label, uint32_t background, uint32_t foreground,
                            bool selected, bool disabled);
@@ -284,5 +303,6 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
 void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void ui_glyph_cache_clear(void);
 void ui_background_rebuild(void);
+void ui_background_draw_frame(uint32_t *pixels, uint32_t stride);
 
 #endif

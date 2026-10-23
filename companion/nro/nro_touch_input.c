@@ -180,6 +180,15 @@ void handle_touch(UiState *ui, int x, int y)
             ui->model.overlay_selection = hit.index;
         }
         break;
+    case PTC_UI_HIT_LANGUAGE_SWITCH:
+        ptc_audio_play(PTC_SE_POPUP);
+        ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+        ui->model.overlay_selection = (int)ui->language_preference;
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
+                 ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+                 ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+        break;
     case PTC_UI_HIT_HOME_DETAILS:
         ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_home_details(&ui->model);

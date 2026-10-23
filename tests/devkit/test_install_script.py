@@ -15,6 +15,9 @@ MTP_INSTALL_SCRIPT = ROOT / "tools" / "install" / "install_package_via_dbi_mtp.p
 PREPARE_LAB_SCRIPT = ROOT / "tools" / "lab" / "prepare_device_lab_sd.ps1"
 
 
+def strip_crlf(text: str) -> str:
+    return text.replace("\r", "").replace("\n", "")
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -159,7 +162,7 @@ def test_dbi_mtp_install_script_preview() -> None:
             text=True,
         )
         require(wrong_target.returncode != 0, "DBI installer endpoint must be rejected")
-        require("installer endpoint, not the raw SD root" in wrong_target.stderr,
+        require("installer endpoint, not the raw SD root" in strip_crlf(wrong_target.stderr),
                 "DBI installer endpoint failure must explain the safe target")
 
         credentials = pkg / "switch" / "playwise" / "credentials.json"
@@ -178,7 +181,7 @@ def test_dbi_mtp_install_script_preview() -> None:
             text=True,
         )
         require(unsafe_package.returncode != 0, "package containing credentials must be rejected")
-        require("credentials.json must not be installed" in unsafe_package.stderr,
+        require("credentials.json must not be installed" in strip_crlf(unsafe_package.stderr),
                 "credential rejection must identify the unsafe seed")
 
 
@@ -301,7 +304,7 @@ def test_ftp_install_safety_contract() -> None:
             text=True,
         )
         require(res_unsafe.returncode != 0, "Package with credentials.json must be rejected")
-        require("credentials.json must not be installed" in res_unsafe.stderr, "Error message must mention credentials.json")
+        require("credentials.json must not be installed" in strip_crlf(res_unsafe.stderr), "Error message must mention credentials.json")
 
     # Safety checks in script contents
     py_code = FTP_INSTALL_PY.read_text(encoding="utf-8")

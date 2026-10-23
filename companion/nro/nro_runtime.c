@@ -144,8 +144,12 @@ bool update_animations(PtcUiModel *model)
 
     if (model->overlay != model->previous_overlay) {
         if (model->overlay == PTC_UI_OVERLAY_NONE && model->previous_overlay != PTC_UI_OVERLAY_NONE) {
-            model->closing_overlay = model->previous_overlay;
-            model->closing_started_ms = now;
+            if (model->previous_overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
+                model->closing_overlay = PTC_UI_OVERLAY_NONE;
+            } else {
+                model->closing_overlay = model->previous_overlay;
+                model->closing_started_ms = now;
+            }
         } else {
             if (model->previous_overlay == PTC_UI_OVERLAY_NUMPAD ||
                 model->previous_overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {

@@ -5,6 +5,9 @@
 #define ptc_mkdir(dir) _mkdir(dir)
 #else
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #define ptc_mkdir(dir) mkdir(dir, 0777)
 #endif
 #include "../../companion/nro/ui_render_internal.h"
@@ -34,8 +37,10 @@ static int check_primitives(void)
     if (preview_pixels[40 * 1280 + 40] != pack_rgb(0xff00ff) || preview_pixels[20 * 1280 + 20] != background) ++failed;
     if (preview_pixels[21 * 1280 + 60] != pack_rgb(0xabcdef) || preview_pixels[40 * 1280 + 21] != pack_rgb(0xabcdef)) ++failed;
     draw_focus_ring(preview_pixels, 1280, rect, 16);
-    if (preview_pixels[40 * 1280 + 19] != background ||
-        preview_pixels[40 * 1280 + 17] != resolve_color(UI_FOCUS) ||
+    if (preview_pixels[40 * 1280 + 4] != background ||
+        preview_pixels[40 * 1280 + 16] == background ||
+        preview_pixels[40 * 1280 + 19] != resolve_color(UI_FOCUS) ||
+        preview_pixels[40 * 1280 + 20] != resolve_color(UI_ACCENT) ||
         preview_pixels[40 * 1280 + 40] != pack_rgb(0xff00ff)) ++failed;
     /* Requested radii remain distinct even on large cards. */
     fill_round_rect(preview_pixels, 1280, (UiRect){200, 20, 96, 64}, 8, UI_RGB(0xe0c0a0));
@@ -304,9 +309,11 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             snprintf(model.pin_text, sizeof(model.pin_text), "1234");
             snprintf(model.auth_error_title, sizeof(model.auth_error_title), ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT));
             snprintf(model.auth_error_message, sizeof(model.auth_error_message), ptc_ui_text(PTC_UI_T_PLEASE_CHECK_AND_RE_ENTER));
-            snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "https://example.invalid/playwise");
-            if (!qrcodegen_encodeText(model.pairing_base_url, temp, model.qr_code,
-                    qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
+            snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
+            model.demo_secret_enabled = true;
+            if (!ptc_build_pairing_url("kid-switch", PTC_DEMO_GRANT_SECRET, model.pairing_url, sizeof(model.pairing_url)) ||
+                !qrcodegen_encodeText(model.pairing_url, temp, model.qr_code,
+                    qrcodegen_Ecc_LOW, 1, 40, qrcodegen_Mask_AUTO, true)) return 1;
             snprintf(name, sizeof(name), "matrix-overlay-%02d", overlay);
             failed |= save_preview(directory, "matrix", name, &model, dark != 0);
             if (overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
@@ -1254,7 +1261,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_SETTINGS));
-            failed |= save_preview(directory, "settings", "settings-grant-manager", &settings_dlg, dark);
+            failed |= save_preview(directory, "grant", "grant-manager", &settings_dlg, dark);
 
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
@@ -1444,6 +1451,29 @@ static int render_dock_previews(const char *directory, const PtcUiModel *baselin
     return failed;
 }
 
+static int render_pairing_qr_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiModel model = *baseline;
+        uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_GRANT;
+        model.overlay = PTC_UI_OVERLAY_QR;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s",
+                 ptc_ui_text(PTC_UI_T_MOBILE_PHONE_COMPUTER_GENERATES_GRANT_CODE));
+        snprintf(model.overlay_body, sizeof(model.overlay_body), "%s",
+                 ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
+        snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
+        model.demo_secret_enabled = true;
+        if (!ptc_build_pairing_url("kid-switch", PTC_DEMO_GRANT_SECRET, model.pairing_url, sizeof(model.pairing_url)) ||
+            !qrcodegen_encodeText(model.pairing_url, temp, model.qr_code,
+                qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true)) return 1;
+        failed |= save_preview(directory, "parent", "pairing-qr-demo", &model, dark);
+    }
+    return failed;
+}
+
 static int render_policy_previews(const char *directory, const PtcUiModel *baseline)
 {
     int failed = 0;
@@ -1553,6 +1583,31 @@ static int render_parent_pin_error_previews(const char *directory, const PtcUiMo
     return failed;
 }
 
+static int render_language_pass(const char *root_dir, const char *subdir, PtcUiLanguagePreference lang, const PtcUiModel *base_model)
+{
+    char target_dir[1024];
+    if (subdir && subdir[0] != '\0') {
+        int n = snprintf(target_dir, sizeof(target_dir), "%s/%s", root_dir, subdir);
+        if (n < 0 || (size_t)n >= sizeof(target_dir)) return 1;
+    } else {
+        int n = snprintf(target_dir, sizeof(target_dir), "%s", root_dir);
+        if (n < 0 || (size_t)n >= sizeof(target_dir)) return 1;
+    }
+    ptc_mkdir(target_dir);
+    ptc_ui_language_set_resolved(lang);
+    PtcUiModel model = *base_model;
+    localize_preview_baseline(&model);
+    int failed = 0;
+    failed |= render_all_previews(target_dir, &model);
+    failed |= render_eye_care_previews(target_dir, &model);
+    failed |= render_dock_previews(target_dir, &model);
+    failed |= render_config_backup_previews(target_dir, &model);
+    failed |= render_pairing_qr_previews(target_dir, &model);
+    failed |= render_policy_previews(target_dir, &model);
+    failed |= render_parent_pin_error_previews(target_dir, &model);
+    return failed;
+}
+
 int main(int argc, char **argv)
 {
     FILE *font;
@@ -1601,41 +1656,48 @@ int main(int argc, char **argv)
     snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
     snprintf(model.result_status, sizeof(model.result_status), "ok");
 
-    /* Pass 1: Simplified Chinese previews */
-    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
-    localize_preview_baseline(&model);
-    ptc_mkdir(argv[2]);
-    failed |= render_all_previews(argv[2], &model);
-    failed |= render_eye_care_previews(argv[2], &model);
-    failed |= render_dock_previews(argv[2], &model);
-    failed |= render_config_backup_previews(argv[2], &model);
-    failed |= render_policy_previews(argv[2], &model);
-    failed |= render_parent_pin_error_previews(argv[2], &model);
-
-    /* Pass 2: English previews */
-    char en_dir[1024];
-    snprintf(en_dir, sizeof(en_dir), "%s/en", argv[2]);
-    ptc_mkdir(en_dir);
-    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
-    localize_preview_baseline(&model);
-    failed |= render_all_previews(en_dir, &model);
-    failed |= render_eye_care_previews(en_dir, &model);
-    failed |= render_dock_previews(en_dir, &model);
-    failed |= render_config_backup_previews(en_dir, &model);
-    failed |= render_policy_previews(en_dir, &model);
-    failed |= render_parent_pin_error_previews(en_dir, &model);
-    /* Keep dialog and long-text coverage identical in all three languages. */
-    char zh_hant_dir[1024];
-    snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
-    ptc_mkdir(zh_hant_dir);
-    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
-    localize_preview_baseline(&model);
-    failed |= render_all_previews(zh_hant_dir, &model);
-    failed |= render_eye_care_previews(zh_hant_dir, &model);
-    failed |= render_dock_previews(zh_hant_dir, &model);
-    failed |= render_config_backup_previews(zh_hant_dir, &model);
-    failed |= render_policy_previews(zh_hant_dir, &model);
-    failed |= render_parent_pin_error_previews(zh_hant_dir, &model);
+    #if defined(_WIN32)
+    failed |= render_language_pass(argv[2], "", PTC_UI_LANGUAGE_SIMPLIFIED, &model);
+    failed |= render_language_pass(argv[2], "en", PTC_UI_LANGUAGE_ENGLISH, &model);
+    failed |= render_language_pass(argv[2], "zh_hant", PTC_UI_LANGUAGE_TRADITIONAL, &model);
+    #else
+    typedef struct {
+        const char *subdir;
+        PtcUiLanguagePreference lang;
+    } LanguageJob;
+    const LanguageJob jobs[3] = {
+        { "", PTC_UI_LANGUAGE_SIMPLIFIED },
+        { "en", PTC_UI_LANGUAGE_ENGLISH },
+        { "zh_hant", PTC_UI_LANGUAGE_TRADITIONAL }
+    };
+    pid_t pids[3] = {0, 0, 0};
+    for (int i = 0; i < 3; ++i) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            /* Fallback to synchronous execution on fork failure */
+            failed |= render_language_pass(argv[2], jobs[i].subdir, jobs[i].lang, &model);
+        } else if (pid == 0) {
+            int res = render_language_pass(argv[2], jobs[i].subdir, jobs[i].lang, &model);
+            FT_Done_Face(g_ui.face);
+            free(bytes);
+            _exit(res ? 1 : 0);
+        } else {
+            pids[i] = pid;
+        }
+    }
+    for (int i = 0; i < 3; ++i) {
+        if (pids[i] > 0) {
+            int status = 0;
+            if (waitpid(pids[i], &status, 0) > 0) {
+                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                    failed = 1;
+                }
+            } else {
+                failed = 1;
+            }
+        }
+    }
+    #endif
     FT_Done_Face(g_ui.face);
     free(bytes);
     return failed;

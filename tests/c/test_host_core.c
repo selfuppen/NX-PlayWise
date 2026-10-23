@@ -1296,6 +1296,19 @@ static void test_overlay_layout_geometry(void)
     check_int(action, PTC_OVERLAY_PARENT_ADD_MINUTES, "overlay action traversal wraps");
     check_int(ptc_overlay_parent_action_move(PTC_OVERLAY_PARENT_WAIVE_DOCK, 1),
         PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, "TV waiver precedes dangerous recovery group");
+    /* Groups must follow the visual order so a group header never appears twice. */
+    int previous_group = -1;
+    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+        const int group = ptc_overlay_parent_action_group(slot);
+        check_true(group >= 0 && group <= 2, "every visual slot belongs to one of three groups");
+        check_true(group >= previous_group, "action groups never interleave in visual order");
+        previous_group = group;
+    }
+    check_int(ptc_overlay_parent_action_group(0), 0, "today allowance group comes first");
+    check_int(ptc_overlay_parent_action_group(PTC_OVERLAY_PARENT_ACTION_COUNT - 1), 2,
+        "system recovery stays the last group");
+    check_int(ptc_overlay_parent_action_group(ptc_overlay_parent_action_slot(
+        PTC_OVERLAY_PARENT_WAIVE_DOCK)), 1, "TV waiver sits with the active rules");
     PtcOverlayRect viewport = ptc_overlay_rect(16, 104, 416, 452);
     PtcOverlayRect first = ptc_overlay_rect(20, 104, 404, 104);
     PtcOverlayRect last = ptc_overlay_rect(20, 1004, 404, 156);
@@ -1340,24 +1353,39 @@ static void test_overlay_layout_geometry(void)
         (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
     check_int(slots_width, 387, "all eight code slots fit the sidebar");
     check_int(PTC_OVERLAY_SLOT_H, 64, "code slots have room for 40px digits");
+    check_int(PTC_OVERLAY_SLOT_Y, 104, "code slots sit below the path header");
+    check_int(PTC_OVERLAY_KEYPAD_Y, 232, "keypad starts below count and date");
+    check_int(PTC_OVERLAY_RAIL_Y, 559, "footer rail starts at 571 absolute");
+    check_int(PTC_OVERLAY_RAIL_BOTTOM, 627, "footer rail ends at 639 absolute");
+    check_int(PTC_OVERLAY_VIEWPORT_BOTTOM, 551, "viewport ends at 563 absolute");
+    check_int(PTC_OVERLAY_SUBMIT_Y, 491, "submit starts at 503 absolute");
+    check_int(PTC_OVERLAY_SUBMIT_H, 60, "submit ends at 563 absolute");
     check_true(PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H < PTC_OVERLAY_KEYPAD_Y,
         "input count and date fit between slots and keypad");
+    /* Slots end at 168 and the keypad starts at 232; the 22px count and date
+       lines need 8+20+6+20 = 54px of that 64px band, leaving 5px below. */
+    check_true(PTC_OVERLAY_KEYPAD_Y - (PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H) >= 54,
+        "slot-to-keypad band still fits the count and console date");
+    check_true(PTC_OVERLAY_KEYPAD_Y + 3 * PTC_OVERLAY_KEY_ROW_STEP + PTC_OVERLAY_KEY_H <=
+        PTC_OVERLAY_SUBMIT_Y, "keypad ends above submit");
+    const int keypad_origin_y = PTC_OVERLAY_CONTENT_Y;
     for (unsigned i = 0; i < PTC_OVERLAY_KEY_COUNT; ++i) {
-        PtcOverlayRect key = ptc_overlay_key_rect(16, 40, i);
+        PtcOverlayRect key = ptc_overlay_key_rect(16, keypad_origin_y, i);
         check_int(key.w, 124, "keypad key width stays comfortable");
         check_int(key.h, 56, "keypad key height grows with the font");
-        check_true(key.y + key.h <= 40 + PTC_OVERLAY_SUBMIT_Y,
+        check_true(key.y + key.h <= keypad_origin_y + PTC_OVERLAY_SUBMIT_Y,
             "all ten digit keys end above submit");
         check_true(ptc_overlay_rect_contains(key, key.x + key.w - 1, key.y + key.h - 1),
             "visible key edges receive touches");
         check_true(!ptc_overlay_rect_contains(key, key.x + key.w, key.y),
             "key touch target ends at the visible edge");
     }
-    PtcOverlayRect submit = ptc_overlay_submit_rect(16, 40, 416);
-    PtcOverlayRect back = ptc_overlay_keypad_nav_back_rect(16, 40);
-    PtcOverlayRect parent = ptc_overlay_keypad_nav_parent_rect(16, 40, 416);
+    PtcOverlayRect submit = ptc_overlay_submit_rect(16, keypad_origin_y, 416);
+    PtcOverlayRect back = ptc_overlay_keypad_nav_back_rect(16, keypad_origin_y);
+    PtcOverlayRect parent = ptc_overlay_keypad_nav_parent_rect(16, keypad_origin_y, 416);
     check_true(submit.y + submit.h < back.y, "submit does not overlap navigation");
     check_true(back.x + back.w < parent.x, "navigation buttons remain separate");
+    check_int(parent.y + parent.h, 639, "fixed keypad buttons align with the rail bottom");
     check_true(parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "fixed keypad buttons stay above the Tesla footer");
     check_true(ptc_overlay_remaining_refresh_pending(true, true),

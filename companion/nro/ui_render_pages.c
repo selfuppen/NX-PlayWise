@@ -32,7 +32,7 @@ static const UiAction SETTINGS_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CHANGE_PIN), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_ENABLED), UI_ACCENT, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_APPEARANCE_THEME), "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_PARENT_SHORTCUT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CURRENT_MINUS_2), UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_UI_LANGUAGE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_FOLLOW_SYSTEM), UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_UI_LANGUAGE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_FOLLOW_SYSTEM), UI_ACCENT, UI_ACTION_ICON_LANGUAGE, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOMEBREW_ACCESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NOT_ENABLED), UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SOUND_EFFECTS), "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_FAMILY_ACTIVITIES), PTC_UI_TEXT_REFERENCE(PTC_UI_T_LAST_200), UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
@@ -121,7 +121,8 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     UiRect rule_badge = {dt_box.x - rw - 10, dt_box.y, rw, dt_box.height};
     bool rule_focused = (model->selected_index == 11 && !model->parent_footer_focused);
     fill_round_rect(pixels, stride, rule_badge, 8, rule_focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised)));
-    draw_rect_outline(pixels, stride, rule_badge, 8, rule_focused ? 3 : 1, rule_focused ? UI_FOCUS : UI_BORDER);
+    if (rule_focused) draw_focus_ring(pixels, stride, rule_badge, 8);
+    else draw_rect_outline(pixels, stride, rule_badge, 8, 1, UI_BORDER);
     uint32_t rule_fg = rule_focused ? UI_ACCENT : UI_RGB(UI_BLENDED(text_secondary));
     draw_text(pixels, stride, rule_badge.x + 10, rule_badge.y + (rule_badge.height + 12) / 2 - 2, rule_label, 12, rule_fg);
     draw_chevron_right(pixels, stride, rule_badge.x + rule_badge.width - 10, rule_badge.y + rule_badge.height / 2, 4, rule_fg);
@@ -223,9 +224,9 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     /* 周期 2：护眼休息设置入口卡 */
     UiRect eye_card = to_uirect(ptc_ui_today_status_rect(8));
     bool eye_focused = (model->selected_index == 8 && !model->parent_footer_focused);
-    fill_round_rect(pixels, stride, eye_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, eye_card, 8, eye_focused ? 3 : 1,
-        eye_focused ? UI_FOCUS : eye_resting ? UI_DANGER : UI_BORDER);
+    fill_round_rect(pixels, stride, eye_card, 8, eye_focused ? UI_ACCENT_SOFT : UI_RAISED);
+    if (eye_focused) draw_focus_ring(pixels, stride, eye_card, 8);
+    else draw_rect_outline(pixels, stride, eye_card, 8, 1, eye_resting ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, eye_card.x + 12, eye_card.y + 20, ptc_ui_text(PTC_UI_T_EYE_CARE), 14, UI_INK);
     const char *eye_badge = !model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_ENABLED));
@@ -252,21 +253,21 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     /* 周期 3：就寝计划设置入口卡 */
     UiRect bedtime_card = to_uirect(ptc_ui_today_status_rect(9));
     bool bedtime_focused = (model->selected_index == 9 && !model->parent_footer_focused);
-    fill_round_rect(pixels, stride, bedtime_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, bedtime_card, 8, bedtime_focused ? 3 : 1,
-        bedtime_focused ? UI_FOCUS : bedtime_enforcing ? UI_DANGER : UI_BORDER);
+    fill_round_rect(pixels, stride, bedtime_card, 8, bedtime_focused ? UI_ACCENT_SOFT : UI_RAISED);
+    if (bedtime_focused) draw_focus_ring(pixels, stride, bedtime_card, 8);
+    else draw_rect_outline(pixels, stride, bedtime_card, 8, 1, bedtime_enforcing ? UI_NIGHT : UI_BORDER);
     draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 20, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_INK);
     PtcPolicyStatus policies;
     ptc_ui_render_policy_status(model, &policies);
     const char *bedtime_badge = ptc_ui_text(policies.bedtime.badge);
-    uint32_t b_badge_color = policy_display_color(policies.bedtime.state);
+    uint32_t b_badge_color = policies.bedtime.state == PTC_POLICY_ACTIVE ? UI_NIGHT : policy_display_color(policies.bedtime.state);
     int bb_w = measure_text(bedtime_badge, 12) + 16;
     int b_ch_x = bedtime_card.x + bedtime_card.width - 16;
     draw_chevron_right(pixels, stride, b_ch_x, bedtime_card.y + bedtime_card.height / 2, 5,
         bedtime_focused ? UI_ACCENT : UI_MUTED);
     UiRect bb_rect = {b_ch_x - 12 - bb_w, bedtime_card.y + 8, bb_w, 20};
     fill_round_rect(pixels, stride, bb_rect, 4,
-        policies.bedtime.state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT : UI_PAGE);
+        policies.bedtime.state == PTC_POLICY_ACTIVE ? UI_NIGHT_SOFT : UI_PAGE);
     draw_text_center(pixels, stride, bb_rect, bedtime_badge, 12, b_badge_color);
     char fitted_bedtime[256];
     fit_text(fitted_bedtime, sizeof(fitted_bedtime), policies.bedtime.detail, 12, bedtime_card.width - 24);
@@ -275,9 +276,9 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     /* 周期 4：电视模式规则设置入口卡 */
     UiRect dock_card = to_uirect(ptc_ui_today_status_rect(10));
     bool dock_focused = (model->selected_index == 10 && !model->parent_footer_focused);
-    fill_round_rect(pixels, stride, dock_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, dock_card, 8, dock_focused ? 3 : 1,
-        dock_focused ? UI_FOCUS : model->dock_restriction_active ? UI_DANGER : UI_BORDER);
+    fill_round_rect(pixels, stride, dock_card, 8, dock_focused ? UI_ACCENT_SOFT : UI_RAISED);
+    if (dock_focused) draw_focus_ring(pixels, stride, dock_card, 8);
+    else draw_rect_outline(pixels, stride, dock_card, 8, 1, model->dock_restriction_active ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 20, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 14, UI_INK);
 
     uint32_t d_badge_color = policy_display_color(policies.dock.state);
@@ -324,6 +325,15 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
     return TODAY_ACTIONS;
 }
 
+/* Shared secondary-page navigation row: back pill on the left, breadcrumb on
+   the right. Time-plan sub-pages and safety-preference pages use the same row
+   so "back one level" never moves between sections. */
+void draw_subpage_nav(uint32_t *pixels, uint32_t stride, const char *back_label, const char *path)
+{
+    home_button(pixels, stride, ptc_ui_advanced_back_rect(), back_label, false, false, false);
+    draw_text(pixels, stride, 278, 146, path, 22, UI_MUTED);
+}
+
 static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const char *LABELS[] = {ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE), ptc_ui_text(PTC_UI_T_TIME_PLANS), ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS), ptc_ui_text(PTC_UI_T_SECURITY_PREFS), ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)};
@@ -332,14 +342,14 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
             (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY ? (ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAYS)) :
             (model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME ? (ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE)) :
             (model->plan_page == PTC_UI_PLAN_PAGE_DOCK ? ptc_ui_text(PTC_UI_T_DOCK_TITLE) : ptc_ui_text(PTC_UI_T_EYE_CARE))));
-        home_button(pixels, stride, ptc_ui_advanced_back_rect(), ptc_ui_text(model->today_settings_origin ? PTC_UI_T_BACK_TO_TODAY : PTC_UI_T_B_BACK_TO_PLANS), false, false, false);
         {
             char path[96];
             if (model->today_settings_origin) {
                 PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("name", name)};
                 (void)ptc_ui_text_format(PTC_UI_T_TODAY_SETTINGS_PATH_NAMED, path, sizeof(path), args, 1);
             } else snprintf(path, sizeof(path), ptc_ui_text(PTC_UI_T_TIME_PLANS_S), name);
-            draw_text(pixels, stride, 278, 140, path, 22, UI_MUTED);
+            draw_subpage_nav(pixels, stride,
+                ptc_ui_text(model->today_settings_origin ? PTC_UI_T_BACK_TO_TODAY : PTC_UI_T_B_BACK_TO_PLANS), path);
         }
         return;
     }
@@ -370,7 +380,7 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         bool active = index == (int)model->parent_page;
         draw_text_center(pixels, stride, tab, LABELS[index], 18, active ? UI_ON_ACCENT : UI_INK);
     }
-    draw_text(pixels, stride, 1038, 140, ptc_ui_text(PTC_UI_T_L_R_SWITCH), 19, UI_MUTED);
+    draw_text(pixels, stride, 1038, 146, ptc_ui_text(PTC_UI_T_L_R_SWITCH), 19, UI_MUTED);
 }
 
 static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -418,8 +428,10 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
             snprintf(latest, sizeof(latest), "%s  |  %s", model->recent_events[source_index], event_time);
             fit_text(latest, sizeof(latest), latest, 14, panel.width - 52);
             UiRect ev_rect = to_uirect(ptc_ui_support_event_rect(event_index));
-            if (event_index + 6 == model->selected_index && !model->parent_footer_focused)
-                draw_rect_outline(pixels, stride, ev_rect, 8, 2, UI_RGB(UI_BLENDED(focus)));
+            if (event_index + 6 == model->selected_index && !model->parent_footer_focused) {
+                fill_round_rect(pixels, stride, ev_rect, 8, UI_ACCENT_SOFT);
+                draw_focus_ring(pixels, stride, ev_rect, 8);
+            }
             draw_text(pixels, stride, panel.x + 26, ev_rect.y + 24,
                       latest, 14, event_index + 6 == model->selected_index ? UI_ACCENT : UI_MUTED);
         }
@@ -433,8 +445,9 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     }
     UiRect guide = to_uirect(ptc_ui_support_guide_rect());
     bool guide_focused = model->selected_index == 6 + model->recent_event_count && !model->parent_footer_focused;
-    fill_round_rect(pixels, stride, guide, 8, guide_focused ? UI_ACCENT_SOFT : UI_PAGE);
-    draw_rect_outline(pixels, stride, guide, 8, guide_focused ? 2 : 1, UI_ACCENT);
+    fill_round_rect(pixels, stride, guide, 8, guide_focused ? UI_ACCENT_SOFT : UI_SURFACE);
+    if (guide_focused) draw_focus_ring(pixels, stride, guide, 8);
+    else draw_rect_outline(pixels, stride, guide, 8, 1, UI_ACCENT);
     draw_text_center(pixels, stride, guide, ptc_ui_text(PTC_UI_T_SUPPORT_GUIDE), 14, UI_ACCENT);
 }
 
@@ -717,6 +730,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
           ptc_ui_text(PTC_UI_T_LOCAL_RULES_AND_DEVICE_SECURITY_SETTINGS))));
     draw_time_status_bar(pixels, stride, model);
     draw_tabs(pixels, stride, model);
+    if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()), false);
+    }
     if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
         actions = actions_for_page(model->parent_page, &action_count);
         if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -870,8 +886,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 action = &dynamic_action;
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 1) {
+                static char theme_subtitle[96];
                 dynamic_action = *action;
-                dynamic_action.subtitle = ptc_ui_theme_preference_label(g_theme.preference);
+                snprintf(theme_subtitle, sizeof(theme_subtitle), "%s / %s",
+                         ptc_ui_theme_preference_label(g_theme.preference),
+                         ptc_ui_theme_style_label(ptc_ui_theme_get_style()));
+                dynamic_action.subtitle = theme_subtitle;
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 2) {
                 static char shortcut_detail[112];
@@ -888,6 +908,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 dynamic_action = *action;
                 dynamic_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
                 action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+                UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
+                draw_language_switcher_badge(pixels, stride, badge, false);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 dynamic_action = *action;
                 dynamic_action.subtitle = ptc_audio_is_enabled() ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_MUTED));
@@ -990,6 +1013,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 fill_round_rect(pixels, stride, badge, 6, st_bg);
                 draw_rect_outline(pixels, stride, badge, 6, 1, st_bd);
                 draw_text_center(pixels, stride, badge, state_label, 12, state_color);
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+                UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
+                draw_language_switcher_badge(pixels, stride, badge, false);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 bool enabled = ptc_audio_is_enabled();
                 const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
@@ -1153,9 +1179,13 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
         /* Render Status Badge */
         UiRect badge = {help.x + help.width - 130, help.y + 24, 106, 26};
-        fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
-        draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
-        draw_text_center(pixels, stride, badge, status_text, 12, status_color);
+        if (sel == 3) {
+            draw_language_switcher_badge(pixels, stride, badge, true);
+        } else {
+            fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+            draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
+            draw_text_center(pixels, stride, badge, status_text, 12, status_color);
+        }
 
         /* Divider line */
         UiRect div = {help.x + 24, help.y + 92, help.width - 48, 1};

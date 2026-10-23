@@ -37,7 +37,10 @@ void draw_dialog_shell(
         draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
     }
     if (!today_limit_editor && description && description[0]) {
+        /* The pairing QR page puts its two solution cards directly under the
+           header, so its description must not grow into them. */
+        int max_lines = model->overlay == PTC_UI_OVERLAY_QR ? 2 : 6;
         draw_wrapped_text(pixels, stride, dialog->x + 34, dialog->y + 88, description,
-                          18, dialog->width - 68, 26, 6, UI_MUTED);
+                          18, dialog->width - 68, 26, max_lines, UI_MUTED);
     }
 }

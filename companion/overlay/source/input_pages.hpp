@@ -84,6 +84,72 @@
         }
         if (gesture_.dragged && gesture_.active) ptc_overlay_hold_reset(&confirm_hold_);
         prev_touch_down_ = false;
+        if (language_confirm_active_) {
+            if (tapped) {
+                for (int i = 0; i < 4; ++i) {
+                    if (flow_hit(page_layout_.lang_options[i], tx, ty)) {
+                        language_confirm_focus_ = i;
+                        language_draft_selection_ = static_cast<PtcOverlayLanguageSetting>(i);
+                        return true;
+                    }
+                }
+                if (page_hit(page_layout_.secondary, tx, ty)) {
+                    cancel_language_confirm();
+                    return true;
+                }
+                if (page_hit(page_layout_.primary, tx, ty)) {
+                    apply_language_confirm();
+                    return true;
+                }
+            }
+            if (keysDown & HidNpadButton_Up) {
+                if (language_confirm_focus_ > 0) {
+                    if (language_confirm_focus_ == 5 || language_confirm_focus_ == 4) {
+                        language_confirm_focus_ = 3;
+                    } else {
+                        language_confirm_focus_--;
+                    }
+                }
+                if (language_confirm_focus_ < 4) {
+                    language_draft_selection_ = static_cast<PtcOverlayLanguageSetting>(language_confirm_focus_);
+                }
+            } else if (keysDown & HidNpadButton_Down) {
+                if (language_confirm_focus_ < 5) {
+                    if (language_confirm_focus_ == 3) {
+                        language_confirm_focus_ = 5;
+                    } else if (language_confirm_focus_ < 3) {
+                        language_confirm_focus_++;
+                    }
+                }
+                if (language_confirm_focus_ < 4) {
+                    language_draft_selection_ = static_cast<PtcOverlayLanguageSetting>(language_confirm_focus_);
+                }
+            } else if (keysDown & (HidNpadButton_Left | HidNpadButton_Right)) {
+                if (language_confirm_focus_ == 4) language_confirm_focus_ = 5;
+                else if (language_confirm_focus_ == 5) language_confirm_focus_ = 4;
+            } else if (keysDown & HidNpadButton_X) {
+                cycle_language_draft();
+                language_confirm_focus_ = static_cast<int>(language_draft_selection_);
+            }
+            if (language_confirm_focus_ < 4) {
+                page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
+                    page_layout_.viewport, page_layout_.lang_options[language_confirm_focus_],
+                    static_cast<int>(page_scroll_target_), page_layout_.scroll_max));
+            }
+            if (keysDown & HidNpadButton_A) {
+                if (language_confirm_focus_ == 4) {
+                    cancel_language_confirm();
+                } else {
+                    apply_language_confirm();
+                }
+                return true;
+            }
+            if (keysDown & HidNpadButton_B) {
+                cancel_language_confirm();
+                return true;
+            }
+            return true;
+        }
         if (access_recovery_visible())
             return handle_parent_input(keysDown, keysHeld, dpad_down, touch, left, right, elapsed_ms);
         if (success_visible_) {
@@ -199,16 +265,17 @@
                 if (requests_enabled) (void)begin_status_refresh();
                 return true;
             }
+            if (ty >= 670 && tx >= 100 && tx <= 280) {
+                open_language_confirm();
+                return true;
+            }
             if (page_hit(page_layout_.parent, tx, ty)) {
                 child_overview_focus_ = restricted ? 0 : 2;
                 open_parent_pin();
                 return true;
             }
             if (restricted) {
-                if (page_hit(page_layout_.secondary, tx, ty)) {
-                    child_overview_focus_ = 1;
-                    tsl::Overlay::get()->close();
-                } else if (flow_hit(page_layout_.status, tx, ty)) {
+                if (flow_hit(page_layout_.status, tx, ty)) {
                     child_overview_focus_ = 2;
                     status_expanded_ = true;
                 }
@@ -259,16 +326,16 @@
             }
         }
         if (restricted) {
+            if (child_overview_focus_ == 1) child_overview_focus_ = 0;
+            else if (child_overview_focus_ == 4) child_overview_focus_ = 3;
             const int prev_focus = child_overview_focus_;
             if (keysDown & HidNpadButton_Up) {
-                if (child_overview_focus_ == 0 || child_overview_focus_ == 1) child_overview_focus_ = 2;
-                else if (child_overview_focus_ == 2) child_overview_focus_ = 3;
+                if (child_overview_focus_ == 2) child_overview_focus_ = 0;
             } else if (keysDown & HidNpadButton_Down) {
-                if (child_overview_focus_ == 3) child_overview_focus_ = 2;
-                else if (child_overview_focus_ == 2) child_overview_focus_ = 0;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 3) child_overview_focus_ = 2;
             } else if (keysDown & (HidNpadButton_Left | HidNpadButton_Right)) {
-                if (child_overview_focus_ == 0 || child_overview_focus_ == 1)
-                    child_overview_focus_ = child_overview_focus_ == 0 ? 1 : 0;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 3)
+                    child_overview_focus_ = child_overview_focus_ == 0 ? 3 : 0;
             }
             if (child_overview_focus_ == 2 && child_overview_focus_ != prev_focus) {
                 page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
@@ -277,13 +344,13 @@
             }
             if (keysDown & HidNpadButton_A) {
                 if (child_overview_focus_ == 0) open_parent_pin();
-                else if (child_overview_focus_ == 1) tsl::Overlay::get()->close();
                 else if (child_overview_focus_ == 2) status_expanded_ = true;
                 else if (child_overview_focus_ == 3 && requests_enabled) (void)begin_status_refresh();
                 return true;
             }
             if (keysDown & HidNpadButton_B) { tsl::Overlay::get()->close(); return true; }
             if (keysDown & HidNpadButton_Minus) { status_expanded_ = true; return true; }
+            if (keysDown & HidNpadButton_X) { open_language_confirm(); return true; }
             if (keysDown & HidNpadButton_R) { open_parent_pin(); return true; }
             if (keysDown & HidNpadButton_Y) {
                 if (requests_enabled) (void)begin_status_refresh();
@@ -294,17 +361,17 @@
         if (!is_keypad_mode()) {
             const int prev_focus = child_overview_focus_;
             if (keysDown & HidNpadButton_Up) {
-                if (child_overview_focus_ == 1 || child_overview_focus_ == 2) child_overview_focus_ = 0;
-                else if (child_overview_focus_ == 0) child_overview_focus_ = 3;
-                else if (child_overview_focus_ == 3) child_overview_focus_ = 4;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 1) child_overview_focus_ = 3;
+                else if (child_overview_focus_ == 3) child_overview_focus_ = 2;
             } else if (keysDown & HidNpadButton_Down) {
-                if (child_overview_focus_ == 4) child_overview_focus_ = 3;
+                if (child_overview_focus_ == 2 || child_overview_focus_ == 4) child_overview_focus_ = 3;
                 else if (child_overview_focus_ == 3) child_overview_focus_ = 0;
-                else if (child_overview_focus_ == 0) child_overview_focus_ = 1;
             } else if (keysDown & HidNpadButton_Left) {
-                if (child_overview_focus_ == 2) child_overview_focus_ = 1;
+                if (child_overview_focus_ == 0) child_overview_focus_ = 1;
+                else if (child_overview_focus_ == 4) child_overview_focus_ = 2;
             } else if (keysDown & HidNpadButton_Right) {
-                if (child_overview_focus_ == 1) child_overview_focus_ = 2;
+                if (child_overview_focus_ == 1) child_overview_focus_ = 0;
+                else if (child_overview_focus_ == 2) child_overview_focus_ = 4;
             }
             if (child_overview_focus_ == 3 && child_overview_focus_ != prev_focus) {
                 page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
@@ -329,6 +396,7 @@
             }
             if (keysDown & HidNpadButton_B) { tsl::Overlay::get()->close(); return true; }
             if (keysDown & HidNpadButton_Minus) { status_expanded_ = true; return true; }
+            if (keysDown & HidNpadButton_X) { open_language_confirm(); return true; }
             if (keysDown & HidNpadButton_R) { open_parent_pin(); return true; }
             if (keysDown & HidNpadButton_L) {
                 if (requests_enabled && displayed_summary_.valid && displayed_summary_.daily_buffer_available)

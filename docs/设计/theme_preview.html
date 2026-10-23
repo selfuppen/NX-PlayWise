@@ -22,7 +22,7 @@
       --pw-light-surface: #FFFFFF;
       --pw-light-surface-raised: #E8EDF7;
       --pw-light-border-decorative: #DBE1E9;
-      --pw-light-border-control: #79879D;
+      --pw-light-border-control: #7A968F;
       --pw-light-text-primary: #172640;
       --pw-light-text-secondary: #53627A;
       --pw-light-text-disabled: #9199A5;
@@ -30,44 +30,44 @@
       --pw-light-accent-soft: #E4EDFF;
       --pw-light-focus: #1247A8;
       --pw-light-on-accent: #FFFFFF;
-      --pw-light-success: #16734E;
-      --pw-light-success-vivid: #52C41A;
-      --pw-light-success-soft: #F6FFED;
-      --pw-light-success-border: #B7EB8F;
-      --pw-light-warning: #D95A00;
-      --pw-light-warning-deep: #B24400;
-      --pw-light-warning-soft: #FFF7E6;
-      --pw-light-warning-border: #F59E0B;
-      --pw-light-danger: #B92F46;
-      --pw-light-danger-vivid: #F5222D;
-      --pw-light-danger-soft: #FFE9ED;
-      --pw-light-danger-border: #FFA39E;
+      --pw-light-success: #15803D;
+      --pw-light-success-vivid: #16A34A;
+      --pw-light-success-soft: #EDF9F0;
+      --pw-light-success-border: #86EFAC;
+      --pw-light-warning: #B45309;
+      --pw-light-warning-deep: #B45309;
+      --pw-light-warning-soft: #FFFBEB;
+      --pw-light-warning-border: #FCD34D;
+      --pw-light-danger: #C42B45;
+      --pw-light-danger-vivid: #DC2626;
+      --pw-light-danger-soft: #FEF2F2;
+      --pw-light-danger-border: #FCA5A5;
 
       /* PlayWise Dark Palette */
-      --pw-dark-page-bg: #0B0F19;
-      --pw-dark-surface: #162032;
-      --pw-dark-surface-raised: #1E2C44;
-      --pw-dark-border-decorative: #2A3B54;
-      --pw-dark-border-control: #7E90AA;
-      --pw-dark-text-primary: #F3F6FD;
-      --pw-dark-text-secondary: #B6C4D9;
-      --pw-dark-text-disabled: #818C98;
-      --pw-dark-accent: #91B9FF;
-      --pw-dark-accent-soft: #273E60;
-      --pw-dark-focus: #BCD4FF;
-      --pw-dark-on-accent: #122344;
-      --pw-dark-success: #5CCB8A;
-      --pw-dark-success-vivid: #49AA19;
-      --pw-dark-success-soft: #193C32;
-      --pw-dark-success-border: #274916;
-      --pw-dark-warning: #FFA940;
-      --pw-dark-warning-deep: #F2C14E;
-      --pw-dark-warning-soft: #40351F;
-      --pw-dark-warning-border: #874D00;
-      --pw-dark-danger: #FF7A85;
-      --pw-dark-danger-vivid: #FF4D4F;
-      --pw-dark-danger-soft: #462936;
-      --pw-dark-danger-border: #78061A;
+      --pw-dark-page-bg: #111122;
+      --pw-dark-surface: #112233;
+      --pw-dark-surface-raised: #223344;
+      --pw-dark-border-decorative: #334455;
+      --pw-dark-border-control: #778899;
+      --pw-dark-text-primary: #EEEEFF;
+      --pw-dark-text-secondary: #AABBCC;
+      --pw-dark-text-disabled: #667788;
+      --pw-dark-accent: #77AAFF;
+      --pw-dark-accent-soft: #223355;
+      --pw-dark-focus: #AACCFF;
+      --pw-dark-on-accent: #112244;
+      --pw-dark-success: #55DD77;
+      --pw-dark-success-vivid: #55DD77;
+      --pw-dark-success-soft: #113322;
+      --pw-dark-success-border: #226633;
+      --pw-dark-warning: #FFBB33;
+      --pw-dark-warning-deep: #FFBB33;
+      --pw-dark-warning-soft: #332211;
+      --pw-dark-warning-border: #885511;
+      --pw-dark-danger: #FF7788;
+      --pw-dark-danger-vivid: #FF7788;
+      --pw-dark-danger-soft: #441122;
+      --pw-dark-danger-border: #882233;
 
       /* Active Dynamic Theme Tokens (Default to Light) */
       --page-bg: var(--pw-light-page-bg);
@@ -160,7 +160,7 @@
     }
 
     .brand-badge {
-      background: linear-gradient(135deg, #1890FF, #52C41A);
+      background: linear-gradient(135deg, #1890FF, #16A34A);
       color: #fff;
       font-family: 'Outfit', sans-serif;
       font-weight: 800;
@@ -190,7 +190,7 @@
       gap: 12px;
     }
 
-    .theme-toggle-group {
+    .theme-toggle-group, .style-toggle-group {
       display: flex;
       background: #21262d;
       padding: 3px;
@@ -883,15 +883,31 @@
       <div class="brand-sub">Visual Design & Palette Explorer</div>
     </div>
     <div class="header-controls">
+      <div class="style-toggle-group">
+        <button class="toggle-btn active" id="btnStyleIndigo" onclick="setStyle('indigo')">沉静靛蓝</button>
+        <button class="toggle-btn" id="btnStyleTeal" onclick="setStyle('teal')">清爽青绿</button>
+        <button class="toggle-btn" id="btnStyleAmethyst" onclick="setStyle('amethyst')">暮紫星夜</button>
+        <button class="toggle-btn" id="btnStyleSlate" onclick="setStyle('slate')">极简冷灰</button>
+      </div>
       <span class="mode-tag" id="currentModeLabel">浅色模式 (Light Mode)</span>
       <div class="theme-toggle-group">
         <button class="toggle-btn active" id="btnLight" onclick="setTheme('light')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-          浅色 (Light)
+          <span id="txtBtnLight">浅色 (Light)</span>
         </button>
         <button class="toggle-btn" id="btnDark" onclick="setTheme('dark')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-          深色 (Dark)
+          <span id="txtBtnDark">深色 (Dark)</span>
+        </button>
+      </div>
+      <div class="lang-toggle-group">
+        <button class="toggle-btn" id="btnLang" onclick="toggleLanguage()" title="切换语言 / Switch Language" style="display:inline-flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+          <span id="txtBtnLang">中文 / EN</span>
         </button>
       </div>
     </div>
@@ -1115,15 +1131,15 @@
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--success-soft); border-color: var(--success-border); color: var(--success);">
             <span class="status-swatch-role">软底 (UI_SUCCESS_SOFT)</span>
-            <span class="status-swatch-code" id="hexSuccessSoft">#F6FFED</span>
+            <span class="status-swatch-code" id="hexSuccessSoft">#EDF9F0</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--success-border); color: var(--text-primary);">
             <span class="status-swatch-role">边框 (Border 1~2px)</span>
-            <span class="status-swatch-code" id="hexSuccessBorder">#B7EB8F</span>
+            <span class="status-swatch-code" id="hexSuccessBorder">#86EFAC</span>
           </div>
           <div class="status-swatch-item" style="background: var(--success); border-color: var(--success); color: #fff;">
             <span class="status-swatch-role">实体/胶囊/前景 (UI_SUCCESS)</span>
-            <span class="status-swatch-code" id="hexSuccessSolid">#52C41A</span>
+            <span class="status-swatch-code" id="hexSuccessSolid">#16A34A</span>
           </div>
         </div>
       </div>
@@ -1139,7 +1155,7 @@
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--warning-soft); border-color: var(--warning-border); color: var(--warning-deep);">
             <span class="status-swatch-role">软底 (UI_WARNING_SOFT)</span>
-            <span class="status-swatch-code" id="hexWarningSoft">#FFF7E6</span>
+            <span class="status-swatch-code" id="hexWarningSoft">#FFFBEB</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--warning-border); color: var(--text-primary);">
             <span class="status-swatch-role">边框 (Border 1~2px)</span>
@@ -1163,15 +1179,15 @@
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--danger-soft); border-color: var(--danger-border); color: var(--danger);">
             <span class="status-swatch-role">软底 (UI_DANGER_SOFT)</span>
-            <span class="status-swatch-code" id="hexDangerSoft">#FFE9ED</span>
+            <span class="status-swatch-code" id="hexDangerSoft">#FEF2F2</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--danger-border); color: var(--text-primary);">
             <span class="status-swatch-role">边框 (Border 1~2px)</span>
-            <span class="status-swatch-code" id="hexDangerBorder">#FFA39E</span>
+            <span class="status-swatch-code" id="hexDangerBorder">#FCA5A5</span>
           </div>
           <div class="status-swatch-item" style="background: var(--danger); border-color: var(--danger); color: #fff;">
             <span class="status-swatch-role">实体/胶囊/前景 (UI_DANGER)</span>
-            <span class="status-swatch-code" id="hexDangerSolid">#B92F46</span>
+            <span class="status-swatch-code" id="hexDangerSolid">#C42B45</span>
           </div>
         </div>
       </div>
@@ -1227,7 +1243,7 @@
         <span class="check-icon">✓</span>
         <div>
           <div class="check-title">高可读性明度对比</div>
-          <div class="check-desc">浅色模式正文字色 ≥ <code>#172640</code>，深色模式正文字色 ≥ <code>#F3F6FD</code>，无昏暗发沉现象。</div>
+          <div class="check-desc">浅色模式正文字色 ≥ <code>#172640</code>，深色模式正文字色 ≥ <code>#EEEEFF</code>，无昏暗发沉现象。</div>
         </div>
       </div>
 
@@ -1276,42 +1292,192 @@
         { key: "surface", cName: ".surface", hex: "#FFFFFF", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#172640" },
         { key: "surface_raised", cName: ".surface_raised", hex: "#E8EDF7", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#172640" },
         { key: "border_decorative", cName: ".border_decorative", hex: "#DBE1E9", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#172640" },
-        { key: "border_control", cName: ".border_control", hex: "#79879D", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#FFFFFF" },
+        { key: "border_control", cName: ".border_control", hex: "#7A968F", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#FFFFFF" },
         { key: "text_primary", cName: ".text_primary", hex: "#172640", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#FFFFFF" },
         { key: "text_secondary", cName: ".text_secondary", hex: "#53627A", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#FFFFFF" },
         { key: "text_disabled", cName: ".text_disabled", hex: "#9199A5", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#FFFFFF" },
         { key: "accent", cName: ".accent", hex: "#245BC4", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#FFFFFF" },
         { key: "accent_soft", cName: ".accent_soft", hex: "#E4EDFF", name: "主色软底", desc: "主色对应浅色软背景", textCol: "#245BC4" },
         { key: "focus", cName: ".focus", hex: "#1247A8", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#FFFFFF" },
-        { key: "success", cName: ".success", hex: "#16734E", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#FFFFFF" },
-        { key: "success_soft", cName: ".success_soft", hex: "#F6FFED", name: "成功极浅软底", desc: "极浅薄荷浅绿软底", textCol: "#16734E" },
+        { key: "success", cName: ".success", hex: "#15803D", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#FFFFFF" },
+        { key: "success_soft", cName: ".success_soft", hex: "#EDF9F0", name: "成功极浅软底", desc: "极浅薄荷浅绿软底", textCol: "#15803D" },
         { key: "warning", cName: ".warning", hex: "#FA8C16", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#FFFFFF" },
-        { key: "warning_soft", cName: ".warning_soft", hex: "#FFF7E6", name: "提醒柔和软底", desc: "温暖柔和杏白/米白软底", textCol: "#D46B08" },
-        { key: "danger", cName: ".danger", hex: "#B92F46", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#FFFFFF" },
-        { key: "danger_soft", cName: ".danger_soft", hex: "#FFE9ED", name: "危险粉樱软底", desc: "淡粉樱软底", textCol: "#B92F46" }
+        { key: "warning_soft", cName: ".warning_soft", hex: "#FFFBEB", name: "提醒柔和软底", desc: "温暖柔和杏白/米白软底", textCol: "#D46B08" },
+        { key: "danger", cName: ".danger", hex: "#C42B45", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#FFFFFF" },
+        { key: "danger_soft", cName: ".danger_soft", hex: "#FEF2F2", name: "危险粉樱软底", desc: "淡粉樱软底", textCol: "#C42B45" }
       ],
       dark: [
-        { key: "page_bg", cName: ".page_bg", hex: "#0B0F19", name: "页面底色", desc: "全局背景色，深邃蓝黑冷调", textCol: "#F3F6FD" },
-        { key: "surface", cName: ".surface", hex: "#162032", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#F3F6FD" },
-        { key: "surface_raised", cName: ".surface_raised", hex: "#1E2C44", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#F3F6FD" },
-        { key: "border_decorative", cName: ".border_decorative", hex: "#2A3B54", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#F3F6FD" },
-        { key: "border_control", cName: ".border_control", hex: "#7E90AA", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#0B0F19" },
-        { key: "text_primary", cName: ".text_primary", hex: "#F3F6FD", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#0B0F19" },
-        { key: "text_secondary", cName: ".text_secondary", hex: "#B6C4D9", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#0B0F19" },
-        { key: "text_disabled", cName: ".text_disabled", hex: "#818C98", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#0B0F19" },
-        { key: "accent", cName: ".accent", hex: "#91B9FF", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#122344" },
-        { key: "accent_soft", cName: ".accent_soft", hex: "#273E60", name: "主色软底", desc: "主色对应暗蓝软背景", textCol: "#91B9FF" },
-        { key: "focus", cName: ".focus", hex: "#BCD4FF", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#122344" },
-        { key: "success", cName: ".success", hex: "#5CCB8A", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#0B0F19" },
-        { key: "success_soft", cName: ".success_soft", hex: "#193C32", name: "成功极浅软底", desc: "暗翡翠绿软底", textCol: "#5CCB8A" },
-        { key: "warning", cName: ".warning", hex: "#FFA940", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#0B0F19" },
-        { key: "warning_soft", cName: ".warning_soft", hex: "#40351F", name: "提醒柔和软底", desc: "深暖褐棕软底", textCol: "#FFA940" },
-        { key: "danger", cName: ".danger", hex: "#FF7A85", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#0B0F19" },
-        { key: "danger_soft", cName: ".danger_soft", hex: "#462936", name: "危险粉樱软底", desc: "暗樱红软底", textCol: "#FF7A85" }
+        { key: "page_bg", cName: ".page_bg", hex: "#111122", name: "页面底色", desc: "全局背景色，深邃蓝黑冷调", textCol: "#EEEEFF" },
+        { key: "surface", cName: ".surface", hex: "#112233", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#EEEEFF" },
+        { key: "surface_raised", cName: ".surface_raised", hex: "#223344", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#EEEEFF" },
+        { key: "border_decorative", cName: ".border_decorative", hex: "#334455", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#EEEEFF" },
+        { key: "border_control", cName: ".border_control", hex: "#778899", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#111122" },
+        { key: "text_primary", cName: ".text_primary", hex: "#EEEEFF", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#111122" },
+        { key: "text_secondary", cName: ".text_secondary", hex: "#AABBCC", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#111122" },
+        { key: "text_disabled", cName: ".text_disabled", hex: "#667788", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#111122" },
+        { key: "accent", cName: ".accent", hex: "#77AAFF", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#112244" },
+        { key: "accent_soft", cName: ".accent_soft", hex: "#223355", name: "主色软底", desc: "主色对应暗蓝软背景", textCol: "#77AAFF" },
+        { key: "focus", cName: ".focus", hex: "#AACCFF", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#112244" },
+        { key: "success", cName: ".success", hex: "#55DD77", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#111122" },
+        { key: "success_soft", cName: ".success_soft", hex: "#113322", name: "成功极浅软底", desc: "暗翡翠绿软底", textCol: "#55DD77" },
+        { key: "warning", cName: ".warning", hex: "#FFBB33", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#111122" },
+        { key: "warning_soft", cName: ".warning_soft", hex: "#332211", name: "提醒柔和软底", desc: "深暖褐棕软底", textCol: "#FFBB33" },
+        { key: "danger", cName: ".danger", hex: "#FF7788", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#111122" },
+        { key: "danger_soft", cName: ".danger_soft", hex: "#441122", name: "危险粉樱软底", desc: "暗樱红软底", textCol: "#FF7788" }
       ]
     };
 
+    const STYLE_DATA = {
+      indigo: {
+        name: '沉静靛蓝 (Serene Indigo)',
+        light: { accent: '#245BC4', accentSoft: '#E4EDFF', focus: '#1247A8', hero: '#214EA3' },
+        dark:  { accent: '#77AAFF', accentSoft: '#223355', focus: '#AACCFF', hero: '#223388', onAccent: '#112244' }
+      },
+      teal: {
+        name: '清爽青绿 (Ocean Teal)',
+        light: { accent: '#0D7A70', accentSoft: '#E0F4F2', focus: '#08544D', hero: '#0B665E' },
+        dark:  { accent: '#44DDCC', accentSoft: '#113333', focus: '#77FFEE', hero: '#115555', onAccent: '#002222' }
+      },
+      amethyst: {
+        name: '暮紫星夜 (Night Amethyst)',
+        light: { accent: '#6340B8', accentSoft: '#F1ECFC', focus: '#482B96', hero: '#5332A0' },
+        dark:  { accent: '#BB99FF', accentSoft: '#332255', focus: '#DDCCFF', hero: '#442277', onAccent: '#221144' }
+      },
+      slate: {
+        name: '极简冷灰 (Slate Neutral)',
+        light: { accent: '#3B5270', accentSoft: '#EAF0F6', focus: '#25364D', hero: '#30435C' },
+        dark:  { accent: '#99BBDD', accentSoft: '#223344', focus: '#CCDDEE', hero: '#224466', onAccent: '#112233' }
+      }
+    };
+
     let currentTheme = 'light';
+    let currentStyle = 'indigo';
+
+    function setStyle(style) {
+      if (!STYLE_DATA[style]) return;
+      currentStyle = style;
+
+      ['Indigo', 'Teal', 'Amethyst', 'Slate'].forEach(s => {
+        const btn = document.getElementById('btnStyle' + s);
+        if (btn) btn.classList.toggle('active', s.toLowerCase() === style);
+      });
+
+      const s = STYLE_DATA[style];
+      const root = document.documentElement;
+      root.style.setProperty('--pw-light-accent', s.light.accent);
+      root.style.setProperty('--pw-light-accent-soft', s.light.accentSoft);
+      root.style.setProperty('--pw-light-focus', s.light.focus);
+      root.style.setProperty('--pw-light-hero', s.light.hero);
+
+      root.style.setProperty('--pw-dark-accent', s.dark.accent);
+      root.style.setProperty('--pw-dark-accent-soft', s.dark.accentSoft);
+      root.style.setProperty('--pw-dark-focus', s.dark.focus);
+      root.style.setProperty('--pw-dark-hero', s.dark.hero);
+      root.style.setProperty('--pw-dark-on-accent', s.dark.onAccent);
+
+      // Update palette data
+      const la = PALETTE_DATA.light.find(x => x.key === 'accent');
+      if (la) { la.hex = s.light.accent; la.desc = s.name + ' 强调色'; }
+      const las = PALETTE_DATA.light.find(x => x.key === 'accent_soft');
+      if (las) { las.hex = s.light.accentSoft; }
+      const lf = PALETTE_DATA.light.find(x => x.key === 'focus');
+      if (lf) { lf.hex = s.light.focus; }
+
+      const da = PALETTE_DATA.dark.find(x => x.key === 'accent');
+      if (da) { da.hex = s.dark.accent; da.desc = s.name + ' 4-bit 严格安全强调色'; }
+      const das = PALETTE_DATA.dark.find(x => x.key === 'accent_soft');
+      if (das) { das.hex = s.dark.accentSoft; }
+      const df = PALETTE_DATA.dark.find(x => x.key === 'focus');
+      if (df) { df.hex = s.dark.focus; }
+
+      renderPaletteGrid();
+      updateSemanticCodes();
+    }
+
+    let currentLang = 'zh';
+
+    const I18N = {
+      zh: {
+        brand_name: "视觉风格与调色板交互预览",
+        brand_sub: "Nintendo Switch 界面调色与微几何规范",
+        style_indigo: "沉静靛蓝",
+        style_teal: "清爽青绿",
+        style_amethyst: "暮紫星夜",
+        style_slate: "极简冷灰",
+        mode_light: "浅色模式 (Light Mode)",
+        mode_dark: "深色模式 (Dark Mode)",
+        btn_light: "浅色 (Light)",
+        btn_dark: "深色 (Dark)",
+        btn_lang: "中文 / EN",
+        sec1_title: "Switch 真机界面实时模拟 (Live UI Simulator)",
+        sec1_desc: "基于 1280x720 纯 CPU 软件渲染约束与 1064px (108px 居中留白) 两端对齐规范",
+        sec2_title: "双主题全量调色板 (Full Light / Dark Color Palettes)",
+        sec2_desc: "点击色卡可直接复制对应十六进制 HEX 颜色值与 C 宏定义命名",
+        sec3_title: "状态语义色与层级规范 (Semantic States & Levels)",
+        sec3_desc: "高饱和实体配极浅软底，严格杜绝发灰脏黄色，强化 OLED 与液晶屏辨识度",
+        copy_hint: "点击复制",
+        toast_copy: "已复制",
+        color_val: "颜色值"
+      },
+      en: {
+        brand_name: "Visual Design & Palette Explorer",
+        brand_sub: "Nintendo Switch UI Palettes & Micro-Geometry Specification",
+        style_indigo: "Serene Indigo",
+        style_teal: "Fresh Teal",
+        style_amethyst: "Twilight Amethyst",
+        style_slate: "Minimal Slate",
+        mode_light: "Light Mode",
+        mode_dark: "Dark Mode",
+        btn_light: "Light",
+        btn_dark: "Dark",
+        btn_lang: "EN / 中文",
+        sec1_title: "Live Nintendo Switch UI Simulator",
+        sec1_desc: "Based on 1280x720 pure CPU rendering & 1064px justified alignment specifications",
+        sec2_title: "Full Light / Dark Color Palettes",
+        sec2_desc: "Click any color swatch to copy its HEX value and C constant name",
+        sec3_title: "Semantic States & Contrast Hierarchy",
+        sec3_desc: "High-saturation solids with ultra-soft tints for optimal readability on OLED & LCD screens",
+        copy_hint: "Click to copy",
+        toast_copy: "Copied",
+        color_val: "Color value"
+      }
+    };
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'zh' ? 'en' : 'zh';
+      applyLanguage();
+    }
+
+    function applyLanguage() {
+      const dict = I18N[currentLang];
+      const isDark = currentTheme === 'dark';
+      document.getElementById('currentModeLabel').textContent = isDark ? dict.mode_dark : dict.mode_light;
+      document.getElementById('txtBtnLight').textContent = dict.btn_light;
+      document.getElementById('txtBtnDark').textContent = dict.btn_dark;
+      document.getElementById('txtBtnLang').textContent = dict.btn_lang;
+
+      document.getElementById('btnStyleIndigo').textContent = dict.style_indigo;
+      document.getElementById('btnStyleTeal').textContent = dict.style_teal;
+      document.getElementById('btnStyleAmethyst').textContent = dict.style_amethyst;
+      document.getElementById('btnStyleSlate').textContent = dict.style_slate;
+
+      const brandName = document.querySelector('.brand-name');
+      if (brandName) brandName.textContent = dict.brand_name;
+      const brandSub = document.querySelector('.brand-sub');
+      if (brandSub) brandSub.textContent = dict.brand_sub;
+
+      const secTitles = document.querySelectorAll('.section-title');
+      if (secTitles[0]) secTitles[0].childNodes[secTitles[0].childNodes.length - 1].textContent = ' ' + dict.sec1_title;
+      if (secTitles[1]) secTitles[1].childNodes[secTitles[1].childNodes.length - 1].textContent = ' ' + dict.sec2_title;
+      if (secTitles[2]) secTitles[2].childNodes[secTitles[2].childNodes.length - 1].textContent = ' ' + dict.sec3_title;
+
+      const secDescs = document.querySelectorAll('.section-desc');
+      if (secDescs[0]) secDescs[0].textContent = dict.sec1_desc;
+      if (secDescs[1]) secDescs[1].textContent = dict.sec2_desc;
+      if (secDescs[2]) secDescs[2].textContent = dict.sec3_desc;
+
+      renderPaletteGrid();
+    }
 
     function setTheme(theme) {
       currentTheme = theme;
@@ -1320,7 +1486,8 @@
       const isDark = theme === 'dark';
       document.getElementById('btnLight').classList.toggle('active', !isDark);
       document.getElementById('btnDark').classList.toggle('active', isDark);
-      document.getElementById('currentModeLabel').textContent = isDark ? '深色模式 (Dark Mode)' : '浅色模式 (Light Mode)';
+      const dict = I18N[currentLang];
+      document.getElementById('currentModeLabel').textContent = isDark ? dict.mode_dark : dict.mode_light;
 
       renderPaletteGrid();
       updateSemanticCodes();
@@ -1350,7 +1517,7 @@
             <div class="swatch-desc">${item.desc}</div>
             <div class="swatch-hex-row">
               <span class="swatch-hex">${item.hex}</span>
-              <span class="copy-hint">点击复制</span>
+              <span class="copy-hint">${I18N[currentLang].copy_hint}</span>
             </div>
           </div>
         `;
@@ -1360,21 +1527,21 @@
 
     function updateSemanticCodes() {
       const isDark = currentTheme === 'dark';
-      document.getElementById('hexSuccessSoft').textContent = isDark ? '#193C32' : '#F6FFED';
-      document.getElementById('hexSuccessBorder').textContent = isDark ? '#274916' : '#B7EB8F';
-      document.getElementById('hexSuccessSolid').textContent = isDark ? '#5CCB8A' : '#52C41A';
+      document.getElementById('hexSuccessSoft').textContent = isDark ? '#113322' : '#EDF9F0';
+      document.getElementById('hexSuccessBorder').textContent = isDark ? '#226633' : '#86EFAC';
+      document.getElementById('hexSuccessSolid').textContent = isDark ? '#55DD77' : '#16A34A';
 
-      document.getElementById('hexWarningSoft').textContent = isDark ? '#40351F' : '#FFF7E6';
-      document.getElementById('hexWarningBorder').textContent = isDark ? '#874D00' : '#FFD591';
-      document.getElementById('hexWarningSolid').textContent = isDark ? '#FFA940' : '#FA8C16';
+      document.getElementById('hexWarningSoft').textContent = isDark ? '#332211' : '#FFFBEB';
+      document.getElementById('hexWarningBorder').textContent = isDark ? '#885511' : '#FFD591';
+      document.getElementById('hexWarningSolid').textContent = isDark ? '#FFBB33' : '#FA8C16';
 
-      document.getElementById('hexDangerSoft').textContent = isDark ? '#462936' : '#FFE9ED';
-      document.getElementById('hexDangerBorder').textContent = isDark ? '#78061A' : '#FFA39E';
-      document.getElementById('hexDangerSolid').textContent = isDark ? '#FF7A85' : '#B92F46';
+      document.getElementById('hexDangerSoft').textContent = isDark ? '#441122' : '#FEF2F2';
+      document.getElementById('hexDangerBorder').textContent = isDark ? '#882233' : '#FCA5A5';
+      document.getElementById('hexDangerSolid').textContent = isDark ? '#FF7788' : '#C42B45';
 
-      document.getElementById('hexAccentSoft').textContent = isDark ? '#273E60' : '#E4EDFF';
-      document.getElementById('hexFocus').textContent = isDark ? '#BCD4FF' : '#1247A8';
-      document.getElementById('hexAccentSolid').textContent = isDark ? '#91B9FF' : '#245BC4';
+      document.getElementById('hexAccentSoft').textContent = isDark ? '#223355' : '#E4EDFF';
+      document.getElementById('hexFocus').textContent = isDark ? '#AACCFF' : '#1247A8';
+      document.getElementById('hexAccentSolid').textContent = isDark ? '#77AAFF' : '#245BC4';
     }
 
     function copyText(text, label) {

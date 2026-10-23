@@ -26,28 +26,39 @@ typedef enum {
 
 enum {
     PTC_OVERLAY_CONTENT_X = 16,
-    PTC_OVERLAY_CONTENT_Y = 40,
+    PTC_OVERLAY_CONTENT_Y = 12,
     PTC_OVERLAY_CONTENT_W = 416,
-    PTC_OVERLAY_CONTENT_H = 607,
-    PTC_OVERLAY_PARENT_CONTENT_Y = 40,
-    PTC_OVERLAY_SLOT_Y = 108,
+    PTC_OVERLAY_CONTENT_H = 635,
+    PTC_OVERLAY_PARENT_CONTENT_Y = 12,
+    /* Unified fixed footer rail: content bottom 639, viewport bottom 563,
+       Tesla safe line 647. All non-child pages share this geometry. */
+    PTC_OVERLAY_RAIL_H = 68,
+    PTC_OVERLAY_RAIL_Y = PTC_OVERLAY_CONTENT_H - 8 - PTC_OVERLAY_RAIL_H,
+    PTC_OVERLAY_RAIL_BOTTOM = PTC_OVERLAY_CONTENT_H - 8,
+    PTC_OVERLAY_VIEWPORT_BOTTOM = PTC_OVERLAY_RAIL_Y - 8,
+    /* Top path bar (方案 A): 22px breadcrumb replaces the old page title. */
+    PTC_OVERLAY_HEADER_H = 44,
+    PTC_OVERLAY_PATH_X = 16,
+    PTC_OVERLAY_PATH_Y = 8,
+    PTC_OVERLAY_PARENT_CARD_MIN_H = 96,
+    PTC_OVERLAY_SLOT_Y = 104,
     PTC_OVERLAY_SLOT_W = 44,
     PTC_OVERLAY_SLOT_H = 64,
     PTC_OVERLAY_SLOT_GAP = 5,
-    PTC_OVERLAY_KEYPAD_Y = 236,
+    PTC_OVERLAY_KEYPAD_Y = 232,
     PTC_OVERLAY_KEYPAD_H = 248,
     PTC_OVERLAY_KEY_ROW_STEP = 64,
     PTC_OVERLAY_KEY_W = 124,
     PTC_OVERLAY_KEY_H = 56,
-    PTC_OVERLAY_SUBMIT_Y = 492,
-    PTC_OVERLAY_SUBMIT_H = 50,
+    PTC_OVERLAY_SUBMIT_Y = 491,
+    PTC_OVERLAY_SUBMIT_H = 60,
     /* Unified Typography Scale (掌机模式全局字体尺寸统一分级契约) */
     PTC_OVERLAY_FONT_HERO = 56,
     PTC_OVERLAY_FONT_DISPLAY = 44,
     PTC_OVERLAY_FONT_CODE = 40,
     PTC_OVERLAY_FONT_KEYPAD = 36,
     PTC_OVERLAY_FONT_TITLE_LG = 44,
-    PTC_OVERLAY_FONT_TITLE = 40,
+    PTC_OVERLAY_FONT_TITLE = 34,
     PTC_OVERLAY_FONT_BTN = 30,
     PTC_OVERLAY_FONT_BODY_LG = 32,
     PTC_OVERLAY_FONT_BODY = 28,
@@ -65,6 +76,8 @@ typedef struct {
     PtcOverlayRect status;
     PtcOverlayRect buffer;
     PtcOverlayRect parent;
+    PtcOverlayRect language;
+    PtcOverlayRect lang_options[4];
     PtcOverlayRect backspace;
     PtcOverlayRect actions[PTC_OVERLAY_PARENT_ACTION_COUNT];
     PtcOverlayRect pin_keys[16];
@@ -153,19 +166,47 @@ static inline bool ptc_overlay_rect_contains(PtcOverlayRect rect, int x, int y)
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
 }
 
-/* Visual order differs from the stable action enum; all input uses this map. */
+/* Visual order differs from the stable action enum; all input uses this map.
+   Slots group the actions by what a parent is trying to do today:
+   0..1 adjust today's allowance, 2..6 relax a rule that is restricting now,
+   7 is the destructive system recovery that must stay apart. */
+static inline const int *ptc_overlay_parent_action_order(void)
+{
+    static const int order[PTC_OVERLAY_PARENT_ACTION_COUNT] = {
+        PTC_OVERLAY_PARENT_ADD_MINUTES,
+        PTC_OVERLAY_PARENT_UNLIMITED,
+        PTC_OVERLAY_PARENT_SKIP_BEDTIME,
+        PTC_OVERLAY_PARENT_SKIP_EYE_CARE,
+        PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP,
+        PTC_OVERLAY_PARENT_DISABLE_BEDTIME,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK,
+        PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT
+    };
+    return order;
+}
+
+static inline int ptc_overlay_parent_action_group(int slot)
+{
+    if (slot < 0 || slot >= PTC_OVERLAY_PARENT_ACTION_COUNT) return -1;
+    if (slot < 2) return 0;
+    return slot < 7 ? 1 : 2;
+}
+
 static inline int ptc_overlay_parent_action_slot(int action)
 {
-    static const int slots[PTC_OVERLAY_PARENT_ACTION_COUNT] = {0, 1, 2, 3, 4, 5, 7, 6};
-    return action >= 0 && action < PTC_OVERLAY_PARENT_ACTION_COUNT ? slots[action] : -1;
+    const int *order = ptc_overlay_parent_action_order();
+    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot)
+        if (order[slot] == action) return slot;
+    return -1;
 }
 
 static inline int ptc_overlay_parent_action_move(int action, int direction)
 {
-    static const int order[PTC_OVERLAY_PARENT_ACTION_COUNT] = {0, 1, 2, 3, 4, 5, 7, 6};
+    const int *order = ptc_overlay_parent_action_order();
     int slot = ptc_overlay_parent_action_slot(action);
-    if (slot < 0) return PTC_OVERLAY_PARENT_ADD_MINUTES;
-    return order[(slot + (direction < 0 ? 7 : 1)) % PTC_OVERLAY_PARENT_ACTION_COUNT];
+    if (slot < 0) return order[0];
+    return order[(slot + (direction < 0 ? PTC_OVERLAY_PARENT_ACTION_COUNT - 1 : 1)) %
+        PTC_OVERLAY_PARENT_ACTION_COUNT];
 }
 
 static inline bool ptc_overlay_remaining_refresh_pending(bool waiting, bool offline_code_request)
@@ -218,12 +259,13 @@ static inline PtcOverlayRect ptc_overlay_submit_rect(int origin_x, int origin_y,
 
 static inline PtcOverlayRect ptc_overlay_keypad_nav_back_rect(int origin_x, int origin_y)
 {
-    return ptc_overlay_rect(origin_x + 12, origin_y + 550, 190, 52);
+    return ptc_overlay_rect(origin_x + 12, origin_y + PTC_OVERLAY_RAIL_Y, 190, PTC_OVERLAY_RAIL_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_keypad_nav_parent_rect(int origin_x, int origin_y, int width)
 {
-    return ptc_overlay_rect(origin_x + 214, origin_y + 550, width - 226, 52);
+    return ptc_overlay_rect(origin_x + 214, origin_y + PTC_OVERLAY_RAIL_Y,
+                            width - 226, PTC_OVERLAY_RAIL_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_pin_wheel_rect(int origin_x, int origin_y, unsigned int index)

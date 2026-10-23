@@ -52,7 +52,7 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     UiRect left = {result.x + 10, result.y + 8, 138, result.height - 16};
     UiRect right = {result.x + result.width - 148, result.y + 8, 138, result.height - 16};
     fill_round_rect(pixels, stride, result, 12, UI_RGB(UI_BLENDED(surface_raised)));
-    draw_rect_outline(pixels, stride, result, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_rect_outline(pixels, stride, result, 12, 1, UI_BORDER);
 
     if (projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
         ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
@@ -202,7 +202,7 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
     UiRect left = {result.x + 10, result.y + 8, col_w, result.height - 16};
     UiRect right = {result.x + result.width - 10 - col_w, result.y + 8, col_w, result.height - 16};
     fill_round_rect(pixels, stride, result, 12, UI_RGB(UI_BLENDED(surface_raised)));
-    draw_rect_outline(pixels, stride, result, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_rect_outline(pixels, stride, result, 12, 1, UI_BORDER);
     if (projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
         ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
         draw_status_symbol(pixels, stride, result.x + 24, result.y + 52, UI_MUTED, 1);
@@ -338,9 +338,11 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     char line[160];
     char minutes_str[64];
     bool disabled = model->disable_flag_present;
-    bool top_selected = model->selected_index == 0;
-    fill_round_rect(pixels, stride, top_card, 16, disabled ? UI_PAGE : (top_selected ? UI_ACCENT_SOFT : UI_SURFACE));
-    draw_rect_outline(pixels, stride, top_card, 16, top_selected ? 3 : 1, top_selected ? UI_ACCENT : UI_BORDER);
+    bool top_selected = model->selected_index == 0 && !model->parent_footer_focused;
+    if (!top_selected) draw_card_shadow(pixels, stride, top_card, 16);
+    fill_round_rect(pixels, stride, top_card, 16, disabled ? UI_RAISED : (top_selected ? UI_ACCENT_SOFT : UI_SURFACE));
+    if (top_selected) draw_focus_ring(pixels, stride, top_card, 16);
+    else draw_rect_outline(pixels, stride, top_card, 16, 1, UI_BORDER);
     draw_text(pixels, stride, top_card.x + 20, top_card.y + 32, ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_RULES), 22, UI_INK);
     draw_text(pixels, stride, top_card.x + 20, top_card.y + 60,
               ptc_ui_text(PTC_UI_T_AUTOMATICALLY_APPLY_STATUTORY_HOLIDAY_MAKEUP_WORKDAY_RULES), 14, UI_MUTED);
@@ -426,9 +428,12 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     for (int i = 0; i < 3; ++i) {
         UiRect rect = to_uirect(ptc_ui_bedtime_section_rect(i));
         bool selected = model->bedtime_section == (PtcUiBedtimeSection)i;
-        fill_round_rect(pixels, stride, rect, 12, selected ? UI_ACCENT : UI_RAISED);
+        bool sec_focused = selected && model->bedtime_section_focused;
+        if (!sec_focused) draw_card_shadow(pixels, stride, rect, 12);
+        fill_round_rect(pixels, stride, rect, 12, selected ? UI_ACCENT : UI_SURFACE);
+        if (sec_focused) draw_focus_ring(pixels, stride, rect, 12);
+        else draw_rect_outline(pixels, stride, rect, 12, 1, selected ? UI_ACCENT : UI_BORDER);
         draw_text_center(pixels, stride, rect, SECTIONS[i], 18, selected ? UI_ON_ACCENT : UI_INK);
-        if (selected && model->bedtime_section_focused) draw_focus_ring(pixels, stride, rect, 12);
     }
 
     bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
@@ -443,16 +448,18 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
     /* 独立醒目的就寝管控总闸卡片 (Bedtime Master Circuit Breaker Card) */
     UiRect master_card = to_uirect(ptc_ui_bedtime_master_switch_rect());
-    draw_card_shadow(pixels, stride, master_card, 16);
-    fill_round_rect(pixels, stride, master_card, 14, UI_RGB(UI_BLENDED(surface)));
-    if (bedtime_enforcing) {
+    bool master_focused = model->bedtime_master_focused && !model->parent_footer_focused;
+    if (!master_focused) draw_card_shadow(pixels, stride, master_card, 14);
+    fill_round_rect(pixels, stride, master_card, 14, master_focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface)));
+    if (master_focused) {
+        draw_focus_ring(pixels, stride, master_card, 14);
+    } else if (bedtime_enforcing) {
         int phase = get_breathing_phase();
         draw_rect_outline(pixels, stride, master_card, 14, 2,
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
     } else {
-        draw_rect_outline(pixels, stride, master_card, 14, 1, UI_RGB(UI_BLENDED(border_control)));
+        draw_rect_outline(pixels, stride, master_card, 14, 1, UI_BORDER);
     }
-    if (model->bedtime_master_focused) draw_focus_ring(pixels, stride, master_card, 14);
     draw_text(pixels, stride, master_card.x + 18, master_card.y + 24, ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH), 20, UI_INK);
 
     bool is_skipped_active = ptc_ui_status_is_fresh(model, raw_now) &&
@@ -532,8 +539,9 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             strcmp(model->result_status, "error") == 0 ? ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED) :
             (model->waiting ? ptc_ui_text(PTC_UI_T_SAVING_3) :
              (model->bedtime_dirty ? ptc_ui_text(PTC_UI_T_DRAFT_TO_BE_SAVED) : ptc_ui_text(PTC_UI_T_RULE_SAVED))));
+        draw_card_shadow(pixels, stride, eval_card, 12);
         fill_round_rect(pixels, stride, eval_card, 12, UI_RGB(UI_BLENDED(surface)));
-        draw_rect_outline(pixels, stride, eval_card, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+        draw_rect_outline(pixels, stride, eval_card, 12, 1, UI_BORDER);
         char preview_title[64];
         snprintf(preview_title, sizeof(preview_title), "%s%s",
                  model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_DRAFT_PREVIEW)) : "", section_name);
@@ -738,8 +746,9 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
         /* 左下角就寝规则说明面板（与右侧预测卡片底部平齐对齐至 y=626） */
         UiRect bedtime_guide = {54, 526, 752, 100};
+        draw_card_shadow(pixels, stride, bedtime_guide, 12);
         fill_round_rect(pixels, stride, bedtime_guide, 12, UI_RGB(UI_BLENDED(surface)));
-        draw_rect_outline(pixels, stride, bedtime_guide, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+        draw_rect_outline(pixels, stride, bedtime_guide, 12, 1, UI_BORDER);
         draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 22,
                    ptc_ui_text(PTC_UI_T_HOW_BEDTIME_WORKS), 15, UI_RGB(UI_BLENDED(text_primary)));
         draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 44,
@@ -794,10 +803,11 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
         /* 节假日日历规则与总闸状态指引面板（底部与右侧预测卡平齐至 y=626） */
         UiRect cal_guide = {54, 526, 752, 100};
+        draw_card_shadow(pixels, stride, cal_guide, 12);
         fill_round_rect(pixels, stride, cal_guide, 12,
                         !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
         draw_rect_outline(pixels, stride, cal_guide, 12, 1,
-                          !draft->enabled ? UI_WARNING : UI_RGB(UI_BLENDED(border_control)));
+                          !draft->enabled ? UI_WARNING : UI_BORDER);
         if (!draft->enabled) {
             draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
                       ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 15, UI_WARNING);
@@ -872,10 +882,11 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
         /* 指定日期规则与总闸状态指引面板（与保存/放弃按钮同高对齐） */
         UiRect sched_guide = {54, 526, 360, 50};
+        draw_card_shadow(pixels, stride, sched_guide, 12);
         fill_round_rect(pixels, stride, sched_guide, 12,
                         !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
         draw_rect_outline(pixels, stride, sched_guide, 12, 1,
-                          !draft->enabled ? UI_WARNING : UI_RGB(UI_BLENDED(border_control)));
+                          !draft->enabled ? UI_WARNING : UI_BORDER);
         if (!draft->enabled) {
             draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 20,
                       ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 13, UI_WARNING);
@@ -949,7 +960,7 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
             draw_rect_outline(pixels, stride, row, 8, 1, UI_ACCENT);
         } else {
             fill_round_rect(pixels, stride, row, 8, UI_RGB(UI_BLENDED(surface)));
-            draw_rect_outline(pixels, stride, row, 8, 1, UI_RGB(UI_BLENDED(border_control)));
+            draw_rect_outline(pixels, stride, row, 8, 1, UI_BORDER);
         }
 
         /* 1. 日期与星期 */
@@ -1071,16 +1082,18 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     /* 1. 独立醒目的护眼管控总开关卡片 (Eye Care Master Circuit Breaker Card) */
     UiRect master_card = to_uirect(ptc_ui_eye_care_page_master_rect());
-    draw_card_shadow(pixels, stride, master_card, 16);
-    fill_round_rect(pixels, stride, master_card, 14, UI_RGB(UI_BLENDED(surface)));
-    if (resting) {
+    bool master_focused = (model->eye_care_field_focus == 0 && !model->parent_footer_focused);
+    if (!master_focused) draw_card_shadow(pixels, stride, master_card, 14);
+    fill_round_rect(pixels, stride, master_card, 14, master_focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface)));
+    if (master_focused) {
+        draw_focus_ring(pixels, stride, master_card, 14);
+    } else if (resting) {
         int phase = get_breathing_phase();
         draw_rect_outline(pixels, stride, master_card, 14, 2,
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
     } else {
-        draw_rect_outline(pixels, stride, master_card, 14, 1, UI_RGB(UI_BLENDED(border_control)));
+        draw_rect_outline(pixels, stride, master_card, 14, 1, UI_BORDER);
     }
-    if (model->eye_care_field_focus == 0) draw_focus_ring(pixels, stride, master_card, 14);
     draw_text(pixels, stride, master_card.x + 18, master_card.y + 26, ptc_ui_text(PTC_UI_T_EYE_CARE), 20, UI_INK);
 
     /* Switch pills */
@@ -1125,14 +1138,14 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     /* 2. 时长配置卡片 (Time Configuration Card) */
     UiRect time_card = {54, 238, 1172, 160};
-    draw_card_shadow(pixels, stride, time_card, 16);
+    draw_card_shadow(pixels, stride, time_card, 14);
     fill_round_rect(pixels, stride, time_card, 14, UI_RGB(UI_BLENDED(surface)));
-    draw_rect_outline(pixels, stride, time_card, 14, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_rect_outline(pixels, stride, time_card, 14, 1, UI_BORDER);
 
     /* Row 1: 连续游玩时长 */
     UiRect play_row = {time_card.x + 12, time_card.y + 10, time_card.width - 24, 66};
-    if (model->eye_care_field_focus == 1) {
-        fill_round_rect(pixels, stride, play_row, 10, UI_RGB(UI_BLENDED(surface_raised)));
+    if (model->eye_care_field_focus == 1 && !model->parent_footer_focused) {
+        fill_round_rect(pixels, stride, play_row, 10, UI_ACCENT_SOFT);
         draw_focus_ring(pixels, stride, play_row, 10);
     }
     draw_text(pixels, stride, play_row.x + 14, play_row.y + 24, ptc_ui_text(PTC_UI_T_EYE_CARE_PLAY), 18, UI_INK);
@@ -1165,8 +1178,8 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     /* Row 2: 单次休息时长 */
     UiRect rest_row = {time_card.x + 12, time_card.y + 82, time_card.width - 24, 66};
-    if (model->eye_care_field_focus == 2) {
-        fill_round_rect(pixels, stride, rest_row, 10, UI_RGB(UI_BLENDED(surface_raised)));
+    if (model->eye_care_field_focus == 2 && !model->parent_footer_focused) {
+        fill_round_rect(pixels, stride, rest_row, 10, UI_ACCENT_SOFT);
         draw_focus_ring(pixels, stride, rest_row, 10);
     }
     draw_text(pixels, stride, rest_row.x + 14, rest_row.y + 24, ptc_ui_text(PTC_UI_T_EYE_CARE_REST), 18, UI_INK);
@@ -1199,9 +1212,9 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     /* 3. 预计休息周期样例 (Dynamic Cycle Schedule Preview) */
     UiRect preview_card = {54, 408, 1172, 108};
-    draw_card_shadow(pixels, stride, preview_card, 16);
+    draw_card_shadow(pixels, stride, preview_card, 14);
     fill_round_rect(pixels, stride, preview_card, 14, UI_RGB(UI_BLENDED(surface)));
-    draw_rect_outline(pixels, stride, preview_card, 14, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_rect_outline(pixels, stride, preview_card, 14, 1, UI_BORDER);
     draw_text(pixels, stride, preview_card.x + 18, preview_card.y + 24,
               ptc_ui_text(PTC_UI_T_EYE_CARE_SCHEDULE_PREVIEW), 16, UI_INK);
 
@@ -1230,9 +1243,9 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     /* 4. 详细逻辑说明卡片 (Operating Logic & Rules Guide) */
     UiRect guide_card = {54, 526, 1172, 112};
-    draw_card_shadow(pixels, stride, guide_card, 16);
+    draw_card_shadow(pixels, stride, guide_card, 14);
     fill_round_rect(pixels, stride, guide_card, 14, UI_RGB(UI_BLENDED(surface)));
-    draw_rect_outline(pixels, stride, guide_card, 14, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_rect_outline(pixels, stride, guide_card, 14, 1, UI_BORDER);
 
     int col_w = (guide_card.width - 36 - 36) / 4;
     static const PtcUiTextId guide_titles[] = {
@@ -1259,20 +1272,31 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
     /* 5. 底部操作按钮 */
     UiRect save_btn = to_uirect(ptc_ui_eye_care_page_save_rect());
     bool dirty = model->eye_care_dirty;
-    fill_round_rect(pixels, stride, save_btn, 10, dirty ? UI_SUCCESS : UI_RAISED);
+    bool save_focused = (model->eye_care_field_focus == 3 && !model->parent_footer_focused);
+    if (dirty && !save_focused) draw_card_shadow(pixels, stride, save_btn, 12);
+    fill_round_rect(pixels, stride, save_btn, 12, dirty ? UI_SUCCESS : (save_focused ? UI_ACCENT_SOFT : UI_RAISED));
+    if (save_focused) {
+        draw_focus_ring(pixels, stride, save_btn, 12);
+    } else {
+        draw_rect_outline(pixels, stride, save_btn, 12, 1, dirty ? UI_SUCCESS : UI_BORDER);
+    }
     draw_button_label(pixels, stride, save_btn,
                       dirty ? (ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE)) : (ptc_ui_text(PTC_UI_T_RULE_SAVED)),
-                      16, dirty ? UI_ON_ACCENT : UI_MUTED);
-    if (model->eye_care_field_focus == 3) draw_focus_ring(pixels, stride, save_btn, 10);
+                      16, dirty ? UI_ON_ACCENT : (save_focused ? UI_ACCENT : UI_MUTED));
 
     if (resting) {
         UiRect skip_btn = to_uirect(ptc_ui_eye_care_page_skip_rect());
+        bool skip_focused = (model->eye_care_field_focus == 4 && !model->parent_footer_focused);
         char label[96];
         snprintf(label, sizeof(label), "X %s", ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP));
-        fill_round_rect(pixels, stride, skip_btn, 10, UI_DANGER_SOFT);
-        draw_rect_outline(pixels, stride, skip_btn, 10, 1, UI_DANGER);
+        if (!skip_focused) draw_card_shadow(pixels, stride, skip_btn, 12);
+        fill_round_rect(pixels, stride, skip_btn, 12, UI_DANGER_SOFT);
+        if (skip_focused) {
+            draw_focus_ring(pixels, stride, skip_btn, 12);
+        } else {
+            draw_rect_outline(pixels, stride, skip_btn, 12, 1, UI_DANGER);
+        }
         draw_button_label(pixels, stride, skip_btn, label, 16, UI_DANGER);
-        if (model->eye_care_field_focus == 4) draw_focus_ring(pixels, stride, skip_btn, 10);
     }
 }
 
@@ -1284,9 +1308,9 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool active = model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
     bool compact = card.height < 200;
     char value[96], line[192];
-    int step = compact ? 22 : 28;
+    int step = compact ? 22 : 24;
     draw_plan_card(pixels, stride, card, false);
-    draw_text(pixels, stride, card.x + 16, card.y + 24, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 16, UI_INK);
+    draw_text(pixels, stride, card.x + 20, card.y + 32, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 17, UI_INK);
     const char *mode = !fresh ? ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM) :
         strcmp(model->operation_mode, "docked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_TV) :
         strcmp(model->operation_mode, "undocked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) : ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
@@ -1297,8 +1321,8 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     if (fresh) snprintf(line, sizeof(line), "%s / %s", mode, state);
     else snprintf(line, sizeof(line), "%s", mode);
     char fitted[192];
-    fit_text(fitted, sizeof(fitted), line, 12, card.width - 32);
-    draw_text(pixels, stride, card.x + 16, card.y + 46, fitted, 12,
+    fit_text(fitted, sizeof(fitted), line, 13, card.width - 40);
+    draw_text(pixels, stride, card.x + 20, card.y + 54, fitted, 13,
         fresh && model->dock_restriction_active ? UI_DANGER : UI_ACCENT);
     const PtcUiTextId labels[] = {PTC_UI_T_DOCK_USED_VALUE_NAMED, PTC_UI_T_DOCK_LEFT_VALUE_NAMED,
         PTC_UI_T_DOCK_LIMIT_VALUE_NAMED, PTC_UI_T_TOTAL_LEFT_VALUE_NAMED};
@@ -1327,11 +1351,11 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         }
         PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("value", value)};
         (void)ptc_ui_text_format(labels[i], line, sizeof(line), args, 1);
-        fit_text(fitted, sizeof(fitted), line, 13, card.width - 32);
-        draw_text(pixels, stride, card.x + 16, card.y + 68 + i * step, fitted, 13, UI_INK);
+        fit_text(fitted, sizeof(fitted), line, 14, card.width - 40);
+        draw_text(pixels, stride, card.x + 20, card.y + 84 + i * step, fitted, 14, UI_INK);
     }
     if (!compact) {
-        UiRect bar = {card.x + 16, card.y + 166, card.width - 32, 6};
+        UiRect bar = {card.x + 20, card.y + 164, card.width - 40, 6};
         fill_round_rect(pixels, stride, bar, 3, UI_RAISED);
         if (known && model->dock_policy.undocked_limit_enabled && !model->dock_policy.force_docked && model->dock_policy.undocked_daily_minutes > 0) {
             int used = model->undocked_used_minutes;
@@ -1341,9 +1365,9 @@ void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             if (width > 0) fill_round_rect(pixels, stride, (UiRect){bar.x, bar.y, width, bar.height}, 3, UI_ACCENT);
         }
     }
-    draw_wrapped_text(pixels, stride, card.x + 16, card.y + (compact ? 151 : 192),
-        ptc_ui_text(compact ? PTC_UI_T_DOCK_TOTAL_RELATION_SHORT : PTC_UI_T_DOCK_TOTAL_RELATION), compact ? 10 : 12, card.width - 32, compact ? 12 : 16,
-        compact ? 1 : 3, UI_MUTED);
+    draw_wrapped_text(pixels, stride, card.x + 20, card.y + (compact ? 151 : 188),
+        ptc_ui_text(compact ? PTC_UI_T_DOCK_TOTAL_RELATION_SHORT : PTC_UI_T_DOCK_TOTAL_RELATION), 13, card.width - 40, 17,
+        compact ? 1 : 2, UI_MUTED);
 }
 
 static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1351,92 +1375,178 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
     const PtcDockPolicy *draft = &model->draft_dock_policy;
     int current_mode = (draft->force_docked) ? 1 : (draft->undocked_limit_enabled ? 2 : 0);
 
-    /* --- 左侧配置卡片 --- */
+    /* --- 左侧配置卡：标题 + 意图 + 三个模式行 --- */
+    UiRect config_card = {54, 176, 744, 420};
+    draw_plan_card(pixels, stride, config_card, false);
+    draw_text(pixels, stride, config_card.x + 22, config_card.y + 34,
+              ptc_ui_text(PTC_UI_T_DOCK_INTENT_TITLE), 19, UI_INK);
+    {
+        const char *mode_pill = current_mode == 1 ? ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE) :
+                                current_mode == 2 ? ptc_ui_text(PTC_UI_T_DOCK_LIMIT) : ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF);
+        int pill_w = measure_text(mode_pill, 12) + 24;
+        UiRect pill = {config_card.x + config_card.width - pill_w - 22, config_card.y + 14, pill_w, 24};
+        fill_round_rect(pixels, stride, pill, 6, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, pill, 6, 1, UI_ACCENT);
+        draw_text_center(pixels, stride, pill, mode_pill, 12, UI_ACCENT);
+    }
+    draw_wrapped_text(pixels, stride, config_card.x + 22, config_card.y + 62,
+                      ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT), 13, config_card.width - 44, 18, 2, UI_MUTED);
+
     for (int i = 0; i < 3; ++i) {
         UiRect row = to_uirect(ptc_ui_dock_field_rect(i));
-        bool focus = model->dock_field_focus == i;
+        bool focus = model->dock_field_focus == i && !model->parent_footer_focused;
         bool selected = (current_mode == i);
         bool lite_unsupported = (i == 1) && model->dock_supported_available && !model->dock_supported;
         bool row_disabled = model->disable_flag_present || (i == 1 && lite_unsupported);
-        draw_plan_card(pixels, stride, row, focus);
+        uint32_t title_color = row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK);
 
-        /* 单选圆圈指示器 (Radio Indicator) */
-        UiRect radio = {row.x + row.width - 48, row.y + (row.height - 24) / 2, 24, 24};
-        fill_round_rect(pixels, stride, radio, 12, selected ? UI_ACCENT : UI_RAISED);
-        draw_rect_outline(pixels, stride, radio, 12, 2, selected ? UI_ACCENT : UI_BORDER);
-        if (selected) {
-            fill_round_rect(pixels, stride, (UiRect){radio.x + 6, radio.y + 6, 12, 12}, 6, UI_ON_ACCENT);
+        if (focus) {
+            fill_round_rect(pixels, stride, row, 10, UI_ACCENT_SOFT);
+            draw_focus_ring(pixels, stride, row, 10);
+        } else {
+            fill_round_rect(pixels, stride, row, 10, selected ? UI_RGB(UI_BLENDED(surface_raised)) : UI_RGB(UI_BLENDED(surface)));
+            draw_rect_outline(pixels, stride, row, 10, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
         }
 
-        if (i == 0) {
-            /* 选项 0：不限制屏幕形态 */
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
-            const char *note = ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT);
-            char fitted[192];
-            fit_text(fitted, sizeof(fitted), note, 13, row.width - 80);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, UI_MUTED);
-        } else if (i == 1) {
-            /* 选项 1：仅允许电视大屏 */
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
-            const char *note = lite_unsupported ? ptc_ui_text(PTC_UI_T_DOCK_LITE) : ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE_HINT);
-            char fitted[192];
-            fit_text(fitted, sizeof(fitted), note, 13, row.width - 80);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, row_disabled ? UI_DISABLED : UI_MUTED);
-        } else {
-            /* 选项 2：允许少量掌机应急 */
-            draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
-            
-            uint16_t mins = (draft->undocked_daily_minutes == 0) ? 30 : draft->undocked_daily_minutes;
-            char text[64];
-            snprintf(text, sizeof(text), "%u %s", mins, ptc_ui_text(PTC_UI_T_MINUTES));
-            int tw = measure_text(text, 18);
-            if (selected) {
-                draw_text(pixels, stride, row.x + row.width - 70 - tw - 20, row.y + 32, "◀", 14, focus ? UI_ACCENT : UI_MUTED);
-                draw_text(pixels, stride, row.x + row.width - 70 - tw, row.y + 32, text, 18, UI_ACCENT);
-                draw_text(pixels, stride, row.x + row.width - 64, row.y + 32, "▶", 14, focus ? UI_ACCENT : UI_MUTED);
-            } else {
-                draw_text(pixels, stride, row.x + row.width - 70 - tw, row.y + 32, text, 18, UI_MUTED);
-            }
+        /* 单选指示器固定在行右端，第三行把分钟步进器排在它左侧。 */
+        UiRect radio = {row.x + row.width - 42, row.y + (row.height - 24) / 2, 24, 24};
+        fill_round_rect(pixels, stride, radio, 12, selected ? UI_ACCENT : UI_RAISED);
+        draw_rect_outline(pixels, stride, radio, 12, 2, selected ? UI_ACCENT : UI_BORDER);
+        if (selected) fill_round_rect(pixels, stride, (UiRect){radio.x + 6, radio.y + 6, 12, 12}, 6, UI_ON_ACCENT);
 
-            char hint_buf[192];
-            snprintf(hint_buf, sizeof(hint_buf), ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT_HINT), mins);
-            char fitted[192];
-            fit_text(fitted, sizeof(fitted), hint_buf, 13, row.width - 80);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, selected ? UI_ACCENT : UI_MUTED);
+        /* 选项直观微缩图案卡 (Intuitive option pattern illustration tile) */
+        UiRect icon_tile = {row.x + 12, row.y + (row.height - 60) / 2, 74, 60};
+        fill_round_rect(pixels, stride, icon_tile, 8, selected ? UI_SURFACE : UI_PAGE);
+        draw_rect_outline(pixels, stride, icon_tile, 8, 1, selected ? UI_ACCENT : UI_BORDER);
+
+        if (i == 0) {
+            /* Mode 0: 掌机与电视均可自由游玩 (Both Handheld and TV illuminated) */
+            /* Mini Switch console */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 6, icon_tile.y + 20, 6, 20}, 2, UI_RGB(0x2E72D2));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 13, icon_tile.y + 20, 13, 20}, pack_rgb(UI_BLENDED(page_bg)));
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 27, icon_tile.y + 20, 6, 20}, 2, UI_RGB(0xE64A38));
+            /* Plus symbol */
+            draw_text(pixels, stride, icon_tile.x + 35, icon_tile.y + 35, "+", 12, UI_MUTED);
+            /* Mini TV Screen */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 44, icon_tile.y + 18, 22, 18}, 3, UI_INK);
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 46, icon_tile.y + 20, 18, 14}, pack_rgb(0x5CCB8A));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 53, icon_tile.y + 36, 4, 3}, pack_rgb(UI_BLENDED(text_primary)));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 50, icon_tile.y + 39, 10, 2}, pack_rgb(UI_BLENDED(text_primary)));
+
+            int text_x = row.x + 98;
+            draw_text(pixels, stride, text_x, row.y + 30,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED), 18, title_color);
+            draw_wrapped_text(pixels, stride, text_x, row.y + 54,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT), 12, row.width - 150, 16, 2, UI_MUTED);
+        } else if (i == 1) {
+            /* Mode 1: 仅允许电视模式 (TV dock prominent, handheld prohibited) */
+            /* Prominent TV dock display */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 12, icon_tile.y + 12, 34, 24}, 3, UI_ACCENT);
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 14, icon_tile.y + 14, 30, 20}, pack_rgb(0x245BC4));
+            draw_text_center(pixels, stride, (UiRect){icon_tile.x + 14, icon_tile.y + 16, 30, 16}, "TV", 11, UI_ON_ACCENT);
+            /* Dock base */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 18, icon_tile.y + 36, 22, 6}, 2, UI_INK);
+            /* Small prohibited handheld indicator */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 50, icon_tile.y + 24, 18, 14}, 2, UI_BORDER);
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 48, icon_tile.y + 30, 22, 2}, 1, UI_DANGER);
+
+            int text_x = row.x + 98;
+            draw_text(pixels, stride, text_x, row.y + 30,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE), 18, title_color);
+            draw_wrapped_text(pixels, stride, text_x, row.y + 54,
+                lite_unsupported ? ptc_ui_text(PTC_UI_T_DOCK_LITE) : ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE_HINT), 12,
+                row.width - 150, 16, 2, row_disabled ? UI_DISABLED : UI_MUTED);
+        } else {
+            /* Mode 2: 限制非电视模式时长 (Timed handheld countdown leading to TV) */
+            /* Handheld console with countdown badge */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 6, icon_tile.y + 18, 6, 24}, 2, UI_RGB(0x2E72D2));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 13, icon_tile.y + 18, 18, 24}, pack_rgb(UI_BLENDED(page_bg)));
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 32, icon_tile.y + 18, 6, 24}, 2, UI_RGB(0xE64A38));
+            /* Timer circle in handheld screen */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 16, icon_tile.y + 23, 12, 12}, 6, UI_ACCENT);
+            /* Transition arrow to TV */
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 40, icon_tile.y + 29, 8, 2}, pack_rgb(UI_BLENDED(accent)));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 46, icon_tile.y + 28, 2, 4}, pack_rgb(UI_BLENDED(accent)));
+            /* Mini TV dock target */
+            fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 52, icon_tile.y + 22, 16, 14}, 2, UI_INK);
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 54, icon_tile.y + 24, 12, 10}, pack_rgb(0x245BC4));
+
+            int text_x = row.x + 98;
+            draw_text(pixels, stride, text_x, row.y + 30,
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT), 18, title_color);
+
+            /* Minus / value / plus capsule stepper, replacing the old text arrows. */
+            uint16_t mins = (draft->undocked_daily_minutes == 0) ? 30 : draft->undocked_daily_minutes;
+            char value_text[32];
+            /* Keep the stepper clear of the radio and vertically centered in
+               the row: 8px gap on the right, 24px top/bottom. */
+            UiRect dec = {row.x + row.width - 242, row.y + 24, 34, 34};
+            UiRect val = {dec.x + 40, row.y + 24, 112, 34};
+            UiRect inc = {val.x + val.width + 6, row.y + 24, 34, 34};
+            snprintf(value_text, sizeof(value_text), "%u %s", mins, ptc_ui_text(PTC_UI_T_MINUTES));
+            fill_round_rect(pixels, stride, dec, 10, selected ? UI_RAISED : UI_SURFACE);
+            draw_rect_outline(pixels, stride, dec, 10, 1, selected ? UI_ACCENT : UI_BORDER);
+            draw_text_center(pixels, stride, dec, "-", 20, selected ? UI_ACCENT : UI_MUTED);
+            fill_round_rect(pixels, stride, val, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
+            draw_rect_outline(pixels, stride, val, 10, 1, selected ? UI_ACCENT : UI_BORDER);
+            fit_text(value_text, sizeof(value_text), value_text, 16, val.width - 12);
+            draw_text_center(pixels, stride, val, value_text, 16, selected ? UI_ACCENT : UI_MUTED);
+            fill_round_rect(pixels, stride, inc, 10, selected ? UI_RAISED : UI_SURFACE);
+            draw_rect_outline(pixels, stride, inc, 10, 1, selected ? UI_ACCENT : UI_BORDER);
+            draw_text_center(pixels, stride, inc, "+", 20, selected ? UI_ACCENT : UI_MUTED);
+
+            {
+                char hint_buf[192];
+                snprintf(hint_buf, sizeof(hint_buf), ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT_HINT), mins);
+                draw_wrapped_text(pixels, stride, text_x, row.y + 54, hint_buf, 12,
+                                  row.width - 360, 16, 2, selected ? UI_ACCENT : UI_MUTED);
+            }
         }
     }
 
-    draw_dock_usage_card(pixels, stride, model, (UiRect){824, 230, 402, 240});
-    UiRect rules_panel = {824, 482, 402, 170};
-    draw_plan_card(pixels, stride, rules_panel, false);
-    draw_wrapped_text(pixels, stride, 840, 500, ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT),
-        12, 370, 15, 2, UI_INK);
-    draw_text(pixels, stride, 840, 538, ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_ACCENT);
-    draw_wrapped_text(pixels, stride, 840, 558, ptc_ui_text(PTC_UI_T_DETAIL_RELATION),
-        11, 370, 15, 2, UI_MUTED);
-    home_button(pixels, stride, ptc_ui_dock_field_rect(5), ptc_ui_text(PTC_UI_T_DOCK_RULES_EXPLAIN_BTN),
-        model->dock_field_focus == 5, false, false);
-    char preview[192];
-    ptc_ui_format_dock_preview(model, ptc_ui_render_now(), preview, sizeof(preview));
-    draw_wrapped_text(pixels, stride, 54, 198, preview, 14, 744, 18, 1, UI_ACCENT);
+    /* 左卡底部固定一行：保存后非电视额度的预计结果 */
+    {
+        char preview[192];
+        ptc_ui_format_dock_preview(model, ptc_ui_render_now(), preview, sizeof(preview));
+        draw_wrapped_text(pixels, stride, config_card.x + 22, config_card.y + config_card.height - 22,
+                          preview, 13, config_card.width - 44, 17, 1, UI_ACCENT);
+    }
+
+    draw_dock_usage_card(pixels, stride, model, (UiRect){824, 176, 402, 220});
+
+    /* --- 右侧规则卡：规则要点 + 与总额度的关系 + 规则详解入口 --- */
+    {
+        UiRect rules_panel = {824, 410, 402, 186};
+        draw_plan_card(pixels, stride, rules_panel, false);
+        draw_text(pixels, stride, rules_panel.x + 20, rules_panel.y + 32,
+                  ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 16, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, rules_panel.x + 20, rules_panel.y + 62,
+                          ptc_ui_text(PTC_UI_T_DOCK_RULE_EXPLANATION), 13,
+                          rules_panel.width - 40, 17, 2, UI_INK);
+        draw_wrapped_text(pixels, stride, rules_panel.x + 20, rules_panel.y + 106,
+                          ptc_ui_text(PTC_UI_T_DETAIL_RELATION), 13,
+                          rules_panel.width - 40, 17, 2, UI_MUTED);
+        home_button(pixels, stride, ptc_ui_dock_field_rect(5), ptc_ui_text(PTC_UI_T_DOCK_RULES_EXPLAIN_BTN),
+            false, model->dock_field_focus == 5 && !model->parent_footer_focused, false);
+    }
 
 #if defined(PLAYWISE_EDEN) || defined(PTC_UI_PREVIEW_ANIM_CLOCK_MS)
     if (model->eden_mode_controls) {
         home_button(pixels, stride, ptc_ui_dock_field_rect(7), ptc_ui_text(PTC_UI_T_EDEN_SIMULATE_TV),
-            model->dock_field_focus == 7, false, model->waiting);
+            false, model->dock_field_focus == 7 && !model->parent_footer_focused, model->waiting);
         home_button(pixels, stride, ptc_ui_dock_field_rect(8), ptc_ui_text(PTC_UI_T_EDEN_SIMULATE_NON_TV),
-            model->dock_field_focus == 8, false, model->waiting);
+            false, model->dock_field_focus == 8 && !model->parent_footer_focused, model->waiting);
     }
 #endif
+    /* --- 底栏动作：今日解除（次要） + 保存规则（主操作） --- */
     bool hold = ptc_ui_dock_save_requires_hold(model, ptc_ui_render_now());
     home_button(pixels, stride, ptc_ui_dock_field_rect(3),
         ptc_ui_text(model->dock_dirty ? PTC_UI_T_DOCK_SAVE : PTC_UI_T_RULE_SAVED),
-        model->dock_field_focus == 3, hold, model->waiting || model->disable_flag_present || !model->dock_dirty);
+        model->dock_dirty, (model->dock_field_focus == 3 && !model->parent_footer_focused) || hold,
+        model->waiting || model->disable_flag_present || !model->dock_dirty);
     home_button(pixels, stride, ptc_ui_dock_field_rect(4), ptc_ui_text(PTC_UI_T_DOCK_WAIVE),
-        model->dock_field_focus == 4, false, model->waiting || model->dock_waived_today ||
+        false, model->dock_field_focus == 4 && !model->parent_footer_focused,
+        model->waiting || model->dock_waived_today ||
         !(model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled));
 }
 

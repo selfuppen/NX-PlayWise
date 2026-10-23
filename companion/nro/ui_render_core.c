@@ -3,10 +3,11 @@
 UiRuntime g_ui;
 const PtcUiPalette *g_palette;
 PtcUiThemeView g_theme = {
-    PTC_UI_THEME_SYSTEM,
-    PTC_UI_RESOLVED_LIGHT,
-    NULL,
-    false
+    .preference = PTC_UI_THEME_SYSTEM,
+    .style = PTC_UI_THEME_STYLE_INDIGO,
+    .resolved = PTC_UI_RESOLVED_LIGHT,
+    .palette = NULL,
+    .system_theme_available = false
 };
 
 int64_t ptc_ui_render_now(void)
@@ -587,10 +588,19 @@ void draw_candidate_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
 {
     UiRect box = to_uirect(rect);
     bool primary = foreground == UI_ON_ACCENT;
-    uint32_t fill = disabled ? UI_RAISED : (selected && !primary ? UI_ACCENT_SOFT : background);
+    uint32_t base_bg = (background == UI_PAGE) ? UI_SURFACE : background;
+    uint32_t fill = disabled ? UI_RAISED : (selected && !primary ? UI_ACCENT_SOFT : base_bg);
+    if (!disabled && !selected) {
+        draw_card_shadow(pixels, stride, box, 12);
+    }
     fill_round_rect(pixels, stride, box, 12, fill);
-    if (selected) draw_focus_ring(pixels, stride, box, 12);
-    else draw_rect_outline(pixels, stride, box, 12, 1, UI_CONTROL);
+    if (selected && !disabled) {
+        draw_focus_ring(pixels, stride, box, 12);
+    } else {
+        uint32_t border = disabled ? UI_BORDER :
+            (primary ? base_bg : (background == UI_ACCENT_SOFT && foreground == UI_ACCENT ? UI_ACCENT : UI_BORDER));
+        draw_rect_outline(pixels, stride, box, 12, 1, border);
+    }
 
     int text_size = 20;
     int tw = measure_text(label, text_size);
@@ -767,9 +777,17 @@ void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
     const char *label, bool primary, bool selected, bool disabled)
 {
     UiRect box = to_uirect(target);
-    uint32_t fill = disabled ? UI_RAISED : (primary ? UI_ACCENT : UI_ACCENT_SOFT);
+    uint32_t fill = disabled ? UI_RAISED : (primary ? UI_ACCENT : (selected ? UI_ACCENT_SOFT : UI_SURFACE));
+    if (!disabled && !selected) {
+        draw_card_shadow(pixels, stride, box, 12);
+    }
     fill_round_rect(pixels, stride, box, 12, fill);
-    if (selected) draw_focus_ring(pixels, stride, box, 12);
+    if (selected && !disabled) {
+        draw_focus_ring(pixels, stride, box, 12);
+    } else {
+        draw_rect_outline(pixels, stride, box, 12, 1,
+            disabled ? UI_BORDER : (primary ? UI_ACCENT : UI_BORDER));
+    }
     draw_button_label(pixels, stride, box, label, target.h <= 48 ? 18 : 22,
         disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT));
 }

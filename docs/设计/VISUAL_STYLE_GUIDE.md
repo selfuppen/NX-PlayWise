@@ -28,18 +28,29 @@ All pages must adapt seamlessly to both color modes, matching system or user pre
 
 ## 2. Color Palette & Semantic System
 
-### 2.1 Base Surface & Layering (`companion/nro/ui_theme.c`)
+### 2.1 Base Surface & Brand Styles (`companion/nro/ui_theme.c`)
+
+PlayWise supports real-time runtime switching across 4 calibrated brand styles with zero code changes, adhering strictly to the 4-bit RGBA4444 dark contract (each channel is a multiple of 0x11, contrast $\ge 6.7:1$ against `#112233` surface):
+
+| Brand Style | Light Accent (`accent`) | Light Soft (`accent_soft`) | Dark Accent (4-bit) | Dark Soft (4-bit) | Aesthetic & Concept |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **0. Serene Indigo (Default)** | `#245BC4` | `#E4EDFF` | `#77AAFF` | `#223355` | Rational, focused, deep digital aesthetic |
+| **1. Ocean Teal** | `#0D7A70` | `#E0F4F2` | `#44DDCC` | `#113333` | Organic, refreshing, vitality & eye-comfort |
+| **2. Night Amethyst** | `#6340B8` | `#F1ECFC` | `#BB99FF` | `#332255` | Gentle, dreamy, elegant night-sky violet |
+| **3. Slate Neutral** | `#3B5270` | `#EAF0F6` | `#99BBDD` | `#223344` | Understated, modern, clean industrial slate |
+
+#### Global Surface & Structural Colors
 
 | Semantic Role | Light Mode | Dark Mode | Usage Description |
 | :--- | :--- | :--- | :--- |
-| **Page Background (`page_bg`)** | `#F0F3FA` | `#0B0F19` | Global canvas backdrop, cool-tinted to elevate cards |
-| **Base Surface (`surface`)** | `#FFFFFF` | `#162032` | Top-level cards, main informational panels |
-| **Raised Surface (`surface_raised`)** | `#E8EDF7` | `#1E2C44` | Secondary containers, result summary cards |
-| **Decorative Border (`border_decorative`)** | `#DBE1E9` | `#2A3B54` | Subtle card dividers and panel strokes (1px) |
-| **Control Border (`border_control`)** | `#79879D` | `#7E90AA` | Interactive buttons, inactive input frames |
-| **Primary Text (`text_primary`)** | `#172640` | `#F3F6FD` | Key headlines, major numbers, body emphasis |
-| **Secondary Text (`text_secondary`)** | `#53627A` | `#B6C4D9` | Subtitles, labels, auxiliary metrics |
-| **Disabled Text (`text_disabled`)** | `#9199A5` | `#818C98` | Disabled actions, placeholders, inactive rules |
+| **Page Background (`page_bg`)** | `#F0F3FA` | `#111122` | Global canvas backdrop, calm teal/night tint |
+| **Base Surface (`surface`)** | `#FFFFFF` | `#112233` | Top-level cards, main panels (4-bit RGBA4444 safe) |
+| **Raised Surface (`surface_raised`)** | `#E8EDF7` | `#223344` | Secondary containers, result summary cards |
+| **Decorative Border (`border_decorative`)** | `#DBE1E9` | `#334455` | Subtle card dividers and panel strokes (1px) |
+| **Control Border (`border_control`)** | `#6E7D94` | `#778899` | Interactive buttons, inactive input frames |
+| **Primary Text (`text_primary`)** | `#172640` | `#EEEEFF` | Key headlines, major numbers, body emphasis |
+| **Secondary Text (`text_secondary`)** | `#53627A` | `#AABBCC` | Subtitles, labels, auxiliary metrics |
+| **Disabled Text (`text_disabled`)** | `#9199A5` | `#667788` | Disabled actions, placeholders, decorative glyphs |
 
 ---
 
@@ -50,42 +61,48 @@ PlayWise follows modern UI principles pairing **saturated foregrounds with ultra
 #### A. Active / Success / Sufficient (Success)
 * **Context**: Quota active, grant confirmed, rules satisfied, schedule running.
 * **Light Mode**:
-  * Soft Background (`UI_SUCCESS_SOFT`): `#F6FFED` (subtle mint)
-  * Border: `#B7EB8F` (soft bright green, 1–2px)
-  * Solid / Text / Foreground (`UI_SUCCESS`): `#52C41A` (vivid emerald) or `#16734E`
+  * Soft Background (`UI_SUCCESS_SOFT`): `#EDF9F0` (subtle mint)
+  * Border: `#86EFAC` (soft bright green, 1–2px)
+  * Solid / Text / Foreground (`UI_SUCCESS`): `#15803D` (vivid emerald green)
 * **Dark Mode**:
-  * Soft Background: `#193C32` / `#1B382B` (deep jade)
-  * Border: `#274916`
-  * Solid / Text / Foreground: `#5CCB8A` / `#49AA19` (high-visibility bright green)
+  * Soft Background: `#113322` (deep jade green)
+  * Border: `#226633`
+  * Solid / Text / Foreground: `#55DD77` (high-visibility bright green)
 
 #### B. Warning / Rest / Pending (Warning)
 * **Context**: Eye-care rest underway, quota running low, pending changes, bedtime approaching.
 * **Light Mode**:
-  * Soft Background (`UI_WARNING_SOFT`): `#FFF7E6` (warm soft apricot/cream)
-  * Border: `#F59E0B` (warm amber border, 1–2px, reinforcing outer contour)
-  * Solid / Text / Foreground (`UI_WARNING`): `#D95A00` (high-contrast deep warm amber orange, resolving washed-out readability issues), deep emphasis `#B24400`
+  * Soft Background (`UI_WARNING_SOFT`): `#FFFBEB` (warm soft apricot/cream)
+  * Border: `#FCD34D` (warm amber border, 1–2px, reinforcing outer contour)
+  * Solid / Text / Foreground (`UI_WARNING`): `#B45309` (high-contrast amber orange, WCAG AA >= 4.5:1 compliant)
 * **Dark Mode**:
-  * Soft Background: `#332211` / `#40351F` (deep warm sepia)
-  * Border: `#874D00`
-  * Solid / Text / Foreground: `#FFA940` / `#F2C14E` (bright golden orange)
+  * Soft Background: `#332211` (deep warm sepia)
+  * Border: `#885511`
+  * Solid / Text / Foreground: `#FFBB33` (bright golden orange)
 
 #### C. Restriction / Danger / Exhausted (Danger)
 * **Context**: Daily limit reached, bedtime lock active, quota exhausted, safety error.
 * **Light Mode**:
-  * Soft Background (`UI_DANGER_SOFT`): `#FFE9ED` / `#FFF1F0` (light rose)
-  * Border: `#FFA39E` (rose pink)
-  * Solid / Text / Foreground (`UI_DANGER`): `#B92F46` / `#F5222D` (vivid ruby crimson)
+  * Soft Background (`UI_DANGER_SOFT`): `#FEF2F2` (light rose)
+  * Border: `#FCA5A5` (rose pink)
+  * Solid / Text / Foreground (`UI_DANGER`): `#C42B45` (vivid ruby crimson)
 * **Dark Mode**:
-  * Soft Background: `#462936` (deep roseate)
-  * Border: `#78061A`
-  * Solid / Text / Foreground: `#FF7A85` / `#FF4D4F` (fluorescent coral red)
+  * Soft Background: `#441122` (deep roseate)
+  * Border: `#882233`
+  * Solid / Text / Foreground: `#FF7788` (fluorescent coral red)
 
 #### D. Brand Accent & Information (Accent / Info)
 * **Context**: Focus rings, decision sequence pills, keyframe dots, default active segments.
-* **Light Mode**: Accent `#245BC4` / `#1890FF`, Soft background `#E4EDFF` / `#BAE7FF`.
-* **Dark Mode**: Accent `#91B9FF` / `#69C0FF`, Soft background `#273E60` / `#113559`.
+* **Light Mode**: Accent `#126B5B` (Teal), Soft background `#E4EDFF`.
+* **Dark Mode**: Accent `#33DDBB` (Cyan-Teal), Soft background `#223355`.
 
 ---
+
+
+#### E. Night & Bedtime Schedule (Night)
+* **Context**: Bedtime schedule active, nightly curfew countdown, peaceful wind-down.
+* **Light Mode**: Solid `#5B47D6` (night star purple), Soft background `#F0EDFF`, Border `#C4B5FD`.
+* **Dark Mode**: Solid `#AA99FF`, Soft background `#221144`, Border `#5544AA`.
 
 ## 3. Spatial Typography & Dynamic Alignment Contracts
 
@@ -117,6 +134,22 @@ In list rows, health-care cards, and decision cells, content must strictly separ
   * Header to sub-card gap: 12px
   * Inline icon-to-text gap: 6px / 8px
 
+
+### 3.3 Classic 3-Section Console Shell Framing Contract
+Across the Nintendo Switch 1280x720 global canvas, all main pages (Child Home, Parent Today) and second-level subpages (Time Plans, Settings, Offline Grants, Support & Recovery) uniformly follow the classic 3-section console shell framing:
+1. **Top Header Bar (Y=0–104)**:
+   * Anchored with a subtle elevated surface tint (blending 43% surface in Light mode, 47% surface in Dark mode), bounding the app icon, title, subtitle, and top-right time status capsule.
+   * A full-width 1px hairline divider rule (border_decorative) spans across Y=104, establishing an architectural boundary.
+   * **Status Capsule Breathing Contract**: Base position is Y=18, height 66px (vertical center Y=51 aligns harmoniously with the left app icon Y=49). When active policy rows (such as TV mode or bedtime restrictions) expand capsule height to 82px, the bottom edge is strictly clamped to Y<=94, ensuring at least 10px of clear breathing clearance to the divider line at Y=104, eliminating crowding.
+2. **Central Main Stage (Y=105–651)**:
+   * **Top Stage Buffer**: Navigation tabs and subpage back buttons start at Y=120 (height 38px, span Y=120~158), creating an airy 16px vertical breathing space from the top divider line (Y=104) and a balanced 14~18px space before content cards below (Y=172~176). Child mode summary and setup panels also align with Y=120, ensuring consistent rhythm across all views.
+   * **Unified Stage Card & Button Shadow / Focus Contract**: Parent main menu tabs and secondary subpages share a single elevation and focus language: unfocused cards and stage buttons cast a tight, cool-slate **bottom-edge micro-shadow** (`blur=4, peak_alpha=22, y_bias=2`) paired with a `1px UI_BORDER` outline so shadows never bleed out of group trays or muddy narrow gaps; focused elements transition to `UI_ACCENT_SOFT` fill, project a floating **cool-blue ambient shadow** (`blur=9, peak_alpha=52, y_bias=3`), and render a zero-gap **2px flush `UI_ACCENT` main frame + 1px (2px docked) flush outer `UI_FOCUS` breathing ring** (3px Switch-style flush frame).
+   * **Settings Secondary Pages Use the Full-Page Shell**: Appearance theme, UI language, parent shortcut keys, homebrew entry, family activity and software info no longer open as modal dialogs over the settings root. Each one repaints the whole console shell, then draws the page header and time capsule, the `B  Back to Safety & Preferences` pill and the `Safety & Preferences / <page>` breadcrumb, keeps content inside the `Y=176..651` stage and puts its actions on the footer row (`Y=664..708`). The header back pill, footer back and the B key share one rect, matching the time-plan subpages exactly.
+   * **Dock Policy Page Uses Section Cards**: The left configuration card carries the title, mode pill, intent copy and the three mode rows (the third row uses a `- / minutes / +` capsule stepper instead of text arrows). The right column stacks the usage card over the rules card, with "Rules explained" as a pill in the rules-card corner. Save and waive-today live in the footer instead of floating mid-stage.
+   * **Setup Wizard: Measure Rows, Center Groups**: The setup panel (`Y=185..630`) never uses fixed row baselines. Rows are sized with the same wrapping rules the renderer draws with (`count_wrapped_lines`), each line taking `font size × 1.5`, and each of the two columns is measured at its own real width with the taller one winning. Step 1 keeps a fixed language card (`Y=185..298`) whose hints follow the measured title, and an environment card (`Y=312..618`) split by 24px padding into environment, parental control and console-time bands separated by 1px hairlines. Step 3 measures both cards first and centers the pair vertically in the panel; cards use `18px` padding, a shared `40px` title band, `12px` row gaps with the hairline on the gap's midline, and `8px` gaps between note blocks, counting a gap only when another block follows so an empty status note leaves no dead band. Page-level save failures never overprint card content: step 3 folds the message into the notes card, while steps 1 and 2 draw one fitted line in the strip between the card bottom (`Y=618`) and the stage divider (`Y=652`).
+3. **Bottom Footer Bar (Y=652–720)**:
+   * A full-width 1px hairline divider rule (border_decorative) spans across Y=652.
+   * Y=653–719 provides a grounded dock bar surface tint (blending 70% surface_raised in Light mode, 55% surface_raised in Dark mode), with button prompts (Y=664, height 44px) perfectly vertically centered (12px top and bottom padding).
 ---
 
 ## 4. Key Component Standards
@@ -133,13 +166,13 @@ In list rows, health-care cards, and decision cells, content must strictly separ
 * **Segments**:
   * **Played Segment**: Brand accent (`UI_ACCENT`).
   * **Bedtime Lock Segment**: Dark slate / danger-soft diagonal strip with crescent moon icon.
-  * **Remaining Playable**: Soft mint (`#B7EB8F`) or translucent accent.
+  * **Remaining Playable**: Soft mint (`#86EFAC`) or translucent accent.
 * **Current Time Needle**: Vertical high-contrast line with subtle outer shadow and indicator tip.
 
 ### 4.3 Continuous Play Forecast Bar
 * **Alternating Session & Rest Chunks**:
   * Play Session: Vivid blue (`#1890FF` / `#245BC4`), rounded rectangle.
-  * Rest Period: Warm amber (`#FFF7E6` bg + `#FA8C16` border), displaying rest duration clearly.
+  * Rest Period: Warm amber (`#FFFBEB` bg + `#FA8C16` border), displaying rest duration clearly.
   * Exhaustion Point: Pulsing micro-circle paired with an endpoint time balloon.
 
 ![Today: plan and status composite control preview](../images/usage-en/parent/today-planning-light.png)
@@ -174,29 +207,49 @@ The view moves beyond rigid and cramped layouts, adopting conversational, parent
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
   * Child and parent cards, code slots, keypad keys and buttons share closed rounded outlines (radius r=4 for cards/buttons, full half-height for pills). CPU span calculations render smooth rounded fills and outer borders; both normal 1px and emphasized 2px borders remain continuous without jagged seams.
-  * Card Surface: `#131B2A` with high `0xE6` opacity, effectively shielding background game graphics.
-  * Decorative Border: `#233047` with subtle `0xB0` opacity, providing restrained, clean edges.
+  * Card Surface: `#112233` with high `0xE6` opacity, effectively shielding background game graphics.
+  * Decorative Border: `#334455` with subtle `0xB0` opacity, providing restrained, clean edges.
   * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm sepia warning `#332211`, dark jade success `#193C32`).
 * **Font, Glyph & Handheld Legibility Contract**:
   * Due to Tesla sysmodule memory constraints (~6MB heap allocation), overlays cannot bundle external TTF/OTF fonts.
   * **Overlay text must never use Unicode 4-byte Emojis or miscellaneous Dingbats**, preventing mojibake or missing-glyph boxes on hardware.
   * Controller prompts must strictly use Nintendo Switch system font glyphs (e.g., `\uE0E0` for A button, `\uE0E1` for B button, `\uE0E2` for X button, `\uE0E3` for Y button, `\uE0E4` for L button, `\uE0E5` for R button, `\uE0E6` for ZL button, `\uE0EC` for touch/click).
   * The rendering layer includes a built-in UTF-8 runtime sanitizer (`ptc_overlay_sanitize_utf8`) that automatically strips out-of-range symbols before dispatching strings to `libtesla`.
-  * **Unified large typography**: Tokens live in `companion/overlay/layout.h`: time/countdown 56px; key values and result titles 44px; page titles 40px; action labels and confirmation/restriction explanations 32px; primary buttons 30px; body 28px; supporting text and disabled reasons 24px; minimum captions 22px. Code slot digits use a separate 40px token; keypad digits use 36px.
-* **Measured layouts prioritize readability**:
-  * Stay inside the 448×720 sidebar, with content starting at Y=40 and ending at or above Y=647. Headers, refresh and bottom actions remain fixed; content scrolls in a separate scissored viewport.
-  * Wrap Chinese at UTF-8 codepoint boundaries and English at word boundaries; split oversized words, preserve explicit newlines and blank lines. Keep important explanations complete instead of shrinking fonts or adding ellipses.
-  * Measure localized text to determine card heights. Parent cards retain stacked text; child cards prefer measured edge-aligned rows and stack only when the texts cannot share a line. Production and Host previews share rendering; input consumes the renderer's `PtcOverlayPageLayout` instead of recreating touch coordinates.
-* **Child overview, entry and explanations**:
-  * **Dark dashboard surfaces**: Child pages use CPU pixel primitives for smooth rounded corners, thin top highlights and bounded geometric texture. Time cards use a dark blue-gray surface; rule cards carry a narrow state rail. Eye-care, bedtime and TV rule titles all use 32px, summaries 28px and supporting notes 24px. Blue eye, moon and TV icons are functional decoration, displayed only when measurement leaves room for the icon, title and summary on one line. Omit icons when space is limited; never shrink text or add height for decoration.
-  * Available states use green. Unknown or boundary states, exhausted non-TV allowance while connected to TV, and bedtime within 15 minutes use bright orange. Active bedtime/TV restrictions and failures use coral red; eye-care rest uses orange and disabled rules use secondary gray. Restrictions and redemption outcomes use matching soft panels; pending outcomes use warning colors. Code slots and keypad keys use rounded corners, highlights and blue soft fills/borders for the insertion point, focused key and enabled submission. Parent pages share the rounded, highlighted surfaces while retaining their stacked layout and scrolling contract.
-  * Add a measured eye-care row showing disabled, play minutes until rest, remaining rest time, paused or awaiting confirmation. Rest and confirmation use warning colors. Combine daily quota and estimated usage in the main time card's note. Status details show the full play/rest cycle and sleep timing explanation; the rest restriction keeps its 56px countdown and fixed Back/Parent buttons. At zero, wait for backend confirmation.
-  * Common child pages prioritize a complete single-screen view while preserving primary large type. Use measured heights and 6px card gaps instead of the parent 104px minimum. Combine quota and usage, use compact rule summaries, and remove the duplicate redeem card. Redeem, buffer and parent shortcuts remain fixed. A / Plus or the entry button opens the keypad; B returns or closes.
+  * **Layered Typography & State Hierarchy (Option B Status Banner + Rule Chain)**: Tokens live in `companion/overlay/layout.h`, establishing five clear visual tiers:
+    1. **Primary Status Headline (`44px`) & Hero Metric / Countdown (`56px`)**: The top status banner claims primary focus; the headline uses `44px` semantic color (e.g. "Ready to Play", "Almost Time", "Time's Up for Today", "Time for Bed", "Rest Your Eyes", "Handheld Time Used Up"), while the remaining minutes or countdown uses `56px` hero type with a semantic soft background and 3px top semantic bar.
+    2. **Brand Overline & Header Actions (`22px` brand, `24px` actions)**: Brand overline (`PlayWise` / `自律约定·任我玩` / `自律約定·任我玩`) sits on the top-left of the banner (`22px`); ` Parent` (`24px`) and ` Refresh` (`24px`) sit on the top-right side by side, completely eliminating the previous separate footer row.
+    3. **Active Rule Chain Nodes (`28px` title, `26px` summary)**: Active or warning rules are connected in a vertical chain with a 10px solid colored dot, a 15px soft glow halo, and a subtle soft background surface; right-hand values are highlighted with green/orange/coral status colors.
+    4. **Standby & Idle Rule De-noising (Standby `28/24px`, Idle `26/22px`)**:
+       - **Standby**: Enabled rules outside active hours (e.g. daytime bedtime rule) use a 16px neutral hollow circle node with a 10px inner hole, secondary `28px` label, and `24px` secondary gray value;
+       - **Idle / Off**: Disabled (`Currently off`) rules reduce to a muted 10px solid gray dot (`text_disabled`), `26px` secondary gray label, `22px` disabled gray value, and no background surface.
+    5. **Action Buttons & Supporting Captions (`28px` / `24px` / `22px`)**: Bottom extra-time code button `28px`, autonomous buffer button auto-sizes across `28px / 26px / 24px`; status details entry `24px`, child guidance notes `22px`, code slot digits `40px`, and keypad digits `36px`.
+* **Upward Viewport Shift & Measured Layouts**:
+  * Stay inside the 448×720 sidebar, **moving the banner start up to `Y=6` and extending content down to `Y=639`**, reclaiming vertical space while strictly honoring the Tesla host footer boundary (`Y=647..720`). The top status banner and unrestricted bottom dual buttons stay fixed; intermediate guidance, rule chain, and status entries scroll in a scissored viewport.
+  * Wrap Chinese at UTF-8 boundaries and English at word boundaries; split oversized words, preserve explicit newlines and blank lines.
+  * Chain and banner heights adapt dynamically via font measurement in all three languages.
+* **Unified Top Path Navigation & Bottom-Anchored Footer Contract (Option A: status-first)**:
+  * Every page except the child overview root (parent PIN / actions / confirm / result, status details, extra-time keypad, grant confirm / result) shares one top path bar: `22px`, origin `(32,20)`, header height `44px`, divider at `Y=58`, scrolling viewport `Y=64..563` (`499px` tall). The last node is the current step in primary text; ancestors use secondary text; ASCII `>` separators use disabled text with 8px on either side, and a `4×16px` accent bar precedes the first node.
+  * The root node is always “任我玩” (same in Traditional Chinese; `PlayWise` in English). Parent pages branch through “家长区”, extra-time pages through “加时码”, ending in “验证 / 确认 / 结果 / 状态详情” (`Verify / Confirm / Result / Status details`). When space is tight, truncate in the order full path → drop root → current node only; the current node never hides. The bar is read-only and adds no touch target.
+  * The child overview root does not repeat a path row: its banner brand line already carries the root, and its layout stays unchanged.
+  * All non-child pages share the fixed footer `Y=571..639` (`68px`, base `639`, Tesla safe line `647`): dual buttons use `154px` + `250px`, a single primary button spans `416px`. The keypad submit key occupies `Y=503..563` (`60px`) above its `Y=571..639` navigation row. Footer labels measure down `30 → 26 → 24px`; long English labels must not wrap or clip.
+  * The parent status band uses `44px DISPLAY` semantic color, refresh age `24px`, group labels `22px`; action cards are at least `96px` tall with `32px` titles, `34px` values and `24px` reasons. Normal availability uses a card surface plus a 1px semantic border; only restricted / stale states use a semantic soft fill, so “everything is fine” never becomes the loudest element.
+* **Child overview, restricted/unrestricted layout, and child-friendly phrasing**:
+  * **Dark Dashboard Banner + Rule Chain**: Child overview renders smooth rounded banner surfaces, 3px colored semantic top strips, and connected node dots.
+  * **Top-Right Dual Header Buttons**: Dual buttons (` Parent` and ` Refresh`) sit side by side in the banner top row.
+  * **Single-Row Bottom Action Bar (Unrestricted)**: Autonomous buffer (`200px`) and extra-time code entry sit side by side in a single bottom row (`H=68`, base at `Y=639`), with L/A shortcut support and smooth controller focus navigation.
+  * **No-Redundant Footer Layout (Restricted)**: The duplicate on-screen `B Back` button is completely eliminated (the Tesla footer already displays `B Back    A OK`, and physical B closes overlay), returning all bottom height to restriction cause, child next-step guidance, and recovery notes.
+  * **Child-Friendly Result-Oriented Phrasing**:
+    - Allowance exhausted: "Time's Up for Today", subtitle "All done today, take a break!";
+    - Bedtime restriction: "Time for Bed", subtitle "Sleep well and play tomorrow";
+    - Eye-care rest: "Rest Your Eyes", with live countdown and eye relaxation guidance;
+    - Handheld exhausted: "Handheld Time Used Up", subtitle "Place in dock to keep playing on TV";
+    - Mandatory TV mode: "TV Mode Required", subtitle "Place in dock to keep playing on TV";
+    - Display "Want more time? Ask a parent" above the rule chain when restricted.
   * Eight 44×64px code slots have 5px gaps and 40px digits. The 3×4 keypad uses 124×56px keys, a 64px row step and 36px digits. Count and console date occupy separate lines; digits, submit and navigation remain accessible on one screen.
-  * Confirmation and outcome comparisons prefer measured inline values with reduced repetition and padding. Restriction pages retain large essential instructions, with Back and Parent fixed side by side. Common states fit on one screen in all three languages; full long rule explanations remain in status details, with scrolling reserved for details and oversized exceptional text. Minus opens independent status details from the overview or keypad; B / Minus returns.
+  * Confirmation and outcome comparisons prefer measured inline values with reduced repetition and padding. Common states fit on one screen in all three languages; full long rule explanations remain in status details, with scrolling reserved for details and oversized exceptional text. Minus opens independent status details from the overview or keypad; B / Minus returns.
 * **Parent zone and scrolling contract**:
   * PIN entry, all eight actions, confirmation and result pages share dashboard surfaces and fixed button styling. Status, masked PIN count, confirmation explanation and result title use semantic soft panels. Action lists add group separators, optional functional icons and narrow color rails: blue for ordinary actions, coral for actions requiring hold confirmation, disabled gray for unavailable actions. Focus borders and fills follow these colors. Icons appear only when measurement leaves room on a single title line; they do not change card height. Pending, success and failure results use orange, green and coral respectively. Active TV restrictions show their corresponding status instead of normal availability.
-  * Keep all eight actions and their three groups. Measured cards are at least 104px high, with 32px titles and 24px reasons. Quick-grant minutes and adjustment instructions occupy separate lines.
+  * Keep all eight actions and their three groups. Measured cards are at least 96px high, with 32px titles, 34px values and 24px reasons. Quick-grant minutes and adjustment instructions occupy separate lines.
   * Focus scrolling uses actual card positions and shows the full selected card. Compute the scroll limit from measured content height. Right-stick scrolling is available outside PIN entry; explanatory pages also accept Up/Down.
   * Resolve taps on release. Movement over 10px cancels the tap and starts dragging. A drag or page transition cannot become a click; scrolled cards only receive touches inside the viewport.
   * PIN retains both sticks as digit input; touch dragging reads long instructions. Errors and cooldown appear near the entered PIN, and failed verification resets scrolling. Verify and Back remain fixed.
@@ -214,7 +267,7 @@ When authoring or updating Companion NRO pages or overlays:
 - [ ] **Overlay Dark Baseline**: Overlay strictly locks to the dark palette, with surfaces tuned to Tesla's translucent black background.
 - [ ] **Overlay Zero-Emoji Contract**: Overlay strings contain no 4-byte emojis; controller prompts strictly use official Switch font glyphs (`\uE0E0`, etc.).
 - [ ] **Contrast & Luminance**: Text passes legibility standards on handheld screens (Light mode primary text $\ge$ `#172640`, Dark mode primary text $\ge$ `#F3F6FD`).
-- [ ] **Semantic Color Harmony**: Active/success uses fresh green (`#52C41A` / `#F6FFED`), rest/warning uses high-contrast warm amber (`#D95A00` / `#FFF7E6`), limits use crimson (`#B92F46` / `#FFE9ED`). Avoid muddy yellow/brown tones.
+- [ ] **Semantic Color Harmony**: Active/success uses fresh green (`#52C41A` / `#EDF9F0`), rest/warning uses high-contrast warm amber (`#D95A00` / `#FFFBEB`), limits use crimson (`#B92F46` / `#FFE9ED`). Avoid muddy yellow/brown tones.
 - [ ] **Dynamic Text Measurement**: Adjacent items and badges calculate positions dynamically using `measure_text(...)`.
 - [ ] **Edge-to-Edge Right Alignment**: Right-hand descriptions and metrics align strictly via `card_x + card_w - padding - desc_w`.
 - [ ] **Text Overflow Protection**: Long strings or localized variations use `fit_text(...)` with ellipses to prevent layout breaking.

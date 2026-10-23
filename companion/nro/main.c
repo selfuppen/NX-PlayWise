@@ -390,6 +390,14 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Plus) {
                 ptc_audio_play(PTC_SE_POPUP);
                 ptc_ui_open_home_details(&ui.model);
+            } else if (down & (HidNpadButton_ZL | HidNpadButton_ZR)) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ui.model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+                ui.model.overlay_selection = (int)ui.language_preference;
+                snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "%s",
+                         ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+                snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "%s",
+                         ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
             } else if (down & HidNpadButton_X) {
                 if (ui.model.disable_flag_present) {
                     ptc_audio_play(PTC_SE_ERROR);
@@ -427,6 +435,14 @@ int main(int argc, char **argv)
             if ((down & HidNpadButton_X) && ptc_ui_open_notice_details(&ui.model)) {
             } else if ((down & HidNpadButton_Plus) && ui.model.parent_page == PTC_UI_PARENT_TODAY) {
                 ptc_ui_open_home_details(&ui.model);
+            } else if ((down & (HidNpadButton_ZL | HidNpadButton_ZR)) && ui.model.parent_page == PTC_UI_PARENT_TODAY) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ui.model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+                ui.model.overlay_selection = (int)ui.language_preference;
+                snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "%s",
+                         ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+                snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "%s",
+                         ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
             } else if (ui.model.parent_footer_focused) {
                 if (down & HidNpadButton_B) {
                     ptc_audio_play(PTC_SE_CANCEL);

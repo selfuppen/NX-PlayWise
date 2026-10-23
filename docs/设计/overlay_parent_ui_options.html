@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlayWise Overlay 家长区层级优化 · 方案 A / B</title>
+<style>
+:root{
+  /* 生产 overlay 深色基准（companion/overlay/source/render_types.hpp，4-bit 色彩） */
+  --bg:#0a0a0a; --panel:#000; --card:#111; --raised:#222;
+  --bd:#333; --bdctl:#777;
+  --t1:#fff; --t2:#aaa; --t3:#666;
+  --accent:#44bbff; --accent-soft:#113355;
+  --ok:#55cc88; --ok-soft:#113322; --ok-bd:#226633;
+  --warn:#ffaa33; --warn-soft:#332211; --warn-bd:#885511;
+  --bad:#ff6677; --bad-soft:#441122; --bad-bd:#882222;
+  --font:"Noto Sans SC","Source Han Sans SC","Microsoft YaHei UI","PingFang SC",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;color:#e6edf3;font-family:var(--font);padding:24px 28px 64px}
+h1{font-size:22px;font-weight:600;margin-bottom:4px}
+.pagesub{color:#8b949e;font-size:13px;line-height:1.7;margin-bottom:16px;max-width:1180px}
+.req{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#c9d1d9;max-width:1180px}
+.req table{border-collapse:collapse;width:100%}
+.req td,.req th{border-top:1px solid #21262d;padding:6px 8px;text-align:left;vertical-align:top}
+.req th{color:#8b949e;font-weight:500;border-top:0}
+.req td:first-child{width:15%;color:#8b949e}
+.req b{color:#e6edf3;font-weight:600}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 18px}
+.toolbar button,.toolbar select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 12px;font:13px var(--font);cursor:pointer}
+.toolbar button.on{background:#1f6feb;border-color:#1f6feb}
+.toolbar label{font-size:13px;color:#8b949e;display:flex;gap:6px;align-items:center}
+.sep{width:1px;height:22px;background:#30363d;margin:0 4px}
+.opts{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.opt h2{font-size:17px;font-weight:600;margin-bottom:2px}
+.opt .tag{font-size:12.5px;color:#8b949e;margin-bottom:10px;max-width:448px;line-height:1.65}
+.single{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.grid{display:flex;flex-wrap:wrap;gap:14px}
+.cell .cap{font-size:12px;color:#8b949e;margin:0 0 4px}
+.frame{position:relative;width:calc(448px * var(--s));height:calc(720px * var(--s));flex:none}
+.screen{position:absolute;left:0;top:0;width:448px;height:720px;background:var(--bg);color:var(--t1);font-family:var(--font);overflow:hidden;border-radius:2px;outline:1px solid #30363d;transform:scale(var(--s));transform-origin:0 0;font-weight:400;line-height:1.2}
+.layer{position:absolute;left:16px;top:12px;width:416px;height:635px}
+
+/* 面板/页眉 */
+.hdr-title{position:absolute;left:16px;top:0;color:var(--t1);white-space:nowrap}
+.path{position:absolute;left:16px;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden}
+.path::before{content:"";width:4px;height:16px;border-radius:2px;background:var(--accent);flex:none}
+.path .pseg{font-size:22px;line-height:27px;color:var(--t2)}
+.path .pseg.cur{color:var(--t1)}
+.path .psep{font-size:22px;line-height:27px;color:var(--t3);flex:none}
+.divider{position:absolute;left:4px;width:408px;height:1px;background:var(--bd)}
+.divider-seg{position:absolute;left:4px;width:32px;height:2px;background:var(--accent)}
+.hdr-btn{position:absolute;right:4px;display:flex;align-items:center;justify-content:center;border:1px solid var(--bdctl);border-radius:4px;background:var(--raised);color:var(--accent);white-space:nowrap}
+.hdr-btn.a{top:2px;width:136px;height:40px;font-size:22px}
+.hdr-btn.b{top:2px;width:128px;height:40px;font-size:22px}
+.vp{position:absolute;left:0;width:416px;overflow-y:auto;overflow-x:hidden;padding-bottom:4px}
+.vp::-webkit-scrollbar{width:6px}
+.vp::-webkit-scrollbar-track{background:#191919}
+.vp::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px}
+.vp{scrollbar-width:thin;scrollbar-color:var(--accent) #191919}
+
+/* 状态带 */
+.status{position:relative;margin:0 0 6px 4px;width:408px;border-radius:4px;background:var(--card);border:1px solid var(--bd);padding:10px 14px 12px 18px}
+.status::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 2px 2px 0;background:var(--tone)}
+.status.loud{background:var(--tone-soft);border-color:var(--tone-bd)}
+.status.quiet{border-color:var(--tone-bd)}
+.sh{color:var(--tone)}
+.status-a .sh{font-size:44px;line-height:53px}
+.status-a .sm{font-size:24px;line-height:29px;color:var(--t2);margin-top:4px}
+.status-b{padding:8px 14px 10px 18px}
+.status-b .sh{font-size:32px;line-height:39px}
+.status-b .sh::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--tone);margin-right:10px;vertical-align:middle}
+.status-b .sm{font-size:22px;line-height:27px;color:var(--t2);margin-top:3px}
+
+/* 分组与卡片 */
+.group{display:flex;align-items:center;gap:8px;margin:10px 0 8px;padding-left:4px;color:var(--accent)}
+.group::before{content:"";width:4px;height:18px;border-radius:2px;background:currentColor;flex:none}
+.group .txt{font-size:22px;line-height:27px;white-space:nowrap}
+.group::after{content:"";flex:1;height:1px;background:var(--bd);margin-left:4px}
+.group.danger{color:var(--bad)}
+.group-b .txt{font-size:24px;line-height:29px}
+.card{position:relative;margin:0 0 10px 4px;width:404px;border:1px solid var(--bd);border-radius:4px;background:var(--card);padding:12px 14px 12px 18px;display:flex;flex-direction:column;gap:6px}
+.card-a{min-height:96px}
+.card-b{min-height:88px;margin-bottom:8px;gap:4px}
+.card::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 2px 2px 0;background:var(--tone)}
+.card.disabled{--tone:var(--t3)}
+.card.disabled::before{opacity:.55}
+.card-b.disabled::before{display:none}
+.card.focused{background:var(--accent-soft);border:2px solid var(--accent);padding:11px 13px 11px 17px;outline:2px solid var(--accent);outline-offset:-5px}
+.card.focused::before{background:var(--accent)}
+.ct{display:flex;align-items:center;gap:8px;font-size:32px;line-height:39px;color:var(--t1)}
+.card-b .ct{font-size:26px;line-height:32px}
+.card.disabled .ct{color:var(--t3)}
+.ct svg{width:24px;height:24px;stroke:var(--tone);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.card.disabled svg{stroke:var(--t3)}
+.card-b.disabled .ct svg{display:none}
+.cv{font-size:34px;line-height:41px;color:var(--tone)}
+.card-b .cv{font-size:32px;line-height:39px}
+.cv span{font-size:24px;color:var(--t2)}
+.cn{font-size:24px;line-height:29px;color:var(--t2)}
+.card-b .cn{font-size:22px;line-height:27px}
+
+/* 面板 / 提示 */
+.panel{position:relative;margin:0 0 6px 4px;width:408px;border:1px solid var(--bd);border-radius:4px;background:var(--card);padding:8px 14px 8px 18px}
+.panel::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;background:var(--tone)}
+.panel.tone-accent{background:var(--accent-soft);border-color:var(--accent)}
+.panel.tone-ok{background:var(--ok-soft);border-color:var(--ok-bd)}
+.panel.tone-bad{background:var(--bad-soft);border-color:var(--bad-bd)}
+.panel .big{font-size:32px;line-height:39px;color:var(--t1)}
+.panel .result{font-size:44px;line-height:53px;color:var(--tone)}
+.hint{font-size:24px;line-height:29px;color:var(--t2);margin:2px 0 6px 16px}
+.detail{font-size:32px;line-height:39px;color:var(--tone);margin:2px 0 8px 16px;max-width:384px}
+.drow{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 6px 4px;width:408px;min-height:56px;border:1px solid var(--bd);border-radius:4px;background:var(--card);padding:8px 14px 8px 18px;font-size:26px;line-height:32px}
+.drow .k{color:var(--t1);white-space:nowrap}
+.drow .v{font-size:24px;line-height:29px;color:var(--t2);text-align:right;flex:1;min-width:0}
+.drow .v.tone{color:var(--tone)}
+
+/* PIN */
+.numpad{display:grid;grid-template-columns:repeat(3,124px);gap:8px;margin:4px 0 0 14px}
+.key{height:58px;border:1px solid var(--bdctl);border-radius:4px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--t1)}
+.key.small{font-size:24px}
+.key.warn{border-color:var(--warn-bd);color:var(--warn)}
+.key.bad{border-color:var(--bad-bd);color:var(--bad)}
+.key.focus{outline:2px solid var(--accent);outline-offset:-4px;border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.pin-toggle{display:flex;gap:10px;margin:6px 0 0 4px}
+.pin-toggle .btn{height:48px;font-size:24px}
+
+/* 页脚 rail */
+.rail{position:absolute;left:0;top:559px;width:416px;height:68px;display:flex;gap:12px}
+.btn{display:flex;align-items:center;justify-content:center;border:1px solid var(--bdctl);border-radius:4px;background:var(--raised);color:var(--t1);white-space:nowrap;overflow:hidden;font-weight:400;position:relative}
+.btn.foot{height:68px;font-size:30px}
+.btn.primary{background:var(--accent-soft);border:2px solid var(--accent);color:var(--accent)}
+.btn.danger{background:var(--bad-soft);border:2px solid var(--bad);color:var(--bad)}
+.btn.focus{outline:2px solid var(--accent);outline-offset:-4px;border-color:var(--accent)}
+.btn.disabled{color:var(--t3);border-color:var(--bd);background:var(--card)}
+.btn.warn-text{color:var(--warn)}
+.holdbar{position:absolute;left:8px;right:8px;bottom:7px;height:3px;background:var(--bad)}
+
+/* Tesla 宿主页脚 */
+.tesla{position:absolute;left:0;top:647px;width:448px;height:73px;background:#000;border-top:1px solid #2b2b2b;display:flex;align-items:center;gap:34px;padding-left:30px;font-size:30px;color:#e8e8e8;z-index:10}
+.g{display:inline-flex;align-items:center;justify-content:center;width:1.15em;height:1.15em;border:2px solid currentColor;border-radius:50%;font-size:.72em;line-height:1;margin-right:.28em;flex:none}
+.g.sh{border-radius:.32em;width:1.5em}
+
+/* 儿童概览 */
+.child-layer{position:absolute;left:16px;top:6px;width:416px;height:641px}
+.banner{position:absolute;left:0;top:0;width:416px;height:206px;border:1px solid var(--ok-bd);border-radius:4px;background:var(--ok-soft);overflow:hidden}
+.banner::before{content:"";position:absolute;left:8px;right:8px;top:1px;height:3px;background:var(--ok)}
+.banner-top{position:absolute;left:14px;right:8px;top:4px;height:40px;display:flex;align-items:center;justify-content:space-between}
+.brand{font-size:22px;color:var(--t2);white-space:nowrap}
+.brand i{font-style:normal;color:var(--accent)}
+.hb{display:flex;gap:6px}
+.hb .btn{height:40px;padding:0 12px;font-size:24px;background:rgba(0,0,0,.35);border-color:var(--bd)}
+.banner-head{position:absolute;left:14px;top:46px;font-size:44px;line-height:53px;color:var(--ok)}
+.banner-num{position:absolute;left:14px;right:14px;top:99px;display:flex;align-items:baseline;gap:8px;font-size:56px;line-height:68px;color:var(--t1)}
+.banner-num .unit{font-size:28px}
+.banner-num .lbl{margin-left:auto;font-size:22px;color:var(--t2)}
+.banner-note{position:absolute;left:14px;top:171px;font-size:22px;line-height:27px;color:var(--t2)}
+.child-vp{position:absolute;left:0;top:214px;width:416px;height:343px;display:flex;flex-direction:column}
+.csec{display:flex;align-items:center;gap:10px;margin:0 0 6px 8px;font-size:22px;line-height:27px;color:var(--t2)}
+.csec::after{content:"";flex:1;height:1px;background:var(--bd)}
+.rule{position:relative;display:flex;align-items:center;height:54px;padding:0 12px 0 0}
+.rule .dot{width:32px;display:flex;justify-content:center;flex:none}
+.rule .dot i{display:block;width:14px;height:14px;border:2px solid var(--bdctl);border-radius:50%}
+.rule.active{background:linear-gradient(90deg,var(--accent-soft),rgba(0,0,0,0) 85%)}
+.rule.active .dot i{width:20px;height:20px;background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 5px rgba(68,187,255,.25)}
+.rule .t{font-size:28px;line-height:34px;color:var(--t1)}
+.rule .v{margin-left:auto;font-size:26px;line-height:32px;color:var(--accent)}
+.rule.standby .v{font-size:24px;color:var(--t2)}
+.rule.standby .dot i{border-color:var(--t2);background:var(--card)}
+.status-row{margin-top:auto;margin-left:4px;width:408px;height:48px;border:1px solid var(--bd);border-radius:4px;background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:24px;color:var(--t2)}
+.status-row em{font-style:normal;color:var(--accent)}
+.child-rail{position:absolute;left:0;top:565px;width:416px;height:68px;display:flex;gap:8px}
+.child-rail .btn{height:68px}
+
+/* 加时码键盘 */
+.kp-layer{position:absolute;left:16px;top:12px;width:416px;height:635px}
+.kp-brand{position:absolute;left:4px;top:0;font-size:34px;line-height:41px;color:var(--accent)}
+.kp-refresh{position:absolute;right:4px;top:4px;width:128px;height:52px;font-size:24px}
+.kp-status{position:absolute;left:14px;top:88px;font-size:28px;line-height:34px;color:var(--ok)}
+.kp-age{position:absolute;right:14px;top:94px;font-size:24px;color:var(--t2)}
+.slots{position:absolute;left:14px;top:108px;display:flex;gap:5px}
+.slot{width:44px;height:64px;border:1px solid var(--bdctl);border-radius:4px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--t1)}
+.slot.focus{border:2px solid var(--accent);background:var(--accent-soft);color:var(--accent)}
+.kp-meta{position:absolute;left:14px;top:198px;font-size:22px;color:var(--t2)}
+.kp-date{position:absolute;left:14px;top:226px;font-size:22px;color:var(--t2)}
+.kp-keys{position:absolute;left:14px;top:236px;display:grid;grid-template-columns:repeat(3,124px);gap:8px}
+.kp-key{height:56px;border:1px solid var(--bdctl);border-radius:4px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--t1)}
+.kp-key.small{font-size:24px}
+.kp-key.warn{border-color:var(--warn-bd);color:var(--warn)}
+.kp-key.bad{border-color:var(--bad-bd);color:var(--bad)}
+.kp-submit{position:absolute;left:12px;top:491px;width:392px;height:60px;font-size:24px}
+.kp-nav{position:absolute;top:559px;width:190px;height:68px;font-size:30px}
+.kp-nav.a{left:12px}
+.kp-nav.b{left:214px}
+
+/* 参考线 */
+.guide{position:absolute;left:0;width:448px;border-top:1px dashed #ff4dd2;color:#ff4dd2;font-size:10px;line-height:1;padding-left:4px;z-index:40;pointer-events:none}
+.guide-box{position:absolute;border:1px dashed #ff4dd2;z-index:40;pointer-events:none}
+
+/* 规格表 */
+.spec{margin-top:12px;max-width:448px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#c9d1d9}
+.spec table{width:100%;border-collapse:collapse}
+.spec td,.spec th{padding:3px 6px;text-align:left;border-top:1px solid #21262d;vertical-align:baseline}
+.spec th{color:#8b949e;font-weight:500;border-top:0}
+.spec td:first-child{white-space:nowrap}
+.spec .px{color:#79c0ff;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<h1>PlayWise Overlay · 家长区字体层级与页脚统一（方案 A / B）</h1>
+<div class="pagesub">画布 448×720（1:1）· 生产 overlay 深色调色板 · 示例数据 · 真机使用 Switch 系统按键字模，这里用圆形字母代替 · <b>已采纳方案 A</b>：所有非儿童根页面的顶部固定只读路径栏（根节点“任我玩”），方案 B 保留为对照 · 此文件只用于确认设计，不修改生产代码</div>
+
+<div class="req">
+<table>
+<tr><th>维度</th><th>方案 A · 状态主导（已采纳）</th><th>方案 B · 标题主导（参考）</th></tr>
+<tr><td>第一眼</td><td>先看到<b>现在是什么状态</b>；所有非儿童根页面的页面身份由<b>顶部 22px 路径行</b>承担（含当前步骤）</td><td>先看到<b>在哪个页面</b>，再看状态带；标题保持 34px</td></tr>
+<tr><td>状态信息</td><td><b>44px Hero</b> + 24px 刷新信息；正常态只描边不填色</td><td><b>32px 状态带</b> + 22px 刷新信息；正常态描边 + 绿点</td></tr>
+<tr><td>分组 / 卡片</td><td>分组 22 · 卡片 32 / 34 / 24 · 最小高 96 · 间距 10</td><td>分组 24 · 卡片 26 / 32 / 22 · 最小高 88 · 间距 8</td></tr>
+<tr><td>闲置 / 不可用</td><td>不可用卡保留图标与禁用轨，标题 32 灰、原因 24 次灰</td><td>不可用卡纯描边，无图标无轨，标题 26 灰、原因 22 灰</td></tr>
+<tr><td>页面导航</td><td><b>已采纳</b>：所有非儿童根页面的 22px 路径栏固定在顶部（header 44，视口 499），路径含当前步骤；当前节点白色；家长区、状态详情、加时码、确认、结果共用同一套顶部导航。儿童概览根页由品牌行 <b>自律约定·任我玩</b> 表达，不重复加行。</td><td>参考：标题 34 + 标题下路径行（只列祖先），header 72，视口 471。</td></tr>
+<tr><td>适合</td><td>家长打开浮窗只为确认“现在能不能玩”（已采纳）</td><td>家长需要浏览并执行八项动作，信息密度优先</td></tr>
+<tr><td>共同改动</td><td colspan="2">所有固定页脚统一底边 <b>Y=639</b>（栏高 68，起点 571），视口底 <b>Y=563</b>；绝不越过 Tesla 安全线 Y=647；新增 6 个路径文案 key，其余复用现有文案；恢复正常态/受限态/待刷新态语义优先级不变</td></tr>
+</table>
+</div>
+
+<div class="toolbar" id="bar"></div>
+<div class="opts" id="opts"></div>
+
+<script>
+const FONT = '"Noto Sans SC","Source Han Sans SC","Microsoft YaHei UI","PingFang SC",sans-serif';
+const _c = document.createElement('canvas');
+const _ctx = _c.getContext('2d');
+function measureText(text, size) { _ctx.font = size + 'px ' + FONT; return _ctx.measureText(text).width; }
+function fitSize(text, maxWidth, sizes) {
+  for (const s of sizes) if (measureText(text, s) <= maxWidth) return s;
+  return sizes[sizes.length - 1];
+}
+const g = (k, sh) => '<span class="g' + (sh ? ' sh' : '') + '">' + k + '</span>';
+
+const S = {
+  zh: {
+    brand: '自律约定', brandAccent: '·任我玩',
+    home: '任我玩', navCode: '加时码', navVerify: '验证', navConfirm: '确认', navResult: '结果',
+    parent: '家长区', pin: '家长密码验证', confirm: '确认恢复限制', result: '操作结果',
+    statusDetails: '状态详情', confirmGrant: '确认加时', grantResult: '加时结果',
+    refresh: 'Y 刷新',
+    normal: '当前可正常使用', stale: '状态待刷新', bedtime: '就寝限制生效中',
+    quota: '今日额度已耗尽', eye: '正在护眼休息', dock: '电视模式规则',
+    justNow: '刚刚刷新',
+    gQuota: '额度调整', gRestrict: '限制处理', gRecover: '恢复与停用',
+    quick: '快速加时', nolimit: '今日不限时', skipBed: '跳过本次就寝', skipEye: '跳过本次休息',
+    restoreBed: '恢复本次就寝', offBed: '关闭就寝计划', waiveDock: '今日解除电视模式限制',
+    restoreAll: '恢复安装前设置并停用',
+    adjust: '左右调整分钟数', dEye: '当前未在护眼休息', dDock: '今日已解除电视限制',
+    dRefresh: '请先刷新状态', dReason: '该动作当前暂不可用',
+    min: '分钟',
+    execute: 'A 执行；Y 刷新；B 返回', hold: '长按 A 1 秒；Y 刷新；B 返回',
+    unavailable: '该动作当前不可用；B 返回',
+    back: 'B 返回', cancel: 'B 取消', verify: 'A 验证',
+    digits: '已输入 4 位  ●●●●', touch: '触摸数字键盘', xBack: 'X 退格', yClear: 'Y 清除',
+    switchDial: '切换到转盘', zlBack: 'ZL 退格',
+    confirmBody: '当前处于就寝时段，确认后将立即恢复限制',
+    holdRestore: '长按 A 1 秒恢复',
+    done: '操作完成', reloaded: '已重新加载 PCTL：限制已解除', reverify: 'Y 重新验证',
+    online: '现在可以玩', todayPlay: '今天还可玩',
+    usage: '已用 35 分钟 / 今日额度 60 分钟',
+    rules: '今日规则', otherRules: '其他规则',
+    eyeLabel: '护眼', bedLabel: '就寝', dockLabel: '掌机模式',
+    eyeValue: '再玩约 25 分钟休息', bedValue: '21:00 · 44 分后就寝', dockValue: '非电视剩余 18 分',
+    statusRow: '命令与状态', details: '查看详情 (X)',
+    buffer: 'L 领取自主缓冲', redeem: 'A 输入加时码',
+    keypadTitle: '输入加时码', inputCount: '已输入 8 位', date: '2026年10月21日',
+    submit: '兑换加时码', navBack: 'B 取消', navParent: 'R 家长区',
+    codeLabel: '加时码', codeValue: '7K3M-9Q2F', grantMin: '增加时长', quotaAfter: '今日额度',
+    grantAdded: '已增加 15 分钟', quotaChange: '60 → 75 分钟', codeOnce: '该加时码仅可使用一次',
+    holdGrant: '长按 A 1 秒确认', grantDone: '加时成功', grantDetail: '已增加 15 分钟 · 今日额度 75 分钟',
+    gTransport: '连接与数据', diagBackend: '后台服务', diagPctl: 'PCTL 会话', diagSync: '最后同步', diagOk: '正常', diagWaived: '今日已解除',
+    backParent: 'B 返回',
+    sceneOk: '家长区 · 正常', sceneRestricted: '家长区 · 受限', sceneStale: '家长区 · 待刷新',
+    scenePin: '家长 PIN', sceneConfirm: '家长确认', sceneResult: '操作结果',
+    sceneChild: '儿童概览 · 根', sceneDetails: '状态详情', sceneKeypad: '加时码键盘',
+    sceneCodeConfirm: '加时确认', sceneCodeResult: '加时结果'
+  },
+  en: {
+    brand: 'PlayWise', brandAccent: '',
+    home: 'PlayWise', navCode: 'Extra time code', navVerify: 'Verify', navConfirm: 'Confirm', navResult: 'Result',
+    parent: 'Parent Zone', pin: 'Parent PIN Verification', confirm: 'Confirm Restoring Limit', result: 'Operation Result',
+    statusDetails: 'Status details', confirmGrant: 'Confirm Extra Time', grantResult: 'Extra Time Result',
+    refresh: 'Y Refresh',
+    normal: 'Normal Play Available', stale: 'Status Pending Refresh', bedtime: 'Bedtime Active',
+    quota: 'Daily Limit Reached', eye: 'Eye care break in progress', dock: 'TV mode rules',
+    justNow: 'Just refreshed',
+    gQuota: 'Quota adjustments', gRestrict: 'Restriction actions', gRecover: 'Recovery and deactivation',
+    quick: 'Quick Grant', nolimit: 'No Limit Today', skipBed: 'Skip Bedtime', skipEye: 'Skip this break',
+    restoreBed: 'Restore This Bedtime', offBed: 'Turn Off Bedtime Plan', waiveDock: 'Waive TV mode rules today',
+    restoreAll: 'Restore Pre-Install Settings & Deactivate',
+    adjust: 'Left / right to adjust', dEye: 'Not resting now', dDock: 'TV rules already waived today',
+    dRefresh: 'Please refresh the status first', dReason: 'Action not available',
+    min: 'min',
+    execute: 'A Execute; Y Refresh; B Back', hold: 'Hold A 1s; Y Refresh; B Back',
+    unavailable: 'Action currently unavailable; B Back',
+    back: 'B  Back', cancel: 'B  Cancel', verify: 'A  Verify',
+    digits: '4 digits entered  ●●●●', touch: 'Touch numeric keypad', xBack: 'X  Backspace', yClear: 'Y Clear',
+    switchDial: 'Minus Direction Pad', zlBack: 'ZL  Backspace',
+    confirmBody: 'Bedtime is active. Confirming will re-apply the restriction immediately.',
+    holdRestore: 'Hold A 1s to Restore',
+    done: 'Operation Completed', reloaded: 'PCTL reloaded: Restrictions cleared', reverify: 'Y  Re-verify',
+    online: 'Normal Play Available', todayPlay: 'Playtime today',
+    usage: 'Used 35 min / quota 60 min',
+    rules: "Today's Rules", otherRules: 'Other Rules',
+    eyeLabel: 'Eye care', bedLabel: 'Bedtime', dockLabel: 'Handheld',
+    eyeValue: 'Break in ~25 min', bedValue: '21:00 · bedtime in 44 min', dockValue: '18 min left undocked',
+    statusRow: 'Commands & status', details: 'Details (X)',
+    buffer: 'L  Claim daily buffer', redeem: 'A  Enter the extra time code',
+    keypadTitle: 'Enter the extra time code', inputCount: '8 digits entered', date: 'Oct 21, 2026',
+    submit: 'Redeem code', navBack: 'B  Cancel', navParent: 'R  Parent',
+    codeLabel: 'Code', codeValue: '7K3M-9Q2F', grantMin: 'Added time', quotaAfter: 'Daily quota',
+    grantAdded: '15 minutes added', quotaChange: '60 → 75 min', codeOnce: 'This code can be used only once',
+    holdGrant: 'Hold A 1s to Confirm', grantDone: 'Extra time added', grantDetail: '15 minutes added · daily quota 75 min',
+    gTransport: 'Connection & data', diagBackend: 'Background service', diagPctl: 'PCTL session', diagSync: 'Last sync', diagOk: 'Normal', diagWaived: 'Waived today',
+    backParent: 'B  Back',
+    sceneOk: 'Parent · Normal', sceneRestricted: 'Parent · Restricted', sceneStale: 'Parent · Pending refresh',
+    scenePin: 'Parent PIN', sceneConfirm: 'Parent Confirm', sceneResult: 'Operation Result',
+    sceneChild: 'Child Overview · Root', sceneDetails: 'Status details', sceneKeypad: 'Code Keypad',
+    sceneCodeConfirm: 'Confirm Grant', sceneCodeResult: 'Grant Result'
+  }
+};
+let lang = 'zh';
+const t = k => (S[lang] && S[lang][k]) || k;
+
+const SCENES = [
+  { id:'actions-ok', kind:'actions', header:'parent', name:'sceneOk', titleKey:'parent', refresh:true,
+    path:['home','parent'], full:['home','parent'],
+    stateKey:'normal', tone:'ok', metaKey:'justNow', variant:'ok', footerKey:'execute' },
+  { id:'actions-restricted', kind:'actions', header:'parent', name:'sceneRestricted', titleKey:'parent', refresh:true,
+    path:['home','parent'], full:['home','parent'],
+    stateKey:'bedtime', tone:'bad', metaKey:'justNow', variant:'restricted', footerKey:'hold' },
+  { id:'actions-stale', kind:'actions', header:'parent', name:'sceneStale', titleKey:'parent', refresh:true,
+    path:['home','parent'], full:['home','parent'],
+    stateKey:'stale', tone:'warn', metaKey:'justNow', variant:'stale', footerKey:'unavailable' },
+  { id:'pin', kind:'pin', header:'parent', name:'scenePin', titleKey:'pin', refresh:false,
+    path:['home','parent'], full:['home','parent','navVerify'],
+    stateKey:'normal', tone:'ok', metaKey:null, footerKey:'pin' },
+  { id:'confirm', kind:'confirm', header:'parent', name:'sceneConfirm', titleKey:'confirm', refresh:false,
+    path:['home','parent'], full:['home','parent','navConfirm'],
+    stateKey:'bedtime', tone:'bad', metaKey:'justNow', footerKey:'confirm' },
+  { id:'result', kind:'result', header:'parent', name:'sceneResult', titleKey:'result', refresh:false,
+    path:['home','parent'], full:['home','parent','navResult'],
+    stateKey:'normal', tone:'ok', metaKey:'justNow', footerKey:'result' },
+  { id:'child', kind:'child', name:'sceneChild', titleKey:'parent', refresh:true },
+  { id:'details', kind:'details', header:'task', name:'sceneDetails', titleKey:'statusDetails', refresh:true,
+    path:['home'], full:['home','statusDetails'], footerKey:'details' },
+  { id:'keypad', kind:'keypad', header:'task', name:'sceneKeypad', titleKey:'keypadTitle', refresh:true,
+    path:['home','navCode'], full:['home','navCode'], footerKey:'none' },
+  { id:'code-confirm', kind:'codeConfirm', header:'task', name:'sceneCodeConfirm', titleKey:'confirmGrant', refresh:false,
+    path:['home','navCode'], full:['home','navCode','navConfirm'], footerKey:'codeConfirm' },
+  { id:'code-result', kind:'codeResult', header:'task', name:'sceneCodeResult', titleKey:'grantResult', refresh:false,
+    path:['home','navCode'], full:['home','navCode','navResult'], footerKey:'codeResult' }
+];
+
+const IC = {
+  eye: '<svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  bed: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+  dock: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  restore: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5"/><path d="M4 4l6 6"/><path d="M20 15v5h-5"/><path d="M20 20l-6-6"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v5M12 16h.01"/></svg>'
+};
+
+function toneVars(tone) {
+  var map = { ok:'--ok', warn:'--warn', bad:'--bad', accent:'--accent', off:'--t3' };
+  var soft = { ok:'--ok-soft', warn:'--warn-soft', bad:'--bad-soft', accent:'--accent-soft', off:'--card' };
+  var bd = { ok:'--ok-bd', warn:'--warn-bd', bad:'--bad-bd', accent:'--accent', off:'--bd' };
+  return '--tone:var(' + map[tone] + ');--tone-soft:var(' + soft[tone] + ');--tone-bd:var(' + bd[tone] + ')';
+}
+
+// 路径导航：只读，不生成焦点区。有标题时只列祖先；A 的家长页无标题，列完整路径。
+function pathNodesHTML(keys, markCurrent) {
+  return keys.map(function(k, i) {
+    var cur = markCurrent && i === keys.length - 1;
+    return (i ? '<span class="psep">&gt;</span>' : '') +
+      '<span class="pseg' + (cur ? ' cur' : '') + '">' + t(k) + '</span>';
+  }).join('');
+}
+
+function measurePath(keys) {
+  var w = 12; // 4px 强调条 + 8px gap
+  keys.forEach(function(k, i) {
+    if (i) w += 8 + measureText('>', 22) + 8;
+    w += measureText(t(k), 22);
+  });
+  return w;
+}
+
+function pathHTML(keys, maxWidth, markCurrent) {
+  var tries = [keys];
+  if (keys.length > 2) tries.push(keys.slice(1));
+  if (keys.length > 1) tries.push([keys[keys.length - 1]]);
+  for (var i = 0; i < tries.length; i++) {
+    if (measurePath(tries[i]) <= maxWidth) return pathNodesHTML(tries[i], markCurrent);
+  }
+  return pathNodesHTML([keys[keys.length - 1]], markCurrent);
+}
+
+function headerHTML(opt, scene) {
+  var refresh = scene.refresh ? '<div class="hdr-btn ' + (opt === 'A' ? 'a' : 'b') + '">' + t('refresh') + '</div>' : '';
+  if (opt === 'A') {
+    // 方案 A：所有非儿童根页面共用顶部单行路径栏，含当前步骤；不画 34px 标题。
+    var maxA = scene.refresh ? 260 : 384;
+    return '<div class="path" style="top:8px;width:' + maxA + 'px">' + pathHTML(scene.full, maxA, true) + '</div>' + refresh +
+      '<div class="divider" style="top:46px"></div><div class="divider-seg" style="top:46px"></div>';
+  }
+  var max = scene.refresh ? 260 : 384;
+  var text = t(scene.titleKey);
+  var size = fitSize(text, max, [34, 30, 28, 26]);
+  var line = Math.round(size * 1.2);
+  return '<div class="hdr-title" style="font-size:' + size + 'px;line-height:' + line + 'px">' + text + '</div>' + refresh +
+    '<div class="path" style="top:' + (line + 4) + 'px;width:384px">' + pathHTML(scene.path, 384, false) + '</div>' +
+    '<div class="divider" style="top:74px"></div><div class="divider-seg" style="top:74px"></div>';
+}
+
+function statusBand(opt, scene, withMeta) {
+  var A = opt === 'A';
+  var loud = scene.stateKey !== 'normal';
+  var cls = 'status ' + (A ? 'status-a' : 'status-b') + ' ' + (loud ? 'loud' : 'quiet');
+  var meta = (withMeta && scene.metaKey) ? '<div class="sm">' + t(scene.metaKey) + '</div>' : '';
+  return '<div class="' + cls + '" style="' + toneVars(scene.tone) + '">' +
+    '<div class="sh">' + t(scene.stateKey) + '</div>' + meta + '</div>';
+}
+
+function groupLabel(opt, text, danger) {
+  var cls = 'group' + (danger ? ' danger' : '') + (opt === 'B' ? ' group-b' : '');
+  return '<div class="' + cls + '"><span class="txt">' + text + '</span></div>';
+}
+
+function groupHTML(opt, idx) {
+  var key = idx === 0 ? 'gQuota' : idx === 1 ? 'gRestrict' : 'gRecover';
+  return groupLabel(opt, t(key), idx === 2);
+}
+
+function drow(k, v, tone) {
+  return '<div class="drow" style="' + toneVars(tone || 'accent') + '">' +
+    '<span class="k">' + k + '</span><span class="v tone">' + v + '</span></div>';
+}
+
+function actionCard(opt, c, focused) {
+  var A = opt === 'A';
+  var disabled = !!c.disabled;
+  var tone = disabled ? 'off' : (c.danger ? 'bad' : 'accent');
+  var cls = 'card ' + (A ? 'card-a' : 'card-b') + (disabled ? ' disabled' : '') + (focused ? ' focused' : '');
+  var icon = (disabled && !A) ? '' : (IC[c.icon] || '');
+  var value = c.value ? '<div class="cv">' + c.value + ' <span>' + t('min') + '</span></div>' : '';
+  var noteKey = c.note || (disabled ? c.disabledKey : null);
+  var note = noteKey ? '<div class="cn">' + t(noteKey) + '</div>' : '';
+  return '<div class="' + cls + '" style="' + toneVars(tone) + '">' +
+    '<div class="ct">' + icon + '<span>' + t(c.label) + '</span></div>' + value + note + '</div>';
+}
+
+function actionCards(variant) {
+  var stale = variant === 'stale';
+  return [
+    { g:0, label:'quick', value:'15', note:'adjust', icon:'info' },
+    { g:0, label:'nolimit', icon:'info' },
+    { g:1, label:'skipBed', icon:'bed' },
+    { g:1, label:'skipEye', icon:'eye', disabled:true, disabledKey: stale ? 'dRefresh' : 'dEye' },
+    { g:1, label:'restoreBed', icon:'restore' },
+    { g:1, label:'offBed', icon:'bed' },
+    { g:1, label:'waiveDock', icon:'dock', disabled:true, disabledKey: stale ? 'dRefresh' : 'dDock' },
+    { g:2, label:'restoreAll', icon:'restore', danger:true }
+  ];
+}
+
+function actionsBody(opt, scene) {
+  var html = statusBand(opt, scene, true);
+  var cards = actionCards(scene.variant);
+  var last = -1;
+  cards.forEach(function(c, i) {
+    if (c.g !== last) { html += groupHTML(opt, c.g); last = c.g; }
+    html += actionCard(opt, c, i === 2);
+  });
+  return html;
+}
+
+function footBtn(label, width, cls, extra) {
+  var size = fitSize(label, width - 26, [30, 26, 24]);
+  return '<div class="btn foot ' + (cls || '') + '" style="width:' + width + 'px;font-size:' + size + 'px">' +
+    '<span>' + label + '</span>' + (extra || '') + '</div>';
+}
+
+function fullFoot(label, cls) {
+  // 全宽页脚是操作提示，不是主按钮：固定 24，避免压过卡片标题。
+  var size = fitSize(label, 416 - 26, [26, 24]);
+  return '<div class="btn foot ' + (cls || '') + '" style="width:416px;font-size:' + size + 'px">' + label + '</div>';
+}
+
+function holdBar() { return '<span class="holdbar"></span>'; }
+
+function footerHTML(opt, scene) {
+  if (scene.footerKey === 'execute') return fullFoot(t('execute'), '');
+  if (scene.footerKey === 'hold') return fullFoot(t('hold'), '');
+  if (scene.footerKey === 'unavailable') return fullFoot(t('unavailable'), 'warn-text');
+  if (scene.footerKey === 'pin')
+    return footBtn(t('back'), 154, '') + footBtn(t('verify'), 250, 'primary focus');
+  if (scene.footerKey === 'confirm')
+    return footBtn(t('cancel'), 154, '') + footBtn(t('holdRestore'), 250, 'danger', holdBar());
+  if (scene.footerKey === 'result')
+    return footBtn(t('reverify'), 154, '') + footBtn(t('back'), 250, 'primary focus');
+  if (scene.footerKey === 'details') return fullFoot(t('backParent'), '');
+  if (scene.footerKey === 'codeConfirm')
+    return footBtn(t('cancel'), 154, '') + footBtn(t('holdGrant'), 250, 'danger', holdBar());
+  if (scene.footerKey === 'codeResult') return fullFoot(t('backParent'), '');
+  return '';
+}
+
+function actionsPage(opt, scene) {
+  var top = opt === 'A' ? 52 : 80;
+  var height = opt === 'A' ? 499 : 471;
+  return '<div class="layer">' + headerHTML(opt, scene) +
+    '<div class="vp" style="top:' + top + 'px;height:' + height + 'px">' + actionsBody(opt, scene) + '</div>' +
+    '<div class="rail">' + footerHTML(opt, scene) + '</div></div>';
+}
+
+function pinPage(opt, scene) {
+  var body = statusBand(opt, scene, false);
+  body += '<div class="panel tone-accent" style="' + toneVars('accent') + '"><div class="big">' + t('digits') + '</div></div>';
+  body += '<div class="hint">' + t('touch') + '</div>';
+  var keys = '';
+  for (var d = 1; d <= 9; d++) keys += '<div class="key' + (d === 5 ? ' focus' : '') + '">' + d + '</div>';
+  keys += '<div class="key small warn">' + t('xBack') + '</div><div class="key">0</div><div class="key small bad">' + t('yClear') + '</div>';
+  body += '<div class="numpad">' + keys + '</div>';
+  body += '<div class="pin-toggle">' +
+    '<div class="btn" style="width:214px">' + t('switchDial') + '</div>' +
+    '<div class="btn" style="width:180px;border-color:var(--warn-bd);color:var(--warn)">' + t('zlBack') + '</div></div>';
+  var top = opt === 'A' ? 52 : 80;
+  var height = opt === 'A' ? 499 : 471;
+  return '<div class="layer">' + headerHTML(opt, scene) +
+    '<div class="vp" style="top:' + top + 'px;height:' + height + 'px">' + body + '</div>' +
+    '<div class="rail">' + footerHTML(opt, scene) + '</div></div>';
+}
+
+function confirmPage(opt, scene) {
+  var body = statusBand(opt, scene, true);
+  body += '<div class="panel tone-bad" style="' + toneVars('bad') + '"><div class="big">' + t('confirmBody') + '</div></div>';
+  var top = opt === 'A' ? 52 : 80;
+  var height = opt === 'A' ? 499 : 471;
+  return '<div class="layer">' + headerHTML(opt, scene) +
+    '<div class="vp" style="top:' + top + 'px;height:' + height + 'px">' + body + '</div>' +
+    '<div class="rail">' + footerHTML(opt, scene) + '</div></div>';
+}
+
+function resultPage(opt, scene) {
+  var body = statusBand(opt, scene, true);
+  body += '<div class="panel tone-ok" style="' + toneVars('ok') + '"><div class="result">' + t('done') + '</div></div>';
+  body += '<div class="detail">' + t('reloaded') + '</div>';
+  var top = opt === 'A' ? 52 : 80;
+  var height = opt === 'A' ? 499 : 471;
+  return '<div class="layer">' + headerHTML(opt, scene) +
+    '<div class="vp" style="top:' + top + 'px;height:' + height + 'px">' + body + '</div>' +
+    '<div class="rail">' + footerHTML(opt, scene) + '</div></div>';
+}
+
+function childPage() {
+  var brand = lang === 'zh'
+    ? t('brand') + '<i>' + t('brandAccent') + '</i>'
+    : '<i>' + t('brand') + '</i>';
+  var html = '<div class="child-layer">' +
+    '<div class="banner">' +
+      '<div class="banner-top"><div class="brand">' + brand + '</div>' +
+        '<div class="hb"><div class="btn">' + t('navParent') + '</div><div class="btn">' + t('refresh') + '</div></div>' +
+      '</div>' +
+      '<div class="banner-head">' + t('online') + '</div>' +
+      '<div class="banner-num">25 <span class="unit">' + t('min') + '</span><span class="lbl">' + t('todayPlay') + '</span></div>' +
+      '<div class="banner-note">' + t('usage') + '</div>' +
+    '</div>' +
+    '<div class="child-vp">' +
+      '<div class="csec">' + t('rules') + '</div>' +
+      '<div class="rule active"><span class="dot"><i></i></span><span class="t">' + t('eyeLabel') + '</span><span class="v">' + t('eyeValue') + '</span></div>' +
+      '<div class="rule standby"><span class="dot"><i></i></span><span class="t">' + t('bedLabel') + '</span><span class="v">' + t('bedValue') + '</span></div>' +
+      '<div class="rule active"><span class="dot"><i></i></span><span class="t">' + t('dockLabel') + '</span><span class="v">' + t('dockValue') + '</span></div>' +
+      '<div class="status-row"><span>' + t('statusRow') + '</span><em>' + t('details') + '</em></div>' +
+    '</div>' +
+    '<div class="child-rail">' +
+      '<div class="btn" style="width:200px;font-size:' + fitSize(t('buffer'), 174, [28, 26, 24]) + 'px">' + t('buffer') + '</div>' +
+      '<div class="btn primary" style="width:208px;font-size:' + fitSize(t('redeem'), 182, [28, 26, 24]) + 'px">' + t('redeem') + '</div>' +
+    '</div></div>';
+  return html;
+}
+
+function pageShell(opt, scene, body) {
+  var top = opt === 'A' ? 52 : 80;
+  var height = opt === 'A' ? 499 : 471;
+  return '<div class="layer">' + headerHTML(opt, scene) +
+    '<div class="vp" style="top:' + top + 'px;height:' + height + 'px">' + body + '</div>' +
+    '<div class="rail">' + footerHTML(opt, scene) + '</div></div>';
+}
+
+function detailsPage(opt, scene) {
+  var body = groupLabel(opt, t('rules'), false);
+  body += drow(t('bedLabel'), t('bedValue'), 'warn');
+  body += drow(t('eyeLabel'), t('eyeValue'), 'ok');
+  body += drow(t('dockLabel'), t('diagWaived'), 'ok');
+  body += groupLabel(opt, t('gTransport'), false);
+  body += drow(t('diagBackend'), t('diagOk'), 'ok');
+  body += drow(t('diagPctl'), t('diagOk'), 'ok');
+  body += drow(t('diagSync'), t('justNow'), 'accent');
+  return pageShell(opt, scene, body);
+}
+
+function codeConfirmPage(opt, scene) {
+  var body = '<div class="panel tone-accent" style="' + toneVars('accent') + '">' +
+    '<div class="big">' + t('codeLabel') + ' · ' + t('codeValue') + '</div></div>';
+  body += drow(t('grantMin'), '+15 ' + t('min'), 'ok');
+  body += drow(t('quotaAfter'), t('quotaChange'), 'accent');
+  body += '<div class="hint">' + t('codeOnce') + '</div>';
+  return pageShell(opt, scene, body);
+}
+
+function codeResultPage(opt, scene) {
+  var body = '<div class="panel tone-ok" style="' + toneVars('ok') + '"><div class="result">' + t('grantDone') + '</div></div>';
+  body += '<div class="detail" style="color:var(--ok)">' + t('grantDetail') + '</div>';
+  body += '<div class="hint">' + t('codeOnce') + '</div>';
+  return pageShell(opt, scene, body);
+}
+
+function keypadPage(opt, scene) {
+  var y = opt === 'A'
+    ? { status:64, slots:104, meta:174, date:201, keys:232 }
+    : { status:84, slots:120, meta:186, date:213, keys:240 };
+  var slots = '';
+  var digits = ['1','2','3','4','5','6','7','8'];
+  digits.forEach(function(d, i) {
+    slots += '<div class="slot' + (i === 7 ? ' focus' : '') + '">' + d + '</div>';
+  });
+  var keys = '';
+  for (var d = 1; d <= 9; d++) keys += '<div class="kp-key">' + d + '</div>';
+  keys += '<div class="kp-key small warn">' + t('xBack') + '</div><div class="kp-key">0</div><div class="kp-key small bad">' + t('yClear') + '</div>';
+  return '<div class="kp-layer">' + headerHTML(opt, scene) +
+    '<div class="kp-status" style="top:' + y.status + 'px">25 ' + t('min') + '</div>' +
+    '<div class="kp-age" style="top:' + (y.status + 6) + 'px">' + t('justNow') + '</div>' +
+    '<div class="slots" style="top:' + y.slots + 'px">' + slots + '</div>' +
+    '<div class="kp-meta" style="top:' + y.meta + 'px">' + t('inputCount') + '</div>' +
+    '<div class="kp-date" style="top:' + y.date + 'px">' + t('date') + '</div>' +
+    '<div class="kp-keys" style="top:' + y.keys + 'px">' + keys + '</div>' +
+    '<div class="btn primary kp-submit">' + t('submit') + '</div>' +
+    '<div class="btn kp-nav a">' + t('navBack') + '</div>' +
+    '<div class="btn primary kp-nav b">' + t('navParent') + '</div>' +
+    '</div>';
+}
+
+function teslaFooter() {
+  return '<div class="tesla">' + g('B') + 'Back&nbsp;&nbsp;&nbsp;&nbsp;' + g('A') + 'OK</div>';
+}
+
+function guidesHTML() {
+  return '<div class="guide" style="top:86px">Y=86 标准页分隔线</div>' +
+    '<div class="guide" style="top:92px">Y=92 标准页视口顶</div>' +
+    '<div class="guide" style="top:563px">Y=563 视口底</div>' +
+    '<div class="guide-box" style="left:0;top:571px;width:448px;height:68px"></div>' +
+    '<div class="guide" style="top:571px;right:4px;left:auto;width:auto;border:0;color:#ff4dd2">Y=571..639 功能按钮栏</div>' +
+    '<div class="guide" style="top:647px">Y=647 Tesla 安全线</div>' +
+    '<div class="guide-box" style="left:16px;top:12px;width:416px;height:635px"></div>';
+}
+
+function renderScene(opt, scene, sc) {
+  var html = '';
+  if (scene.kind === 'actions') html = actionsPage(opt, scene);
+  else if (scene.kind === 'pin') html = pinPage(opt, scene);
+  else if (scene.kind === 'confirm') html = confirmPage(opt, scene);
+  else if (scene.kind === 'result') html = resultPage(opt, scene);
+  else if (scene.kind === 'child') html = childPage();
+  else if (scene.kind === 'details') html = detailsPage(opt, scene);
+  else if (scene.kind === 'keypad') html = keypadPage(opt, scene);
+  else if (scene.kind === 'codeConfirm') html = codeConfirmPage(opt, scene);
+  else if (scene.kind === 'codeResult') html = codeResultPage(opt, scene);
+  return '<div class="frame" style="--s:' + sc + '"><div class="screen">' +
+    (guides ? guidesHTML() : '') + html + teslaFooter() + '</div></div>';
+}
+
+const SPEC = {
+  A: '<table>' +
+    '<tr><th>层级</th><th>用途</th><th>字号 / 规格</th></tr>' +
+    '<tr><td>L1 状态 Hero</td><td>当前状态（家长页）</td><td class="px">44（语义色）</td></tr>' +
+    '<tr><td>L1 状态 meta</td><td>刚刚刷新 / N 秒前</td><td class="px">24</td></tr>' +
+    '<tr><td>L1 结果大标题</td><td>操作结果 / 加时成功</td><td class="px">44</td></tr>' +
+    '<tr><td>L2 顶部路径</td><td>所有非儿童根页面，含当前步骤</td><td class="px">22 + 4px 强调条</td></tr>' +
+    '<tr><td>L3 分组</td><td>额度调整 / 限制处理 / 恢复与停用 / 今日规则</td><td class="px">22 + 4px 竖条 + 分隔线</td></tr>' +
+    '<tr><td>L4 卡片 / 详情行</td><td>标题 / 数值 / 说明</td><td class="px">32 / 34 / 24（详情行 26 / 24）</td></tr>' +
+    '<tr><td>L5 页脚</td><td>固定动作按钮</td><td class="px">自适应 30 → 26 → 24，高 68</td></tr>' +
+    '</table><table style="margin-top:8px">' +
+    '<tr><th>几何</th><th>值</th></tr>' +
+    '<tr><td>统一页眉</td><td class="px">高 44 · 路径行 Y=20 · 分隔线 Y=58 · 视口 Y=64..563（499）</td></tr>' +
+    '<tr><td>路径裁剪</td><td class="px">完整 → 去根 → 仅当前；当前节点永不隐藏</td></tr>' +
+    '<tr><td>键盘页</td><td class="px">路径栏 Y=20 · submit Y=503..563 · 导航 Y=571..639</td></tr>' +
+    '<tr><td>动作卡</td><td class="px">最小高 96 · 间距 10 · 内边距 20</td></tr>' +
+    '<tr><td>固定页脚</td><td class="px">Y=571..639 · 高 68</td></tr>' +
+    '</table>',
+  B: '<table>' +
+    '<tr><th>层级</th><th>用途</th><th>字号 / 规格</th></tr>' +
+    '<tr><td>L1 页面标题</td><td>页面身份（当前步骤）</td><td class="px">34（超宽降至 30/28/26，不折行）</td></tr>' +
+    '<tr><td>L2 页面路径</td><td>只列祖先：任我玩 / 任我玩 &gt; 家长区 / 任我玩 &gt; 加时码</td><td class="px">22 + 4px 强调条</td></tr>' +
+    '<tr><td>L2 状态带</td><td>当前状态 + 绿点</td><td class="px">32（语义色）</td></tr>' +
+    '<tr><td>L2 状态 meta</td><td>刚刚刷新 / N 秒前</td><td class="px">22</td></tr>' +
+    '<tr><td>L3 分组</td><td>额度调整 / 限制处理 / 恢复与停用</td><td class="px">24 + 4px 竖条 + 分隔线</td></tr>' +
+    '<tr><td>L4 卡片</td><td>标题 / 数值 / 说明</td><td class="px">26 / 32 / 22</td></tr>' +
+    '<tr><td>L5 页脚</td><td>固定动作按钮</td><td class="px">自适应 30 → 26 → 24，高 68</td></tr>' +
+    '</table><table style="margin-top:8px">' +
+    '<tr><th>几何</th><th>值</th></tr>' +
+    '<tr><td>标准页页眉</td><td class="px">标题 34 · 路径行 22 · 高 72 · 分隔线 Y=86 · 视口 Y=92..563（471）</td></tr>' +
+    '<tr><td>路径裁剪</td><td class="px">祖先完整 → 去根 → 最深祖先；当前页由标题承担</td></tr>' +
+    '<tr><td>动作卡</td><td class="px">最小高 88 · 间距 8 · 内边距 20</td></tr>' +
+    '<tr><td>不可用卡</td><td class="px">纯描边 · 无图标 · 无左轨</td></tr>' +
+    '<tr><td>固定页脚</td><td class="px">Y=571..639 · 高 68</td></tr>' +
+    '</table>'
+};
+
+const META = {
+  A: ['方案 A · 状态主导（已采纳）', '家长页面的“现在是什么状态”占据 44px 主位；所有非儿童根页面的页面身份由顶部 22px 路径行承担（任我玩 &gt; 家长区 / 加时码 / 状态详情 / 确认 / 结果），路径含当前步骤。正常态只描边不填色，只有受限/待刷新才使用语义实底。儿童概览根页仍由品牌行表达。'],
+  B: ['方案 B · 标题主导（参考）', '保留 34px 页面标题，建立 34 → 32 → 26 → 22 的阶梯；标题下方 22px 路径行只列祖先（根节点“任我玩”），当前页由标题表达。分组 24px，卡片更紧凑（最小 88），不可用卡纯描边退出视觉层级。此方案仅作对照。']
+};
+
+let mode = 'single';
+let cur = 'actions-ok';
+let guides = false;
+let scale = 1;
+
+// 支持 #pin / #confirm / #result / #child / #details / #keypad / #code-confirm / #code-result 直达场景。
+(function () {
+  var h = location.hash.replace('#', '');
+  if (SCENES.some(function (s) { return s.id === h; })) cur = h;
+})();
+
+function render() {
+  var bar = document.getElementById('bar');
+  var html = SCENES.map(function(s) {
+    return '<button data-s="' + s.id + '" class="' + (mode === 'single' && cur === s.id ? 'on' : '') + '">' + t(s.name) + '</button>';
+  }).join('');
+  html += '<button data-s="__all" class="' + (mode === 'all' ? 'on' : '') + '">全部场景</button>';
+  html += '<span class="sep"></span>';
+  html += '<label><input type="checkbox" id="gd" ' + (guides ? 'checked' : '') + '> 布局参考线</label>';
+  html += '<label>缩放 <select id="sc">' + [100, 85, 70, 55].map(function(v) {
+    return '<option value="' + v + '" ' + (Math.round(scale * 100) === v ? 'selected' : '') + '>' + v + '%</option>';
+  }).join('') + '</select></label>';
+  html += '<span class="sep"></span>';
+  html += '<button id="lang" class="' + (lang === 'en' ? 'on' : '') + '" style="display:inline-flex;align-items:center;gap:5px;">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line>' +
+    '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' +
+    (lang === 'zh' ? '中文 / EN' : 'EN / 中文') + '</button>';
+  bar.innerHTML = html;
+
+  bar.querySelectorAll('button[data-s]').forEach(function(b) {
+    b.onclick = function() {
+      if (b.dataset.s === '__all') { mode = 'all'; scale = 0.55; history.replaceState(null, '', location.pathname); }
+      else { mode = 'single'; cur = b.dataset.s; scale = 1; history.replaceState(null, '', '#' + cur); }
+      render();
+    };
+  });
+  document.getElementById('gd').onchange = function(e) { guides = e.target.checked; render(); };
+  document.getElementById('sc').onchange = function(e) { scale = +e.target.value; render(); };
+  document.getElementById('lang').onclick = function() {
+    lang = lang === 'zh' ? 'en' : 'zh';
+    render();
+  };
+
+  var scenes = mode === 'single'
+    ? [SCENES.filter(function(s) { return s.id === cur; })[0]]
+    : SCENES;
+  var sc = mode === 'single' ? scale : 0.55;
+
+  document.getElementById('opts').innerHTML = ['A', 'B'].map(function(opt) {
+    var cells = scenes.map(function(s) {
+      return '<div class="cell"><div class="cap">' + t(s.name) + '</div>' + renderScene(opt, s, sc) + '</div>';
+    }).join('');
+    return '<div class="opt"><h2>' + META[opt][0] + '</h2><div class="tag">' + META[opt][1] + '</div>' +
+      '<div class="' + (mode === 'single' ? 'single' : 'grid') + '">' + cells + '</div>' +
+      (mode === 'single' ? '<div class="spec">' + SPEC[opt] + '</div>' : '') + '</div>';
+  }).join('');
+}
+
+render();
+</script>
+</body>
+</html>

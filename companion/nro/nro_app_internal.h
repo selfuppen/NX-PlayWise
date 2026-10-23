@@ -113,6 +113,7 @@ typedef struct {
     int calendar_view_year_count;
     int calendar_view_year_index;
     PtcUiThemePreference theme_preference;
+    PtcUiThemeStyle theme_style;
     PtcUiSystemTheme system_theme;
     PtcUiThemeView theme_view;
     PtcUiLanguagePreference language_preference;
@@ -308,6 +309,7 @@ void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 bool input_owner_blocks(UiState *ui, bool non_neutral);
 void applet_hook(AppletHookType hook, void *param);
 bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
+bool apply_theme_style(UiState *ui, PtcUiThemeStyle style);
 void handle_today_action_ready(UiState *ui, int index);
 void handle_parent_action(UiState *ui);
 void confirm_operation(UiState *ui);

@@ -127,7 +127,8 @@ typedef enum {
     PTC_UI_HIT_DOCK_FIELD,
     PTC_UI_HIT_DAY_DECISION_REFRESH,
     PTC_UI_HIT_DAY_DECISION_PREV,
-    PTC_UI_HIT_DAY_DECISION_NEXT
+    PTC_UI_HIT_DAY_DECISION_NEXT,
+    PTC_UI_HIT_LANGUAGE_SWITCH
 } PtcUiHitKind;
 
 typedef struct {
@@ -160,12 +161,20 @@ PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_time_status_bar_rect(void);
 PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model);
+PtcUiRect ptc_ui_header_language_rect(void);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_settings_card_rect(int index);
 PtcUiRect ptc_ui_qr_export_rect(void);
+PtcUiRect ptc_ui_qr_panel_rect(int index);
+PtcUiRect ptc_ui_qr_code_rect(void);
+PtcUiRect ptc_ui_qr_address_rect(void);
+PtcUiRect ptc_ui_qr_warning_rect(void);
+PtcUiRect ptc_ui_settings_page_back_rect(void);
+PtcUiRect ptc_ui_settings_page_primary_rect(void);
+PtcUiRect ptc_ui_settings_page_footer_rect(int index);
 PtcUiRect ptc_ui_auth_error_guide_rect(void);
 PtcUiRect ptc_ui_plan_card_rect(int index);
 PtcUiRect ptc_ui_forecast_day_row_rect(int index);
@@ -277,6 +286,7 @@ PtcUiRect ptc_ui_weekly_bulk_target_rect(int index);
 PtcUiRect ptc_ui_album_action_rect(int index);
 PtcUiRect ptc_ui_album_refresh_rect(void);
 PtcUiRect ptc_ui_theme_option_rect(int index);
+PtcUiRect ptc_ui_theme_style_rect(int index);
 PtcUiRect ptc_ui_language_option_rect(int index);
 PtcUiRect ptc_ui_credential_input_rect(void);
 PtcUiRect ptc_ui_credential_random_rect(void);

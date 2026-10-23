@@ -180,6 +180,7 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
         }
     } else {
         fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, pack_rgb(UI_BLENDED(page_bg)));
+        ui_background_draw_frame(pixels, stride);
     }
     if (model->view == PTC_UI_PARENT) {
         draw_parent(pixels, stride, model);

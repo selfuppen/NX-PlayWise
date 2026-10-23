@@ -38,6 +38,7 @@ typedef struct {
 #define PTC_UI_TEXT_NUMBER(name_, value_) ((PtcUiTextArg){(name_), NULL, (int64_t)(value_), true})
 
 const char *ptc_ui_text(PtcUiTextId id);
+const char *ptc_ui_text_in_language(PtcUiTextId id, PtcUiLanguagePreference lang);
 /* Allows file-scope UI descriptors to hold compile-time key names. */
 #define PTC_UI_TEXT_REFERENCE(id) #id
 const char *ptc_ui_text_resolve(const char *value);

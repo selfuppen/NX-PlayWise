@@ -190,10 +190,14 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
 
 static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
-    char fitted[192];
+    char path[128];
     int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("name", ptc_ui_text(PTC_UI_T_GRANT_SETTINGS))};
+    (void)ptc_ui_text_format(PTC_UI_T_OFFLINE_GRANTS_S, path, sizeof(path), args, 1);
+    draw_subpage_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_GRANT_SETTINGS),
+                       ptc_ui_text(PTC_UI_T_MANAGES_THE_DEVICE_INFORMATION_EXPORT_CONFIGURATION_AND),
+                       ptc_ui_text(PTC_UI_T_B_BACK_TO_OFFLINE_GRANTS), path);
+
     for (index = 0; index < PTC_UI_GRANT_MANAGER_COUNT; ++index) {
         draw_action_card(
             pixels,
@@ -204,12 +208,6 @@ static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const 
             PTC_UI_ACTION_AVAILABLE,
             0);
     }
-    fit_text(fitted, sizeof(fitted), model->message, 16, dialog.width - 330);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 506,
-              fitted[0] ? fitted : ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_A_CONFIRM_B_RETURN), 16,
-              fitted[0] ? UI_SUCCESS : UI_MUTED);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
-                       UI_RAISED, UI_INK, true);
 }
 
 static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -302,59 +300,52 @@ static const char *activity_label(const char *action)
 
 static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     int pages = ptc_ui_activity_history_page_count(model);
     int first = model->activity_history_page * 8;
     int visible = model->activity_history_count - first;
     int row;
-    char line[160];
+    char line[192];
     if (visible > 8) visible = 8;
     if (visible < 0) visible = 0;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD),
+                             ptc_ui_text(PTC_UI_T_RETAINS_UP_TO_200_RULES_GRANT_AUTONOMOUS));
     snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_NEWEST_FIRST_PAGE_D_D_D_ENTRIES_2),
         model->activity_history_page + 1, pages, model->activity_history_count);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 104, line, 15, UI_MUTED);
+    draw_text(pixels, stride, 54, 194, line, 14, UI_MUTED);
+
     if (!model->activity_history_available) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+        draw_text_center(pixels, stride, (UiRect){54, 300, 1172, 44},
             ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_LOGGING_IS_TEMPORARILY_UNAVAILABLE_CONTROL), 19, UI_DANGER);
     } else if (model->activity_history_count == 0) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+        draw_text_center(pixels, stride, (UiRect){54, 300, 1172, 44},
             ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECORD_OF_FAMILY_ACTIVITIES), 19, UI_MUTED);
     } else {
-        if (visible > 0) {
-            int line_x = dialog.x + 48;
-            int start_y = dialog.y + 130 + 19;
-            int end_y = dialog.y + 130 + (visible - 1) * 45 + 19;
-            fill_rect(pixels, stride, (UiRect){line_x - 1, start_y, 2, end_y - start_y}, UI_BORDER);
-        }
         for (row = 0; row < visible; ++row) {
             int source = model->activity_history_count - 1 - first - row;
             const PtcActivityHistoryRecord *record = &model->activity_history[source];
-            UiRect item = {dialog.x + 68, dialog.y + 130 + row * 45, dialog.width - 102, 38};
+            UiRect item = {54, 214 + row * 52, 1172, 46};
             char time_text[48];
+            char fitted[192];
             format_event_time(record->occurred_at, true, time_text, sizeof(time_text));
             snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_S_PLANNED_U_MIN_ACTUAL_U),
                 time_text, activity_label(record->action), (unsigned int)record->minutes,
                 (unsigned int)record->effective_minutes);
-            fill_round_rect(pixels, stride, item, 6, UI_RAISED);
-            draw_text(pixels, stride, item.x + 14, item.y + 24, line, 14,
+            fit_text(fitted, sizeof(fitted), line, 15, item.width - 64);
+            fill_round_rect(pixels, stride, item, 8, UI_RAISED);
+            draw_text(pixels, stride, item.x + 40, item.y + 29, fitted, 15,
                 strcmp(record->action, "protection") == 0 ? UI_DANGER : UI_INK);
 
-            int cy = item.y + 19;
-            int cx = dialog.x + 48;
             uint32_t dot_color = strcmp(record->action, "protection") == 0 ? UI_DANGER : UI_ACCENT;
-            fill_round_rect(pixels, stride, (UiRect){cx - 4, cy - 4, 8, 8}, 4, dot_color);
-            fill_round_rect(pixels, stride, (UiRect){cx - 2, cy - 2, 4, 4}, 2, UI_SURFACE);
+            fill_round_rect(pixels, stride, (UiRect){item.x + 16, item.y + 19, 10, 10}, 5, dot_color);
         }
     }
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE),
-        UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE),
-        UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
-        UI_RAISED, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_X_CLEAR_ALL),
-        UI_DANGER_SOFT, UI_DANGER, false);
+
+    home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1),
+                ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE), false, false, false);
+    home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2),
+                ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE), false, false, false);
+    home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                ptc_ui_text(PTC_UI_T_X_CLEAR_ALL), false, false, false);
 }
 
 static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -417,72 +408,140 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
     draw_text(pixels, stride, dialog.x + 280, dialog.y + 615, ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_A_EDIT_CODE_DURATION), 18, UI_RGB(UI_BLENDED(text_secondary)));
 }
 
+/* Numbered round badge used by the two pairing QR solution cards. */
+static void draw_qr_step_badge(uint32_t *pixels, uint32_t stride, UiRect badge, int number)
+{
+    char label[8];
+    fill_round_rect(pixels, stride, badge, badge.width / 2, UI_ACCENT);
+    snprintf(label, sizeof(label), "%d", number);
+    draw_text_center(pixels, stride, badge, label, 16, UI_ON_ACCENT);
+}
+
 static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    int size = qrcodegen_getSize(model->qr_code);
-    int scale = size > 0 ? 350 / (size + 8) : 1;
+    UiRect left;
+    UiRect right;
+    UiRect canvas;
+    UiRect address;
+    UiRect warning;
+    int size;
+    int scale;
     int total;
     int origin_x;
     int origin_y;
     int next_y;
     int x;
     int y;
-    if (scale < 2) scale = 2;
-    total = (size + 8) * scale;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, ptc_ui_text(PTC_UI_T_RECOMMENDED_SOLUTION_ONE_SCAN_THE_QR_CODE), 23, UI_SUCCESS);
-    origin_x = dialog.x + 34;
-    origin_y = dialog.y + 164;
+
+    draw_dialog_shell(pixels, stride, model, &dialog, 1160, 700);
+    left = to_uirect(ptc_ui_qr_panel_rect(0));
+    right = to_uirect(ptc_ui_qr_panel_rect(1));
+
+    /* ---------------- Card 1: scan the QR code online ---------------- */
+    draw_plan_card(pixels, stride, left, false);
+    draw_qr_step_badge(pixels, stride, (UiRect){left.x + 22, left.y + 12, 30, 30}, 1);
+    draw_text(pixels, stride, left.x + 62, left.y + 34,
+              ptc_ui_text(PTC_UI_T_QR_TITLE_ONLINE), 18, UI_INK);
+
     /* QR polarity is functional and intentionally bypasses the active theme. */
-    fill_rect_packed(pixels, stride, (UiRect){origin_x, origin_y, total, total}, pack_rgb(0xFFFFFF));
-    for (y = 0; y < size; ++y) {
-        for (x = 0; x < size; ++x) {
-            if (qrcodegen_getModule(model->qr_code, x, y)) {
-                fill_rect_packed(pixels, stride,
-                                 (UiRect){origin_x + (x + 4) * scale, origin_y + (y + 4) * scale, scale, scale},
-                                 pack_rgb(0x000000));
+    canvas = to_uirect(ptc_ui_qr_code_rect());
+    fill_rect_packed(pixels, stride, canvas, pack_rgb(0xFFFFFF));
+    size = qrcodegen_getSize(model->qr_code);
+    if (size > 0) {
+        scale = canvas.width / (size + 8);
+        if (scale < 2) scale = 2;
+        total = (size + 8) * scale;
+        origin_x = canvas.x + (canvas.width - total) / 2;
+        origin_y = canvas.y + (canvas.height - total) / 2;
+        for (y = 0; y < size; ++y) {
+            for (x = 0; x < size; ++x) {
+                if (qrcodegen_getModule(model->qr_code, x, y)) {
+                    fill_rect_packed(pixels, stride,
+                                     (UiRect){origin_x + (x + 4) * scale, origin_y + (y + 4) * scale, scale, scale},
+                                     pack_rgb(0x000000));
+                }
             }
         }
     }
 
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 530,
-              ptc_ui_text(PTC_UI_T_SCAN_THE_CODE_ONLY_WHEN_THE_WEB), 14, UI_MUTED);
-    next_y = draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 552,
-                               model->pairing_base_url, 13, 400, 19, 3, UI_ACCENT);
-    draw_text(pixels, stride, dialog.x + 34, next_y + 4,
-              ptc_ui_text(PTC_UI_T_THE_QR_CODE_CONTAINS_A_TIME_CODE), 14, UI_DANGER);
+    address = to_uirect(ptc_ui_qr_address_rect());
+    fill_round_rect(pixels, stride, address, 10, UI_PAGE);
+    draw_rect_outline(pixels, stride, address, 10, 1, UI_BORDER);
+    draw_text(pixels, stride, address.x + 14, address.y + 20,
+              ptc_ui_text(PTC_UI_T_SCAN_THE_CODE_ONLY_WHEN_THE_WEB), 12, UI_MUTED);
+    draw_wrapped_text(pixels, stride, address.x + 14, address.y + 40,
+                      model->pairing_base_url, 13, address.width - 28, 16, 2, UI_ACCENT);
 
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, ptc_ui_text(PTC_UI_T_ALTERNATE_PLAN_TWO_SINGLE_FILE_OFFLINE_VERSION), 23, UI_INK);
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 178,
-              ptc_ui_text(PTC_UI_T_1_UNZIP_THE_COMPLETE_DELIVERY_PACKAGE_AND), 15, UI_INK);
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 208,
-              ptc_ui_text(PTC_UI_T_2_PRESS_A_TO_EXPORT_THE_CONFIGURATION), 15, UI_INK);
-    draw_text(pixels, stride, dialog.x + 488, dialog.y + 234,
-              PLAYWISE_SD_ROOT "/parent-import.json", 15, UI_ACCENT);
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 266,
-              ptc_ui_text(PTC_UI_T_3_TRANSFER_HTML_AND_CONFIGURATION_FILES_TO), 15, UI_INK);
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 298,
-              ptc_ui_text(PTC_UI_T_4_OPEN_THE_HTML_IN_A_BROWSER), 15, UI_INK);
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 330,
-              ptc_ui_text(PTC_UI_T_5_SELECT_PARENT_IMPORT_JSON_THEN_IMPORT), 15, UI_INK);
-    next_y = dialog.y + 362;
-    draw_text(pixels, stride, dialog.x + 470, next_y + 6,
-              ptc_ui_text(PTC_UI_T_NO_NETWORK_REQUIRED_FOR_DAILY_GENERATION_NO), 14, UI_SUCCESS);
-    draw_text(pixels, stride, dialog.x + 470, next_y + 32,
-              ptc_ui_text(PTC_UI_T_PLEASE_SAVE_THE_FILE_ON_YOUR_MOBILE), 14, UI_MUTED);
-    draw_text(pixels, stride, dialog.x + 470, next_y + 58,
-              ptc_ui_text(PTC_UI_T_DO_NOT_USE_THE_BUILT_IN_PREVIEWER), 14, UI_MUTED);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 470, next_y + 74, 610, 48}, 16, UI_DANGER_SOFT);
-    draw_text(pixels, stride, dialog.x + 486, next_y + 104,
-              ptc_ui_text(PTC_UI_T_THE_CONFIGURATION_FILE_CONTAINS_A_TIME_CODED), 15, UI_DANGER);
+    warning = to_uirect(ptc_ui_qr_warning_rect());
+    fill_round_rect(pixels, stride, warning, 8, UI_DANGER_SOFT);
+    draw_rect_outline(pixels, stride, warning, 8, 1, UI_DANGER_BORDER);
+    draw_wrapped_text(pixels, stride, warning.x + 12, warning.y + 18,
+                      ptc_ui_text(PTC_UI_T_THE_QR_CODE_CONTAINS_A_TIME_CODE), 12,
+                      warning.width - 24, 15, 2, UI_DANGER);
 
-    UiRect export_button = to_uirect(ptc_ui_qr_export_rect());
-    fill_round_rect(pixels, stride, export_button, 12, UI_ACCENT);
-    draw_text_center(pixels, stride, export_button, ptc_ui_text(PTC_UI_T_A_EXPORT_CONFIGURATION_FILE), 18, UI_ON_ACCENT);
+    /* ---------------- Card 2: offline single-file flow ---------------- */
+    draw_plan_card(pixels, stride, right, false);
+    draw_qr_step_badge(pixels, stride, (UiRect){right.x + 22, right.y + 12, 30, 30}, 2);
+    draw_text(pixels, stride, right.x + 62, right.y + 34,
+              ptc_ui_text(PTC_UI_T_QR_TITLE_OFFLINE), 18, UI_INK);
 
+    {
+        static const PtcUiTextId STEPS[] = {
+            PTC_UI_T_1_UNZIP_THE_COMPLETE_DELIVERY_PACKAGE_AND,
+            PTC_UI_T_2_PRESS_A_TO_EXPORT_THE_CONFIGURATION,
+            PTC_UI_T_3_TRANSFER_HTML_AND_CONFIGURATION_FILES_TO,
+            PTC_UI_T_4_OPEN_THE_HTML_IN_A_BROWSER,
+            PTC_UI_T_5_SELECT_PARENT_IMPORT_JSON_THEN_IMPORT
+        };
+        int step = 0;
+        next_y = right.y + 60;
+        for (step = 0; step < 5; ++step) {
+            next_y = draw_wrapped_text(pixels, stride, right.x + 24, next_y,
+                                       ptc_ui_text(STEPS[step]), 14, right.width - 48, 20, 2, UI_INK);
+            next_y += 6;
+            if (step == 1) {
+                /* The exported file name is the one thing users copy by hand. */
+                UiRect chip = {right.x + 24, next_y, right.width - 48, 28};
+                char path[96];
+                snprintf(path, sizeof(path), "%s", PLAYWISE_SD_ROOT "/parent-import.json");
+                fill_round_rect(pixels, stride, chip, 8, UI_PAGE);
+                draw_rect_outline(pixels, stride, chip, 8, 1, UI_BORDER);
+                draw_text(pixels, stride, chip.x + 14, chip.y + 20, path, 14, UI_ACCENT);
+                next_y = chip.y + chip.height + 20;
+            }
+        }
+
+        /* Tip box grouping hints and security warning with comfortable breathing room. */
+        UiRect tip_box = {right.x + 20, right.y + 264, right.width - 40, 186};
+        fill_round_rect(pixels, stride, tip_box, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, tip_box, 10, 1, UI_BORDER);
+
+        int tip_y = tip_box.y + 24;
+        tip_y = draw_wrapped_text(pixels, stride, tip_box.x + 14, tip_y,
+                                  ptc_ui_text(PTC_UI_T_NO_NETWORK_REQUIRED_FOR_DAILY_GENERATION_NO), 13,
+                                  tip_box.width - 28, 18, 2, UI_SUCCESS);
+        tip_y += 8;
+        tip_y = draw_wrapped_text(pixels, stride, tip_box.x + 14, tip_y,
+                                  ptc_ui_text(PTC_UI_T_PLEASE_SAVE_THE_FILE_ON_YOUR_MOBILE), 13,
+                                  tip_box.width - 28, 18, 2, UI_MUTED);
+        tip_y += 6;
+        tip_y = draw_wrapped_text(pixels, stride, tip_box.x + 14, tip_y,
+                                  ptc_ui_text(PTC_UI_T_DO_NOT_USE_THE_BUILT_IN_PREVIEWER), 13,
+                                  tip_box.width - 28, 18, 2, UI_MUTED);
+
+        UiRect danger = {tip_box.x + 10, tip_box.y + tip_box.height - 48, tip_box.width - 20, 38};
+        fill_round_rect(pixels, stride, danger, 8, UI_DANGER_SOFT);
+        draw_rect_outline(pixels, stride, danger, 8, 1, UI_DANGER_BORDER);
+        draw_wrapped_text(pixels, stride, danger.x + 12, danger.y + 19,
+                          ptc_ui_text(PTC_UI_T_THE_CONFIGURATION_FILE_CONTAINS_A_TIME_CODED), 12,
+                          danger.width - 24, 15, 2, UI_DANGER);
+    }
+
+    draw_dialog_button(pixels, stride, ptc_ui_qr_export_rect(),
+                       ptc_ui_text(PTC_UI_T_A_EXPORT_CONFIGURATION_FILE), UI_ACCENT, UI_ON_ACCENT, false);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
-                       UI_RAISED, UI_INK, true);
+                       UI_RAISED, UI_INK, false);
 }
 
 static void draw_parent_export_result_overlay(

@@ -134,11 +134,13 @@ void load_ui_preferences(UiState *ui)
     ui->model.setup_eye_care_enabled = false;
     ui->model.setup_bedtime_enabled = false;
     ui->theme_preference = PTC_UI_THEME_SYSTEM;
+    ui->theme_style = PTC_UI_THEME_STYLE_INDIGO;
+    ptc_ui_theme_set_style(ui->theme_style);
     ui->language_preference = PTC_UI_LANGUAGE_SYSTEM;
     ui->model.language_preference = PTC_UI_LANGUAGE_SYSTEM;
     ui->system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
     ui->system_theme = PTC_UI_SYSTEM_THEME_UNAVAILABLE;
-    ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
+    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, ui->theme_style, ui->system_theme);
     ptc_audio_set_enabled(true);
     ui->model.shortcut_draft_mask = ui->model.custom_shortcut_mask;
     ui->model.shortcut_draft_enabled = false;
@@ -175,6 +177,14 @@ void load_ui_preferences(UiState *ui)
             ui->theme_preference = preference;
         }
     }
+    item = cJSON_GetObjectItemCaseSensitive(root, "theme_style");
+    if (cJSON_IsString(item)) {
+        PtcUiThemeStyle style;
+        if (ptc_ui_theme_parse_style(item->valuestring, &style)) {
+            ui->theme_style = style;
+            ptc_ui_theme_set_style(style);
+        }
+    }
     item = cJSON_GetObjectItemCaseSensitive(root, "ui_language");
     if (cJSON_IsString(item)) {
         PtcUiLanguagePreference preference;
@@ -188,7 +198,7 @@ void load_ui_preferences(UiState *ui)
     } else {
         ptc_audio_set_enabled(true);
     }
-    ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
+    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, ui->theme_style, ui->system_theme);
     item = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_step");
     ui->model.setup_theme_index = ui->theme_preference;
     if (cJSON_IsNumber(item)) {
@@ -253,6 +263,8 @@ bool save_ui_preferences(UiState *ui)
     cJSON_AddBoolToObject(root, "show_parent_shortcut_hint", ui->model.show_parent_shortcut_hint);
     cJSON_DeleteItemFromObject(root, "theme");
     cJSON_AddStringToObject(root, "theme", ptc_ui_theme_preference_name(ui->theme_preference));
+    cJSON_DeleteItemFromObject(root, "theme_style");
+    cJSON_AddStringToObject(root, "theme_style", ptc_ui_theme_style_name(ui->theme_style));
     cJSON_DeleteItemFromObject(root, "ui_language");
     cJSON_AddStringToObject(root, "ui_language",
         ptc_ui_language_preference_name(ui->language_preference));

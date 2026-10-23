@@ -3,51 +3,53 @@
 
 static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     char status[192];
     char shortcut_hint[160];
     int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_PARENT_SHORTCUT),
+                             ptc_ui_text(PTC_UI_T_PARENT_AREA_SHORTCUT_KEY_MANAGEMENT));
     for (index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
         UiRect option = to_uirect(ptc_ui_shortcut_option_rect(index));
         bool selected = index == model->setup_shortcut_index;
         bool chosen = model->shortcut_draft_enabled && selected;
-        fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 12, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
-        draw_text(pixels, stride, option.x + 14, option.y + 23,
-                  ptc_ui_shortcut_common_label(index), 16,
+        fill_round_rect(pixels, stride, option, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 10, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+        draw_text(pixels, stride, option.x + 16, option.y + 28,
+                  ptc_ui_shortcut_common_label(index), 17,
                   selected ? UI_ACCENT : UI_INK);
         if (chosen) {
             const char *save_text = ptc_ui_text(PTC_UI_T_PENDING_SAVE);
-            int tw = measure_text(save_text, 15);
-            draw_text(pixels, stride, option.x + option.width - tw - 16, option.y + 23,
-                      save_text, 15, UI_SUCCESS);
+            int tw = measure_text(save_text, 14);
+            draw_text(pixels, stride, option.x + option.width - tw - 16, option.y + 28,
+                      save_text, 14, UI_SUCCESS);
         }
     }
-    draw_dialog_button(pixels, stride, ptc_ui_shortcut_disable_rect(),
-                       ptc_ui_text(PTC_UI_T_ZL_CLOSE_CUSTOM_SHORTCUT_KEYS), UI_DANGER_SOFT, UI_DANGER, true);
-    draw_dialog_button(pixels, stride, ptc_ui_shortcut_hint_rect(),
-                       model->shortcut_draft_show_hint ? ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_DISPLAY) : ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_HIDE),
-                       UI_PAGE, UI_INK, true);
     ptc_ui_format_custom_shortcut_hint(model->shortcut_draft_label, shortcut_hint, sizeof(shortcut_hint));
     snprintf(status, sizeof(status), "%s",
              model->shortcut_draft_enabled ? shortcut_hint : ptc_ui_text(PTC_UI_T_THE_CUSTOM_ENTRANCE_HAS_BEEN_CLOSED_FIXED));
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 516, status, 18,
-              model->shortcut_draft_enabled ? UI_SUCCESS : UI_DANGER);
-    draw_overlay_actions(pixels, stride, model, ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE));
+    draw_wrapped_text(pixels, stride, 54, 544, status, 14, 1172, 18, 1,
+                      model->shortcut_draft_enabled ? UI_SUCCESS : UI_DANGER);
+
+    home_button(pixels, stride, ptc_ui_shortcut_disable_rect(),
+                ptc_ui_text(PTC_UI_T_ZL_CLOSE_CUSTOM_SHORTCUT_KEYS), false, false, false);
+    home_button(pixels, stride, ptc_ui_shortcut_hint_rect(),
+                model->shortcut_draft_show_hint ? ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_DISPLAY) : ptc_ui_text(PTC_UI_T_Y_CHILD_AREA_PROMPT_HIDE),
+                false, false, false);
+    home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE), true, false, model->waiting);
 }
 
 static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     UiRect details;
     char value[128];
     const char *status = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
     uint32_t status_color = UI_MUTED;
-    draw_dialog_shell(pixels, stride, model, &dialog, 960, 560);
-    details = (UiRect){dialog.x + 34, dialog.y + 106, dialog.width - 68, 326};
-    fill_round_rect(pixels, stride, details, 16, UI_RAISED);
-    draw_rect_outline(pixels, stride, details, 16, 1, UI_BORDER);
+    bool pending = model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only;
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_SOFTWARE_INFO),
+                             ptc_ui_text(PTC_UI_T_VERSION_PROJECT_REPOSITORY_AND_PARENT_PAGE));
+    details = (UiRect){54, 176, 1172, 468};
+    draw_plan_card(pixels, stride, details, false);
     const char *lbl_host = ptc_ui_text(PTC_UI_T_HOST_APPLICATION);
     const char *lbl_bg = ptc_ui_text(PTC_UI_T_CURRENT_BACKGROUND);
     const char *lbl_status = ptc_ui_text(PTC_UI_T_LOADING_STATUS);
@@ -60,19 +62,21 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     w = measure_text(lbl_repo, 18); if (w > max_lbl_w) max_lbl_w = w;
     w = measure_text(lbl_parent, 18); if (w > max_lbl_w) max_lbl_w = w;
 
-    int val_offset = 24 + max_lbl_w + 16;
-    if (val_offset < 180) val_offset = 180;
-    int val_max_w = details.width - val_offset - 20;
+    int val_offset = 34 + max_lbl_w + 28;
+    if (val_offset < 220) val_offset = 220;
+    int val_max_w = details.width - val_offset - 34;
 
-    draw_text(pixels, stride, details.x + 24, details.y + 38, lbl_host, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + 34, details.y + 56, lbl_host, 18, UI_MUTED);
     snprintf(value, sizeof(value), "%.24s  (%.88s)", model->software_version,
              model->app_release_id[0] ? model->app_release_id : ptc_ui_text(PTC_UI_T_UNKNOWN_IDENTITY));
     fit_text(value, sizeof(value), value, 18, val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 38, value, 18, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 82, lbl_bg, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 56, value, 18, UI_ACCENT);
+
+    draw_text(pixels, stride, details.x + 34, details.y + 118, lbl_bg, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->backend_release_id[0] ? model->backend_release_id : ptc_ui_text(PTC_UI_T_UNABLE_TO_TRUSTWORTHY_CONFIRMATION), 18,
              val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 82, value, 18, UI_INK);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 118, value, 18, UI_INK);
+
     if (model->hot_reload_status == PTC_UI_HOT_RELOAD_CURRENT ||
         model->hot_reload_status == PTC_UI_HOT_RELOAD_SUCCESS) {
         status = ptc_ui_text(PTC_UI_T_LOADED); status_color = UI_SUCCESS;
@@ -87,46 +91,60 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_UNAVAILABLE) {
         status = ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_CANNOT_BE_LOADED_YET); status_color = UI_WARNING;
     }
-    draw_text(pixels, stride, details.x + 24, details.y + 126, lbl_status, 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 126, status, 20, status_color);
-    draw_wrapped_text(pixels, stride, details.x + val_offset, details.y + 154,
+    draw_text(pixels, stride, details.x + 34, details.y + 182, lbl_status, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 182, status, 20, status_color);
+    draw_wrapped_text(pixels, stride, details.x + val_offset, details.y + 212,
         model->hot_reload_detail, 15, val_max_w, 20, 2, UI_MUTED);
-    draw_text(pixels, stride, details.x + 24, details.y + 216, lbl_repo, 18, UI_MUTED);
+
+    draw_text(pixels, stride, details.x + 34, details.y + 300, lbl_repo, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->repository_url, 17, val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 216, value, 17, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 266, lbl_parent, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 300, value, 17, UI_ACCENT);
+
+    draw_text(pixels, stride, details.x + 34, details.y + 362, lbl_parent, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->pwa_url, 17, val_max_w);
-    draw_text(pixels, stride, details.x + val_offset, details.y + 266, value, 17, UI_SUCCESS);
-    if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only) {
-        draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_NOT_YET),
-                           UI_RAISED, UI_INK, false);
-        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(model->hot_reload_capture_restart
-            ? PTC_UI_T_CAPTURE_RESTART_BUTTON : PTC_UI_T_A_LOAD_NEW_VERSION),
-                           UI_ACCENT, UI_ON_ACCENT, false);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 362, value, 17, UI_SUCCESS);
+
+    if (pending) {
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1), ptc_ui_text(PTC_UI_T_B_NOT_YET),
+                    false, false, false);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                    ptc_ui_text(model->hot_reload_capture_restart
+                        ? PTC_UI_T_CAPTURE_RESTART_BUTTON : PTC_UI_T_A_LOAD_NEW_VERSION),
+                    true, false, false);
     } else {
-        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_CLOSE),
-                           UI_ACCENT, UI_ON_ACCENT, false);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                    ptc_ui_text(PTC_UI_T_A_CLOSE), true, false, false);
     }
 }
 
 static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     const char *state = model->album_restriction_state == 0 ? ptc_ui_text(PTC_UI_T_NOT_ENABLED) :
                         model->album_restriction_state == 1 ? ptc_ui_text(PTC_UI_T_ENABLED) :
                         model->album_restriction_state == 2 ? ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2) :
                         model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURED) : ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
     const char *status_lbl = ptc_ui_text(PTC_UI_T_CURRENT_STATUS);
-    int status_lbl_w = measure_text(status_lbl, 17);
-    int state_x = dialog.x + 38 + status_lbl_w + 12;
-    draw_dialog_shell(pixels, stride, model, &dialog, 980, 560);
-    draw_text(pixels, stride, dialog.x + 38, dialog.y + 126, status_lbl, 17, UI_MUTED);
-    draw_text(pixels, stride, state_x, dialog.y + 126, state, 19,
-              model->album_restriction_state == 1 ? UI_SUCCESS :
-              model->album_restriction_state == 2 ? UI_WARNING :
-              model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? UI_ACCENT : UI_MUTED);
-    draw_candidate_button(pixels, stride, ptc_ui_album_refresh_rect(), ptc_ui_text(PTC_UI_T_Y_RETEST),
-                          UI_PAGE, UI_ACCENT, false, false);
+    int status_lbl_w;
+    int state_x;
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS),
+                             ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
+
+    /* 状态条：当前状态 + Y 重新检测 */
+    {
+        UiRect bar = {54, 176, 1172, 72};
+        fill_round_rect(pixels, stride, bar, 12, UI_PAGE);
+        draw_rect_outline(pixels, stride, bar, 12, 1, UI_BORDER);
+        status_lbl_w = measure_text(status_lbl, 17);
+        state_x = bar.x + 22 + status_lbl_w + 14;
+        draw_text(pixels, stride, bar.x + 22, bar.y + 44, status_lbl, 17, UI_MUTED);
+        draw_text(pixels, stride, state_x, bar.y + 44, state, 19,
+                  model->album_restriction_state == 1 ? UI_SUCCESS :
+                  model->album_restriction_state == 2 ? UI_WARNING :
+                  model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? UI_ACCENT : UI_MUTED);
+        home_button(pixels, stride, ptc_ui_album_refresh_rect(), ptc_ui_text(PTC_UI_T_Y_RETEST),
+                    false, false, false);
+    }
+
     for (int index = 0; index < 2; ++index) {
         UiRect card = to_uirect(ptc_ui_album_action_rect(index));
         bool selected = model->overlay_selection == index;
@@ -141,24 +159,30 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
                                 (model->album_restriction_state == 2 && model->album_backup_valid ? ptc_ui_text(PTC_UI_T_FORCE_RECOVERY_OF_TRUSTED_BACKUPS) : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_STARTUP_MODE));
         int title_size = 21;
         while (title_size > 16 && measure_text(card_title, title_size) > card.width - 48) --title_size;
-        draw_text(pixels, stride, card.x + 24, card.y + 40, card_title, title_size, enabled ? UI_INK : UI_DISABLED);
+        draw_text(pixels, stride, card.x + 24, card.y + 44, card_title, title_size, enabled ? UI_INK : UI_DISABLED);
         const char *card_desc = index == 0
             ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
                 ? ptc_ui_text(PTC_UI_T_THE_CURRENT_DISK_CONFIGURATION_ALREADY_PROVIDES_THE)
                 : ptc_ui_text(PTC_UI_T_FIRST_MAKE_A_COMPLETE_BACKUP_OF_RELEVANT))
             : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_CONFIGURATION_ACCORDING_TO_THE);
-        draw_wrapped_text(pixels, stride, card.x + 24, card.y + 76, card_desc,
-                          14, card.width - 48, 20, 3, enabled ? UI_MUTED : UI_DISABLED);
-        draw_text(pixels, stride, card.x + 24, card.y + 194,
-                  enabled ? ptc_ui_text(PTC_UI_T_A_CONTINUE) : ptc_ui_text(PTC_UI_T_CURRENT_STATUS_IS_NOT_AVAILABLE), 16,
-                  enabled ? UI_ACCENT : UI_DISABLED);
+        draw_wrapped_text(pixels, stride, card.x + 24, card.y + 82, card_desc,
+                          15, card.width - 48, 22, 4, enabled ? UI_MUTED : UI_DISABLED);
+
+        /* 底部行动胶囊：与护眼页卡片内按钮同一语义 */
+        {
+            UiRect pill = {card.x + 24, card.y + card.height - 62, card.width - 48, 40};
+            const char *pill_label = enabled ? ptc_ui_text(PTC_UI_T_A_CONTINUE)
+                                             : ptc_ui_text(PTC_UI_T_CURRENT_STATUS_IS_NOT_AVAILABLE);
+            fill_round_rect(pixels, stride, pill, 20, enabled ? (selected ? UI_ACCENT : UI_ACCENT_SOFT) : UI_RAISED);
+            draw_rect_outline(pixels, stride, pill, 20, 1, enabled ? UI_ACCENT : UI_BORDER);
+            draw_text_center(pixels, stride, pill, pill_label, 16,
+                             enabled ? (selected ? UI_ON_ACCENT : UI_ACCENT) : UI_DISABLED);
+        }
     }
+
     if (model->album_restriction_detail[0]) {
-        draw_wrapped_text(pixels, stride, dialog.x + 38, dialog.y + 432,
-                          model->album_restriction_detail, 14, dialog.width - 76, 20, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, 54, 600, model->album_restriction_detail, 14, 1172, 20, 2, UI_MUTED);
     }
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
-                       UI_RAISED, UI_INK, true);
 }
 
 static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -173,144 +197,268 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         ptc_ui_text(PTC_UI_T_REFRESHING_LIGHT_BACKGROUND),
         ptc_ui_text(PTC_UI_T_SOFT_DARK_BACKGROUND)
     };
-    UiRect dialog;
-    int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1160, 600);
+    const char *shell_hint = !g_theme.system_theme_available
+        ? ptc_ui_text(PTC_UI_T_THE_SYSTEM_THEME_IS_TEMPORARILY_UNAVAILABLE_AND)
+        : ptc_ui_text(PTC_UI_T_THEME_SHELL_HINT);
 
-    for (index = 0; index < 3; ++index) {
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_APPEARANCE_THEME), shell_hint);
+
+    // --- Row 0: Mode Selection (3 Cards) ---
+    for (int index = 0; index < 3; ++index) {
         UiRect option = to_uirect(ptc_ui_theme_option_rect(index));
-        bool selected = index == model->overlay_selection;
-        bool is_current = (int)g_theme.preference == index;
+        bool selected = (index == model->overlay_selection);
+        bool is_current = ((int)g_theme.preference == index);
 
-        // Card container shadow and background
-        draw_round_rect_shadow(pixels, stride, option, 16, 12, selected ? 45 : 20, 3);
-        fill_round_rect(pixels, stride, option, 16, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 16, selected ? 3 : 1, selected ? UI_ACCENT : UI_BORDER);
+        fill_round_rect(pixels, stride, option, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
 
-        // Header Title
-        draw_text(pixels, stride, option.x + 20, option.y + 36, LABELS[index], 24, UI_INK);
+        draw_text(pixels, stride, option.x + 18, option.y + 26, LABELS[index], 20, UI_INK);
 
-        // Current theme badge if active
         if (is_current) {
-            UiRect cur_badge = {option.x + option.width - 92, option.y + 16, 76, 26};
-            fill_round_rect(pixels, stride, cur_badge, 13, UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, cur_badge, 13, 1, UI_SUCCESS_BORDER);
-            draw_text_center(pixels, stride, (UiRect){cur_badge.x, cur_badge.y + 2, cur_badge.width, cur_badge.height},
-                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 14, UI_SUCCESS);
+            UiRect cur_badge = {option.x + option.width - 78, option.y + 12, 62, 22};
+            fill_round_rect(pixels, stride, cur_badge, 11, UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, cur_badge, 11, 1, UI_SUCCESS_BORDER);
+            draw_text_center(pixels, stride, cur_badge,
+                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 12, UI_SUCCESS);
         }
 
-        // Subtitle description (measured or wrapped)
-        draw_wrapped_text(pixels, stride, option.x + 20, option.y + 68, DETAILS[index],
-                          15, option.width - 40, 22, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, option.x + 18, option.y + 50, DETAILS[index],
+                          13, option.width - 36, 18, 1, UI_MUTED);
 
-        // Realistic UI Miniature Preview Screen inside the card
-        UiRect preview = {option.x + 18, option.y + 116, option.width - 36, 204};
-        draw_rect_outline(pixels, stride, preview, 12, 1, selected ? UI_ACCENT : UI_BORDER);
+        // Preview box inside Mode Card
+        UiRect preview = {option.x + 16, option.y + 68, option.width - 32, 108};
+        draw_rect_outline(pixels, stride, preview, 10, 1, selected ? UI_ACCENT : UI_BORDER);
 
         if (index == PTC_UI_THEME_LIGHT) {
-            // Light Theme Preview
-            fill_round_rect(pixels, stride, preview, 12, UI_RGB(0xF0F3FA));
-            // Top mini navbar
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 28}, 6, UI_RGB(0xFFFFFF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 18, 12, 12}, 3, UI_RGB(0x245BC4));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 36, preview.y + 22, 64, 4}, 2, UI_RGB(0x172640));
-            // Content cards
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 46, preview.width - 20, 48}, 8, UI_RGB(0xFFFFFF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 20, preview.y + 58, 80, 8}, 4, UI_RGB(0x245BC4));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 20, preview.y + 74, 120, 5}, 2, UI_RGB(0x53627A));
-            // Secondary cards
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 102, (preview.width - 26) / 2, 88}, 8, UI_RGB(0xFFFFFF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 102, (preview.width - 26) / 2, 88}, 8, UI_RGB(0xE8EDF7));
-            // Accent button
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 154, (preview.width - 42) / 2, 24}, 6, UI_RGB(0x245BC4));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 24 + (preview.width - 26) / 2, preview.y + 154, (preview.width - 42) / 2, 24}, 6, UI_RGB(0x16734E));
+            fill_round_rect(pixels, stride, preview, 10, UI_RGB(0xF0F3FA));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 20}, 5, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 15, 10, 10}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(0x172640));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 44, 56, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(0x53627A));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(0xE8EDF7));
         } else if (index == PTC_UI_THEME_DARK) {
-            // Dark Theme Preview
-            fill_round_rect(pixels, stride, preview, 12, UI_RGB(0x0B0F19));
-            // Top mini navbar
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 28}, 6, UI_RGB(0x162032));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 18, 12, 12}, 3, UI_RGB(0x91B9FF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 36, preview.y + 22, 64, 4}, 2, UI_RGB(0xF3F6FD));
-            // Content cards
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 46, preview.width - 20, 48}, 8, UI_RGB(0x162032));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 20, preview.y + 58, 80, 8}, 4, UI_RGB(0x91B9FF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 20, preview.y + 74, 120, 5}, 2, UI_RGB(0xB6C4D9));
-            // Secondary cards
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 102, (preview.width - 26) / 2, 88}, 8, UI_RGB(0x162032));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 102, (preview.width - 26) / 2, 88}, 8, UI_RGB(0x1E2C44));
-            // Accent button
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 154, (preview.width - 42) / 2, 24}, 6, UI_RGB(0x91B9FF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 24 + (preview.width - 26) / 2, preview.y + 154, (preview.width - 42) / 2, 24}, 6, UI_RGB(0x5CCB8A));
+            fill_round_rect(pixels, stride, preview, 10, UI_RGB(0x111122));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 20}, 5, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 15, 10, 10}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(0xEEEEFF));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 44, 56, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(0xAABBCC));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(0x223344));
         } else {
-            // Split System Theme Preview (Left Light, Right Dark)
             int half_w = preview.width / 2;
-            // Left half light
-            fill_round_rect(pixels, stride, (UiRect){preview.x, preview.y, half_w, preview.height}, 12, UI_RGB(0xF0F3FA));
-            // Right half dark
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w, preview.y, preview.width - half_w, preview.height}, 12, UI_RGB(0x0B0F19));
-            // Seam line
-            fill_rect_packed(pixels, stride, (UiRect){preview.x + half_w, preview.y, 1, preview.height}, UI_RGB(0x79879D));
-            // Left mini card
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 16, half_w - 16, 70}, 6, UI_RGB(0xFFFFFF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 26, 48, 6}, 3, UI_RGB(0x245BC4));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 40, half_w - 28, 4}, 2, UI_RGB(0x53627A));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 60, half_w - 28, 16}, 4, UI_RGB(0x245BC4));
-            // Right mini card
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 8, preview.y + 16, half_w - 16, 70}, 6, UI_RGB(0x162032));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 14, preview.y + 26, 48, 6}, 3, UI_RGB(0x91B9FF));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 14, preview.y + 40, half_w - 28, 4}, 2, UI_RGB(0xB6C4D9));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 14, preview.y + 60, half_w - 28, 16}, 4, UI_RGB(0x91B9FF));
-            // Bottom banner explaining auto sync
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 12, preview.y + 114, preview.width - 24, 72}, 8, UI_ACCENT_SOFT);
-            draw_text_center(pixels, stride, (UiRect){preview.x + 12, preview.y + 128, preview.width - 24, 24},
-                             ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM), 16, UI_ACCENT);
-            draw_text_center(pixels, stride, (UiRect){preview.x + 12, preview.y + 154, preview.width - 24, 20},
-                             "Auto Day / Night Switch", 13, UI_MUTED);
+            fill_round_rect(pixels, stride, (UiRect){preview.x, preview.y, half_w, preview.height}, 10, UI_RGB(0xF0F3FA));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w, preview.y, preview.width - half_w, preview.height}, 10, UI_RGB(0x111122));
+            fill_rect_packed(pixels, stride, (UiRect){preview.x + half_w, preview.y, 1, preview.height}, UI_RGB(0x6E7D94));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, half_w - 14, 20}, 5, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 15, 8, 8}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 26, preview.y + 18, 32, 4}, 2, UI_RGB(0x172640));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, 40, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(0x53627A));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 74, half_w - 14, 24}, 5, UI_ACCENT);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 10, half_w - 14, 20}, 5, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 15, 8, 8}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 24, preview.y + 18, 32, 4}, 2, UI_RGB(0xEEEEFF));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 44, 40, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(0xAABBCC));
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 74, half_w - 14, 24}, 5, UI_RGB(0x223344));
         }
 
-        // Selection pill / button at bottom of card
-        UiRect select_btn = {option.x + 24, option.y + option.height - 52, option.width - 48, 38};
-        fill_round_rect(pixels, stride, select_btn, 19, selected ? UI_ACCENT : UI_SURFACE);
-        draw_rect_outline(pixels, stride, select_btn, 19, 1, selected ? UI_FOCUS : UI_CONTROL);
-        draw_text_center(pixels, stride, (UiRect){select_btn.x, select_btn.y + 6, select_btn.width, select_btn.height},
-                         selected ? ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE) : (is_current ? ptc_ui_text(PTC_UI_T_CURRENT) : ptc_ui_text(PTC_UI_T_A_CONFIRM)),
-                         16, selected ? UI_ON_ACCENT : UI_INK);
+        // Action button at bottom of mode card
+        UiRect select_btn = {option.x + 16, option.y + option.height - 38, option.width - 32, 28};
+        fill_round_rect(pixels, stride, select_btn, 14, selected ? UI_ACCENT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, select_btn, 14, 1, selected ? UI_FOCUS : UI_CONTROL);
+        const char *btn_label = selected
+            ? ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE)
+            : (is_current ? ptc_ui_text(PTC_UI_T_THEME_STYLE_IN_USE) : ptc_ui_text(PTC_UI_T_THEME_STYLE_SELECT));
+        draw_text_center(pixels, stride, select_btn, btn_label, 13, selected ? UI_ON_ACCENT : UI_INK);
     }
 
-    // Bottom guidance footer
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 550,
-              !g_theme.system_theme_available && model->overlay_selection == PTC_UI_THEME_SYSTEM
-                  ? ptc_ui_text(PTC_UI_T_THE_SYSTEM_THEME_IS_TEMPORARILY_UNAVAILABLE_AND)
-                  : ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B),
-              18, !g_theme.system_theme_available ? UI_WARNING : UI_MUTED);
+    // --- Row 1: Theme Style Header ---
+    const char *style_title = ptc_ui_text(PTC_UI_T_THEME_STYLE_TITLE);
+    const char *style_sub = ptc_ui_text(PTC_UI_T_THEME_STYLE_SUBTITLE);
+    int title_w = measure_text(style_title, 17);
+    draw_text(pixels, stride, 56, 432, style_title, 17, UI_INK);
+    draw_text(pixels, stride, 56 + title_w + 18, 432, style_sub, 13, UI_MUTED);
+
+    // --- Row 1: Theme Style Cards (4 Cards) ---
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
+    for (int i = 0; i < PTC_UI_THEME_STYLE_COUNT; ++i) {
+        UiRect s_rect = to_uirect(ptc_ui_theme_style_rect(i));
+        bool selected = (model->overlay_selection == 3 + i);
+        bool is_current = (ptc_ui_theme_get_style() == (PtcUiThemeStyle)i);
+        const PtcUiPalette *spal = ptc_ui_theme_style_palette(g_theme.resolved, (PtcUiThemeStyle)i);
+
+        fill_round_rect(pixels, stride, s_rect, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, s_rect, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+
+        // Color Swatches Row
+        int sw_x = s_rect.x + 16;
+        int sw_y = s_rect.y + 16;
+        fill_round_rect(pixels, stride, (UiRect){sw_x, sw_y, 28, 16}, 4, UI_RGB(spal->accent));
+        fill_round_rect(pixels, stride, (UiRect){sw_x + 34, sw_y, 22, 16}, 4, UI_RGB(spal->focus));
+        fill_round_rect(pixels, stride, (UiRect){sw_x + 62, sw_y, 22, 16}, 4, UI_RGB(spal->accent_soft));
+        draw_rect_outline(pixels, stride, (UiRect){sw_x + 62, sw_y, 22, 16}, 4, 1, UI_RGB(spal->accent));
+        fill_round_rect(pixels, stride, (UiRect){sw_x + 90, sw_y, 22, 16}, 4, UI_RGB(spal->night));
+
+        // Active Badge if currently active style
+        if (is_current) {
+            UiRect cur_badge = {s_rect.x + s_rect.width - 66, s_rect.y + 14, 52, 20};
+            fill_round_rect(pixels, stride, cur_badge, 10, UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, cur_badge, 10, 1, UI_SUCCESS_BORDER);
+            draw_text_center(pixels, stride, cur_badge,
+                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 11, UI_SUCCESS);
+        }
+
+        // Style Title
+        draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 58, ptc_ui_theme_style_label((PtcUiThemeStyle)i), 18, UI_INK);
+
+        // Style Keyword (Chinese only) & Description
+        if (!is_en) {
+            draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 80, ptc_ui_theme_style_name((PtcUiThemeStyle)i), 12, UI_ACCENT);
+            draw_wrapped_text(pixels, stride, s_rect.x + 16, s_rect.y + 100, ptc_ui_theme_style_desc((PtcUiThemeStyle)i),
+                              12, s_rect.width - 32, 16, 2, UI_MUTED);
+        } else {
+            draw_wrapped_text(pixels, stride, s_rect.x + 16, s_rect.y + 86, ptc_ui_theme_style_desc((PtcUiThemeStyle)i),
+                              12, s_rect.width - 32, 17, 2, UI_MUTED);
+        }
+
+        // Action Pill at Bottom
+        UiRect action_btn = {s_rect.x + 16, s_rect.y + s_rect.height - 38, s_rect.width - 32, 28};
+        fill_round_rect(pixels, stride, action_btn, 14, selected ? UI_ACCENT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, action_btn, 14, 1, selected ? UI_FOCUS : UI_CONTROL);
+        draw_text_center(pixels, stride, action_btn,
+                         selected ? ptc_ui_text(PTC_UI_T_THEME_STYLE_APPLY)
+                                  : (is_current ? ptc_ui_text(PTC_UI_T_THEME_STYLE_IN_USE) : ptc_ui_text(PTC_UI_T_THEME_STYLE_SELECT)),
+                         12, selected ? UI_ON_ACCENT : UI_INK);
+    }
+
+    home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE), true, false, model->waiting);
 }
 
 static void draw_language_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    const char *LABELS[] = {ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM), ptc_ui_text(PTC_UI_T_SIMPLIFIED_CHINESE), ptc_ui_text(PTC_UI_T_TRADITIONAL_CHINESE), "English"};
-    const char *DETAILS[] = {
-        ptc_ui_text(PTC_UI_T_USE_SWITCH_SYSTEM_LANGUAGE), ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_SIMPLIFIED_CHINESE), ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_TRADITIONAL_CHINESE), "Always use English"
+    const char *LABELS[] = {
+        ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM),
+        ptc_ui_text(PTC_UI_T_SIMPLIFIED_CHINESE),
+        ptc_ui_text(PTC_UI_T_TRADITIONAL_CHINESE),
+        "English"
     };
-    UiRect dialog;
-    draw_dialog_shell(pixels, stride, model, &dialog, 820, 360);
+    const char *DETAILS[] = {
+        ptc_ui_text(PTC_UI_T_USE_SWITCH_SYSTEM_LANGUAGE),
+        ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_SIMPLIFIED_CHINESE),
+        ptc_ui_text(PTC_UI_T_ALWAYS_SHOW_TRADITIONAL_CHINESE),
+        "Always use English"
+    };
+    draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_UI_LANGUAGE),
+                             ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B));
+
     for (int index = 0; index < 4; ++index) {
         UiRect option = to_uirect(ptc_ui_language_option_rect(index));
-        bool selected = index == model->overlay_selection;
-        fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 12, selected ? 3 : 1,
-            selected ? UI_ACCENT : UI_CONTROL);
-        int label_size = 20;
-        while (label_size > 14 && measure_text(LABELS[index], label_size) > option.width - 16) --label_size;
-        draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 12, option.width, 30}, LABELS[index], label_size, UI_INK);
+        bool selected = (index == model->overlay_selection);
+        bool is_current = (index == (int)model->language_preference);
 
-        int detail_size = 14;
-        while (detail_size > 11 && measure_text(DETAILS[index], detail_size) > option.width - 16) --detail_size;
-        draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 44, option.width, 24}, DETAILS[index], detail_size, UI_MUTED);
+        fill_round_rect(pixels, stride, option, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+
+        /* Realistic UI miniature preview screen on the left of each option card */
+        UiRect preview = {option.x + 16, option.y + 16, 178, 178};
+        fill_round_rect(pixels, stride, preview, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, preview, 10, 1, selected ? UI_ACCENT : UI_BORDER);
+
+        if (index == 0) {
+            /* Follow system: Switch OS bar + dual language badges */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 16, 6, 14}, 2, UI_RGB(0x2E72D2));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + preview.width - 20, preview.y + 16, 6, 14}, 2, UI_RGB(0xE64A38));
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "Switch OS", 12, UI_INK);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 46, preview.width - 32, 66}, 8, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 16, preview.y + 46, preview.width - 32, 66}, 8, 1, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 16, preview.y + 54, preview.width - 32, 28}, "AUTO", 20, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 16, preview.y + 84, preview.width - 32, 18}, "Auto Sync", 12, UI_MUTED);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 122, preview.width - 32, 38}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 16, preview.y + 132, preview.width - 32, 18}, ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM), 13, UI_INK);
+        } else if (index == 1) {
+            /* Simplified Chinese miniature UI */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "PlayWise", 12, UI_ACCENT);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, 1, UI_BORDER);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 18, preview.y + 50, 42, 42}, "CN", 22, UI_ACCENT);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 70,
+                      ptc_ui_text_in_language(PTC_UI_T_CHILD_ZONE, PTC_UI_LANGUAGE_SIMPLIFIED), 12, UI_INK);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 96, "120 min", 14, UI_SUCCESS);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 130, preview.width - 28, 32}, 6, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 14, preview.y + 136, preview.width - 28, 20},
+                             ptc_ui_text_in_language(PTC_UI_T_SIMPLIFIED_CHINESE, PTC_UI_LANGUAGE_SIMPLIFIED), 13, UI_ON_ACCENT);
+        } else if (index == 2) {
+            /* Traditional Chinese miniature UI */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "PlayWise", 12, UI_ACCENT);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, 1, UI_BORDER);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 18, preview.y + 50, 42, 42}, "HK", 22, UI_ACCENT);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 70,
+                      ptc_ui_text_in_language(PTC_UI_T_CHILD_ZONE, PTC_UI_LANGUAGE_TRADITIONAL), 12, UI_INK);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 96, "120 min", 14, UI_SUCCESS);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 130, preview.width - 28, 32}, 6, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 14, preview.y + 136, preview.width - 28, 20},
+                             ptc_ui_text_in_language(PTC_UI_T_TRADITIONAL_CHINESE, PTC_UI_LANGUAGE_TRADITIONAL), 13, UI_ON_ACCENT);
+        } else {
+            /* English miniature UI */
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, preview.width - 16, 26}, 6, UI_SURFACE);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 8, preview.y + 14, preview.width - 16, 18}, "PlayWise", 12, UI_ACCENT);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, preview.width - 28, 76}, 8, 1, UI_BORDER);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 18, preview.y + 50, 42, 42}, "EN", 22, UI_ACCENT);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 70, "Child Zone", 12, UI_INK);
+            draw_text(pixels, stride, preview.x + 64, preview.y + 96, "120 min", 14, UI_SUCCESS);
+
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 130, preview.width - 28, 32}, 6, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){preview.x + 14, preview.y + 136, preview.width - 28, 20}, "English", 13, UI_ON_ACCENT);
+        }
+
+        /* Information & action area on the right side of the card */
+        draw_text(pixels, stride, option.x + 214, option.y + 44, LABELS[index], 22,
+                  selected ? UI_ACCENT : UI_INK);
+        draw_wrapped_text(pixels, stride, option.x + 214, option.y + 80, DETAILS[index], 14,
+                          option.width - 232, 20, 2, UI_MUTED);
+
+        /* Selection pill button */
+        UiRect select_btn = {option.x + 214, option.y + option.height - 54, 180, 36};
+        fill_round_rect(pixels, stride, select_btn, 18, selected ? UI_ACCENT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, select_btn, 18, 1, selected ? UI_FOCUS : UI_CONTROL);
+        draw_text_center(pixels, stride, (UiRect){select_btn.x, select_btn.y + 6, select_btn.width, select_btn.height},
+                         selected ? ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE) : (is_current ? ptc_ui_text(PTC_UI_T_CURRENT) : ptc_ui_text(PTC_UI_T_A_CONFIRM)),
+                         15, selected ? UI_ON_ACCENT : UI_INK);
     }
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 306,
-        ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B), 16, UI_MUTED);
+
+    home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE), true, false, model->waiting);
 }
 
 static void draw_support_event_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1612,9 +1760,9 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 : PTC_UI_T_DETAIL_BACK)
             : (model->view == PTC_UI_CHILD ? PTC_UI_T_DETAIL_BACK_CHILD : PTC_UI_T_DETAIL_BACK_TODAY));
     home_button(pixels, stride, ptc_ui_home_details_action_rect(model, 2), back_label,
-        model->home_details_focus == 2, false, false);
+        true, model->home_details_focus == 2, false);
     home_button(pixels, stride, ptc_ui_home_details_action_rect(model, 1), ptc_ui_text(PTC_UI_T_Y_REFRESH),
-        model->home_details_focus == 1, false, model->waiting);
+        false, model->home_details_focus == 1, model->waiting);
 
     /* 底部右侧文字 */
     char footer[384];

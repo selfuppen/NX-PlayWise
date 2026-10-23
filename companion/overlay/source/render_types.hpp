@@ -1,6 +1,7 @@
 // Shared production Overlay colors, text and view types.
 #pragma once
 #include <ctime>
+#include <cmath>
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,38 +31,296 @@ struct OverlayPalette {
     tsl::Color danger;
     tsl::Color danger_soft;
     tsl::Color danger_border;
+    tsl::Color night;
+    tsl::Color night_soft;
+    tsl::Color night_border;
 };
 
-// Dark theme palette conforming to docs/设计/视觉风格与设计指南.md (Tesla dark baseline)
+// 0: 沉静靛蓝 (Serene Indigo) - 默认暗色基线
 constexpr OverlayPalette DARK_OVERLAY_PALETTE = {
     .panel_bg = { 0x0, 0x0, 0x0, 0xD },
-    .card_bg = { 0x1, 0x1, 0x1, 0xF },
-    .card_raised = { 0x2, 0x2, 0x2, 0xF },
-    .border_decorative = { 0x3, 0x3, 0x3, 0xF },
-    .border_control = { 0x7, 0x7, 0x7, 0xF },
-    .text_primary = { 0xF, 0xF, 0xF, 0xF },
-    .text_secondary = { 0xA, 0xA, 0xA, 0xF },
-    .text_disabled = { 0x6, 0x6, 0x6, 0xF },
-    .accent = { 0x4, 0xB, 0xF, 0xF },
-    .accent_soft = { 0x1, 0x3, 0x5, 0xF },
-    .success = { 0x5, 0xC, 0x8, 0xF },
+    .card_bg = { 0x1, 0x2, 0x3, 0xF },
+    .card_raised = { 0x2, 0x3, 0x4, 0xF },
+    .border_decorative = { 0x3, 0x4, 0x5, 0xF },
+    .border_control = { 0x7, 0x8, 0x9, 0xF },
+    .text_primary = { 0xE, 0xE, 0xF, 0xF },
+    .text_secondary = { 0xA, 0xB, 0xC, 0xF },
+    .text_disabled = { 0x6, 0x7, 0x8, 0xF },
+    .accent = { 0x7, 0xA, 0xF, 0xF },
+    .accent_soft = { 0x2, 0x3, 0x5, 0xF },
+    .success = { 0x5, 0xD, 0x7, 0xF },
     .success_soft = { 0x1, 0x3, 0x2, 0xF },
     .success_border = { 0x2, 0x6, 0x3, 0xF },
-    .warning = { 0xF, 0xA, 0x3, 0xF },
+    .warning = { 0xF, 0xB, 0x3, 0xF },
     .warning_soft = { 0x3, 0x2, 0x1, 0xF },
     .warning_border = { 0x8, 0x5, 0x1, 0xF },
-    .danger = { 0xF, 0x6, 0x7, 0xF },
+    .danger = { 0xF, 0x7, 0x8, 0xF },
     .danger_soft = { 0x4, 0x1, 0x2, 0xF },
-    .danger_border = { 0x8, 0x2, 0x2, 0xF }
+    .danger_border = { 0x8, 0x2, 0x3, 0xF },
+    .night = { 0xA, 0x9, 0xF, 0xF },
+    .night_soft = { 0x2, 0x1, 0x4, 0xF },
+    .night_border = { 0x5, 0x4, 0xA, 0xF }
+};
+
+// 1: 清爽青绿 (Ocean Teal)
+constexpr OverlayPalette DARK_OVERLAY_TEAL_PALETTE = {
+    .panel_bg = { 0x0, 0x0, 0x0, 0xD },
+    .card_bg = { 0x1, 0x2, 0x3, 0xF },
+    .card_raised = { 0x2, 0x3, 0x4, 0xF },
+    .border_decorative = { 0x3, 0x4, 0x5, 0xF },
+    .border_control = { 0x7, 0x8, 0x9, 0xF },
+    .text_primary = { 0xE, 0xE, 0xF, 0xF },
+    .text_secondary = { 0xA, 0xB, 0xC, 0xF },
+    .text_disabled = { 0x6, 0x7, 0x8, 0xF },
+    .accent = { 0x4, 0xD, 0xC, 0xF },
+    .accent_soft = { 0x1, 0x3, 0x3, 0xF },
+    .success = { 0x5, 0xD, 0x7, 0xF },
+    .success_soft = { 0x1, 0x3, 0x2, 0xF },
+    .success_border = { 0x2, 0x6, 0x3, 0xF },
+    .warning = { 0xF, 0xB, 0x3, 0xF },
+    .warning_soft = { 0x3, 0x2, 0x1, 0xF },
+    .warning_border = { 0x8, 0x5, 0x1, 0xF },
+    .danger = { 0xF, 0x7, 0x8, 0xF },
+    .danger_soft = { 0x4, 0x1, 0x2, 0xF },
+    .danger_border = { 0x8, 0x2, 0x3, 0xF },
+    .night = { 0xA, 0x9, 0xF, 0xF },
+    .night_soft = { 0x2, 0x1, 0x4, 0xF },
+    .night_border = { 0x5, 0x4, 0xA, 0xF }
+};
+
+// 2: 暮紫星夜 (Night Amethyst)
+constexpr OverlayPalette DARK_OVERLAY_AMETHYST_PALETTE = {
+    .panel_bg = { 0x0, 0x0, 0x0, 0xD },
+    .card_bg = { 0x1, 0x2, 0x3, 0xF },
+    .card_raised = { 0x2, 0x3, 0x4, 0xF },
+    .border_decorative = { 0x3, 0x4, 0x5, 0xF },
+    .border_control = { 0x7, 0x8, 0x9, 0xF },
+    .text_primary = { 0xE, 0xE, 0xF, 0xF },
+    .text_secondary = { 0xA, 0xB, 0xC, 0xF },
+    .text_disabled = { 0x6, 0x7, 0x8, 0xF },
+    .accent = { 0xB, 0x9, 0xF, 0xF },
+    .accent_soft = { 0x3, 0x2, 0x5, 0xF },
+    .success = { 0x5, 0xD, 0x7, 0xF },
+    .success_soft = { 0x1, 0x3, 0x2, 0xF },
+    .success_border = { 0x2, 0x6, 0x3, 0xF },
+    .warning = { 0xF, 0xB, 0x3, 0xF },
+    .warning_soft = { 0x3, 0x2, 0x1, 0xF },
+    .warning_border = { 0x8, 0x5, 0x1, 0xF },
+    .danger = { 0xF, 0x7, 0x8, 0xF },
+    .danger_soft = { 0x4, 0x1, 0x2, 0xF },
+    .danger_border = { 0x8, 0x2, 0x3, 0xF },
+    .night = { 0xA, 0x9, 0xF, 0xF },
+    .night_soft = { 0x2, 0x1, 0x4, 0xF },
+    .night_border = { 0x5, 0x4, 0xA, 0xF }
+};
+
+// 3: 极简冷灰 (Slate Neutral)
+constexpr OverlayPalette DARK_OVERLAY_SLATE_PALETTE = {
+    .panel_bg = { 0x0, 0x0, 0x0, 0xD },
+    .card_bg = { 0x1, 0x2, 0x3, 0xF },
+    .card_raised = { 0x2, 0x3, 0x4, 0xF },
+    .border_decorative = { 0x3, 0x4, 0x5, 0xF },
+    .border_control = { 0x7, 0x8, 0x9, 0xF },
+    .text_primary = { 0xE, 0xE, 0xF, 0xF },
+    .text_secondary = { 0xA, 0xB, 0xC, 0xF },
+    .text_disabled = { 0x6, 0x7, 0x8, 0xF },
+    .accent = { 0x9, 0xB, 0xD, 0xF },
+    .accent_soft = { 0x2, 0x3, 0x4, 0xF },
+    .success = { 0x5, 0xD, 0x7, 0xF },
+    .success_soft = { 0x1, 0x3, 0x2, 0xF },
+    .success_border = { 0x2, 0x6, 0x3, 0xF },
+    .warning = { 0xF, 0xB, 0x3, 0xF },
+    .warning_soft = { 0x3, 0x2, 0x1, 0xF },
+    .warning_border = { 0x8, 0x5, 0x1, 0xF },
+    .danger = { 0xF, 0x7, 0x8, 0xF },
+    .danger_soft = { 0x4, 0x1, 0x2, 0xF },
+    .danger_border = { 0x8, 0x2, 0x3, 0xF },
+    .night = { 0xA, 0x9, 0xF, 0xF },
+    .night_soft = { 0x2, 0x1, 0x4, 0xF },
+    .night_border = { 0x5, 0x4, 0xA, 0xF }
 };
 
 // Light theme palette fallback (Tesla overlay strictly runs in dark mode)
 constexpr OverlayPalette LIGHT_OVERLAY_PALETTE = DARK_OVERLAY_PALETTE;
 
-inline const OverlayPalette &get_overlay_palette(PtcUiResolvedTheme theme)
+static inline PtcUiThemeStyle s_overlay_theme_style = PTC_UI_THEME_STYLE_INDIGO;
+
+inline void set_overlay_theme_style(PtcUiThemeStyle style)
+{
+    if (style >= 0 && style < PTC_UI_THEME_STYLE_COUNT) {
+        s_overlay_theme_style = style;
+    }
+}
+
+inline PtcUiThemeStyle get_overlay_theme_style()
+{
+    return s_overlay_theme_style;
+}
+
+enum class PtcOverlayLanguageSetting {
+    Auto = 0,
+    Simplified = 1,
+    Traditional = 2,
+    English = 3
+};
+
+[[maybe_unused]] static inline PtcOverlayLanguageSetting s_overlay_lang_setting = PtcOverlayLanguageSetting::Auto;
+[[maybe_unused]] static inline PtcUiLanguagePreference s_nro_language_preference = PTC_UI_LANGUAGE_SYSTEM;
+[[maybe_unused]] static inline PtcUiSystemLanguage s_system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
+
+inline void set_overlay_language_setting(PtcOverlayLanguageSetting setting)
+{
+    s_overlay_lang_setting = setting;
+}
+
+inline PtcOverlayLanguageSetting get_overlay_language_setting()
+{
+    return s_overlay_lang_setting;
+}
+
+inline const char *overlay_language_setting_name(PtcOverlayLanguageSetting setting)
+{
+    switch (setting) {
+    case PtcOverlayLanguageSetting::Simplified: return "zh-Hans";
+    case PtcOverlayLanguageSetting::Traditional: return "zh-Hant";
+    case PtcOverlayLanguageSetting::English: return "en";
+    case PtcOverlayLanguageSetting::Auto:
+    default: return "auto";
+    }
+}
+
+inline bool parse_overlay_language_setting(const char *val, PtcOverlayLanguageSetting *out)
+{
+    if (!val || !out) return false;
+    if (std::strcmp(val, "zh-Hans") == 0) {
+        *out = PtcOverlayLanguageSetting::Simplified;
+        return true;
+    }
+    if (std::strcmp(val, "zh-Hant") == 0) {
+        *out = PtcOverlayLanguageSetting::Traditional;
+        return true;
+    }
+    if (std::strcmp(val, "en") == 0) {
+        *out = PtcOverlayLanguageSetting::English;
+        return true;
+    }
+    if (std::strcmp(val, "auto") == 0 || std::strcmp(val, "follow_nro") == 0) {
+        *out = PtcOverlayLanguageSetting::Auto;
+        return true;
+    }
+    return false;
+}
+
+inline PtcUiLanguagePreference resolve_overlay_effective_language(
+    PtcOverlayLanguageSetting setting,
+    PtcUiLanguagePreference nro_pref,
+    PtcUiSystemLanguage sys_lang)
+{
+    switch (setting) {
+    case PtcOverlayLanguageSetting::Simplified:
+        return PTC_UI_LANGUAGE_SIMPLIFIED;
+    case PtcOverlayLanguageSetting::Traditional:
+        return PTC_UI_LANGUAGE_TRADITIONAL;
+    case PtcOverlayLanguageSetting::English:
+        return PTC_UI_LANGUAGE_ENGLISH;
+    case PtcOverlayLanguageSetting::Auto:
+    default:
+        return ptc_ui_language_resolve(nro_pref, sys_lang);
+    }
+}
+
+inline void draw_overlay_globe_icon(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 r, tsl::Color color)
+{
+    if (!renderer || r <= 1) return;
+    // Outer circle outline
+    renderer->drawCircle(cx, cy, static_cast<u16>(r), false, color);
+    // Equator horizontal line
+    renderer->drawRect(cx - r + 1, cy, (2 * r) - 1, 1, color);
+    // Prime meridian vertical line
+    renderer->drawRect(cx, cy - r + 1, 1, (2 * r) - 1, color);
+    // Curved side meridians (vertical ellipse)
+    const float rx = static_cast<float>(r) * 0.52f;
+    const float ry = static_cast<float>(r);
+    for (s32 dy = -r + 1; dy < r; ++dy) {
+        float fy = static_cast<float>(dy) / ry;
+        float factor = 1.0f - fy * fy;
+        if (factor > 0.0f) {
+            s32 dx = static_cast<s32>(std::round(std::sqrt(factor) * rx));
+            if (dx > 0 && dx < r) {
+                renderer->setPixelBlendDst(cx - dx, cy + dy, color);
+                renderer->setPixelBlendDst(cx + dx, cy + dy, color);
+            }
+        }
+    }
+}
+
+inline void draw_overlay_footer_hints(tsl::gfx::Renderer *renderer, tsl::Color color)
+{
+    if (!renderer) return;
+    const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+    const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+
+    s32 cur_x = 30;
+    renderer->drawString(back_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
+    const auto back_sz = renderer->drawString(back_lbl, false, 0, 0,
+        PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
+    cur_x += static_cast<s32>(back_sz.first) + 22;
+
+    renderer->drawString("\uE0E2", false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
+    const auto x_sz = renderer->drawString("\uE0E2", false, 0, 0,
+        PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
+    cur_x += static_cast<s32>(x_sz.first) + 6;
+
+    constexpr s32 globe_r = 9;
+    draw_overlay_globe_icon(renderer, cur_x + globe_r, 683, globe_r, color);
+    cur_x += (globe_r * 2) + 22;
+
+    renderer->drawString(ok_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
+}
+
+inline const char *overlay_language_button_label(PtcOverlayLanguageSetting setting)
+{
+    (void)setting;
+    return "\uE0E2";
+}
+
+inline void get_overlay_current_time(char *out, size_t size)
+{
+    if (!out || size == 0) return;
+    out[0] = '\0';
+#if defined(__SWITCH__)
+    u64 ts = 0;
+    TimeCalendarTime cal{};
+    TimeCalendarAdditionalInfo info{};
+    if (R_SUCCEEDED(timeGetCurrentTime(TimeType_Default, &ts)) &&
+        R_SUCCEEDED(timeToCalendarTimeWithMyRule(ts, &cal, &info))) {
+        std::snprintf(out, size, "%02u:%02u", (unsigned)cal.hour, (unsigned)cal.minute);
+        return;
+    }
+#endif
+    const std::time_t now = std::time(nullptr);
+    struct tm tm_buf{};
+#if defined(_WIN32)
+    if (localtime_s(&tm_buf, &now) == 0) {
+#else
+    if (localtime_r(&now, &tm_buf) != nullptr) {
+#endif
+        std::snprintf(out, size, "%02d:%02d", tm_buf.tm_hour, tm_buf.tm_min);
+        return;
+    }
+    std::snprintf(out, size, "--:--");
+}
+
+inline const OverlayPalette &get_overlay_palette(PtcUiResolvedTheme theme = PTC_UI_RESOLVED_DARK)
 {
     (void)theme;
-    return DARK_OVERLAY_PALETTE;
+    switch (s_overlay_theme_style) {
+    case PTC_UI_THEME_STYLE_TEAL: return DARK_OVERLAY_TEAL_PALETTE;
+    case PTC_UI_THEME_STYLE_AMETHYST: return DARK_OVERLAY_AMETHYST_PALETTE;
+    case PTC_UI_THEME_STYLE_SLATE: return DARK_OVERLAY_SLATE_PALETTE;
+    case PTC_UI_THEME_STYLE_INDIGO:
+    default: return DARK_OVERLAY_PALETTE;
+    }
 }
 
 // Backward-compatible named colors aligned with the dark design baseline.
@@ -81,6 +340,8 @@ constexpr tsl::Color DANGER_BG = DARK_OVERLAY_PALETTE.danger_soft;
 constexpr tsl::Color WARNING_BG = DARK_OVERLAY_PALETTE.warning_soft;
 constexpr tsl::Color BACKSPACE_BORDER = DARK_OVERLAY_PALETTE.warning_border;
 constexpr tsl::Color CLEAR_BORDER = DARK_OVERLAY_PALETTE.danger_border;
+constexpr tsl::Color NIGHT_COLOR = DARK_OVERLAY_PALETTE.night;
+constexpr tsl::Color NIGHT_BG = DARK_OVERLAY_PALETTE.night_soft;
 
 // Zero-allocation UTF-8 Emoji filter: removes 4-byte emojis and unsupported symbols
 // preventing missing glyph artifacts and mojibake in libtesla's shared font renderer.
@@ -272,6 +533,13 @@ enum class ParentView {
     Actions,
     Confirm,
     Result,
+};
+
+enum class OverlayNavbarScheme {
+    Default = 0,
+    Breadcrumb = 1,
+    Capsule = 2,
+    Stepper = 3
 };
 
 enum class ChildCardKind { Plain, Time, Eye, Bedtime, Dock };

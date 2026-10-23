@@ -10,9 +10,14 @@
 #include "../../companion/ui_emoji.h"
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "../../companion/overlay/vendor/libtesla/include/stb_truetype.h"
+using u8 = uint8_t;
+using u16 = uint16_t;
 using u32 = uint32_t;
-using s32 = int32_t;
 using u64 = uint64_t;
+using s8 = int8_t;
+using s16 = int16_t;
+using s32 = int32_t;
+using s64 = int64_t;
 static u64 armGetSystemTick() { return 1000000000000ULL; }
 static u64 armTicksToNs(u64 ticks) { return ticks; }
 namespace tsl {
@@ -60,6 +65,45 @@ public:
             throw std::runtime_error("invalid preview font");
     }
     Color a(Color color) const { return color; }
+    void setPixelBlendDst(int x, int y, Color color) {
+        pixel(x, y, color);
+    }
+    void drawCircle(int centerX, int centerY, u16 radius, bool filled, Color color) {
+        int x = radius;
+        int y = 0;
+        int radiusError = 0;
+        int xChange = 1 - (radius << 1);
+        int yChange = 0;
+        while (x >= y) {
+            if (filled) {
+                for (int i = centerX - x; i <= centerX + x; i++) {
+                    pixel(i, centerY + y, color);
+                    pixel(i, centerY - y, color);
+                }
+                for (int i = centerX - y; i <= centerX + y; i++) {
+                    pixel(i, centerY + x, color);
+                    pixel(i, centerY - x, color);
+                }
+            } else {
+                pixel(centerX + x, centerY + y, color);
+                pixel(centerX + y, centerY + x, color);
+                pixel(centerX - y, centerY + x, color);
+                pixel(centerX - x, centerY + y, color);
+                pixel(centerX - x, centerY - y, color);
+                pixel(centerX - y, centerY - x, color);
+                pixel(centerX + y, centerY - x, color);
+                pixel(centerX + x, centerY - y, color);
+            }
+            y++;
+            radiusError += yChange;
+            yChange += 2;
+            if (((radiusError << 1) + xChange) > 0) {
+                x--;
+                radiusError += xChange;
+                xChange += 2;
+            }
+        }
+    }
     void drawRect(int x, int y, int w, int h, Color color) {
         for (int py = std::max(0, y); py < std::min(height, y + h); ++py)
             for (int px = std::max(0, x); px < std::min(width, x + w); ++px) pixel(px, py, color);

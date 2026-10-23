@@ -89,6 +89,9 @@ uint32_t resolve_color(uint32_t source)
     case UI_HERO: return pack_rgb(UI_BLENDED(hero));
     case UI_ON_HERO: return pack_rgb(UI_BLENDED(on_hero));
     case UI_HERO_SECONDARY: return pack_rgb(UI_BLENDED(hero_secondary));
+    case UI_NIGHT: return pack_rgb(UI_BLENDED(night));
+    case UI_NIGHT_SOFT: return pack_rgb(UI_BLENDED(night_soft));
+    case UI_NIGHT_BORDER: return pack_rgb(UI_BLENDED(night_border));
     default: return pack_rgb(source);
     }
 }
@@ -358,32 +361,6 @@ int get_breathing_phase(void)
     return phase > 15 ? 15 : phase;
 }
 
-void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
-{
-    int phase = get_breathing_phase();
-    int offset = is_docked_mode() ? 4 : 3;
-    int stroke_w = is_docked_mode() ? 3 : 2;
-
-    /* 呼吸动态颜色：在基础 UI_FOCUS 与呼吸高光荧光亮蓝之间平滑脉冲插值 */
-    uint32_t focus_token = UI_FOCUS;
-    if (phase > 0 && g_palette) {
-        uint32_t raw_rgb = UI_BLENDED(focus);
-        uint32_t r = (raw_rgb >> 16) & 0xff;
-        uint32_t g = (raw_rgb >> 8) & 0xff;
-        uint32_t b = raw_rgb & 0xff;
-        r += (uint32_t)((215 - (int)r) * phase) / 30u;
-        g += (uint32_t)((238 - (int)g) * phase) / 30u;
-        b += (uint32_t)((255 - (int)b) * phase) / 30u;
-        focus_token = UI_RGB((r << 16) | (g << 8) | b);
-    }
-
-    /* 绘制完整、闭合、严密同心的圆角焦点框，彻底根除断裂悬空的多余线条 */
-    draw_rect_outline(pixels, stride,
-        (UiRect){rect.x - offset, rect.y - offset, rect.width + 2 * offset, rect.height + 2 * offset},
-        radius + offset, stroke_w, focus_token);
-}
-
-
 /* 圆角矩形符号距离（负值在内部）。轴对齐带状区域免开方，仅角部走 sqrt。 */
 static float round_rect_sdf(UiRect rect, int radius, float x, float y)
 {
@@ -411,19 +388,21 @@ static inline float smootherstep(float t)
     return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 }
 
-/* 工业级圆角感知软阴影：
+/* 工业级圆角感知软阴影（支持自定义色彩与主题强度缩放）：
  * 1. 采用精准圆角 SDF 几何遮罩剔除卡片实心本体，保留四个转角弧线外的完整阴影与抗锯齿带，
  *    根除外接矩形 AABB 直角截断导致的转角分层断裂；
  * 2. 单次像素遍历中融合 Key（向下投影核心）与 Ambient（大范围漫反射光晕）双层物理软阴影；
  * 3. 采用五次 Smootherstep 极平滑衰减，并在单次 blend_pixel 中完成 Alpha 复合，画质与帧率兼顾。 */
-void draw_round_rect_shadow(
+static void draw_round_rect_shadow_colored(
     uint32_t *pixels,
     uint32_t stride,
     UiRect rect,
     int radius,
     int blur,
     int peak_alpha,
-    int y_bias)
+    int y_bias,
+    uint32_t shadow_color,
+    bool scale_by_theme)
 {
     if (blur <= 0 || peak_alpha <= 0) return;
     if (rect.width <= 0 || rect.height <= 0) return;
@@ -431,7 +410,7 @@ void draw_round_rect_shadow(
     if (radius > rect.height / 2) radius = rect.height / 2;
 
     /* 阴影峰值按主题 shadow_strength 缩放，暗色主题阴影更实。 */
-    if (g_palette && g_palette->shadow_strength) {
+    if (scale_by_theme && g_palette && g_palette->shadow_strength) {
         peak_alpha = peak_alpha * (int)g_palette->shadow_strength / 100;
         if (peak_alpha > 255) peak_alpha = 255;
     }
@@ -440,7 +419,7 @@ void draw_round_rect_shadow(
      * Key 层：聚集清晰，偏置随光源下移；
      * Ambient 层：扩散更广，偏置轻微，营造柔和弥散光晕。 */
     int blur_key = blur * 3 / 5;
-    if (blur_key < 3) blur_key = 3;
+    if (blur_key < 2) blur_key = 2;
     int blur_amb = blur + 2;
     int alpha_key = peak_alpha * 65 / 100;
     int alpha_amb = peak_alpha * 40 / 100;
@@ -505,16 +484,67 @@ void draw_round_rect_shadow(
             int total_alpha = a_amb + a_key - (a_amb * a_key + 127) / 255;
             if (total_alpha > 255) total_alpha = 255;
             if (total_alpha > 0) {
-                blend_pixel(pixels, stride, x, y, RGBA8_MAXALPHA(0, 0, 0), (uint8_t)total_alpha);
+                blend_pixel(pixels, stride, x, y, shadow_color, (uint8_t)total_alpha);
             }
         }
     }
 }
 
-/* 海拔档位：页面卡片用轻阴影；弹窗在 draw_dialog_shell 用更强更扩散的一档。 */
+void draw_round_rect_shadow(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    int radius,
+    int blur,
+    int peak_alpha,
+    int y_bias)
+{
+    uint32_t shadow_rgb = g_palette ? ui_mix_rgb(UI_BLENDED(text_primary), 0x000000, 65) : 0x000000;
+    draw_round_rect_shadow_colored(pixels, stride, rect, radius, blur, peak_alpha, y_bias,
+                                   pack_rgb(shadow_rgb), true);
+}
+
+/* 海拔档位：未获焦页面卡片与舞台按钮采用方案 B 极轻底边投影（blur=4, peak_alpha=22, y_bias=2），
+ * 兼顾底部微立体托举感与分组托盘内窄缝的干净通透；弹窗在 draw_dialog_shell 用更强更扩散的一档。 */
 void draw_card_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
 {
-    draw_round_rect_shadow(pixels, stride, rect, radius, 10, 42, 3);
+    uint32_t shadow_rgb = g_palette ? ui_mix_rgb(UI_BLENDED(text_primary), 0x000000, 55) : 0x000000;
+    draw_round_rect_shadow_colored(pixels, stride, rect, radius, 4, 22, 2,
+                                   pack_rgb(shadow_rgb), true);
+}
+
+/* 焦点光环（方案 B + C 组合）：
+ * 1. 获焦时向外投射冷蓝环境悬浮投影（blur=9, peak_alpha=52, y_bias=3）；
+ * 2. 紧贴卡片边缘绘制 2px UI_ACCENT 主框 + 外侧紧贴 1px（底座 2px）UI_FOCUS 呼吸宽框，
+ *    构成零黑缝的 3px Switch 原生风贴边宽框。 */
+void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
+{
+    int phase = get_breathing_phase();
+    int outer_w = is_docked_mode() ? 2 : 1;
+
+    /* 呼吸动态颜色：在基础 UI_FOCUS 与呼吸高光荧光亮蓝之间平滑脉冲插值 */
+    uint32_t focus_token = UI_FOCUS;
+    if (phase > 0 && g_palette) {
+        uint32_t raw_rgb = UI_BLENDED(focus);
+        uint32_t r = (raw_rgb >> 16) & 0xff;
+        uint32_t g = (raw_rgb >> 8) & 0xff;
+        uint32_t b = raw_rgb & 0xff;
+        r += (uint32_t)((215 - (int)r) * phase) / 30u;
+        g += (uint32_t)((238 - (int)g) * phase) / 30u;
+        b += (uint32_t)((255 - (int)b) * phase) / 30u;
+        focus_token = UI_RGB((r << 16) | (g << 8) | b);
+    }
+
+    UiRect outer_rect = {
+        rect.x - outer_w,
+        rect.y - outer_w,
+        rect.width + 2 * outer_w,
+        rect.height + 2 * outer_w
+    };
+    draw_round_rect_shadow_colored(pixels, stride, outer_rect, radius + outer_w,
+                                   9, 52, 3, resolve_color(focus_token), false);
+    draw_rect_outline(pixels, stride, rect, radius, 2, UI_ACCENT);
+    draw_rect_outline(pixels, stride, outer_rect, radius + outer_w, outer_w, focus_token);
 }
 
 /* 背景氛围层：页面底色加两团极低透明度的主题色光斑，整幅缓存在离屏，
@@ -555,6 +585,81 @@ static void ui_background_glow(int center_x, int center_y, int radius, uint32_t 
     }
 }
 
+/* 绘制三段式通栏外框 (Classic 3-Section Console Shell)：
+ * 1. 顶部 Header Bar (y: 0..103，高度 104px)：高质感微通栏底色，将应用图标、标题与状态胶囊牢牢锚定
+ * 2. 顶部微细分割线 (y: 104，1px 高)：贯通 1280 物理像素的 border_decorative 分界线
+ * 3. 底部微细分割线 (y: 652，1px 高)：贯通 1280 物理像素的 border_decorative 分界线
+ * 4. 底部 Footer Bar (y: 653..719，高度 67px)：停泊底栏底色，包裹按键提焂与状态通知 */
+void ui_background_draw_frame(uint32_t *pixels, uint32_t stride)
+{
+    if (!pixels || !g_palette) return;
+
+    uint32_t page_rgb = UI_BLENDED(page_bg);
+    uint32_t surface_rgb = UI_BLENDED(surface);
+    uint32_t raised_rgb = UI_BLENDED(surface_raised);
+    uint32_t border_rgb = pack_rgb(UI_BLENDED(border_decorative));
+    bool is_dark = ((page_rgb & 0xFF) < 0x80);
+
+    /* 顶部通栏透明度混合 (Light: 43% surface, Dark: 47% surface) */
+    int top_alpha = is_dark ? 120 : 110;
+    uint32_t top_r = (surface_rgb >> 16) & 0xff;
+    uint32_t top_g = (surface_rgb >> 8) & 0xff;
+    uint32_t top_b = surface_rgb & 0xff;
+
+    /* 底部通栏透明度混合 (Light: 70% raised, Dark: 55% raised) */
+    int bot_alpha = is_dark ? 140 : 180;
+    uint32_t bot_r = (raised_rgb >> 16) & 0xff;
+    uint32_t bot_g = (raised_rgb >> 8) & 0xff;
+    uint32_t bot_b = raised_rgb & 0xff;
+
+    int y, x;
+    /* 1. 顶部通栏 Header Bar (y: 0..103) */
+    for (y = 0; y < 104; ++y) {
+        uint32_t *row = pixels + (size_t)y * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            uint32_t dst = row[x];
+            uint32_t dst_r = dst & 0xff;
+            uint32_t dst_g = (dst >> 8) & 0xff;
+            uint32_t dst_b = (dst >> 16) & 0xff;
+            row[x] = RGBA8_MAXALPHA(
+                (top_r * top_alpha + dst_r * (255 - top_alpha)) / 255,
+                (top_g * top_alpha + dst_g * (255 - top_alpha)) / 255,
+                (top_b * top_alpha + dst_b * (255 - top_alpha)) / 255);
+        }
+    }
+
+    /* 2. 顶部贯通分割线 (y: 104) */
+    {
+        uint32_t *row = pixels + (size_t)104 * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            row[x] = border_rgb;
+        }
+    }
+
+    /* 3. 底部贯通分割线 (y: 652) */
+    {
+        uint32_t *row = pixels + (size_t)652 * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            row[x] = border_rgb;
+        }
+    }
+
+    /* 4. 底部通栏 Footer Bar (y: 653..719) */
+    for (y = 653; y < SCREEN_HEIGHT; ++y) {
+        uint32_t *row = pixels + (size_t)y * stride;
+        for (x = 0; x < SCREEN_WIDTH; ++x) {
+            uint32_t dst = row[x];
+            uint32_t dst_r = dst & 0xff;
+            uint32_t dst_g = (dst >> 8) & 0xff;
+            uint32_t dst_b = (dst >> 16) & 0xff;
+            row[x] = RGBA8_MAXALPHA(
+                (bot_r * bot_alpha + dst_r * (255 - bot_alpha)) / 255,
+                (bot_g * bot_alpha + dst_g * (255 - bot_alpha)) / 255,
+                (bot_b * bot_alpha + dst_b * (255 - bot_alpha)) / 255);
+        }
+    }
+}
+
 void ui_background_rebuild(void)
 {
     uint32_t base = pack_rgb(UI_BLENDED(page_bg));
@@ -567,6 +672,7 @@ void ui_background_rebuild(void)
     }
     ui_background_glow(230, 40, 760, UI_BLENDED(accent), 12);
     ui_background_glow(1180, 730, 680, UI_BLENDED(coral), 10);
+    ui_background_draw_frame(g_background_cache, SCREEN_WIDTH);
     g_background_palette = g_palette;
     g_background_docked = is_docked_mode();
 }
@@ -758,4 +864,59 @@ void draw_status_symbol(
         fill_rect(pixels, stride, (UiRect){left + 8, top + 4, 4, 3}, color);
         fill_rect(pixels, stride, (UiRect){left + 8, top + 9, 4, 8}, color);
     }
+}
+
+void draw_globe_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color)
+{
+    if (radius <= 3) return;
+    /* 1. Outer circle outline */
+    draw_circle_outline(pixels, stride, cx, cy, radius, radius >= 10 ? 2 : 1, color);
+
+    /* 2. Equator line */
+    int eq_span = radius - 1;
+    draw_line(pixels, stride, cx - eq_span, cy, cx + eq_span, cy, 1, color);
+
+    /* 3. Vertical prime meridian line */
+    draw_line(pixels, stride, cx, cy - eq_span, cx, cy + eq_span, 1, color);
+
+    /* 4. Elliptical curved meridian lines on both sides */
+    float rx = (float)radius * 0.48f;
+    const int steps = 16;
+    float prev_x_r = (float)cx;
+    float prev_y_r = (float)(cy - radius + 1);
+    float prev_x_l = (float)cx;
+    float prev_y_l = (float)(cy - radius + 1);
+    for (int i = 1; i <= steps; ++i) {
+        float angle = -1.5707963f + 3.14159265f * ((float)i / (float)steps);
+        float y = (float)cy + ((float)radius - 1.0f) * sinf(angle);
+        float x_offset = rx * cosf(angle);
+        float xr = (float)cx + x_offset;
+        float xl = (float)cx - x_offset;
+        draw_line(pixels, stride, (int)(prev_x_r + 0.5f), (int)(prev_y_r + 0.5f),
+                  (int)(xr + 0.5f), (int)(y + 0.5f), 1, color);
+        draw_line(pixels, stride, (int)(prev_x_l + 0.5f), (int)(prev_y_l + 0.5f),
+                  (int)(xl + 0.5f), (int)(y + 0.5f), 1, color);
+        prev_x_r = xr;
+        prev_y_r = y;
+        prev_x_l = xl;
+        prev_y_l = y;
+    }
+}
+
+void draw_language_switcher_badge(uint32_t *pixels, uint32_t stride, UiRect rect, bool focused)
+{
+    int corner_r = rect.height / 2;
+    fill_round_rect(pixels, stride, rect, corner_r, focused ? UI_ACCENT_SOFT : UI_SURFACE);
+    draw_rect_outline(pixels, stride, rect, corner_r, focused ? 2 : 1, focused ? UI_ACCENT : UI_BORDER);
+
+    int icon_r = (rect.height <= 26) ? 5 : 7;
+    int font_sz = (rect.height <= 26) ? 11 : 13;
+    int icon_cx = rect.x + (rect.height <= 26 ? 12 : 16);
+    int icon_cy = rect.y + rect.height / 2;
+    draw_globe_icon(pixels, stride, icon_cx, icon_cy, icon_r, UI_ACCENT);
+
+    const char *label = ptc_ui_text(PTC_UI_T_LANG_BADGE);
+    int text_x = icon_cx + icon_r + (rect.height <= 26 ? 5 : 7);
+    int text_y = rect.y + rect.height / 2 + (rect.height <= 26 ? 4 : 5);
+    draw_text(pixels, stride, text_x, text_y, label, font_sz, focused ? UI_ACCENT : UI_INK);
 }

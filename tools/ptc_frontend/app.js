@@ -131,7 +131,12 @@ function applyTranslations(lang) {
   });
 
   if (langToggle) {
-    langToggle.textContent = t("lang_toggle_btn", {}, lang);
+    const textNode = langToggle.querySelector("[data-i18n='lang_toggle_btn']");
+    if (textNode) {
+      textNode.textContent = t("lang_toggle_btn", {}, lang);
+    } else {
+      langToggle.textContent = t("lang_toggle_btn", {}, lang);
+    }
     langToggle.setAttribute("aria-label", t("lang_toggle_aria", {}, lang));
   }
 
