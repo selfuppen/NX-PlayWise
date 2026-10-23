@@ -339,41 +339,74 @@
 
     PtcOverlayRect flow_card(tsl::gfx::Renderer *renderer, const char *label,
         const char *value, const char *note, int value_size, tsl::Color color,
-        tsl::Color tone, PtcOverlayParentAction action, bool highlighted = false, bool disabled = false)
+        tsl::Color tone, PtcOverlayParentAction action, bool highlighted = false, bool disabled = false,
+        int label_size = PTC_OVERLAY_FONT_BODY)
     {
         const auto &pal = current_palette();
         const auto &vp = page_layout_.viewport;
-        const int width = vp.w - 40;
-        const int label_h = overlay_text_height(renderer, label, width, PTC_OVERLAY_FONT_BODY_LG);
-        const int value_h = value && *value ? overlay_text_height(renderer, value, width, value_size) : 0;
-        const int note_h = note && *note ? overlay_text_height(renderer, note, width, PTC_OVERLAY_FONT_SECONDARY) : 0;
-        const int height = std::max(static_cast<int>(PTC_OVERLAY_PARENT_CARD_MIN_H),
-            20 + label_h + (value_h ? value_h + 8 : 0) + (note_h ? note_h + 8 : 0));
-        const auto raw = ptc_overlay_rect(vp.x + 4, flow_y_, vp.w - 12, height);
+        const int raw_w = vp.w - 12;
+        const int content_w = raw_w - 28;
+        const int icon_space = 30;
+        const int text_w = content_w - icon_space;
+        const int text_x = (vp.x + 4) + 14 + icon_space;
+
+        const int first_line_h = (label_size * 6 + 4) / 5;
+        const int label_w = static_cast<int>(measure_localized(renderer, label, label_size).first);
+        const int label_h = overlay_text_height(renderer, label, text_w, label_size);
+
+        const bool has_value = (value != nullptr && value[0] != '\0');
+        const int value_w = has_value ? static_cast<int>(measure_localized(renderer, value, value_size).first) : 0;
+        const int value_h = has_value ? overlay_text_height(renderer, value, text_w, value_size) : 0;
+        const bool inline_value = has_value && (label_w + value_w + 16 <= text_w);
+
+        const int row0_h = inline_value ? std::max(label_h, value_h) : (has_value ? (label_h + 4 + value_h) : label_h);
+
+        const bool has_note = (note != nullptr && note[0] != '\0');
+        const int note_h = has_note ? overlay_text_height(renderer, note, text_w, PTC_OVERLAY_FONT_SECONDARY) : 0;
+
+        const int content_h = row0_h + (has_note ? (4 + note_h) : 0);
+        const int height = std::max(static_cast<int>(PTC_OVERLAY_PARENT_CARD_MIN_H), content_h + 16);
+
+        const auto raw = ptc_overlay_rect(vp.x + 4, flow_y_, raw_w, height);
         const int y = raw.y - static_cast<int>(page_scroll_);
-        flow_y_ += height + 10;
+        flow_y_ += height + 6;
+
         // Still measure hidden cards for scrolling, but avoid rasterizing their
         // glyphs into the bounded Tesla cache when the entire card is clipped.
         if (y + height <= vp.y || y >= vp.y + vp.h) return raw;
+
         draw_dashboard_surface(renderer, ptc_overlay_rect(raw.x, y, raw.w, raw.h),
             highlighted ? dashboard_soft(tone) : tsl::Color{1, 2, 3, 15},
             highlighted ? tone : pal.border_decorative, highlighted);
-        renderer->drawRect(raw.x, y + 10, disabled ? 2 : 3, height - 20, renderer->a(tone));
-        // Optional icons do not change measured card height or wrap a title.
-        const int icon_space = static_cast<int>(measure_localized(renderer, label,
-            PTC_OVERLAY_FONT_BODY_LG).first) + 30 <= width ? 30 : 0;
-        int top = y + 12;
-        if (icon_space) draw_parent_action_icon(renderer, action, raw.x + 14, top + 6,
-            disabled ? pal.text_disabled : tone);
-        overlay_text(renderer, label, raw.x + 14 + icon_space, top, width - icon_space, PTC_OVERLAY_FONT_BODY_LG,
+        renderer->drawRect(raw.x, y + 6, disabled ? 2 : 3, height - 12, renderer->a(tone));
+
+        const int content_top = y + (height - content_h) / 2;
+        const int label_y = content_top + (inline_value ? (row0_h - label_h) / 2 : 0);
+
+        // Icon aligns with the first line of the title row
+        const int icon_y = label_y + (first_line_h - 22) / 2;
+        draw_parent_action_icon(renderer, action, raw.x + 14, icon_y, disabled ? pal.text_disabled : tone);
+
+        overlay_text(renderer, label, text_x, label_y, inline_value ? (label_w + 1) : text_w, label_size,
             disabled ? pal.text_disabled : pal.text_primary);
-        top += label_h + 8;
-        if (value_h) {
-            overlay_text(renderer, value, raw.x + 14, top, width, value_size, color);
-            top += value_h + 8;
+
+        if (has_value) {
+            if (inline_value) {
+                const int val_x = raw.x + raw.w - 14 - value_w;
+                const int val_y = content_top + (row0_h - value_h) / 2;
+                overlay_text(renderer, value, val_x, val_y, value_w + 1, value_size, color);
+            } else {
+                const int val_y = label_y + label_h + 4;
+                overlay_text(renderer, value, text_x, val_y, text_w, value_size, color);
+            }
         }
-        if (note_h) overlay_text(renderer, note, raw.x + 14, top, width, PTC_OVERLAY_FONT_SECONDARY,
-            disabled ? pal.text_disabled : pal.text_secondary);
+
+        if (has_note) {
+            const int note_y = content_top + row0_h + 4;
+            overlay_text(renderer, note, text_x, note_y, text_w, PTC_OVERLAY_FONT_SECONDARY,
+                disabled ? pal.text_disabled : pal.text_secondary);
+        }
+
         return raw;
     }
 
@@ -687,10 +720,11 @@
                 if (group >= 0 && (slot == 0 || ptc_overlay_parent_action_group(slot - 1) != group)) {
                     const auto group_color = group == 2 ? pal.danger : group == 1 ? pal.warning : pal.accent;
                     if (slot != 0) {
+                        flow_y_ += 4;
                         renderer->drawRect(page_layout_.viewport.x + 4,
                             flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 12, 1,
                             renderer->a(pal.border_decorative));
-                        flow_y_ += 12;
+                        flow_y_ += 8;
                     }
                     const int label_y = flow_y_ - static_cast<int>(page_scroll_);
                     renderer->drawRect(page_layout_.viewport.x + 4, label_y + 4, 4,
@@ -704,7 +738,7 @@
                         flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 24,
                         PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
                     flow_y_ += overlay_text_height(renderer, ptc_ui_text(hints[group]),
-                        page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION) + 8;
+                        page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION) + 6;
                 }
                 const auto action = static_cast<PtcOverlayParentAction>(index);
                 const char *reason = parent_action_reason(action);
@@ -724,7 +758,7 @@
                 const int start = flow_y_;
                 const auto tone = reason ? pal.text_disabled : parent_action_requires_hold(action) ? pal.danger : pal.accent;
                 page_layout_.actions[index] = flow_card(renderer, ptc_ui_text(parent_action_label_id(index)), value, note,
-                    PTC_OVERLAY_FONT_TITLE, reason ? pal.text_disabled : pal.text_primary,
+                    PTC_OVERLAY_FONT_BTN, reason ? pal.text_disabled : pal.text_primary,
                     tone, action, parent_action_ == index, reason != nullptr);
                 if (parent_action_ == index && !reason && parent_action_requires_hold(action)) {
                     auto rect = page_layout_.actions[index];
