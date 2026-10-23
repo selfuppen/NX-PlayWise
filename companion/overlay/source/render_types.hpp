@@ -156,6 +156,111 @@ inline PtcUiThemeStyle get_overlay_theme_style()
     return s_overlay_theme_style;
 }
 
+enum class PtcOverlayLanguageSetting {
+    Auto = 0,
+    Simplified = 1,
+    Traditional = 2,
+    English = 3
+};
+
+[[maybe_unused]] static inline PtcOverlayLanguageSetting s_overlay_lang_setting = PtcOverlayLanguageSetting::Auto;
+[[maybe_unused]] static inline PtcUiLanguagePreference s_nro_language_preference = PTC_UI_LANGUAGE_SYSTEM;
+[[maybe_unused]] static inline PtcUiSystemLanguage s_system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
+
+inline void set_overlay_language_setting(PtcOverlayLanguageSetting setting)
+{
+    s_overlay_lang_setting = setting;
+}
+
+inline PtcOverlayLanguageSetting get_overlay_language_setting()
+{
+    return s_overlay_lang_setting;
+}
+
+inline const char *overlay_language_setting_name(PtcOverlayLanguageSetting setting)
+{
+    switch (setting) {
+    case PtcOverlayLanguageSetting::Simplified: return "zh-Hans";
+    case PtcOverlayLanguageSetting::Traditional: return "zh-Hant";
+    case PtcOverlayLanguageSetting::English: return "en";
+    case PtcOverlayLanguageSetting::Auto:
+    default: return "auto";
+    }
+}
+
+inline bool parse_overlay_language_setting(const char *val, PtcOverlayLanguageSetting *out)
+{
+    if (!val || !out) return false;
+    if (std::strcmp(val, "zh-Hans") == 0) {
+        *out = PtcOverlayLanguageSetting::Simplified;
+        return true;
+    }
+    if (std::strcmp(val, "zh-Hant") == 0) {
+        *out = PtcOverlayLanguageSetting::Traditional;
+        return true;
+    }
+    if (std::strcmp(val, "en") == 0) {
+        *out = PtcOverlayLanguageSetting::English;
+        return true;
+    }
+    if (std::strcmp(val, "auto") == 0 || std::strcmp(val, "follow_nro") == 0) {
+        *out = PtcOverlayLanguageSetting::Auto;
+        return true;
+    }
+    return false;
+}
+
+inline PtcUiLanguagePreference resolve_overlay_effective_language(
+    PtcOverlayLanguageSetting setting,
+    PtcUiLanguagePreference nro_pref,
+    PtcUiSystemLanguage sys_lang)
+{
+    switch (setting) {
+    case PtcOverlayLanguageSetting::Simplified:
+        return PTC_UI_LANGUAGE_SIMPLIFIED;
+    case PtcOverlayLanguageSetting::Traditional:
+        return PTC_UI_LANGUAGE_TRADITIONAL;
+    case PtcOverlayLanguageSetting::English:
+        return PTC_UI_LANGUAGE_ENGLISH;
+    case PtcOverlayLanguageSetting::Auto:
+    default:
+        return ptc_ui_language_resolve(nro_pref, sys_lang);
+    }
+}
+
+inline const char *overlay_language_button_label(PtcOverlayLanguageSetting setting)
+{
+    (void)setting;
+    return ptc_ui_text(PTC_UI_T_OVERLAY_LANG_BUTTON);
+}
+
+inline void get_overlay_current_time(char *out, size_t size)
+{
+    if (!out || size == 0) return;
+    out[0] = '\0';
+#if defined(__SWITCH__)
+    u64 ts = 0;
+    TimeCalendarTime cal{};
+    TimeCalendarAdditionalInfo info{};
+    if (R_SUCCEEDED(timeGetCurrentTime(TimeType_Default, &ts)) &&
+        R_SUCCEEDED(timeToCalendarTimeWithMyRule(ts, &cal, &info))) {
+        std::snprintf(out, size, "%02u:%02u", (unsigned)cal.hour, (unsigned)cal.minute);
+        return;
+    }
+#endif
+    const std::time_t now = std::time(nullptr);
+    struct tm tm_buf{};
+#if defined(_WIN32)
+    if (localtime_s(&tm_buf, &now) == 0) {
+#else
+    if (localtime_r(&now, &tm_buf) != nullptr) {
+#endif
+        std::snprintf(out, size, "%02d:%02d", tm_buf.tm_hour, tm_buf.tm_min);
+        return;
+    }
+    std::snprintf(out, size, "--:--");
+}
+
 inline const OverlayPalette &get_overlay_palette(PtcUiResolvedTheme theme = PTC_UI_RESOLVED_DARK)
 {
     (void)theme;

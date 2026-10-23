@@ -76,6 +76,8 @@ typedef struct {
     PtcOverlayRect status;
     PtcOverlayRect buffer;
     PtcOverlayRect parent;
+    PtcOverlayRect language;
+    PtcOverlayRect lang_options[4];
     PtcOverlayRect backspace;
     PtcOverlayRect actions[PTC_OVERLAY_PARENT_ACTION_COUNT];
     PtcOverlayRect pin_keys[16];

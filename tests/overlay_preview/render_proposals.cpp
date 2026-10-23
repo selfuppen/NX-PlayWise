@@ -33,6 +33,9 @@ public:
     bool preview_changed_ = false, error_ = false, success_visible_ = false;
     bool result_pending_ = false, result_failed_ = false, touch_hold_warning_ = false;
     bool keypad_active_ = false;
+    bool language_confirm_active_ = false;
+    PtcOverlayLanguageSetting language_draft_selection_ = PtcOverlayLanguageSetting::Auto;
+    int language_confirm_focus_ = 0;
     bool details_tech_expanded_ = false, parent_pin_standard_keypad_ = false;
     PtcOverlayHoldState confirm_hold_{};
     ParentView parent_view_ = ParentView::Child;

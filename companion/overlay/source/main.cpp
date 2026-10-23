@@ -36,10 +36,37 @@ static PtcUiStatusTrace s_status_trace;
 static PtcInputOwnerWriter s_input_owner;
 static bool s_owner_visible = false;
 
+static bool save_overlay_language_setting(PtcStorage *storage, PtcOverlayLanguageSetting setting)
+{
+    if (!storage) return false;
+    char text[4096];
+    cJSON *root = nullptr;
+    if (storage->vtable->read_text(storage, "sdmc:/switch/playwise/config.json", text, sizeof(text))) {
+        root = cJSON_Parse(text);
+        if (!cJSON_IsObject(root)) {
+            if (root) cJSON_Delete(root);
+            root = cJSON_CreateObject();
+        }
+    } else {
+        root = cJSON_CreateObject();
+    }
+    cJSON_DeleteItemFromObject(root, "overlay_ui_language");
+    cJSON_AddStringToObject(root, "overlay_ui_language", overlay_language_setting_name(setting));
+    char *rendered = cJSON_PrintUnformatted(root);
+    bool ok = false;
+    if (rendered) {
+        ok = storage->vtable->write_text_atomic(storage, "sdmc:/switch/playwise/config.json", rendered);
+        cJSON_free(rendered);
+    }
+    cJSON_Delete(root);
+    return ok;
+}
+
 static void load_overlay_config(PtcStorage *storage)
 {
     char config[2048];
     PtcUiLanguagePreference lang_preference = PTC_UI_LANGUAGE_SYSTEM;
+    PtcOverlayLanguageSetting ovl_lang_setting = PtcOverlayLanguageSetting::Auto;
     PtcUiSystemLanguage system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
     PtcUiThemePreference theme_preference = PTC_UI_THEME_SYSTEM;
     u64 code;
@@ -50,6 +77,9 @@ static void load_overlay_config(PtcStorage *storage)
         const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, "ui_language");
         if (cJSON_IsString(item))
             (void)ptc_ui_language_parse_preference(item->valuestring, &lang_preference);
+        const cJSON *ovl_item = cJSON_GetObjectItemCaseSensitive(root, "overlay_ui_language");
+        if (cJSON_IsString(ovl_item))
+            (void)parse_overlay_language_setting(ovl_item->valuestring, &ovl_lang_setting);
         const cJSON *theme_item = cJSON_GetObjectItemCaseSensitive(root, "theme");
         if (cJSON_IsString(theme_item))
             (void)ptc_ui_theme_parse_preference(theme_item->valuestring, &theme_preference);
@@ -76,7 +106,11 @@ static void load_overlay_config(PtcStorage *storage)
                 system_language = PTC_UI_SYSTEM_LANGUAGE_ENGLISH;
         }
     }
-    ptc_ui_language_set_resolved(ptc_ui_language_resolve(lang_preference, system_language));
+    s_nro_language_preference = lang_preference;
+    s_system_language = system_language;
+    set_overlay_language_setting(ovl_lang_setting);
+    ptc_ui_language_set_resolved(resolve_overlay_effective_language(
+        ovl_lang_setting, lang_preference, system_language));
 
     // The Tesla overlay environment is universally a dark sidebar overlay (ColorFrameBackground = 0x000D).
     // The overlay UI must always adhere to the dark baseline palette for optimal contrast and seamless aesthetics.
@@ -142,7 +176,22 @@ public:
         renderer->drawRect(tsl::cfg::FramebufferWidth - 1, 0, 1, tsl::cfg::FramebufferHeight, a(0xF222));
         renderer->drawRect(15, tsl::cfg::FramebufferHeight - 73, tsl::cfg::FramebufferWidth - 30, 1,
             a(tsl::style::color::ColorText));
-        renderer->drawString("  Back       OK", false, 30, 693, PTC_OVERLAY_FONT_BTN, a(tsl::style::color::ColorText));
+        const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+        const char *lang_lbl = overlay_language_button_label(s_overlay_lang_setting);
+        const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+        char nav_hints[96];
+        std::snprintf(nav_hints, sizeof(nav_hints), "%s   %s   %s", back_lbl, lang_lbl, ok_lbl);
+        renderer->drawString(nav_hints, false, 30, 693, PTC_OVERLAY_FONT_BTN, a(tsl::style::color::ColorText));
+
+        char time_buf[16];
+        get_overlay_current_time(time_buf, sizeof(time_buf));
+        if (time_buf[0]) {
+            const auto measured = renderer->drawString(time_buf, false, 0, 0,
+                PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
+            const s32 time_x = tsl::cfg::FramebufferWidth - 30 - static_cast<s32>(measured.first);
+            renderer->drawString(time_buf, false, time_x, 693, PTC_OVERLAY_FONT_BTN, a(tsl::style::color::ColorText));
+        }
+
         if (m_contentElement != nullptr)
             m_contentElement->frame(renderer);
     }
@@ -1139,6 +1188,54 @@ private:
     int confirm_focus_ = 1;
     int result_focus_ = 0;
     int keypad_nav_focus_ = -1;
+    bool language_confirm_active_ = false;
+    PtcOverlayLanguageSetting language_draft_selection_ = PtcOverlayLanguageSetting::Auto;
+    int language_confirm_focus_ = 0;
+
+    void open_language_confirm()
+    {
+        language_confirm_active_ = true;
+        language_draft_selection_ = s_overlay_lang_setting;
+        language_confirm_focus_ = static_cast<int>(s_overlay_lang_setting);
+        reset_page_scroll();
+        if (frame_) frame_->invalidate();
+    }
+
+    void cancel_language_confirm()
+    {
+        language_confirm_active_ = false;
+        reset_page_scroll();
+        if (frame_) frame_->invalidate();
+    }
+
+    void apply_language_confirm()
+    {
+        set_overlay_language_setting(language_draft_selection_);
+        PtcStorage *storage = bridge_ && bridge_->transport.file.storage
+            ? bridge_->transport.file.storage : nullptr;
+        save_overlay_language_setting(storage, language_draft_selection_);
+
+        PtcUiLanguagePreference effective = resolve_overlay_effective_language(
+            language_draft_selection_, s_nro_language_preference, s_system_language);
+        ptc_ui_language_set_resolved(effective);
+
+        language_confirm_active_ = false;
+        reset_page_scroll();
+        if (frame_ != nullptr) {
+            char title[64], subtitle[64];
+            frame_->setTitle(ptc_ui_localize(ptc_ui_text(PTC_UI_T_PLAYWISE), title, sizeof(title)));
+            frame_->setSubtitle(ptc_ui_localize(ptc_ui_text(PTC_UI_T_PLAYTIME_BEDTIME_CONTROLS), subtitle, sizeof(subtitle)));
+            frame_->invalidate();
+        }
+    }
+
+    void cycle_language_draft()
+    {
+        language_draft_selection_ = static_cast<PtcOverlayLanguageSetting>(
+            (static_cast<int>(language_draft_selection_) + 1) % 4);
+        language_confirm_focus_ = static_cast<int>(language_draft_selection_);
+        if (frame_) frame_->invalidate();
+    }
 };
 
 class PctcOverlay final : public tsl::Overlay {
@@ -1157,6 +1254,9 @@ public:
 
     void initServices() override
     {
+#if defined(__SWITCH__)
+        timeInitialize();
+#endif
         fsdevMountSdmc();
         ptc_fs_storage_init(&storage_);
         ptc_input_owner_writer_init(&s_input_owner, ptc_fs_storage_as_storage(&storage_), APP_ROOT,
@@ -1174,6 +1274,9 @@ public:
         ptc_ui_status_trace_close(&s_status_trace, armTicksToNs(armGetSystemTick()));
         ptc_overlay_bridge_exit(&bridge_);
         fsdevUnmountDevice("sdmc");
+#if defined(__SWITCH__)
+        timeExit();
+#endif
     }
 
     std::unique_ptr<tsl::Gui> loadInitialGui() override { return initially<PctcGui>(&bridge_, &input_, s_overlay_theme); }

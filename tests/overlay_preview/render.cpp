@@ -32,6 +32,9 @@ public:
     bool preview_changed_ = false, error_ = false, success_visible_ = false;
     bool result_pending_ = false, result_failed_ = false, touch_hold_warning_ = false;
     bool keypad_active_ = false;
+    bool language_confirm_active_ = false;
+    PtcOverlayLanguageSetting language_draft_selection_ = PtcOverlayLanguageSetting::Auto;
+    int language_confirm_focus_ = 0;
     bool details_tech_expanded_ = false, parent_pin_standard_keypad_ = false;
     PtcOverlayHoldState confirm_hold_{};
     ParentView parent_view_ = ParentView::Child;
@@ -180,7 +183,15 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
         int day, second;
         require(!view.child_status_fresh(s, day, second),
             "displaying a countdown never promotes cached status to fresh");
-        renderer.drawString("HOST PREVIEW / SAMPLE DATA", false, 20, 699, 18, WAITING_COLOR);
+        renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 13});
+        renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
+        const char *stale_back = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+        const char *stale_lang = overlay_language_button_label(s_overlay_lang_setting);
+        const char *stale_ok = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+        char stale_hints[96];
+        std::snprintf(stale_hints, sizeof(stale_hints), "%s   %s   %s", stale_back, stale_lang, stale_ok);
+        renderer.drawString(stale_hints, false, 30, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
+        renderer.drawString("12:34", false, 448 - 30 - 55, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
         renderer.save((dir / (std::string(names[i]) + ".ppm")).string());
     }
 }
@@ -279,7 +290,8 @@ int main(int argc, char **argv) {
             "overlay-eye-rest-boundary", "overlay-eye-unlimited", "overlay-quota-unknown",
             "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown",
             "overlay-console-usage", "overlay-console-unknown",
-            "overlay-console-details", "overlay-console-details-unknown"};
+            "overlay-console-details", "overlay-console-details-unknown",
+            "overlay-language-confirm"};
         auto run_language_pass = [&](int language) -> int {
             int child_overflows = 0;
             ptc_ui_language_set_resolved(languages[language]);
@@ -453,6 +465,11 @@ int main(int argc, char **argv) {
                         input.length = 4;
                         std::snprintf(input.symbols, sizeof(input.symbols), "1234");
                     }
+                    if (scene == 60) {
+                        view.language_confirm_active_ = true;
+                        view.language_draft_selection_ = PtcOverlayLanguageSetting::Simplified;
+                        view.language_confirm_focus_ = 1;
+                    }
                 }
                 // First measure the production layout, then render the requested scroll position.
                 if (scene >= 38) {
@@ -496,7 +513,7 @@ int main(int argc, char **argv) {
                     if (scene == 55) std::snprintf(view.pin_message_, sizeof(view.pin_message_), "%s",
                         ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR));
                 }
-                if (scene >= 56) {
+                if (scene >= 56 && scene <= 59) {
                     status.usage_present = true;
                     status.usage_ns = 4191000000000ULL;
                     status.usage_captured_at = 1000;
@@ -506,7 +523,7 @@ int main(int argc, char **argv) {
                     status.played_minutes = scene == 56 || scene == 58 ? 69 : -1;
                     status.played_minutes_available = scene == 56 || scene == 58;
                     status.remaining_available = scene == 56 || scene == 58;
-                    if (scene >= 58) {
+                    if (scene == 58 || scene == 59) {
                         view.status_expanded_ = true;
                         // Console usage lives in the collapsed diagnostics group;
                         // these scenes exist to verify it once expanded.
@@ -535,7 +552,7 @@ int main(int argc, char **argv) {
                             "merged dashboard must not retain an unavailable console counter");
                     }
                 }
-                if (scene >= 58) {
+                if (scene == 58 || scene == 59) {
                     std::string drawn;
                     for (const auto &run : renderer.text_runs) drawn += run.text + " ";
                     require(drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos,
@@ -623,6 +640,7 @@ int main(int argc, char **argv) {
                 const bool child_root_page = view.parent_view_ == ParentView::Child &&
                     !view.access_recovery_visible() && !view.success_visible_ &&
                     !view.preview_ready_ && !view.status_expanded_ &&
+                    !view.language_confirm_active_ &&
                     (!view.is_keypad_mode() || view.child_is_restricted());
                 if (!child_root_page) {
                     require(view.page_layout_.viewport.y == PTC_OVERLAY_CONTENT_Y +
@@ -639,6 +657,7 @@ int main(int argc, char **argv) {
                     else if (view.preview_ready_) current = ptc_ui_text(PTC_UI_T_NAV_CONFIRM);
                     else if (view.status_expanded_) current = ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS);
                     else if (view.is_keypad_mode()) current = ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE);
+                    else if (view.language_confirm_active_) current = ptc_ui_text(PTC_UI_T_NAV_CONFIRM);
                     require(current != nullptr, "non-child pages must define a path current node");
                     bool current_found = false, title_found = false;
                     for (const auto &run : renderer.text_runs) {
@@ -726,8 +745,21 @@ int main(int argc, char **argv) {
                 std::fill(renderer.pixels.begin(), renderer.pixels.end(), 17);
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
-                renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 15});
-                renderer.drawString("HOST PREVIEW / SAMPLE DATA", false, 20, 699, 18, WAITING_COLOR);
+                renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 13});
+                renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
+                const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+                const char *lang_lbl = overlay_language_button_label(s_overlay_lang_setting);
+                const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+                char nav_hints[96];
+                std::snprintf(nav_hints, sizeof(nav_hints), "%s   %s   %s", back_lbl, lang_lbl, ok_lbl);
+                renderer.drawString(nav_hints, false, 30, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
+
+                char time_buf[16];
+                get_overlay_current_time(time_buf, sizeof(time_buf));
+                if (!time_buf[0] || std::strcmp(time_buf, "--:--") == 0) std::snprintf(time_buf, sizeof(time_buf), "12:34");
+                const auto time_measured = renderer.drawString(time_buf, false, 0, 0, PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
+                const int time_x = 448 - 30 - static_cast<int>(time_measured.first);
+                renderer.drawString(time_buf, false, time_x, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
                 renderer.save((dir / (std::string(scenes[scene]) + ".ppm")).string());
             }
             require(child_overflows == 0, "ordinary child pages must fit on one screen in all three languages");

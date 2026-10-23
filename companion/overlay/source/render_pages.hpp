@@ -16,6 +16,7 @@
 
     int page_identity() const
     {
+        if (language_confirm_active_) return 6;
         if (access_recovery_visible()) return 10 + static_cast<int>(parent_view_);
         if (success_visible_) return 2;
         if (preview_ready_) return 3;
@@ -1327,11 +1328,97 @@
             fit_button_size(renderer, redeem_btn, page_layout_.redeem.w), child_overview_focus_ == 0);
     }
 
+    void draw_language_confirm(tsl::gfx::Renderer *renderer, int cx, int cy, int cw)
+    {
+        const auto &pal = current_palette();
+        begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_OVERLAY_LANG_CONFIRM_TITLE),
+            PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_UI_LANGUAGE),
+                         ptc_ui_text(PTC_UI_T_NAV_CONFIRM)}, 3},
+            false, PTC_OVERLAY_FONT_TITLE_LG);
+
+        flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_LANG_CONFIRM_DESC),
+            PTC_OVERLAY_FONT_CAPTION, pal.text_secondary, 8);
+        flow_y_ += 4;
+
+        struct LangOptionInfo {
+            PtcOverlayLanguageSetting setting;
+            PtcUiTextId title;
+            PtcUiTextId subtitle;
+        };
+        static const LangOptionInfo OPTIONS[4] = {
+            {PtcOverlayLanguageSetting::Auto, PTC_UI_T_OVERLAY_LANG_OPT_FOLLOW, PTC_UI_T_OVERLAY_LANG_OPT_FOLLOW_SUB},
+            {PtcOverlayLanguageSetting::Simplified, PTC_UI_T_OVERLAY_LANG_OPT_HANS, PTC_UI_T_OVERLAY_LANG_OPT_HANS_SUB},
+            {PtcOverlayLanguageSetting::Traditional, PTC_UI_T_OVERLAY_LANG_OPT_HANT, PTC_UI_T_OVERLAY_LANG_OPT_HANT_SUB},
+            {PtcOverlayLanguageSetting::English, PTC_UI_T_OVERLAY_LANG_OPT_EN, PTC_UI_T_OVERLAY_LANG_OPT_EN_SUB},
+        };
+
+        const auto &vp = page_layout_.viewport;
+        const int card_w = vp.w - 12;
+        const int card_h = 68;
+
+        for (int i = 0; i < 4; ++i) {
+            const auto raw = ptc_overlay_rect(vp.x + 4, flow_y_, card_w, card_h);
+            const int y = raw.y - static_cast<int>(page_scroll_);
+            flow_y_ += card_h + 8;
+            page_layout_.lang_options[i] = raw;
+
+            if (y + card_h <= vp.y || y >= vp.y + vp.h) continue;
+
+            const bool selected = (language_draft_selection_ == OPTIONS[i].setting);
+            const bool focused = (language_confirm_focus_ == i);
+            const bool is_current = (s_overlay_lang_setting == OPTIONS[i].setting);
+
+            const auto bg_col = selected ? pal.accent_soft : pal.card_bg;
+            const auto border_col = focused ? pal.accent : selected ? pal.accent : pal.border_decorative;
+
+            draw_dashboard_surface(renderer, ptc_overlay_rect(raw.x, y, raw.w, raw.h),
+                bg_col, border_col, selected || focused);
+            renderer->drawRect(raw.x, y + 8, selected ? 4 : 2, card_h - 16,
+                renderer->a(selected ? pal.accent : pal.border_control));
+
+            if (focused) {
+                draw_focus_ring(renderer, ptc_overlay_rect(raw.x, y, raw.w, raw.h), pal.accent);
+            }
+
+            const char *title_text = ptc_ui_text(OPTIONS[i].title);
+            const char *sub_text = ptc_ui_text(OPTIONS[i].subtitle);
+
+            overlay_text(renderer, title_text, raw.x + 18, y + 10, raw.w - 120,
+                PTC_OVERLAY_FONT_BODY, selected ? pal.accent : pal.text_primary);
+            overlay_text(renderer, sub_text, raw.x + 18, y + 36, raw.w - 36,
+                PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+
+            if (is_current) {
+                const char *badge = ptc_ui_text(PTC_UI_T_OVERLAY_LANG_CURRENT_BADGE);
+                const int badge_w = text_width(renderer, badge, PTC_OVERLAY_FONT_CAPTION);
+                const int badge_x = raw.x + raw.w - badge_w - 16;
+                overlay_text(renderer, badge, badge_x, y + 12, badge_w + 4,
+                    PTC_OVERLAY_FONT_CAPTION, pal.success);
+            }
+        }
+
+        page_layout_.secondary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, 154, PTC_OVERLAY_RAIL_H);
+        page_layout_.primary = ptc_overlay_rect(cx + 166, cy + PTC_OVERLAY_RAIL_Y, cw - 166, PTC_OVERLAY_RAIL_H);
+
+        const char *cancel_text = ptc_ui_text(PTC_UI_T_B_CANCEL_2);
+        const char *confirm_text = ptc_ui_text(PTC_UI_T_OVERLAY_LANG_CONFIRM_BTN);
+
+        draw_button(renderer, page_layout_.secondary, cancel_text,
+            pal.text_secondary, false, fit_rail_button_size(renderer, cancel_text, 154),
+            language_confirm_focus_ == 4);
+        draw_button(renderer, page_layout_.primary, confirm_text,
+            pal.accent, true, fit_rail_button_size(renderer, confirm_text, cw - 166),
+            language_confirm_focus_ == 5);
+
+        end_page(renderer);
+    }
+
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)
     {
         (void)ch;
         prepare_page();
-        if (access_recovery_visible()) draw_parent_page(renderer, cx, cy, cw);
+        if (language_confirm_active_) draw_language_confirm(renderer, cx, cy, cw);
+        else if (access_recovery_visible()) draw_parent_page(renderer, cx, cy, cw);
         else if (success_visible_) draw_code_success(renderer, cx, cy, cw);
         else if (preview_ready_) draw_code_preview(renderer, cx, cy, cw);
         else if (status_expanded_) draw_status_details(renderer, cx, cy, cw);
