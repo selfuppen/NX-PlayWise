@@ -1355,11 +1355,11 @@ static void test_overlay_layout_geometry(void)
     check_int(PTC_OVERLAY_SLOT_H, 64, "code slots have room for 40px digits");
     check_int(PTC_OVERLAY_SLOT_Y, 104, "code slots sit below the path header");
     check_int(PTC_OVERLAY_KEYPAD_Y, 232, "keypad starts below count and date");
-    check_int(PTC_OVERLAY_RAIL_Y, 559, "footer rail starts at 571 absolute");
+    check_int(PTC_OVERLAY_RAIL_Y, 575, "footer rail starts at 587 absolute");
     check_int(PTC_OVERLAY_RAIL_BOTTOM, 627, "footer rail ends at 639 absolute");
-    check_int(PTC_OVERLAY_VIEWPORT_BOTTOM, 551, "viewport ends at 563 absolute");
-    check_int(PTC_OVERLAY_SUBMIT_Y, 491, "submit starts at 503 absolute");
-    check_int(PTC_OVERLAY_SUBMIT_H, 60, "submit ends at 563 absolute");
+    check_int(PTC_OVERLAY_VIEWPORT_BOTTOM, 567, "viewport ends at 579 absolute");
+    check_int(PTC_OVERLAY_SUBMIT_Y, 507, "submit starts at 519 absolute");
+    check_int(PTC_OVERLAY_SUBMIT_H, 60, "submit ends at 579 absolute");
     check_true(PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H < PTC_OVERLAY_KEYPAD_Y,
         "input count and date fit between slots and keypad");
     /* Slots end at 168 and the keypad starts at 232; the 22px count and date

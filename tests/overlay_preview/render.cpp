@@ -219,7 +219,7 @@ static void test_surface_outline(tsl::gfx::Renderer &renderer)
     const tsl::Color background{1, 2, 3, 15};
     // Code slots, keypad keys, refresh, footer buttons and both card widths.
     for (const auto &dimensions : {std::pair<int, int>{44, 64}, {124, 56}, {136, 40},
-        {416, 68}, {408, 114}, {404, PTC_OVERLAY_PARENT_CARD_MIN_H}}) {
+        {416, PTC_OVERLAY_RAIL_H}, {408, 114}, {404, PTC_OVERLAY_PARENT_CARD_MIN_H}}) {
         for (const bool emphasized : {false, true}) {
             for (const auto color : {DARK_OVERLAY_PALETTE.border_control,
                 DARK_OVERLAY_PALETTE.accent, DARK_OVERLAY_PALETTE.danger}) {
