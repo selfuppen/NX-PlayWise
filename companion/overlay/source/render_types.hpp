@@ -260,20 +260,26 @@ inline void draw_overlay_footer_hints(tsl::gfx::Renderer *renderer, tsl::Color c
     const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
     const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
 
-    s32 cur_x = 30;
+    s32 cur_x = 24;
     renderer->drawString(back_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
     const auto back_sz = renderer->drawString(back_lbl, false, 0, 0,
         PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
-    cur_x += static_cast<s32>(back_sz.first) + 22;
+    cur_x += static_cast<s32>(back_sz.first) + 16;
 
     renderer->drawString("\uE0E2", false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
     const auto x_sz = renderer->drawString("\uE0E2", false, 0, 0,
         PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
     cur_x += static_cast<s32>(x_sz.first) + 6;
 
-    constexpr s32 globe_r = 9;
+    constexpr s32 globe_r = 8;
     draw_overlay_globe_icon(renderer, cur_x + globe_r, 683, globe_r, color);
-    cur_x += (globe_r * 2) + 22;
+    cur_x += (globe_r * 2) + 6;
+
+    const char *badge = ptc_ui_text(PTC_UI_T_OVERLAY_LANG_BADGE);
+    renderer->drawString(badge, false, cur_x, 693, 22, color);
+    const auto lang_sz = renderer->drawString(badge, false, 0, 0,
+        22, tsl::style::color::ColorTransparent);
+    cur_x += static_cast<s32>(lang_sz.first) + 16;
 
     renderer->drawString(ok_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
 }
