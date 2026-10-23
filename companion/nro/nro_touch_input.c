@@ -164,11 +164,7 @@ void handle_touch(UiState *ui, int x, int y)
         if (hit.index >= 0 && hit.index < ui->model.recent_event_count) {
             ptc_audio_play(PTC_SE_POPUP);
             ui->model.selected_index = 6 + (ui->model.recent_event_count - 1 - hit.index);
-            ui->model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
-            ui->model.overlay_selection = hit.index;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_RECENT_EVENT_DETAILS));
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_IS_PIN_AUTHENTICATED_THE));
+            open_support_event(ui, hit.index);
         }
         break;
     case PTC_UI_HIT_FORECAST_DAY:
@@ -182,12 +178,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_LANGUAGE_SWITCH:
         ptc_audio_play(PTC_SE_POPUP);
-        ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
-        ui->model.overlay_selection = (int)ui->language_preference;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
-                 ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
-        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
-                 ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+        open_language_overlay(ui);
         break;
     case PTC_UI_HIT_HOME_DETAILS:
         ptc_audio_play(PTC_SE_POPUP);

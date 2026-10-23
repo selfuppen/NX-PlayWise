@@ -298,6 +298,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
 void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 bool draw_account_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 bool draw_plan_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+bool draw_details_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, UiRect card);
 void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);

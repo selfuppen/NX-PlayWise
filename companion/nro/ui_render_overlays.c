@@ -256,6 +256,7 @@ void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     }
     if (draw_account_overlay_surface(pixels, stride, model) ||
         draw_plan_overlay_surface(pixels, stride, model) ||
+        draw_details_overlay_surface(pixels, stride, model) ||
         draw_support_overlay_surface(pixels, stride, model)) return;
 
     switch (model->overlay) {

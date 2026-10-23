@@ -301,3 +301,13 @@ bool save_setup_step(UiState *ui, int step)
     snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_FIRST_TIME_SETUP_PROGRESS));
     return false;
 }
+
+void open_language_overlay(UiState *ui)
+{
+    ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+    ui->model.overlay_selection = (int)ui->language_preference;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
+             ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+             ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+}

@@ -872,3 +872,54 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
     (void)ptc_ui_text_format(message_id, message, message_size, args, 2);
     (void)ptc_ui_text_format(detail_id, detail, detail_size, args, 2);
 }
+
+bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)
+{
+    PtcDayRule source;
+    PtcDayRule before[7];
+    int slot;
+    if (!model || model->disable_flag_present) return false;
+    slot = model->weekly_last_day_slot;
+    if (slot < 0 || slot >= 7) slot = 0;
+    source = model->draft_week[ptc_ui_weekday_for_display_slot(slot)];
+    memcpy(before, model->draft_week, sizeof(before));
+    if (weekend) {
+        model->draft_week[6] = source;
+        model->draft_week[0] = source;
+    } else {
+        for (int day = 1; day <= 5; ++day) model->draft_week[day] = source;
+    }
+    model->weekly_dirty = memcmp(model->draft_week, model->current_week, sizeof(model->draft_week)) != 0;
+    return memcmp(before, model->draft_week, sizeof(before)) != 0;
+}
+
+void ptc_ui_weekly_bulk_stats(const PtcUiModel *model, bool weekend, PtcUiWeeklyBulkStats *stats)
+{
+    int slot;
+    PtcDayRule source;
+    if (!stats) return;
+    memset(stats, 0, sizeof(*stats));
+    if (!model) return;
+    slot = model->weekly_last_day_slot;
+    if (slot < 0 || slot >= 7) slot = 0;
+    source = model->draft_week[ptc_ui_weekday_for_display_slot(slot)];
+    for (int day = 0; day < 7; ++day) {
+        bool included = weekend ? (day == 0 || day == 6) : (day >= 1 && day <= 5);
+        int group = -1;
+        if (!included) continue;
+        ++stats->target_count;
+        if (ptc_ui_day_rule_effectively_changed(model->draft_week[day], source)) ++stats->changed_count;
+        else ++stats->unchanged_count;
+        for (int index = 0; index < stats->rule_group_count; ++index) {
+            if (!ptc_ui_day_rule_effectively_changed(stats->rule_groups[index].rule, model->draft_week[day])) {
+                group = index;
+                break;
+            }
+        }
+        if (group < 0 && stats->rule_group_count < 5) {
+            group = stats->rule_group_count++;
+            stats->rule_groups[group].rule = model->draft_week[day];
+        }
+        if (group >= 0) ++stats->rule_groups[group].count;
+    }
+}

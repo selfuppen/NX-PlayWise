@@ -92,3 +92,13 @@ void export_diagnostics(UiState *ui)
     }
     free(rendered);
 }
+
+void open_support_event(UiState *ui, int event_index)
+{
+    ui->model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
+    ui->model.overlay_selection = event_index;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
+             ptc_ui_text(PTC_UI_T_RECENT_EVENT_DETAILS));
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+             ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_IS_PIN_AUTHENTICATED_THE));
+}

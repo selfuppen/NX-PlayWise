@@ -416,11 +416,7 @@ void handle_parent_action(UiState *ui)
             break;
         case 2: open_shortcut_manager(ui); break;
         case 3:
-            ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
-            ui->model.overlay_selection = (int)ui->language_preference;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+            open_language_overlay(ui);
             break;
         case 4:
             refresh_album_restriction(ui);

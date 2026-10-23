@@ -706,14 +706,9 @@ static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcU
               ptc_ui_text(PTC_UI_T_GITHUB_ADDRESS_HTTPS_GITHUB_COM_SELFUPPEN_NX), 17, accent);
 }
 
-void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+static void draw_parent_header(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const char *TITLES[] = {ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE), ptc_ui_text(PTC_UI_T_TIME_PLANS), ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS), ptc_ui_text(PTC_UI_T_SECURITY_PREFS), ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)};
-    const UiAction *actions;
-    int action_count;
-    int index;
-    const bool plan_subpage = model->parent_page == PTC_UI_PARENT_PLAN &&
-        model->plan_page != PTC_UI_PLAN_PAGE_ROOT;
     const char *title = TITLES[model->parent_page >= 0 && model->parent_page < PTC_UI_PARENT_PAGE_COUNT
         ? model->parent_page : 0];
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -733,500 +728,508 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()), false);
     }
-    if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
-        actions = actions_for_page(model->parent_page, &action_count);
-        if (model->parent_page == PTC_UI_PARENT_PLAN) {
-            UiRect quota_zone = {42, 172, 388, 452};
-            UiRect parallel_zone = {428, 172, 388, 452};
-            fill_round_rect(pixels, stride, quota_zone, 16, UI_RAISED);
-            draw_rect_outline(pixels, stride, quota_zone, 16, 1, UI_BORDER);
-            const char *q_text = ptc_ui_text(PTC_UI_T_QUOTA_RULES);
-            int qw = measure_text(q_text, 12) + 16;
-            if (qw < 76) qw = 76;
-            UiRect qbadge = {54, 178, qw, 22};
-            fill_round_rect(pixels, stride, qbadge, 6, UI_ACCENT_SOFT);
-            draw_rect_outline(pixels, stride, qbadge, 6, 1, UI_ACCENT);
-            draw_text_center(pixels, stride, qbadge, q_text, 12, UI_ACCENT);
-            draw_text(pixels, stride, 54 + qw + 8, 195, ptc_ui_text(PTC_UI_T_APPLIES_FROM_TOP_TO_BOTTOM), 13, UI_MUTED);
+}
 
-            fill_round_rect(pixels, stride, parallel_zone, 16, UI_RAISED);
-            draw_rect_outline(pixels, stride, parallel_zone, 16, 1, UI_BORDER);
-            const char *p_text = ptc_ui_text(PTC_UI_T_SEPARATE);
-            int pw = measure_text(p_text, 12) + 16;
-            if (pw < 76) pw = 76;
-            UiRect pbadge = {440, 178, pw, 22};
-            fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
-            draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING_BORDER);
-            draw_text_center(pixels, stride, pbadge, p_text, 12, UI_WARNING_TEXT);
-            draw_text(pixels, stride, 440 + pw + 8, 195, ptc_ui_text(PTC_UI_T_OPERATES_INDEPENDENTLY), 13, UI_MUTED);
+static void draw_parent_action_badges(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                       UiRect card, int index)
+{
+    if (model->parent_page == PTC_UI_PARENT_PLAN) {
+        bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+        bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
+        bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+                               strcmp(model->rule_source, "makeup_workday") == 0);
+        bool today_active = (strcmp(model->rule_source, "today_override") == 0);
+        bool weekly_active = !scheduled_active && !holiday_active && !today_active;
+        bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
+        bool is_active_rule = (index == 0 && scheduled_active) ||
+                              (index == 1 && holiday_active) ||
+                              (index == 2 && weekly_active) ||
+                              (index == 3 && bedtime_enforcing);
 
+        /* 当前生效规则的高亮描边（非聚焦时呈现） */
+        if (fresh && is_active_rule && !(index == model->selected_index && !model->parent_footer_focused)) {
+            uint32_t active_border = (index == 3 ? UI_DANGER : (index == 1 ? UI_SUCCESS : UI_ACCENT));
+            draw_rect_outline(pixels, stride, card, 16, 2, active_border);
         }
-        if (model->parent_page == PTC_UI_PARENT_GRANT) {
-            UiRect grant_banner = {54, 484, 750, 144};
-            fill_round_rect(pixels, stride, grant_banner, 16, UI_SURFACE);
-            draw_rect_outline(pixels, stride, grant_banner, 16, 1, UI_BORDER);
-            fill_round_rect(pixels, stride, (UiRect){grant_banner.x + 16, grant_banner.y + 18, 4, grant_banner.height - 36}, 2, UI_ACCENT);
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 36, ptc_ui_text(PTC_UI_T_OFFLINE_GRANT_CODE_USAGE_GUIDE), 18, UI_INK);
-            char fitted_grant[256];
-            fit_text(fitted_grant, sizeof(fitted_grant),
-                     ptc_ui_text(PTC_UI_T_PARENTS_CAN_DIRECTLY_SELECT_THE_SHORTCUT_TIME), 14, grant_banner.width - 48);
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 68, fitted_grant, 14, UI_RGB(UI_BLENDED(text_secondary)));
-            fit_text(fitted_grant, sizeof(fitted_grant),
-                     ptc_ui_text(PTC_UI_T_AFTER_REDEMPTION_IT_WILL_AUTOMATICALLY_BE_INCLUDED), 14, grant_banner.width - 48);
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 96, fitted_grant, 14, UI_RGB(UI_BLENDED(text_secondary)));
-            fit_text(fitted_grant, sizeof(fitted_grant),
-                     ptc_ui_text(PTC_UI_T_THE_EXTRA_TIME_CODE_INCLUDES_ANTI_REPLAY), 14, grant_banner.width - 48);
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 124, fitted_grant, 14, UI_MUTED);
-        }
-        for (index = 0; index < action_count; ++index) {
-            UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SUPPORT
-                ? ptc_ui_support_card_rect(index) : (model->parent_page == PTC_UI_PARENT_PLAN
-                    ? ptc_ui_plan_card_rect(index) : (model->parent_page == PTC_UI_PARENT_SETTINGS
-                        ? ptc_ui_settings_card_rect(index) : ptc_ui_parent_card_rect(index))));
-            PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
-            if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
-                if (!ptc_ui_safety_action_visible(model, index)) continue;
-                astate = ptc_ui_safety_action_available(model, index);
-                if (astate != PTC_UI_ACTION_DISABLED)
-                    astate = index == ptc_ui_support_recommended_action(model)
-                        ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_AVAILABLE;
-            }
-            const UiAction *action = &actions[index];
-            UiAction dynamic_action;
-            if (model->parent_page == PTC_UI_PARENT_SUPPORT && model->disable_flag_present && index == 0) {
-                action = ptc_ui_runtime_fingerprint_reconfirmation_needed(model)
-                    ? &RECONFIRM_ENVIRONMENT_ACTION : &RESUME_CONTROL_ACTION;
-            }
-            if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 4) {
-                const char *detail = ptc_ui_text(PTC_UI_T_STATUS_IS_UNKNOWN_PLEASE_CHECK_AGAIN);
-                dynamic_action = *action;
-                if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                    detail = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
-                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                    detail = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON_HOLD_DOWN_X_AND);
-                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
-                    detail = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_PLEASE_VIEW_DETAILS);
-                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                    detail = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION_ENTRY_AVAILABLE);
-                }
-                /* Use the card's single subtitle row; a second row at the same y overlaps it. */
-                dynamic_action.subtitle = detail;
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 0) {
-                dynamic_action = *action;
-                bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
-                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
-                dynamic_action.subtitle = scheduled_active
-                    ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_THE_PLAN_IS_IN_EFFECT_WITH_CURRENT) : ptc_ui_text(PTC_UI_T_THIS_PLAN_IS_CURRENTLY_USED_TO_DETERMINE))
-                    : (model->scheduled_override.enabled ? ptc_ui_text(PTC_UI_T_IS_ENABLED_TODAY_IS_NOT_WITHIN_THE) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED));
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 1) {
-                dynamic_action = *action;
-                bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
-                                       strcmp(model->rule_source, "makeup_workday") == 0);
-                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
-                dynamic_action.subtitle = holiday_active
-                    ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_IS_IN_EFFECT_DURING_HOLIDAYS_CURRENTLY_UNDER) :
-                       (strcmp(model->rule_source, "statutory_holiday") == 0
-                        ? ptc_ui_text(PTC_UI_T_IS_CURRENTLY_IN_EFFECT_AND_IS_A) : ptc_ui_text(PTC_UI_T_CURRENTLY_IN_EFFECT_THE_NATIONAL_REST_DAYS)))
-                    : (model->holiday_enabled ? ptc_ui_text(PTC_UI_T_IS_ENABLED_TODAY_IS_NOT_A_HOLIDAY) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED_RULES_CAN_BE_PRESET));
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 2) {
-                dynamic_action = *action;
-                bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
-                bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
-                                       strcmp(model->rule_source, "makeup_workday") == 0);
-                bool today_active = (strcmp(model->rule_source, "today_override") == 0);
-                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
-                if (today_active) {
-                    dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_TODAY_S_ADJUSTMENT_WILL_BE_USED_FIRST);
-                } else if (scheduled_active) {
-                    dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_THE_SPECIFIED_DATE_QUOTA_WILL_BE_USED);
-                } else if (holiday_active) {
-                    dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_HOLIDAY_SETTINGS_WILL_BE_USED_FIRST_TODAY);
-                } else {
-                    dynamic_action.subtitle = bedtime_enforcing
-                        ? ptc_ui_text(PTC_UI_T_WEEKLY_QUOTA_IS_IN_EFFECT_CURRENT_BEDTIME) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_IN_EFFECT_BASIC_QUOTA_FROM);
-                }
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 3) {
-                dynamic_action = *action;
-                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
-                dynamic_action.subtitle = model->bedtime_policy.enabled
-                    ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_THE_CURRENT_RESTRICTION_IS_IN_EFFECT) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_OPEN_WAITING_FOR_THE_NEXT))
-                    : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED);
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 4) {
-                static char eye_detail[80];
-                dynamic_action = *action;
-                if (model->eye_care_policy.enabled) {
-                    snprintf(eye_detail, sizeof(eye_detail), "%u / %u %s",
-                        (unsigned)model->eye_care_policy.play_minutes,
-                        (unsigned)model->eye_care_policy.rest_minutes,
-                        ptc_ui_text(PTC_UI_T_MIN));
-                } else snprintf(eye_detail, sizeof(eye_detail), "%s", ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
-                dynamic_action.subtitle = eye_detail;
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 5) {
-                static char dock_detail[192];
-                dynamic_action = *action;
-                ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock_detail, sizeof(dock_detail));
-                dynamic_action.subtitle = dock_detail;
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 6) {
-                static char autonomy_detail[64];
-                dynamic_action = *action;
-                if (model->autonomy_policy.daily_buffer_minutes > 0u) {
-                    snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_U_MIN_DAY),
-                        (unsigned int)model->autonomy_policy.daily_buffer_minutes);
-                } else {
-                    snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
-                }
-                dynamic_action.subtitle = autonomy_detail;
-                action = &dynamic_action;
-            }
-            if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 1) {
-                static char theme_subtitle[96];
-                dynamic_action = *action;
-                snprintf(theme_subtitle, sizeof(theme_subtitle), "%s / %s",
-                         ptc_ui_theme_preference_label(g_theme.preference),
-                         ptc_ui_theme_style_label(ptc_ui_theme_get_style()));
-                dynamic_action.subtitle = theme_subtitle;
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 2) {
-                static char shortcut_detail[112];
-                dynamic_action = *action;
-                if (model->custom_shortcut_enabled && model->custom_shortcut_label[0]) {
-                    snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_S),
-                             model->custom_shortcut_label);
-                } else {
-                    snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_MINUS));
-                }
-                dynamic_action.subtitle = shortcut_detail;
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-                dynamic_action = *action;
-                dynamic_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-                UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
-                draw_language_switcher_badge(pixels, stride, badge, false);
-            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
-                dynamic_action = *action;
-                dynamic_action.subtitle = ptc_audio_is_enabled() ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_MUTED));
-                dynamic_action.accent = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
-                action = &dynamic_action;
-            }
-            if (model->parent_page == PTC_UI_PARENT_PLAN &&
-                !ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
-                dynamic_action = *action;
-                dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_TO_CONFIRM_THE);
-                action = &dynamic_action;
-            }
-            /* Status badges live in the card's top-right corner.  The one-line
-             * title/status block is vertically centered below that corner, so
-             * it can use the full remaining width without being truncated. */
-            int reserved_right = 0;
-            draw_action_card(pixels, stride, card, action, index == model->selected_index && !model->parent_footer_focused, astate,
-                             reserved_right);
-            if (model->parent_page == PTC_UI_PARENT_PLAN) {
-                bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
-                bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
-                bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
-                                       strcmp(model->rule_source, "makeup_workday") == 0);
-                bool today_active = (strcmp(model->rule_source, "today_override") == 0);
-                bool weekly_active = !scheduled_active && !holiday_active && !today_active;
-                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
-                bool is_active_rule = (index == 0 && scheduled_active) ||
-                                      (index == 1 && holiday_active) ||
-                                      (index == 2 && weekly_active) ||
-                                      (index == 3 && bedtime_enforcing);
 
-                /* 当前生效规则的高亮描边（非聚焦时呈现） */
-                if (fresh && is_active_rule && !(index == model->selected_index && !model->parent_footer_focused)) {
-                    uint32_t active_border = (index == 3 ? UI_DANGER : (index == 1 ? UI_SUCCESS : UI_ACCENT));
-                    draw_rect_outline(pixels, stride, card, 16, 2, active_border);
-                }
-
-                const char *badge_label = !fresh ? ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED) :
-                    index == 0 ? (scheduled_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) :
-                                  (model->scheduled_override.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2))) :
-                    index == 1 ? (holiday_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) :
-                                  (model->holiday_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2))) :
-                    index == 2 ? (weekly_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) : ptc_ui_text(PTC_UI_T_NOT_ACTIVE)) :
-                    index == 3 ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
-                                  (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? ptc_ui_text(PTC_UI_T_SKIPPED) :
-                                   (model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)))) :
-                    index == 4 ? ptc_ui_eye_care_plan_badge_label(model) :
-                    index == 5 ? (model->dock_restriction_active ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
-                        model->dock_waived_today ? ptc_ui_text(PTC_UI_T_SKIPPED) :
-                        (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled) ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)) :
-                    (model->autonomy_policy.daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
-                     (model->daily_buffer_claimed ? ptc_ui_text(PTC_UI_T_RECEIVED_TODAY) :
-                      (model->daily_buffer_available ? ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY) : ptc_ui_text(PTC_UI_T_ENABLED))));
-                int p_width = measure_text(badge_label, 12) + 16;
-                if (p_width < 76) p_width = 76;
-                UiRect pbadge = {card.x + card.width - p_width - 12, card.y + 8, p_width, 22};
-                uint32_t badge_color = !fresh ? UI_WARNING :
-                    bedtime_enforcing && index == 3 ? UI_DANGER :
-                    (strcmp(badge_label, ptc_ui_text(PTC_UI_T_ACTIVE_2)) == 0 ||
-                     strcmp(badge_label, ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY)) == 0 ||
-                     strcmp(badge_label, ptc_ui_text(PTC_UI_T_SKIPPED)) == 0 ? UI_SUCCESS :
-                     (strcmp(badge_label, ptc_ui_text(PTC_UI_T_DISABLED_2)) == 0 ||
-                       strcmp(badge_label, ptc_ui_text(PTC_UI_T_NOT_ACTIVE)) == 0 ? UI_MUTED : UI_ACCENT));
-                fill_round_rect(pixels, stride, pbadge, 6,
-                                badge_color == UI_DANGER ? UI_DANGER_SOFT :
-                                (badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
-                                 (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
-                uint32_t p_bd = badge_color == UI_DANGER ? UI_DANGER_BORDER :
-                                (badge_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
-                                 (badge_color == UI_WARNING ? UI_WARNING_BORDER : UI_BORDER));
-                draw_rect_outline(pixels, stride, pbadge, 6, 1, p_bd);
-                draw_text_center(pixels, stride, pbadge, badge_label, 12, badge_color);
-            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 4) {
-                const char *state_label = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
-                uint32_t state_color = UI_DANGER;
-                if (model->album_restriction_state == 0) {
-                    state_label = ptc_ui_text(PTC_UI_T_NOT_ENABLED);
-                    state_color = UI_MUTED;
-                } else if (model->album_restriction_state == 1) {
-                    state_label = ptc_ui_text(PTC_UI_T_ENABLED);
-                    state_color = UI_SUCCESS;
-                } else if (model->album_restriction_state == 2) {
-                    state_label = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
-                    state_color = UI_WARNING;
-                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                    state_label = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
-                    state_color = UI_ACCENT;
-                }
-                int st_width = measure_text(state_label, 12) + 16;
-                if (st_width < 72) st_width = 72;
-                UiRect badge = {card.x + card.width - st_width - 14, card.y + 8, st_width, 24};
-                uint32_t st_bg = state_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
-                                 (state_color == UI_WARNING ? UI_WARNING_SOFT :
-                                  (state_color == UI_DANGER ? UI_DANGER_SOFT :
-                                   (state_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
-                uint32_t st_bd = state_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
-                                 (state_color == UI_WARNING ? UI_WARNING_BORDER :
-                                  (state_color == UI_DANGER ? UI_DANGER_BORDER :
-                                   (state_color == UI_ACCENT ? UI_ACCENT : UI_BORDER)));
-                fill_round_rect(pixels, stride, badge, 6, st_bg);
-                draw_rect_outline(pixels, stride, badge, 6, 1, st_bd);
-                draw_text_center(pixels, stride, badge, state_label, 12, state_color);
-            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-                UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
-                draw_language_switcher_badge(pixels, stride, badge, false);
-            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
-                bool enabled = ptc_audio_is_enabled();
-                const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
-                uint32_t state_color = enabled ? UI_SUCCESS : UI_MUTED;
-                int au_width = measure_text(state_label, 12) + 16;
-                if (au_width < 62) au_width = 62;
-                UiRect badge = {card.x + card.width - au_width - 14, card.y + 8, au_width, 24};
-                uint32_t au_bg = enabled ? UI_SUCCESS_SOFT : UI_PAGE;
-                uint32_t au_bd = enabled ? UI_SUCCESS_BORDER : UI_BORDER;
-                fill_round_rect(pixels, stride, badge, 6, au_bg);
-                draw_rect_outline(pixels, stride, badge, 6, 1, au_bd);
-                draw_text_center(pixels, stride, badge, state_label, 12, state_color);
-            }
+        const char *badge_label = !fresh ? ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED) :
+            index == 0 ? (scheduled_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) :
+                          (model->scheduled_override.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2))) :
+            index == 1 ? (holiday_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) :
+                          (model->holiday_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2))) :
+            index == 2 ? (weekly_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) : ptc_ui_text(PTC_UI_T_NOT_ACTIVE)) :
+            index == 3 ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
+                          (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? ptc_ui_text(PTC_UI_T_SKIPPED) :
+                           (model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)))) :
+            index == 4 ? ptc_ui_eye_care_plan_badge_label(model) :
+            index == 5 ? (model->dock_restriction_active ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
+                model->dock_waived_today ? ptc_ui_text(PTC_UI_T_SKIPPED) :
+                (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled) ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)) :
+            (model->autonomy_policy.daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
+             (model->daily_buffer_claimed ? ptc_ui_text(PTC_UI_T_RECEIVED_TODAY) :
+              (model->daily_buffer_available ? ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY) : ptc_ui_text(PTC_UI_T_ENABLED))));
+        int p_width = measure_text(badge_label, 12) + 16;
+        if (p_width < 76) p_width = 76;
+        UiRect pbadge = {card.x + card.width - p_width - 12, card.y + 8, p_width, 22};
+        uint32_t badge_color = !fresh ? UI_WARNING :
+            bedtime_enforcing && index == 3 ? UI_DANGER :
+            (strcmp(badge_label, ptc_ui_text(PTC_UI_T_ACTIVE_2)) == 0 ||
+             strcmp(badge_label, ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY)) == 0 ||
+             strcmp(badge_label, ptc_ui_text(PTC_UI_T_SKIPPED)) == 0 ? UI_SUCCESS :
+             (strcmp(badge_label, ptc_ui_text(PTC_UI_T_DISABLED_2)) == 0 ||
+               strcmp(badge_label, ptc_ui_text(PTC_UI_T_NOT_ACTIVE)) == 0 ? UI_MUTED : UI_ACCENT));
+        fill_round_rect(pixels, stride, pbadge, 6,
+                        badge_color == UI_DANGER ? UI_DANGER_SOFT :
+                        (badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
+                         (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
+        uint32_t p_bd = badge_color == UI_DANGER ? UI_DANGER_BORDER :
+                        (badge_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
+                         (badge_color == UI_WARNING ? UI_WARNING_BORDER : UI_BORDER));
+        draw_rect_outline(pixels, stride, pbadge, 6, 1, p_bd);
+        draw_text_center(pixels, stride, pbadge, badge_label, 12, badge_color);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 4) {
+        const char *state_label = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
+        uint32_t state_color = UI_DANGER;
+        if (model->album_restriction_state == 0) {
+            state_label = ptc_ui_text(PTC_UI_T_NOT_ENABLED);
+            state_color = UI_MUTED;
+        } else if (model->album_restriction_state == 1) {
+            state_label = ptc_ui_text(PTC_UI_T_ENABLED);
+            state_color = UI_SUCCESS;
+        } else if (model->album_restriction_state == 2) {
+            state_label = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
+            state_color = UI_WARNING;
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+            state_label = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
+            state_color = UI_ACCENT;
         }
-        if (model->parent_page == PTC_UI_PARENT_PLAN) {
-            /* 胶囊 1: 优先于节假日规则 (位于卡片 0 底部 316 与卡片 1 顶部 354 之间，y=325) */
-            const char *t0 = ptc_ui_text(PTC_UI_T_OVERRIDES_HOLIDAYS);
-            int w0 = measure_text(t0, 11) + 16;
-            UiRect pill0 = {54 + 20, 325, w0, 20};
-            fill_round_rect(pixels, stride, pill0, 10, UI_PAGE);
-            draw_rect_outline(pixels, stride, pill0, 10, 1, UI_BORDER);
-            draw_text_center(pixels, stride, pill0, t0, 11, UI_ACCENT);
-
-            /* 胶囊 2: 优先于每周常规计划 (位于卡片 1 底部 456 与卡片 2 顶部 494 之间，y=465) */
-            const char *t1 = ptc_ui_text(PTC_UI_T_OVERRIDES_WEEKLY_PLAN);
-            int w1 = measure_text(t1, 11) + 16;
-            UiRect pill1 = {54 + 20, 465, w1, 20};
-            fill_round_rect(pixels, stride, pill1, 10, UI_PAGE);
-            draw_rect_outline(pixels, stride, pill1, 10, 1, UI_BORDER);
-            draw_text_center(pixels, stride, pill1, t1, 11, UI_SUCCESS);
-        }
+        int st_width = measure_text(state_label, 12) + 16;
+        if (st_width < 72) st_width = 72;
+        UiRect badge = {card.x + card.width - st_width - 14, card.y + 8, st_width, 24};
+        uint32_t st_bg = state_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
+                         (state_color == UI_WARNING ? UI_WARNING_SOFT :
+                          (state_color == UI_DANGER ? UI_DANGER_SOFT :
+                           (state_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
+        uint32_t st_bd = state_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
+                         (state_color == UI_WARNING ? UI_WARNING_BORDER :
+                          (state_color == UI_DANGER ? UI_DANGER_BORDER :
+                           (state_color == UI_ACCENT ? UI_ACCENT : UI_BORDER)));
+        fill_round_rect(pixels, stride, badge, 6, st_bg);
+        draw_rect_outline(pixels, stride, badge, 6, 1, st_bd);
+        draw_text_center(pixels, stride, badge, state_label, 12, state_color);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+        UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
+        draw_language_switcher_badge(pixels, stride, badge, false);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
+        bool enabled = ptc_audio_is_enabled();
+        const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
+        uint32_t state_color = enabled ? UI_SUCCESS : UI_MUTED;
+        int au_width = measure_text(state_label, 12) + 16;
+        if (au_width < 62) au_width = 62;
+        UiRect badge = {card.x + card.width - au_width - 14, card.y + 8, au_width, 24};
+        uint32_t au_bg = enabled ? UI_SUCCESS_SOFT : UI_PAGE;
+        uint32_t au_bd = enabled ? UI_SUCCESS_BORDER : UI_BORDER;
+        fill_round_rect(pixels, stride, badge, 6, au_bg);
+        draw_rect_outline(pixels, stride, badge, 6, 1, au_bd);
+        draw_text_center(pixels, stride, badge, state_label, 12, state_color);
     }
-    if (draw_parent_plan_surface(pixels, stride, model)) {
-        /* Plan root and editor pages are rendered by ui_render_plan.c. */
-    } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
-        draw_today_status(pixels, stride, model);
-    } else if (model->parent_page == PTC_UI_PARENT_GRANT) {
-        draw_grant_help(pixels, stride, model);
-    } else if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
-        draw_safety_status(pixels, stride, model);
+}
+
+static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                     const UiAction *actions, int index)
+{
+    UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SUPPORT
+        ? ptc_ui_support_card_rect(index) : (model->parent_page == PTC_UI_PARENT_PLAN
+            ? ptc_ui_plan_card_rect(index) : (model->parent_page == PTC_UI_PARENT_SETTINGS
+                ? ptc_ui_settings_card_rect(index) : ptc_ui_parent_card_rect(index))));
+    PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+        if (!ptc_ui_safety_action_visible(model, index)) return;
+        astate = ptc_ui_safety_action_available(model, index);
+        if (astate != PTC_UI_ACTION_DISABLED)
+            astate = index == ptc_ui_support_recommended_action(model)
+                ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_AVAILABLE;
     }
-    if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
-        UiRect help = {842, 176, 384, 452};
-        draw_plan_card(pixels, stride, help, false);
-
-        int sel = model->selected_index;
-        const char *tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
-        const char *title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
-        const char *status_text = ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM);
-        uint32_t status_color = UI_ACCENT;
-        const char *desc1 = "";
-        const char *desc2 = "";
-        const char *desc3 = "";
-        const char *action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_MODIFY_SETTINGS);
-
-        switch (sel) {
-        case 0: /* 修改 PIN */
-            tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
-            title = ptc_ui_text(PTC_UI_T_PARENT_PIN);
-            status_text = ptc_ui_text(PTC_UI_T_PROTECTION_ENABLED);
-            status_color = UI_SUCCESS;
-            desc1 = ptc_ui_text(PTC_UI_T_USED_TO_PROTECT_PARENTAL_ZONE_SETTINGS_HIGH);
-            desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_4_8_DIGIT_PASSWORD_PLEASE_KEEP);
-            desc3 = ptc_ui_text(PTC_UI_T_ENTERING_INCORRECTLY_THREE_TIMES_IN_A_ROW);
-            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_THE_MANAGEMENT_PASSWORD);
-            break;
-        case 1: /* 外观主题 */
-            tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
-            title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
-            status_text = ptc_ui_theme_preference_label(g_theme.preference);
-            status_color = UI_ACCENT;
-            desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_THREE_THEME_MODES_LIGHT_DARK_AND);
-            desc2 = ptc_ui_text(PTC_UI_T_DARK_MODE_OPTIMIZES_OLED_SCREEN_POWER_SAVING);
-            desc3 = ptc_ui_text(PTC_UI_T_SETTINGS_ARE_SAVED_INSTANTLY_AND_TAKE_EFFECT);
-            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_THEME_SWITCHING);
-            break;
-        case 2: /* 家长区快捷键 */
-            tag = ptc_ui_text(PTC_UI_T_SYSTEM_CONTROL);
-            title = ptc_ui_text(PTC_UI_T_QUICK_ENTRANCE_TO_PARENT_AREA);
-            status_text = (model->custom_shortcut_enabled && model->custom_shortcut_label[0])
-                ? model->custom_shortcut_label : ptc_ui_text(PTC_UI_T_DEFAULT_SHORTCUT_LABEL);
-            status_color = UI_ACCENT;
-            desc1 = ptc_ui_text(PTC_UI_T_LONG_PRESS_THIS_KEY_ON_ANY_INTERFACE);
-            desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_CUSTOM_CONFIGURATION_OF_MINUS_CAPTURE_OR);
-            desc3 = ptc_ui_text(PTC_UI_T_IT_IS_CONVENIENT_FOR_PARENTS_TO_QUICKLY);
-            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_SHORTCUT_KEY_BINDINGS);
-            break;
-        case 3: /* 界面语言 */
-            tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
-            title = ptc_ui_text(PTC_UI_T_UI_LANGUAGE);
-            status_text = ptc_ui_language_preference_label(model->language_preference);
-            status_color = UI_ACCENT;
-            desc1 = ptc_ui_text(PTC_UI_T_SET_THE_LANGUAGE_FOR_PLAYWISE_CONSOLE_MANAGEMENT);
-            desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_SIMPLIFIED_CHINESE_TRADITIONAL_CHINESE_ENGLISH_AND);
-            desc3 = ptc_ui_text(PTC_UI_T_PREFERENCES_ARE_PERSISTED_IN_THE_SD_CARD);
-            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_LANGUAGE_SELECTION);
-            break;
-        case 4: /* 自制程序高级入口 */
-            tag = ptc_ui_text(PTC_UI_T_ADVANCED_SECURITY);
-            title = ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS);
-            if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
-                status_color = UI_MUTED;
-            } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON);
-                status_color = UI_SUCCESS;
-            } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
-                status_text = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
-                status_color = UI_WARNING;
-            } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                status_text = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
-                status_color = UI_ACCENT;
-            } else {
-                status_text = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
-                status_color = UI_DANGER;
-            }
-            desc1 = ptc_ui_text(PTC_UI_T_REDIRECT_PHOTO_ALBUM_ENTRY_TO_HOMEBREW_MENU);
-            desc2 = ptc_ui_text(PTC_UI_T_ONCE_ENABLED_HOLD_X_THEN_PRESS_A);
-            desc3 = ptc_ui_text(PTC_UI_T_PREVENT_CHILDREN_FROM_BYPASSING_PARENTAL_CONTROL_RESTRICTIONS);
-            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
-            break;
-        case 5: /* 按键与交互音效 */
-            tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
-            title = ptc_ui_text(PTC_UI_T_SOUND_EFFECTS);
-            status_text = ptc_audio_is_enabled() ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
-            status_color = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
-            desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_CRISP_BUTTONS_MICRO_GEAR_WHEEL_AND);
-            desc2 = ptc_ui_text(PTC_UI_T_CONTAINS_LONG_PRESS_TO_CONFIRM_COMPLETION_DANGER);
-            desc3 = ptc_ui_text(PTC_UI_T_MUTE_DOES_NOT_AFFECT_THE_SWITCH_SYSTEM);
-            action_hint = ptc_audio_is_enabled() ? ptc_ui_text(PTC_UI_T_PRESS_A_TO_MUTE_SOUND_EFFECTS) : ptc_ui_text(PTC_UI_T_PRESS_A_TO_TURN_ON_SOUND_EFFECTS);
-            break;
-        case 6: /* 家庭活动记录 */
-            tag = ptc_ui_text(PTC_UI_T_SECURITY_AUDIT);
-            title = ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD);
-            status_text = ptc_ui_text(PTC_UI_T_UP_TO_200_ITEMS);
-            status_color = UI_MUTED;
-            desc1 = ptc_ui_text(PTC_UI_T_RECORDS_CREDIT_ADJUSTMENT_OFFLINE_GRANT_BEDTIME_SKIP);
-            desc2 = ptc_ui_text(PTC_UI_T_ONLY_SAVE_LOCAL_SECURITY_AUDIT_LOGS_AND);
-            desc3 = ptc_ui_text(PTC_UI_T_SUPPORTS_HANDLE_L_R_FOR_QUICK_PAGE);
-            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_SEE_FULL_ACTIVITY_LOG);
-            break;
-        case 7:
-            tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
-            title = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_TITLE);
-            status_text = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SELECTION);
-            desc1 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE);
-            desc2 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NOTE);
-            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
-            break;
-        default:
-            break;
+    const UiAction *action = &actions[index];
+    UiAction dynamic_action;
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT && model->disable_flag_present && index == 0) {
+        action = ptc_ui_runtime_fingerprint_reconfirmation_needed(model)
+            ? &RECONFIRM_ENVIRONMENT_ACTION : &RESUME_CONTROL_ACTION;
+    }
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 4) {
+        const char *detail = ptc_ui_text(PTC_UI_T_STATUS_IS_UNKNOWN_PLEASE_CHECK_AGAIN);
+        dynamic_action = *action;
+        if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
+            detail = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
+            detail = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON_HOLD_DOWN_X_AND);
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
+            detail = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_PLEASE_VIEW_DETAILS);
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+            detail = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION_ENTRY_AVAILABLE);
         }
-
-        /* Render Tag */
-        draw_text(pixels, stride, help.x + 24, help.y + 36, tag, 14, UI_ACCENT);
-
-        /* Render Title */
-        char fitted_title[128];
-        fit_text(fitted_title, sizeof(fitted_title), title, 22, help.width - 48);
-        draw_text(pixels, stride, help.x + 24, help.y + 72, fitted_title, 22, UI_RGB(UI_BLENDED(text_primary)));
-
-        /* Render Status Badge */
-        UiRect badge = {help.x + help.width - 130, help.y + 24, 106, 26};
-        if (sel == 3) {
-            draw_language_switcher_badge(pixels, stride, badge, true);
+        /* Use the card's single subtitle row; a second row at the same y overlaps it. */
+        dynamic_action.subtitle = detail;
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 0) {
+        dynamic_action = *action;
+        bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
+        bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
+        dynamic_action.subtitle = scheduled_active
+            ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_THE_PLAN_IS_IN_EFFECT_WITH_CURRENT) : ptc_ui_text(PTC_UI_T_THIS_PLAN_IS_CURRENTLY_USED_TO_DETERMINE))
+            : (model->scheduled_override.enabled ? ptc_ui_text(PTC_UI_T_IS_ENABLED_TODAY_IS_NOT_WITHIN_THE) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED));
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 1) {
+        dynamic_action = *action;
+        bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+                               strcmp(model->rule_source, "makeup_workday") == 0);
+        bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
+        dynamic_action.subtitle = holiday_active
+            ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_IS_IN_EFFECT_DURING_HOLIDAYS_CURRENTLY_UNDER) :
+               (strcmp(model->rule_source, "statutory_holiday") == 0
+                ? ptc_ui_text(PTC_UI_T_IS_CURRENTLY_IN_EFFECT_AND_IS_A) : ptc_ui_text(PTC_UI_T_CURRENTLY_IN_EFFECT_THE_NATIONAL_REST_DAYS)))
+            : (model->holiday_enabled ? ptc_ui_text(PTC_UI_T_IS_ENABLED_TODAY_IS_NOT_A_HOLIDAY) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED_RULES_CAN_BE_PRESET));
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 2) {
+        dynamic_action = *action;
+        bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
+        bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+                               strcmp(model->rule_source, "makeup_workday") == 0);
+        bool today_active = (strcmp(model->rule_source, "today_override") == 0);
+        bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
+        if (today_active) {
+            dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_TODAY_S_ADJUSTMENT_WILL_BE_USED_FIRST);
+        } else if (scheduled_active) {
+            dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_THE_SPECIFIED_DATE_QUOTA_WILL_BE_USED);
+        } else if (holiday_active) {
+            dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_HOLIDAY_SETTINGS_WILL_BE_USED_FIRST_TODAY);
         } else {
-            fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
-            draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
-            draw_text_center(pixels, stride, badge, status_text, 12, status_color);
+            dynamic_action.subtitle = bedtime_enforcing
+                ? ptc_ui_text(PTC_UI_T_WEEKLY_QUOTA_IS_IN_EFFECT_CURRENT_BEDTIME) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_IN_EFFECT_BASIC_QUOTA_FROM);
         }
-
-        /* Divider line */
-        UiRect div = {help.x + 24, help.y + 92, help.width - 48, 1};
-        fill_round_rect(pixels, stride, div, 0, UI_BORDER);
-
-        /* Descriptions */
-        int desc_y = help.y + 128;
-        if (desc1 && *desc1) {
-            desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc1, 14,
-                                      help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 3) {
+        dynamic_action = *action;
+        bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
+        dynamic_action.subtitle = model->bedtime_policy.enabled
+            ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_THE_CURRENT_RESTRICTION_IS_IN_EFFECT) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_OPEN_WAITING_FOR_THE_NEXT))
+            : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED);
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 4) {
+        static char eye_detail[80];
+        dynamic_action = *action;
+        if (model->eye_care_policy.enabled) {
+            snprintf(eye_detail, sizeof(eye_detail), "%u / %u %s",
+                (unsigned)model->eye_care_policy.play_minutes,
+                (unsigned)model->eye_care_policy.rest_minutes,
+                ptc_ui_text(PTC_UI_T_MIN));
+        } else snprintf(eye_detail, sizeof(eye_detail), "%s", ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
+        dynamic_action.subtitle = eye_detail;
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 5) {
+        static char dock_detail[192];
+        dynamic_action = *action;
+        ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock_detail, sizeof(dock_detail));
+        dynamic_action.subtitle = dock_detail;
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 6) {
+        static char autonomy_detail[64];
+        dynamic_action = *action;
+        if (model->autonomy_policy.daily_buffer_minutes > 0u) {
+            snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_U_MIN_DAY),
+                (unsigned int)model->autonomy_policy.daily_buffer_minutes);
+        } else {
+            snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
         }
-        if (desc2 && *desc2) {
-            desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc2, 14,
-                                      help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
-        }
-        if (desc3 && *desc3) {
-            draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc3, 14,
-                              help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
-        }
-
-        /* Action Hint Box */
-        UiRect hint_box = {help.x + 24, help.y + 268, help.width - 48, 44};
-        fill_round_rect(pixels, stride, hint_box, 10, UI_PAGE);
-        draw_rect_outline(pixels, stride, hint_box, 10, 1, UI_BORDER);
-        draw_text_center(pixels, stride, hint_box, action_hint, 15, UI_INK);
-
-        /* Bottom guidance */
-        draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 68,
-                          ptc_ui_text(PTC_UI_T_PRESS_B_WHILE_AWAY_TO_RETURN_TO), 13,
-                          help.width - 48, 17, 2, UI_MUTED);
-        draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 30,
-                          ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_DEVICE_STATUS), 13,
-                          help.width - 48, 17, 2, UI_MUTED);
+        dynamic_action.subtitle = autonomy_detail;
+        action = &dynamic_action;
     }
-    draw_settings_badge(pixels, stride, model);
-    if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
-        model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
-        draw_diagnostic_notice(pixels, stride, model);
-    } else if (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model)) {
-        draw_notice(pixels, stride, model);
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 1) {
+        static char theme_subtitle[96];
+        dynamic_action = *action;
+        snprintf(theme_subtitle, sizeof(theme_subtitle), "%s / %s",
+                 ptc_ui_theme_preference_label(g_theme.preference),
+                 ptc_ui_theme_style_label(ptc_ui_theme_get_style()));
+        dynamic_action.subtitle = theme_subtitle;
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 2) {
+        static char shortcut_detail[112];
+        dynamic_action = *action;
+        if (model->custom_shortcut_enabled && model->custom_shortcut_label[0]) {
+            snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_S),
+                     model->custom_shortcut_label);
+        } else {
+            snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_MINUS));
+        }
+        dynamic_action.subtitle = shortcut_detail;
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+        dynamic_action = *action;
+        dynamic_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
+        action = &dynamic_action;
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+        UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
+        draw_language_switcher_badge(pixels, stride, badge, false);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
+        dynamic_action = *action;
+        dynamic_action.subtitle = ptc_audio_is_enabled() ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_MUTED));
+        dynamic_action.accent = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
+        action = &dynamic_action;
     }
+    if (model->parent_page == PTC_UI_PARENT_PLAN &&
+        !ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+        dynamic_action = *action;
+        dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_TO_CONFIRM_THE);
+        action = &dynamic_action;
+    }
+    /* Status badges live in the card's top-right corner.  The one-line
+     * title/status block is vertically centered below that corner, so
+     * it can use the full remaining width without being truncated. */
+    int reserved_right = 0;
+    draw_action_card(pixels, stride, card, action, index == model->selected_index && !model->parent_footer_focused, astate,
+                     reserved_right);
+    draw_parent_action_badges(pixels, stride, model, card, index);
+}
+
+static void draw_parent_action_grid(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    const UiAction *actions;
+    int action_count;
+    int index;
+    actions = actions_for_page(model->parent_page, &action_count);
+    if (model->parent_page == PTC_UI_PARENT_PLAN) {
+        UiRect quota_zone = {42, 172, 388, 452};
+        UiRect parallel_zone = {428, 172, 388, 452};
+        fill_round_rect(pixels, stride, quota_zone, 16, UI_RAISED);
+        draw_rect_outline(pixels, stride, quota_zone, 16, 1, UI_BORDER);
+        const char *q_text = ptc_ui_text(PTC_UI_T_QUOTA_RULES);
+        int qw = measure_text(q_text, 12) + 16;
+        if (qw < 76) qw = 76;
+        UiRect qbadge = {54, 178, qw, 22};
+        fill_round_rect(pixels, stride, qbadge, 6, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, qbadge, 6, 1, UI_ACCENT);
+        draw_text_center(pixels, stride, qbadge, q_text, 12, UI_ACCENT);
+        draw_text(pixels, stride, 54 + qw + 8, 195, ptc_ui_text(PTC_UI_T_APPLIES_FROM_TOP_TO_BOTTOM), 13, UI_MUTED);
+
+        fill_round_rect(pixels, stride, parallel_zone, 16, UI_RAISED);
+        draw_rect_outline(pixels, stride, parallel_zone, 16, 1, UI_BORDER);
+        const char *p_text = ptc_ui_text(PTC_UI_T_SEPARATE);
+        int pw = measure_text(p_text, 12) + 16;
+        if (pw < 76) pw = 76;
+        UiRect pbadge = {440, 178, pw, 22};
+        fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
+        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING_BORDER);
+        draw_text_center(pixels, stride, pbadge, p_text, 12, UI_WARNING_TEXT);
+        draw_text(pixels, stride, 440 + pw + 8, 195, ptc_ui_text(PTC_UI_T_OPERATES_INDEPENDENTLY), 13, UI_MUTED);
+
+    }
+    if (model->parent_page == PTC_UI_PARENT_GRANT) {
+        UiRect grant_banner = {54, 484, 750, 144};
+        fill_round_rect(pixels, stride, grant_banner, 16, UI_SURFACE);
+        draw_rect_outline(pixels, stride, grant_banner, 16, 1, UI_BORDER);
+        fill_round_rect(pixels, stride, (UiRect){grant_banner.x + 16, grant_banner.y + 18, 4, grant_banner.height - 36}, 2, UI_ACCENT);
+        draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 36, ptc_ui_text(PTC_UI_T_OFFLINE_GRANT_CODE_USAGE_GUIDE), 18, UI_INK);
+        char fitted_grant[256];
+        fit_text(fitted_grant, sizeof(fitted_grant),
+                 ptc_ui_text(PTC_UI_T_PARENTS_CAN_DIRECTLY_SELECT_THE_SHORTCUT_TIME), 14, grant_banner.width - 48);
+        draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 68, fitted_grant, 14, UI_RGB(UI_BLENDED(text_secondary)));
+        fit_text(fitted_grant, sizeof(fitted_grant),
+                 ptc_ui_text(PTC_UI_T_AFTER_REDEMPTION_IT_WILL_AUTOMATICALLY_BE_INCLUDED), 14, grant_banner.width - 48);
+        draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 96, fitted_grant, 14, UI_RGB(UI_BLENDED(text_secondary)));
+        fit_text(fitted_grant, sizeof(fitted_grant),
+                 ptc_ui_text(PTC_UI_T_THE_EXTRA_TIME_CODE_INCLUDES_ANTI_REPLAY), 14, grant_banner.width - 48);
+        draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 124, fitted_grant, 14, UI_MUTED);
+    }
+    for (index = 0; index < action_count; ++index) {
+        draw_parent_action_card(pixels, stride, model, actions, index);
+    }
+    if (model->parent_page == PTC_UI_PARENT_PLAN) {
+        /* 胶囊 1: 优先于节假日规则 (位于卡片 0 底部 316 与卡片 1 顶部 354 之间，y=325) */
+        const char *t0 = ptc_ui_text(PTC_UI_T_OVERRIDES_HOLIDAYS);
+        int w0 = measure_text(t0, 11) + 16;
+        UiRect pill0 = {54 + 20, 325, w0, 20};
+        fill_round_rect(pixels, stride, pill0, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, pill0, 10, 1, UI_BORDER);
+        draw_text_center(pixels, stride, pill0, t0, 11, UI_ACCENT);
+
+        /* 胶囊 2: 优先于每周常规计划 (位于卡片 1 底部 456 与卡片 2 顶部 494 之间，y=465) */
+        const char *t1 = ptc_ui_text(PTC_UI_T_OVERRIDES_WEEKLY_PLAN);
+        int w1 = measure_text(t1, 11) + 16;
+        UiRect pill1 = {54 + 20, 465, w1, 20};
+        fill_round_rect(pixels, stride, pill1, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, pill1, 10, 1, UI_BORDER);
+        draw_text_center(pixels, stride, pill1, t1, 11, UI_SUCCESS);
+    }
+}
+
+static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect help = {842, 176, 384, 452};
+    draw_plan_card(pixels, stride, help, false);
+
+    int sel = model->selected_index;
+    const char *tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+    const char *title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
+    const char *status_text = ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM);
+    uint32_t status_color = UI_ACCENT;
+    const char *desc1 = "";
+    const char *desc2 = "";
+    const char *desc3 = "";
+    const char *action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_MODIFY_SETTINGS);
+
+    switch (sel) {
+    case 0: /* 修改 PIN */
+        tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
+        title = ptc_ui_text(PTC_UI_T_PARENT_PIN);
+        status_text = ptc_ui_text(PTC_UI_T_PROTECTION_ENABLED);
+        status_color = UI_SUCCESS;
+        desc1 = ptc_ui_text(PTC_UI_T_USED_TO_PROTECT_PARENTAL_ZONE_SETTINGS_HIGH);
+        desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_4_8_DIGIT_PASSWORD_PLEASE_KEEP);
+        desc3 = ptc_ui_text(PTC_UI_T_ENTERING_INCORRECTLY_THREE_TIMES_IN_A_ROW);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_THE_MANAGEMENT_PASSWORD);
+        break;
+    case 1: /* 外观主题 */
+        tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+        title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
+        status_text = ptc_ui_theme_preference_label(g_theme.preference);
+        status_color = UI_ACCENT;
+        desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_THREE_THEME_MODES_LIGHT_DARK_AND);
+        desc2 = ptc_ui_text(PTC_UI_T_DARK_MODE_OPTIMIZES_OLED_SCREEN_POWER_SAVING);
+        desc3 = ptc_ui_text(PTC_UI_T_SETTINGS_ARE_SAVED_INSTANTLY_AND_TAKE_EFFECT);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_THEME_SWITCHING);
+        break;
+    case 2: /* 家长区快捷键 */
+        tag = ptc_ui_text(PTC_UI_T_SYSTEM_CONTROL);
+        title = ptc_ui_text(PTC_UI_T_QUICK_ENTRANCE_TO_PARENT_AREA);
+        status_text = (model->custom_shortcut_enabled && model->custom_shortcut_label[0])
+            ? model->custom_shortcut_label : ptc_ui_text(PTC_UI_T_DEFAULT_SHORTCUT_LABEL);
+        status_color = UI_ACCENT;
+        desc1 = ptc_ui_text(PTC_UI_T_LONG_PRESS_THIS_KEY_ON_ANY_INTERFACE);
+        desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_CUSTOM_CONFIGURATION_OF_MINUS_CAPTURE_OR);
+        desc3 = ptc_ui_text(PTC_UI_T_IT_IS_CONVENIENT_FOR_PARENTS_TO_QUICKLY);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_SHORTCUT_KEY_BINDINGS);
+        break;
+    case 3: /* 界面语言 */
+        tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+        title = ptc_ui_text(PTC_UI_T_UI_LANGUAGE);
+        status_text = ptc_ui_language_preference_label(model->language_preference);
+        status_color = UI_ACCENT;
+        desc1 = ptc_ui_text(PTC_UI_T_SET_THE_LANGUAGE_FOR_PLAYWISE_CONSOLE_MANAGEMENT);
+        desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_SIMPLIFIED_CHINESE_TRADITIONAL_CHINESE_ENGLISH_AND);
+        desc3 = ptc_ui_text(PTC_UI_T_PREFERENCES_ARE_PERSISTED_IN_THE_SD_CARD);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_LANGUAGE_SELECTION);
+        break;
+    case 4: /* 自制程序高级入口 */
+        tag = ptc_ui_text(PTC_UI_T_ADVANCED_SECURITY);
+        title = ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS);
+        if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
+            status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
+            status_color = UI_MUTED;
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
+            status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON);
+            status_color = UI_SUCCESS;
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
+            status_text = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
+            status_color = UI_WARNING;
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+            status_text = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
+            status_color = UI_ACCENT;
+        } else {
+            status_text = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
+            status_color = UI_DANGER;
+        }
+        desc1 = ptc_ui_text(PTC_UI_T_REDIRECT_PHOTO_ALBUM_ENTRY_TO_HOMEBREW_MENU);
+        desc2 = ptc_ui_text(PTC_UI_T_ONCE_ENABLED_HOLD_X_THEN_PRESS_A);
+        desc3 = ptc_ui_text(PTC_UI_T_PREVENT_CHILDREN_FROM_BYPASSING_PARENTAL_CONTROL_RESTRICTIONS);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
+        break;
+    case 5: /* 按键与交互音效 */
+        tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+        title = ptc_ui_text(PTC_UI_T_SOUND_EFFECTS);
+        status_text = ptc_audio_is_enabled() ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
+        status_color = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
+        desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_CRISP_BUTTONS_MICRO_GEAR_WHEEL_AND);
+        desc2 = ptc_ui_text(PTC_UI_T_CONTAINS_LONG_PRESS_TO_CONFIRM_COMPLETION_DANGER);
+        desc3 = ptc_ui_text(PTC_UI_T_MUTE_DOES_NOT_AFFECT_THE_SWITCH_SYSTEM);
+        action_hint = ptc_audio_is_enabled() ? ptc_ui_text(PTC_UI_T_PRESS_A_TO_MUTE_SOUND_EFFECTS) : ptc_ui_text(PTC_UI_T_PRESS_A_TO_TURN_ON_SOUND_EFFECTS);
+        break;
+    case 6: /* 家庭活动记录 */
+        tag = ptc_ui_text(PTC_UI_T_SECURITY_AUDIT);
+        title = ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD);
+        status_text = ptc_ui_text(PTC_UI_T_UP_TO_200_ITEMS);
+        status_color = UI_MUTED;
+        desc1 = ptc_ui_text(PTC_UI_T_RECORDS_CREDIT_ADJUSTMENT_OFFLINE_GRANT_BEDTIME_SKIP);
+        desc2 = ptc_ui_text(PTC_UI_T_ONLY_SAVE_LOCAL_SECURITY_AUDIT_LOGS_AND);
+        desc3 = ptc_ui_text(PTC_UI_T_SUPPORTS_HANDLE_L_R_FOR_QUICK_PAGE);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_SEE_FULL_ACTIVITY_LOG);
+        break;
+    case 7:
+        tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
+        title = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_TITLE);
+        status_text = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SELECTION);
+        desc1 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE);
+        desc2 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NOTE);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
+        break;
+    default:
+        break;
+    }
+
+    /* Render Tag */
+    draw_text(pixels, stride, help.x + 24, help.y + 36, tag, 14, UI_ACCENT);
+
+    /* Render Title */
+    char fitted_title[128];
+    fit_text(fitted_title, sizeof(fitted_title), title, 22, help.width - 48);
+    draw_text(pixels, stride, help.x + 24, help.y + 72, fitted_title, 22, UI_RGB(UI_BLENDED(text_primary)));
+
+    /* Render Status Badge */
+    UiRect badge = {help.x + help.width - 130, help.y + 24, 106, 26};
+    if (sel == 3) {
+        draw_language_switcher_badge(pixels, stride, badge, true);
+    } else {
+        fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+        draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
+        draw_text_center(pixels, stride, badge, status_text, 12, status_color);
+    }
+
+    /* Divider line */
+    UiRect div = {help.x + 24, help.y + 92, help.width - 48, 1};
+    fill_round_rect(pixels, stride, div, 0, UI_BORDER);
+
+    /* Descriptions */
+    int desc_y = help.y + 128;
+    if (desc1 && *desc1) {
+        desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc1, 14,
+                                  help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
+    }
+    if (desc2 && *desc2) {
+        desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc2, 14,
+                                  help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
+    }
+    if (desc3 && *desc3) {
+        draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc3, 14,
+                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
+    }
+
+    /* Action Hint Box */
+    UiRect hint_box = {help.x + 24, help.y + 268, help.width - 48, 44};
+    fill_round_rect(pixels, stride, hint_box, 10, UI_PAGE);
+    draw_rect_outline(pixels, stride, hint_box, 10, 1, UI_BORDER);
+    draw_text_center(pixels, stride, hint_box, action_hint, 15, UI_INK);
+
+    /* Bottom guidance */
+    draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 68,
+                      ptc_ui_text(PTC_UI_T_PRESS_B_WHILE_AWAY_TO_RETURN_TO), 13,
+                      help.width - 48, 17, 2, UI_MUTED);
+    draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 30,
+                      ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_DEVICE_STATUS), 13,
+                      help.width - 48, 17, 2, UI_MUTED);
+}
+
+static void draw_parent_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                bool plan_subpage)
+{
     if (!plan_subpage) {
         draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
                            ptc_ui_text(PTC_UI_T_L_PREVIOUS_PAGE));
@@ -1253,4 +1256,34 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             }
         }
     }
+}
+
+void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    const bool plan_subpage = model->parent_page == PTC_UI_PARENT_PLAN &&
+        model->plan_page != PTC_UI_PLAN_PAGE_ROOT;
+    draw_parent_header(pixels, stride, model);
+    if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
+        draw_parent_action_grid(pixels, stride, model);
+    }
+    if (draw_parent_plan_surface(pixels, stride, model)) {
+        /* Plan root and editor pages are rendered by ui_render_plan.c. */
+    } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        draw_today_status(pixels, stride, model);
+    } else if (model->parent_page == PTC_UI_PARENT_GRANT) {
+        draw_grant_help(pixels, stride, model);
+    } else if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+        draw_safety_status(pixels, stride, model);
+    }
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
+        draw_parent_settings_help(pixels, stride, model);
+    }
+    draw_settings_badge(pixels, stride, model);
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
+        model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
+        draw_diagnostic_notice(pixels, stride, model);
+    } else if (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model)) {
+        draw_notice(pixels, stride, model);
+    }
+    draw_parent_footer(pixels, stride, model, plan_subpage);
 }
