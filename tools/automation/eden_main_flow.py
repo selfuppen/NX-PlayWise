@@ -433,27 +433,42 @@ class MainFlow:
                                         "claimed buffer remains unavailable", "nonce ledger remains consumed"], ledger_sha256=ledger)
 
     def preferences_journey(self) -> None:
+        config = self.app / "config.json"
         self.page(3)
         self.action(target="card_1")
         self.wait_ui(overlay=21, overlay_selection=0)
+        # Both radio groups preview live but write nothing until A commits them together.
         self.action(button="Right")
         self.wait_ui(overlay_selection=1)
+        self.action(button="Down")
+        self.wait_ui(overlay_selection=4)
+        self.action(button="Right")
+        self.wait_ui(overlay_selection=5)
+        require(read(config)["theme"] == "system" and read(config)["theme_style"] == "slate",
+                "theme preview wrote config before confirm")
         self.action(button="A")
-        self.wait_ui(overlay=21, overlay_selection=1)
-        require(read(self.app / "config.json")["theme"] == "light", "light theme did not persist")
-        self.capture("preference-light")
-        self.action(button="B")
         self.wait_ui(overlay=0)
+        saved = read(config)
+        require(saved["theme"] == "light" and saved["theme_style"] == "teal",
+                "theme mode and style were not saved together")
+        self.capture("preference-light")
         self.action(target="card_1")
         self.wait_ui(overlay=21, overlay_selection=1)
         self.action(button="Right")
         self.wait_ui(overlay_selection=2)
         self.action(button="A")
-        self.wait_ui(overlay=21, overlay_selection=2)
-        require(read(self.app / "config.json")["theme"] == "dark", "dark theme did not persist")
+        self.wait_ui(overlay=0)
+        require(read(config)["theme"] == "dark" and read(config)["theme_style"] == "teal",
+                "dark theme did not persist with the chosen style")
         self.capture("preference-dark")
+        # B discards a pending draft and restores the saved appearance.
+        self.action(target="card_1")
+        self.wait_ui(overlay=21, overlay_selection=2)
+        self.action(button="Right")
+        self.wait_ui(overlay_selection=0)
         self.action(button="B")
         self.wait_ui(overlay=0)
+        require(read(config)["theme"] == "dark", "discarded theme draft reached config")
         self.action(target="card_3")
         self.wait_ui(overlay=37, overlay_selection=0)
         self.action(button="Down")
@@ -464,4 +479,6 @@ class MainFlow:
         self.wait_ui(overlay=0)
         require(read(self.app / "config.json")["ui_language"] == "en", "English did not persist")
         self.capture("preference-english")
-        self.checked("preferences_journey", ["light and dark apply through UI", "language switch keeps navigation usable"])
+        self.checked("preferences_journey", ["theme mode and style preview without writing config",
+                                            "A saves both radio groups together and B discards the draft",
+                                            "language switch keeps navigation usable"])

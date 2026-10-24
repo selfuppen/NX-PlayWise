@@ -548,6 +548,12 @@ typedef struct {
     char confirm_return_body[320];
     PtcUiOperation operation;
     int overlay_selection;
+    /* 外观主题页的两组单选：草稿只用于预览，按 A 才把主题模式与设计风格一起保存。 */
+    PtcUiThemePreference theme_draft_preference;
+    PtcUiThemeStyle theme_draft_style;
+    PtcUiThemePreference theme_saved_preference;
+    PtcUiThemeStyle theme_saved_style;
+    bool theme_draft_valid;
     uint16_t draft_minutes;
     bool today_limit_unlimited_draft;
     uint16_t minimum_minutes;

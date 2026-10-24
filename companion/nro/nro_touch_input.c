@@ -248,6 +248,9 @@ void handle_touch(UiState *ui, int x, int y)
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
             handle_overlay_input(ui, HidNpadButton_B);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_THEME) {
+            /* 返回键放弃未提交的主题草稿并恢复已保存外观。 */
+            handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
             close_code_result(ui);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
@@ -787,9 +790,10 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.shortcut_draft_show_hint = !ui->model.shortcut_draft_show_hint;
         break;
     case PTC_UI_HIT_THEME_OPTION:
-        ptc_audio_play(PTC_SE_CONFIRM);
-        ui->model.overlay_selection = hit.index;
-        handle_overlay_input(ui, HidNpadButton_A);
+        /* 点选只更新草稿并即时预览；保存仍走底栏主按钮或 A。 */
+        ptc_audio_play(PTC_SE_FOCUS);
+        if (hit.index < 3) theme_draft_select_mode(ui, (PtcUiThemePreference)hit.index);
+        else theme_draft_select_style(ui, (PtcUiThemeStyle)(hit.index - 3));
         break;
     case PTC_UI_HIT_LANGUAGE_OPTION:
         ptc_audio_play(PTC_SE_CONFIRM);

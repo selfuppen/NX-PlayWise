@@ -57,11 +57,104 @@ void refresh_language(UiState *ui)
     }
 }
 
+static void show_theme_view(UiState *ui, PtcUiThemePreference preference, PtcUiThemeStyle style)
+{
+    ptc_ui_theme_set_style(style);
+    ui->theme_view = ptc_ui_theme_make_styled_view(preference, style, ui->system_theme);
+}
+
+/* 外观主题页使用草稿：方向键/触摸只改草稿并即时预览，A 才把主题模式与
+ * 设计风格一起写入 config.json；B 丢弃草稿并恢复已保存外观。 */
+void open_theme_overlay(UiState *ui)
+{
+    if (!ui) return;
+    ui->model.overlay = PTC_UI_OVERLAY_THEME;
+    ui->model.overlay_selection = (int)ui->theme_preference;
+    ui->model.theme_saved_preference = ui->theme_preference;
+    ui->model.theme_saved_style = ui->theme_style;
+    ui->model.theme_draft_preference = ui->theme_preference;
+    ui->model.theme_draft_style = ui->theme_style;
+    ui->model.theme_draft_valid = true;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
+             ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+             ptc_ui_text(PTC_UI_T_ONLY_CHANGES_THE_DRAWING_APPEARANCE_OF_THE));
+}
+
+void preview_theme_draft(UiState *ui)
+{
+    if (!ui || !ui->model.theme_draft_valid) return;
+    show_theme_view(ui, ui->model.theme_draft_preference, ui->model.theme_draft_style);
+}
+
+/* 两组单选互不影响：改主题模式保留已选风格，改风格保留已选模式。 */
+void theme_draft_select_mode(UiState *ui, PtcUiThemePreference preference)
+{
+    if (!ui || !ui->model.theme_draft_valid) return;
+    ui->model.theme_draft_preference = preference;
+    ui->model.overlay_selection = (int)preference;
+    preview_theme_draft(ui);
+}
+
+void theme_draft_select_style(UiState *ui, PtcUiThemeStyle style)
+{
+    if (!ui || !ui->model.theme_draft_valid) return;
+    ui->model.theme_draft_style = style;
+    ui->model.overlay_selection = 3 + (int)style;
+    preview_theme_draft(ui);
+}
+
+void discard_theme_draft(UiState *ui)
+{
+    if (!ui || !ui->model.theme_draft_valid) return;
+    ui->model.theme_draft_valid = false;
+    ui->model.theme_draft_preference = ui->theme_preference;
+    ui->model.theme_draft_style = ui->theme_style;
+    show_theme_view(ui, ui->theme_preference, ui->theme_style);
+}
+
+bool commit_theme_draft(UiState *ui)
+{
+    PtcUiThemePreference preference;
+    PtcUiThemeStyle style;
+    PtcUiThemePreference previous_preference;
+    PtcUiThemeStyle previous_style;
+    if (!ui || !ui->model.theme_draft_valid) return false;
+    preference = ui->model.theme_draft_preference;
+    style = ui->model.theme_draft_style;
+    previous_preference = ui->theme_preference;
+    previous_style = ui->theme_style;
+    if (preference == previous_preference && style == previous_style) {
+        discard_theme_draft(ui);
+        return true;
+    }
+    ui->theme_preference = preference;
+    ui->theme_style = style;
+    show_theme_view(ui, preference, style);
+    if (save_ui_preferences(ui)) {
+        ui->model.theme_draft_valid = false;
+        return true;
+    }
+    ui->theme_preference = previous_preference;
+    ui->theme_style = previous_style;
+    ui->model.theme_draft_preference = previous_preference;
+    ui->model.theme_draft_style = previous_style;
+    /* 焦点留在原分组，但跟随回滚后的取值，避免焦点环指向未选中的卡片。 */
+    ui->model.overlay_selection = ui->model.overlay_selection >= 3
+        ? 3 + (int)previous_style : (int)previous_preference;
+    show_theme_view(ui, previous_preference, previous_style);
+    return false;
+}
+
 void refresh_theme(UiState *ui)
 {
     if (!ui) return;
     ui->system_theme = read_system_theme();
-    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, ui->theme_style, ui->system_theme);
+    if (ui->model.theme_draft_valid && ui->model.overlay == PTC_UI_OVERLAY_THEME) {
+        preview_theme_draft(ui);
+    } else {
+        show_theme_view(ui, ui->theme_preference, ui->theme_style);
+    }
     ui->theme_refresh_pending = false;
 }
 
@@ -114,7 +207,7 @@ bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
     if (!ui) return false;
     previous = ui->theme_preference;
     ui->theme_preference = preference;
-    ui->theme_view = ptc_ui_theme_make_styled_view(preference, ui->theme_style, ui->system_theme);
+    show_theme_view(ui, preference, ui->theme_style);
     if (save_ui_preferences(ui)) return true;
     if (ui->model.view == PTC_UI_SETUP) {
         ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_THEME, PTC_ERR_STORAGE_WRITE_FAILED);
@@ -122,22 +215,7 @@ bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
         return false;
     }
     ui->theme_preference = previous;
-    ui->theme_view = ptc_ui_theme_make_styled_view(previous, ui->theme_style, ui->system_theme);
-    return false;
-}
-
-bool apply_theme_style(UiState *ui, PtcUiThemeStyle style)
-{
-    PtcUiThemeStyle previous;
-    if (!ui) return false;
-    previous = ui->theme_style;
-    ui->theme_style = style;
-    ptc_ui_theme_set_style(style);
-    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, style, ui->system_theme);
-    if (save_ui_preferences(ui)) return true;
-    ui->theme_style = previous;
-    ptc_ui_theme_set_style(previous);
-    ui->theme_view = ptc_ui_theme_make_styled_view(ui->theme_preference, previous, ui->system_theme);
+    show_theme_view(ui, previous, ui->theme_style);
     return false;
 }
 

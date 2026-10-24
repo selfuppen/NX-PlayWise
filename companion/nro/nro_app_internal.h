@@ -311,7 +311,12 @@ void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 bool input_owner_blocks(UiState *ui, bool non_neutral);
 void applet_hook(AppletHookType hook, void *param);
 bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
-bool apply_theme_style(UiState *ui, PtcUiThemeStyle style);
+void open_theme_overlay(UiState *ui);
+void preview_theme_draft(UiState *ui);
+void theme_draft_select_mode(UiState *ui, PtcUiThemePreference preference);
+void theme_draft_select_style(UiState *ui, PtcUiThemeStyle style);
+void discard_theme_draft(UiState *ui);
+bool commit_theme_draft(UiState *ui);
 void handle_today_action_ready(UiState *ui, int index);
 void handle_parent_action(UiState *ui);
 void confirm_operation(UiState *ui);

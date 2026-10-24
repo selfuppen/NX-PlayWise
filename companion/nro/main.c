@@ -200,6 +200,10 @@ int main(int argc, char **argv)
             refresh_theme(&ui);
             refresh_language(&ui);
         }
+        /* 主题页草稿只在该页有效：其他路径关闭页面时恢复已保存外观。 */
+        if (ui.model.theme_draft_valid && ui.model.overlay != PTC_UI_OVERLAY_THEME) {
+            discard_theme_draft(&ui);
+        }
         if (ui.status_refresh_pending) trigger_resume_status_refresh(&ui, &background_poll_elapsed_ms);
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);

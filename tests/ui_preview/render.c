@@ -1254,6 +1254,12 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_THEME;
             settings_dlg.overlay_selection = 3;
+            /* 单选草稿：模式与风格各有一项选中；预览按已保存状态绘制，不显示待保存提示。 */
+            settings_dlg.theme_draft_valid = true;
+            settings_dlg.theme_draft_preference = dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT;
+            settings_dlg.theme_draft_style = PTC_UI_THEME_STYLE_SLATE;
+            settings_dlg.theme_saved_preference = settings_dlg.theme_draft_preference;
+            settings_dlg.theme_saved_style = settings_dlg.theme_draft_style;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
             failed |= save_preview(directory, "settings", "settings-theme", &settings_dlg, dark);
 

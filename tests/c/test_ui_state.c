@@ -1286,6 +1286,10 @@ static void test_theme_resolution(void)
         option = ptc_ui_theme_option_rect(2);
         check_hit(hit_center(&model, option), PTC_UI_HIT_THEME_OPTION, 2,
                   "dark theme option has a matching touch target");
+        for (int i = 0; i < PTC_UI_THEME_STYLE_COUNT; ++i) {
+            check_hit(hit_center(&model, ptc_ui_theme_style_rect(i)), PTC_UI_HIT_THEME_OPTION, 3 + i,
+                      "design style card shares the theme radio touch target");
+        }
     }
     {
         PtcUiRect icon = ptc_ui_notice_status_icon_rect(530);

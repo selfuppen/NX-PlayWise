@@ -408,11 +408,7 @@ void handle_parent_action(UiState *ui)
         switch (index) {
         case 0: change_parent_pin(ui); break;
         case 1:
-            ui->model.overlay = PTC_UI_OVERLAY_THEME;
-            ui->model.overlay_selection = (int)ui->theme_preference;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     ptc_ui_text(PTC_UI_T_ONLY_CHANGES_THE_DRAWING_APPEARANCE_OF_THE));
+            open_theme_overlay(ui);
             break;
         case 2: open_shortcut_manager(ui); break;
         case 3:

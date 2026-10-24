@@ -139,59 +139,47 @@ static void handle_redemption_history_overlay_input(UiState *ui, u64 down)
     return;
 }
 
+/* 主题页两组单选：上排主题模式（跟随系统/浅色/深色），下排设计风格。
+ * 移动只改草稿并即时预览；A 一次提交并保存两组选择，B 放弃草稿。 */
 static void handle_theme_overlay_input(UiState *ui, u64 down)
 {
     if (down & HidNpadButton_B) {
+        discard_theme_draft(ui);
         ptc_ui_cancel_overlay(&ui->model);
     } else if (down & HidNpadButton_Left) {
         if (ui->model.overlay_selection < 3) {
-            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1;
+            theme_draft_select_mode(ui, (PtcUiThemePreference)(ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1));
         } else {
             int style_idx = ui->model.overlay_selection - 3;
-            style_idx = style_idx <= 0 ? 3 : style_idx - 1;
-            ui->model.overlay_selection = 3 + style_idx;
+            theme_draft_select_style(ui, (PtcUiThemeStyle)(style_idx <= 0 ? PTC_UI_THEME_STYLE_COUNT - 1 : style_idx - 1));
         }
     } else if (down & HidNpadButton_Right) {
         if (ui->model.overlay_selection < 3) {
-            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+            theme_draft_select_mode(ui, (PtcUiThemePreference)((ui->model.overlay_selection + 1) % 3));
         } else {
             int style_idx = ui->model.overlay_selection - 3;
-            style_idx = (style_idx + 1) % 4;
-            ui->model.overlay_selection = 3 + style_idx;
+            theme_draft_select_style(ui, (PtcUiThemeStyle)((style_idx + 1) % PTC_UI_THEME_STYLE_COUNT));
         }
     } else if (down & HidNpadButton_Up) {
         if (ui->model.overlay_selection >= 3) {
             int style_idx = ui->model.overlay_selection - 3;
-            ui->model.overlay_selection = style_idx < 3 ? style_idx : 2;
+            theme_draft_select_mode(ui, (PtcUiThemePreference)(style_idx < 3 ? style_idx : 2));
         }
     } else if (down & HidNpadButton_Down) {
         if (ui->model.overlay_selection < 3) {
             int mode_idx = ui->model.overlay_selection;
-            ui->model.overlay_selection = 3 + mode_idx;
+            theme_draft_select_style(ui, (PtcUiThemeStyle)mode_idx);
         }
-    } else if (down & HidNpadButton_X) {
-        PtcUiThemeStyle next_style = (ui->theme_style + 1) % PTC_UI_THEME_STYLE_COUNT;
-        if (apply_theme_style(ui, next_style)) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "%s: %s",
-                     ptc_ui_text(PTC_UI_T_APPEARANCE_THEME), ptc_ui_theme_style_label(next_style));
-        }
-    } else if (down & HidNpadButton_A) {
-        if (ui->model.overlay_selection < 3) {
-            PtcUiThemePreference preference = (PtcUiThemePreference)ui->model.overlay_selection;
-            if (apply_theme_preference(ui, preference)) {
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THEME_CHANGED_TO_S),
-                         ptc_ui_theme_preference_label(preference));
-            } else {
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
-            }
+    } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+        if (commit_theme_draft(ui)) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s: %s / %s",
+                     ptc_ui_text(PTC_UI_T_APPEARANCE_THEME),
+                     ptc_ui_theme_preference_label(ui->theme_preference),
+                     ptc_ui_theme_style_label(ui->theme_style));
+            ptc_ui_cancel_overlay(&ui->model);
         } else {
-            PtcUiThemeStyle style = (PtcUiThemeStyle)(ui->model.overlay_selection - 3);
-            if (apply_theme_style(ui, style)) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "%s: %s",
-                         ptc_ui_text(PTC_UI_T_APPEARANCE_THEME), ptc_ui_theme_style_label(style));
-            } else {
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
-            }
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
         }
     }
     return;

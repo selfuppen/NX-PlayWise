@@ -185,6 +185,14 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
     }
 }
 
+/* 单选指示：未选为控件描边圆环，选中为强调色圆环 + 实心圆点。 */
+static void draw_radio_marker(uint32_t *pixels, uint32_t stride, int cx, int cy,
+                              bool selected, uint32_t accent)
+{
+    draw_circle_outline(pixels, stride, cx, cy, 9, selected ? 3 : 2, selected ? accent : UI_CONTROL);
+    if (selected) draw_circle_outline(pixels, stride, cx, cy, 4, 4, accent);
+}
+
 static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const char *LABELS[] = {
@@ -200,42 +208,45 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
     const char *shell_hint = !g_theme.system_theme_available
         ? ptc_ui_text(PTC_UI_T_THE_SYSTEM_THEME_IS_TEMPORARILY_UNAVAILABLE_AND)
         : ptc_ui_text(PTC_UI_T_THEME_SHELL_HINT);
-    const PtcUiPalette *light_pal = ptc_ui_theme_style_palette(PTC_UI_RESOLVED_LIGHT, g_theme.style);
-    const PtcUiPalette *dark_pal = ptc_ui_theme_style_palette(PTC_UI_RESOLVED_DARK, g_theme.style);
+    /* 页面显示草稿选择；未按 A 前不写入 config.json。没有活动草稿时
+     * （如宿主预览）回退到当前已保存外观。 */
+    const PtcUiThemePreference draft_preference = model->theme_draft_valid
+        ? model->theme_draft_preference : g_theme.preference;
+    const PtcUiThemeStyle draft_style = model->theme_draft_valid
+        ? model->theme_draft_style : g_theme.style;
+    const PtcUiThemePreference saved_preference = model->theme_draft_valid
+        ? model->theme_saved_preference : g_theme.preference;
+    const PtcUiThemeStyle saved_style = model->theme_draft_valid
+        ? model->theme_saved_style : g_theme.style;
+    const int draft_mode = (int)draft_preference;
+    const bool dirty = draft_preference != saved_preference || draft_style != saved_style;
+    /* 模式预览使用草稿风格，选中风格后即时反映到上方三张模式卡。 */
+    const PtcUiPalette *light_pal = ptc_ui_theme_style_palette(PTC_UI_RESOLVED_LIGHT, draft_style);
+    const PtcUiPalette *dark_pal = ptc_ui_theme_style_palette(PTC_UI_RESOLVED_DARK, draft_style);
 
     draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_APPEARANCE_THEME), shell_hint);
 
-    // --- Row 0: Mode Selection (3 Cards) ---
+    // --- Row 0: Mode Selection (3 radio cards) ---
     for (int index = 0; index < 3; ++index) {
         UiRect option = to_uirect(ptc_ui_theme_option_rect(index));
-        bool selected = (index == model->overlay_selection);
-        bool is_current = ((int)g_theme.preference == index);
+        bool focused = (index == model->overlay_selection);
+        bool selected = (index == draft_mode);
 
-        if (selected) {
+        if (focused) {
             UiRect halo = {option.x - 3, option.y - 3, option.width + 6, option.height + 6};
             draw_rect_outline(pixels, stride, halo, 17, 1, UI_FOCUS);
         }
-        fill_round_rect(pixels, stride, option, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 14, selected ? 4 : 1, selected ? UI_ACCENT : UI_BORDER);
-        if (selected) {
-            fill_round_rect(pixels, stride, (UiRect){option.x + 6, option.y + 16, 4, option.height - 32}, 2, UI_ACCENT);
-        }
+        fill_round_rect(pixels, stride, option, 14, focused ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 14, focused ? 4 : 1, focused ? UI_ACCENT : UI_BORDER);
 
-        draw_text(pixels, stride, option.x + 18, option.y + 26, LABELS[index], 20, UI_INK);
+        draw_radio_marker(pixels, stride, option.x + 26, option.y + 24, selected, UI_ACCENT);
+        draw_text(pixels, stride, option.x + 44, option.y + 31, LABELS[index], 20, UI_INK);
 
-        if (is_current) {
-            UiRect cur_badge = {option.x + option.width - 78, option.y + 12, 62, 22};
-            fill_round_rect(pixels, stride, cur_badge, 11, UI_ACCENT);
-            draw_rect_outline(pixels, stride, cur_badge, 11, 1, UI_FOCUS);
-            draw_text_center(pixels, stride, cur_badge,
-                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 12, UI_ON_ACCENT);
-        }
-
-        draw_wrapped_text(pixels, stride, option.x + 18, option.y + 50, DETAILS[index],
+        draw_wrapped_text(pixels, stride, option.x + 18, option.y + 54, DETAILS[index],
                           13, option.width - 36, 18, 1, UI_MUTED);
 
         // Preview box inside Mode Card
-        UiRect preview = {option.x + 16, option.y + 68, option.width - 32, 108};
+        UiRect preview = {option.x + 16, option.y + 72, option.width - 32, 120};
         draw_rect_outline(pixels, stride, preview, 10, 1, selected ? UI_ACCENT : UI_BORDER);
 
         if (index == PTC_UI_THEME_LIGHT) {
@@ -244,24 +255,24 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
             fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 15, 10, 10}, 2, UI_ACCENT);
             fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(light_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(light_pal->surface));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 44, 56, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(light_pal->text_secondary));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 38, preview.width - 20, 34}, 6, UI_RGB(light_pal->surface));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 46, 56, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 58, 88, 4}, 2, UI_RGB(light_pal->text_secondary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(light_pal->surface_raised));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 80, (preview.width - 26) / 2, 26}, 5, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 80, (preview.width - 26) / 2, 26}, 5, UI_RGB(light_pal->surface_raised));
         } else if (index == PTC_UI_THEME_DARK) {
             fill_round_rect(pixels, stride, preview, 10, UI_RGB(dark_pal->page_bg));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 20}, 5, UI_RGB(dark_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 15, 10, 10}, 2, UI_ACCENT);
             fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(dark_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(dark_pal->surface));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 44, 56, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(dark_pal->text_secondary));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 38, preview.width - 20, 34}, 6, UI_RGB(dark_pal->surface));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 46, 56, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 58, 88, 4}, 2, UI_RGB(dark_pal->text_secondary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(dark_pal->surface_raised));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 80, (preview.width - 26) / 2, 26}, 5, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 80, (preview.width - 26) / 2, 26}, 5, UI_RGB(dark_pal->surface_raised));
         } else {
             int half_w = preview.width / 2;
             fill_round_rect(pixels, stride, (UiRect){preview.x, preview.y, half_w, preview.height}, 10, UI_RGB(light_pal->page_bg));
@@ -272,63 +283,51 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
             fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 15, 8, 8}, 2, UI_ACCENT);
             fill_round_rect(pixels, stride, (UiRect){preview.x + 26, preview.y + 18, 32, 4}, 2, UI_RGB(light_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(light_pal->surface));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, 40, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(light_pal->text_secondary));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 38, half_w - 14, 34}, 6, UI_RGB(light_pal->surface));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 46, 40, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 58, half_w - 28, 4}, 2, UI_RGB(light_pal->text_secondary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 74, half_w - 14, 24}, 5, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 80, half_w - 14, 26}, 5, UI_ACCENT);
 
             fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 10, half_w - 14, 20}, 5, UI_RGB(dark_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 15, 8, 8}, 2, UI_ACCENT);
             fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 24, preview.y + 18, 32, 4}, 2, UI_RGB(dark_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(dark_pal->surface));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 44, 40, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(dark_pal->text_secondary));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 38, half_w - 14, 34}, 6, UI_RGB(dark_pal->surface));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 46, 40, 5}, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 58, half_w - 28, 4}, 2, UI_RGB(dark_pal->text_secondary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 74, half_w - 14, 24}, 5, UI_RGB(dark_pal->surface_raised));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 80, half_w - 14, 26}, 5, UI_RGB(dark_pal->surface_raised));
         }
-
-        // Action button at bottom of mode card
-        UiRect select_btn = {option.x + 16, option.y + option.height - 38, option.width - 32, 28};
-        fill_round_rect(pixels, stride, select_btn, 14, selected ? UI_ACCENT : UI_SURFACE);
-        draw_rect_outline(pixels, stride, select_btn, 14, 1, selected ? UI_FOCUS : UI_CONTROL);
-        const char *btn_label = selected
-            ? ptc_ui_text(PTC_UI_T_A_CONFIRM_SAVE)
-            : (is_current ? ptc_ui_text(PTC_UI_T_THEME_STYLE_IN_USE) : ptc_ui_text(PTC_UI_T_THEME_STYLE_SELECT));
-        draw_text_center(pixels, stride, select_btn, btn_label, 13, selected ? UI_ON_ACCENT : UI_INK);
     }
 
     // --- Row 1: Theme Style Header ---
     const char *style_title = ptc_ui_text(PTC_UI_T_THEME_STYLE_TITLE);
     const char *style_sub = ptc_ui_text(PTC_UI_T_THEME_STYLE_SUBTITLE);
     int title_w = measure_text(style_title, 17);
-    draw_text(pixels, stride, 56, 432, style_title, 17, UI_INK);
-    draw_text(pixels, stride, 56 + title_w + 18, 432, style_sub, 13, UI_MUTED);
+    draw_text(pixels, stride, 56, 424, style_title, 17, UI_INK);
+    draw_text(pixels, stride, 56 + title_w + 18, 424, style_sub, 13, UI_MUTED);
 
-    // --- Row 1: Theme Style Cards (4 Cards) ---
-    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
+    // --- Row 1: Theme Style Cards (4 radio cards) ---
     for (int i = 0; i < PTC_UI_THEME_STYLE_COUNT; ++i) {
         UiRect s_rect = to_uirect(ptc_ui_theme_style_rect(i));
-        bool selected = (model->overlay_selection == 3 + i);
-        bool is_current = (ptc_ui_theme_get_style() == (PtcUiThemeStyle)i);
+        bool focused = (model->overlay_selection == 3 + i);
+        bool selected = (i == (int)draft_style);
         const PtcUiPalette *spal = ptc_ui_theme_style_palette(g_theme.resolved, (PtcUiThemeStyle)i);
-        const uint32_t card_accent = selected ? UI_RGB(spal->accent) : UI_ACCENT;
-        const uint32_t card_on_accent = selected ? UI_RGB(spal->on_accent) : UI_ON_ACCENT;
-        const uint32_t card_focus = selected ? UI_RGB(spal->focus) : UI_FOCUS;
+        const uint32_t card_accent = focused ? UI_RGB(spal->accent) : UI_ACCENT;
+        const uint32_t card_focus = focused ? UI_RGB(spal->focus) : UI_FOCUS;
 
-        if (selected) {
+        if (focused) {
             UiRect halo = {s_rect.x - 3, s_rect.y - 3, s_rect.width + 6, s_rect.height + 6};
             draw_rect_outline(pixels, stride, halo, 17, 1, card_focus);
         }
-        fill_round_rect(pixels, stride, s_rect, 14, selected ? UI_RGB(spal->accent_soft) : UI_RAISED);
-        draw_rect_outline(pixels, stride, s_rect, 14, selected ? 4 : 1, selected ? card_accent : UI_BORDER);
-        if (selected) {
-            fill_round_rect(pixels, stride, (UiRect){s_rect.x + 6, s_rect.y + 16, 4, s_rect.height - 32}, 2, card_accent);
-        }
+        fill_round_rect(pixels, stride, s_rect, 14, focused ? UI_RGB(spal->accent_soft) : UI_RAISED);
+        draw_rect_outline(pixels, stride, s_rect, 14, focused ? 4 : 1, focused ? card_accent : UI_BORDER);
+
+        draw_radio_marker(pixels, stride, s_rect.x + 26, s_rect.y + 24, selected, card_accent);
 
         // Color Swatches Row
-        int sw_x = s_rect.x + 16;
+        int sw_x = s_rect.x + 44;
         int sw_y = s_rect.y + 16;
         fill_round_rect(pixels, stride, (UiRect){sw_x, sw_y, 28, 16}, 4, UI_RGB(spal->accent));
         fill_round_rect(pixels, stride, (UiRect){sw_x + 34, sw_y, 22, 16}, 4, UI_RGB(spal->focus));
@@ -336,36 +335,40 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         draw_rect_outline(pixels, stride, (UiRect){sw_x + 62, sw_y, 22, 16}, 4, 1, UI_RGB(spal->accent));
         fill_round_rect(pixels, stride, (UiRect){sw_x + 90, sw_y, 22, 16}, 4, UI_RGB(spal->night));
 
-        // Active Badge if currently active style
-        if (is_current) {
-            UiRect cur_badge = {s_rect.x + s_rect.width - 66, s_rect.y + 14, 52, 20};
-            fill_round_rect(pixels, stride, cur_badge, 10, UI_ACCENT);
-            draw_rect_outline(pixels, stride, cur_badge, 10, 1, UI_FOCUS);
-            draw_text_center(pixels, stride, cur_badge,
-                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 11, UI_ON_ACCENT);
-        }
-
         // Style Title
-        draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 58, ptc_ui_theme_style_label((PtcUiThemeStyle)i), 18, UI_INK);
+        draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 66, ptc_ui_theme_style_label((PtcUiThemeStyle)i), 18, UI_INK);
 
-        // Style Keyword (Chinese only) & Description
-        if (!is_en) {
-            draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 80, ptc_ui_theme_style_keyword((PtcUiThemeStyle)i), 12, UI_ACCENT);
-            draw_wrapped_text(pixels, stride, s_rect.x + 16, s_rect.y + 100, ptc_ui_theme_style_desc((PtcUiThemeStyle)i),
-                              12, s_rect.width - 32, 16, 2, UI_MUTED);
-        } else {
-            draw_wrapped_text(pixels, stride, s_rect.x + 16, s_rect.y + 86, ptc_ui_theme_style_desc((PtcUiThemeStyle)i),
-                              12, s_rect.width - 32, 17, 2, UI_MUTED);
+        // Style Keyword & Description
+        draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 90, ptc_ui_theme_style_keyword((PtcUiThemeStyle)i), 12, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, s_rect.x + 16, s_rect.y + 114, ptc_ui_theme_style_desc((PtcUiThemeStyle)i),
+                          12, s_rect.width - 32, 16, 3, UI_MUTED);
+    }
+
+    // --- Selection summary: saved pair vs pending draft ---
+    /* 13px 基线 644 落在风格卡下沿（626）与底栏分割线（652）之间的留白带。 */
+    {
+        char summary[192];
+        char fitted[192];
+        int x = 56;
+        int max_width = ptc_ui_settings_page_primary_rect().x - 24 - x;
+        PtcUiTextArg args[] = {
+            PTC_UI_TEXT_STRING("mode", ptc_ui_theme_preference_label(saved_preference)),
+            PTC_UI_TEXT_STRING("style", ptc_ui_theme_style_label(saved_style))
+        };
+        (void)ptc_ui_text_format(PTC_UI_T_THEME_SAVED_SUMMARY, summary, sizeof(summary), args, 2);
+        fit_text(fitted, sizeof(fitted), summary, 13, max_width);
+        draw_text(pixels, stride, x, 644, fitted, 13, UI_MUTED);
+        if (dirty) {
+            PtcUiTextArg draft_args[] = {
+                PTC_UI_TEXT_STRING("mode", ptc_ui_theme_preference_label(draft_preference)),
+                PTC_UI_TEXT_STRING("style", ptc_ui_theme_style_label(draft_style))
+            };
+            x += measure_text(fitted, 13) + 24;
+            max_width = ptc_ui_settings_page_primary_rect().x - 24 - x;
+            (void)ptc_ui_text_format(PTC_UI_T_THEME_PENDING_SUMMARY, summary, sizeof(summary), draft_args, 2);
+            fit_text(fitted, sizeof(fitted), summary, 13, max_width);
+            draw_text(pixels, stride, x, 644, fitted, 13, UI_WARNING_TEXT);
         }
-
-        // Action Pill at Bottom
-        UiRect action_btn = {s_rect.x + 16, s_rect.y + s_rect.height - 38, s_rect.width - 32, 28};
-        fill_round_rect(pixels, stride, action_btn, 14, selected ? card_accent : UI_SURFACE);
-        draw_rect_outline(pixels, stride, action_btn, 14, 1, selected ? card_focus : UI_CONTROL);
-        draw_text_center(pixels, stride, action_btn,
-                         selected ? ptc_ui_text(PTC_UI_T_THEME_STYLE_APPLY)
-                                  : (is_current ? ptc_ui_text(PTC_UI_T_THEME_STYLE_IN_USE) : ptc_ui_text(PTC_UI_T_THEME_STYLE_SELECT)),
-                         12, selected ? card_on_accent : UI_INK);
     }
 
     home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),

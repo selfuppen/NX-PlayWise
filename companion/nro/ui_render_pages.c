@@ -1095,7 +1095,7 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
         status_color = UI_ACCENT;
         desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_THREE_THEME_MODES_LIGHT_DARK_AND);
         desc2 = ptc_ui_text(PTC_UI_T_DARK_MODE_OPTIMIZES_OLED_SCREEN_POWER_SAVING);
-        desc3 = ptc_ui_text(PTC_UI_T_SETTINGS_ARE_SAVED_INSTANTLY_AND_TAKE_EFFECT);
+        desc3 = ptc_ui_text(PTC_UI_T_THEME_SELECTION_SAVED_ON_CONFIRM);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_THEME_SWITCHING);
         break;
     case 2: /* 家长区快捷键 */

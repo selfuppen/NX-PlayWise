@@ -380,6 +380,63 @@ static void test_today_detail_refresh(void)
         "submission failure keeps child details");
 }
 
+static void test_theme_draft_commit(void)
+{
+    static PtcMemStorage mem;
+    UiState ui, reopened;
+    char text[8192];
+    init(&ui, &mem);
+    check(ui.theme_preference == PTC_UI_THEME_SYSTEM && ui.theme_style == PTC_UI_THEME_STYLE_SLATE,
+          "theme draft fixture starts on defaults");
+
+    open_theme_overlay(&ui);
+    check(ui.model.overlay == PTC_UI_OVERLAY_THEME && ui.model.theme_draft_valid &&
+          ui.model.theme_draft_preference == PTC_UI_THEME_SYSTEM &&
+          ui.model.theme_draft_style == PTC_UI_THEME_STYLE_SLATE &&
+          ui.model.theme_saved_preference == PTC_UI_THEME_SYSTEM &&
+          ui.model.theme_saved_style == PTC_UI_THEME_STYLE_SLATE,
+          "theme page opens with both radio groups on the saved pair");
+    theme_draft_select_mode(&ui, PTC_UI_THEME_LIGHT);
+    theme_draft_select_style(&ui, PTC_UI_THEME_STYLE_TEAL);
+    check(ui.theme_preference == PTC_UI_THEME_SYSTEM && ui.theme_style == PTC_UI_THEME_STYLE_SLATE,
+          "preview never mutates the saved preferences");
+    check(!mem.storage.vtable->exists(&mem.storage, CONFIG_PATH),
+          "preview writes no config before confirm");
+    check(ui.model.overlay_selection == 3 + PTC_UI_THEME_STYLE_TEAL,
+          "style radio takes the shared focus index");
+    check(commit_theme_draft(&ui), "theme draft commit succeeds");
+    check(ui.theme_preference == PTC_UI_THEME_LIGHT && ui.theme_style == PTC_UI_THEME_STYLE_TEAL &&
+          !ui.model.theme_draft_valid, "confirm saves theme mode and style together");
+    check(mem.storage.vtable->read_text(&mem.storage, CONFIG_PATH, text, sizeof(text)) &&
+          strstr(text, "\"theme\":\"light\"") && strstr(text, "\"theme_style\":\"teal\""),
+          "confirm persists both preference keys in one write");
+    memset(&reopened, 0, sizeof(reopened));
+    reopened.client = ui.client;
+    load_ui_preferences(&reopened);
+    check(reopened.theme_preference == PTC_UI_THEME_LIGHT &&
+          reopened.theme_style == PTC_UI_THEME_STYLE_TEAL,
+          "reopen restores the committed theme pair");
+
+    open_theme_overlay(&ui);
+    theme_draft_select_mode(&ui, PTC_UI_THEME_DARK);
+    mem.fail_writes = true;
+    check(!commit_theme_draft(&ui), "failed config write reports an unsaved draft");
+    mem.fail_writes = false;
+    check(ui.theme_preference == PTC_UI_THEME_LIGHT && ui.theme_style == PTC_UI_THEME_STYLE_TEAL &&
+          ui.model.theme_draft_valid && ui.model.theme_draft_preference == PTC_UI_THEME_LIGHT &&
+          ui.model.theme_draft_style == PTC_UI_THEME_STYLE_TEAL &&
+          ui.model.overlay == PTC_UI_OVERLAY_THEME,
+          "failed save restores the saved pair and keeps the page open");
+    check(mem.storage.vtable->read_text(&mem.storage, CONFIG_PATH, text, sizeof(text)) &&
+          strstr(text, "\"theme\":\"light\""),
+          "failed save leaves the persisted theme untouched");
+
+    theme_draft_select_style(&ui, PTC_UI_THEME_STYLE_AMETHYST);
+    discard_theme_draft(&ui);
+    check(!ui.model.theme_draft_valid && ui.theme_style == PTC_UI_THEME_STYLE_TEAL,
+          "discard drops the draft and restores the saved appearance");
+}
+
 int main(void)
 {
     static PtcMemStorage mem;
@@ -565,6 +622,7 @@ int main(void)
     test_config_backup_ui();
     test_today_detail_refresh();
     test_parent_pin_error();
+    test_theme_draft_commit();
     {
         PtcUiModel model = {0};
         char text[8192], small[8];
