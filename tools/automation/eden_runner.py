@@ -291,16 +291,33 @@ def set_profile_timezone(text: str, index: int | None) -> str:
     return re.sub(r"(?m)^time_zone_index\\default=.*$", r"time_zone_index\\default=false", text)
 
 
+def check_runtime_capacity(root: Path, copy_bytes: int) -> dict:
+    require(type(copy_bytes) is int and copy_bytes >= 0, "invalid profile copy size")
+    root.mkdir(parents=True, exist_ok=True)
+    free = shutil.disk_usage(root).free
+    reserve = 512 * 1024 * 1024
+    require(free >= copy_bytes + reserve,
+            f"runtime disk space insufficient: free={free}, copy={copy_bytes}, reserve={reserve}; no profile copied")
+    return {"copy_bytes": copy_bytes, "reserve_bytes": reserve, "free_before": free}
+
+
 def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     from tools.package_remote import verify_eden_nro
     manifest = read(args.manifest)
     verify_eden_nro(args.nro, manifest)
+    sources = [args.eden]
+    for name in ("config", "keys", "nand"):
+        require((args.profile / name).is_dir(), f"profile component missing: {name}")
+        sources.extend(p for p in (args.profile / name).rglob("*") if p.is_file())
+    languages = args.eden.parent / "languages"
+    if languages.is_dir():
+        sources.extend(p for p in languages.rglob("*") if p.is_file())
+    capacity = check_runtime_capacity(args.runtime_root.resolve(), sum(p.stat().st_size for p in sources))
     runtime = args.runtime_root.resolve() / uuid.uuid4().hex
     profile = runtime / "user"
     profile.mkdir(parents=True, exist_ok=False)
     shutil.copy2(args.eden, runtime / "eden.exe")
     for name in ("config", "keys", "nand"):
-        require((args.profile / name).is_dir(), f"profile component missing: {name}")
         shutil.copytree(args.profile / name, profile / name, symlinks=False)
     # Never seed the operator's SD or PlayWise authentication state.
     if (args.eden.parent / "languages").is_dir():
@@ -329,6 +346,8 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     app = profile / APP
     (app / "support").mkdir(parents=True)
     (app / "support/automation-observe.flag").write_text("eden-runner-v1\n", encoding="ascii")
+    if getattr(args, "trace_progress", False):
+        (app / "support/automation-trace.flag").write_text("eden-progress-v1\n", encoding="ascii")
     rules = {"version": 1, "week": [{"mode": "limit", "minutes": 120} for _ in range(7)],
              "today_override_present": False, "today_override_day_index": 0,
              "today_override_mode": "limit", "today_override_minutes": 120}
@@ -369,6 +388,7 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     }.items()) + "\nrequire_control = true\nauto_prune_sessions = false\n"
     (runtime / "eden-mcp.toml").write_text(config_text, encoding="utf-8")
     identity = {"schema_version": 1, "run_id": runtime.name, "started_at": datetime.now(timezone.utc).isoformat(),
+                "runtime_capacity": capacity,
                 "nro_sha256": digest(artifacts / "pctc-eden.nro"), "eden_sha256": digest(runtime / "eden.exe"),
                 "manifest": manifest, "runtime": str(runtime), "profile": str(profile),
                 "source_executable": str(args.eden.resolve()), "source_profile": str(args.profile.resolve()),
@@ -435,7 +455,7 @@ class Suite:
     def action(self, button: str | None = None, target: str | None = None, hold_ms: int = 200) -> None:
         self.bounded()
         healthy_launch(self.client.tool("eden_status"))
-        value = self.wait_input(False)
+        value = self.wait_action_ready()
         self.step += 1
         require(200 <= hold_ms <= 1400, "input hold exceeds bound")
         name = "eden_press_button" if button else "eden_touch_screen"
@@ -459,20 +479,75 @@ class Suite:
         self.wait_input(False, after=sampled)
         time.sleep(0.15)
 
+    def wait_action_ready(self) -> dict:
+        # A cached neutral snapshot may precede a slow first render of a new
+        # dialog. Require two progressing, presented idle frames before down.
+        deadline = min(self.deadline, time.monotonic() + 5)
+        baseline = self.wait_input(False)
+        previous = None
+        ready = 0
+        while time.monotonic() < deadline:
+            try:
+                value = self.observe()
+                require(type(value.get("presentation_version")) is int and value["presentation_version"] == 1,
+                        "NRO does not publish completed frames; input prohibited")
+                require(type(value.get("input_sampling_version")) is int and value["input_sampling_version"] == 2 and
+                        type(value.get("sequence")) is int and type(value.get("input_sequence")) is int and
+                        type(value.get("input_active")) is bool and value["instance"] == baseline["instance"],
+                        "invalid input readiness observation")
+                # Independent HID publication can be ahead of the last UI
+                # frame. Wait for UI to catch up; it is not an instance reset.
+                if (value["input_sequence"] < baseline["input_sequence"] or value["input_active"] or
+                        value["ui"]["waiting"] or value["ui"]["overlay_animating"]):
+                    previous = None
+                    ready = 0
+                elif previous is None:
+                    previous = value
+                    samples = [value]
+                elif value["sequence"] > previous["sequence"] and value["input_sequence"] > previous["input_sequence"]:
+                    samples.append(value)
+                    previous = value
+                    ready += 1
+                    if ready == 2:
+                        for index, sample in enumerate(samples):
+                            save(self.output / f"input-readiness/{self.step + 1:03d}-{index}.json", sample)
+                        return value
+            except (OSError, ValueError, ObservationPending):
+                pass
+            time.sleep(0.05)
+        raise GateError("guest did not present two progressing neutral frames before input; no down sent")
+
+    def observe_input(self) -> dict:
+        self.bounded()
+        value, modified = read_observation_stream(self.app / "support/automation-input.jsonl")
+        require(type(value.get("schema_version")) is int and value["schema_version"] == 1 and
+                type(value.get("input_stream_version")) is int and value["input_stream_version"] == 1 and
+                type(value.get("input_sampling_version")) is int and value["input_sampling_version"] == 2 and
+                type(value.get("sequence")) is int and value["sequence"] > 0 and
+                type(value.get("input_sequence")) is int and value["input_sequence"] == value["sequence"] and
+                type(value.get("input_active")) is bool and isinstance(value.get("instance"), str) and value["instance"] and
+                isinstance(value.get("tick"), str) and value["tick"].isascii() and value["tick"].isdecimal(),
+                "invalid independent HID observation; input prohibited")
+        age = time.time() - modified
+        require(age >= 0, "input observation timestamp is in the future")
+        if age > 4:
+            raise ObservationPending("input observation is stale")
+        return value
+
     def wait_input(self, active: bool, after: dict | None = None) -> dict:
         deadline = min(self.deadline, time.monotonic() + 5)
         while time.monotonic() < deadline:
             try:
-                value = self.observe()
-                require(type(value.get("input_sampling_version")) is int and value["input_sampling_version"] == 1 and
+                value = self.observe_input()
+                require(type(value.get("input_sampling_version")) is int and value["input_sampling_version"] == 2 and
                         type(value.get("input_sequence")) is int and value["input_sequence"] >= 0 and
                         type(value.get("input_active")) is bool,
                         "NRO lacks bounded input sampling; input prohibited")
                 if after:
-                    require(value["instance"] == after["instance"] and value["input_sequence"] >= after["input_sequence"],
+                    require(value["instance"] == after["instance"] and
+                            (after.get("input_stream_version") != 1 or value["input_sequence"] >= after["input_sequence"]),
                             "input instance/sequence changed; input prohibited")
-                ready = after is not None or active or not value["ui"]["waiting"]
-                if ready and value["input_sequence"] > 0 and value["input_active"] is active and (not after or value["input_sequence"] > after["input_sequence"]):
+                if value["input_sequence"] > 0 and value["input_active"] is active and (not after or value["input_sequence"] > after["input_sequence"]):
                     save(self.output / f"input-samples/{self.step:03d}-{uuid.uuid4().hex[:8]}.json", value)
                     return value
             except (OSError, ValueError, ObservationPending):
@@ -523,6 +598,18 @@ class Suite:
             target.parent.mkdir(exist_ok=True)
             shutil.copy2(stream, target)
             stream.unlink()
+        progress = self.app / "support/automation-progress.jsonl"
+        if progress.is_file():
+            target = self.output / f"progress-streams/{uuid.uuid4().hex}.jsonl"
+            target.parent.mkdir(exist_ok=True)
+            shutil.copy2(progress, target)
+            progress.unlink()
+        input_stream = self.app / "support/automation-input.jsonl"
+        if input_stream.is_file():
+            target = self.output / f"input-streams/{uuid.uuid4().hex}.jsonl"
+            target.parent.mkdir(exist_ok=True)
+            shutil.copy2(input_stream, target)
+            input_stream.unlink()
         observation.unlink(missing_ok=True)  # One owned transient snapshot, while emulator is stopped.
         remaining = self.deadline - time.monotonic()
         status = self.client.tool("eden_start_game", {"base_path": str(self.output / "artifacts/pctc-eden.nro"),
@@ -591,6 +678,14 @@ class Suite:
             self.results[name] = {"status": "pass"}
         except Exception as exc:
             self.results[name] = {"status": "failed_or_unknown", "detail": str(exc)}
+            try:
+                metrics = self.client.tool("eden_get_runtime_metrics", {"sample_ms": 500}, timeout=20)
+                save(self.output / f"failure-metrics/{name}.json", metrics)
+            except Exception as diagnostic_error:
+                try:
+                    save(self.output / f"failure-metrics/{name}-error.json", {"error": str(diagnostic_error)})
+                except OSError:
+                    pass  # Diagnostics must not replace the original failure or cleanup.
             try:
                 self.capture(name + "_failed")
             except Exception:
@@ -752,10 +847,14 @@ def verify(output: Path) -> dict:
                 len(summary["health"]) == (3 if summary.get("suite") == "main" else 2), "incomplete suite cannot pass")
         for row in summary["health"]:
             healthy_exit(row["pid"], row["reply"], row["events"])
-        if summary.get("input_sampling_version") == 1:
+        if summary.get("input_sampling_version") in (1, 2):
             verify_input_evidence(output, summary["actions"])
         if summary.get("capture_readiness_version") == 1:
             verify_capture_readiness(output)
+        if summary.get("input_readiness_version") == 1:
+            verify_input_readiness(output, summary["actions"])
+        if summary.get("progress_trace_version") == 1:
+            verify_progress_streams(output)
         if (output / "app-final/support/automation-ui.jsonl").is_file():
             verify_observation_streams(output)
         if summary.get("suite") == "support":
@@ -787,27 +886,72 @@ def verify(output: Path) -> dict:
 
 
 def verify_observation_streams(output: Path) -> None:
-    samples = {}
-    for path in (output / "input-samples").glob("*.json"):
+    samples = {"ui": {}, "input": {}}
+    for path in list((output / "input-samples").glob("*.json")) + list((output / "input-readiness").glob("*.json")):
         value = read(path)
+        group = samples["input" if value.get("input_stream_version") == 1 else "ui"]
         key = (value["instance"], value["sequence"])
-        require(key not in samples or samples[key] == value, "same observation sequence has different input samples")
-        samples[key] = value
-    found = set()
-    streams = list((output / "ui-streams").glob("*.jsonl")) + [output / "app-final/support/automation-ui.jsonl"]
+        require(key not in group or group[key] == value, "same observation sequence has different input samples")
+        group[key] = value
+    for kind, group in samples.items():
+        if not group:
+            continue
+        found = set()
+        folder = "ui-streams" if kind == "ui" else "input-streams"
+        name = "automation-ui.jsonl" if kind == "ui" else "automation-input.jsonl"
+        streams = list((output / folder).glob("*.jsonl")) + [output / "app-final/support" / name]
+        for path in streams:
+            with path.open("rb") as source:
+                while raw := source.readline(65537):
+                    require(len(raw) <= 65536, "observation stream record exceeds bound")
+                    if not raw.endswith(b"\n"):
+                        require(source.read(1) == b"", "observation stream record is truncated before EOF")
+                        break  # Preserve, but never accept, an interrupted trailing append.
+                    value = decode(raw.decode("utf-8"))
+                    key = (value["instance"], value["sequence"])
+                    if key in group:
+                        require(value == group[key], "input evidence differs from original observation stream")
+                        found.add(key)
+        require(found == group.keys(), "input samples absent from original observation streams")
+
+
+def verify_input_readiness(output: Path, actions: int) -> None:
+    require(type(actions) is int and 0 < actions <= 500, "invalid readiness action count")
+    files = list((output / "input-readiness").glob("*.json"))
+    require(len(files) == actions * 3, "input readiness samples missing or duplicated")
+    for action in range(1, actions + 1):
+        previous = None
+        for index in range(3):
+            value = read(output / f"input-readiness/{action:03d}-{index}.json")
+            require(type(value.get("presentation_version")) is int and value["presentation_version"] == 1 and
+                    type(value.get("input_sampling_version")) is int and value["input_sampling_version"] in (1, 2) and
+                    type(value.get("sequence")) is int and type(value.get("input_sequence")) is int and
+                    value["input_active"] is False and value["ui"]["waiting"] is False and
+                    value["ui"]["overlay_animating"] is False, "invalid presented neutral frame")
+            if previous:
+                require(value["instance"] == previous["instance"] and value["sequence"] > previous["sequence"] and
+                        value["input_sequence"] > previous["input_sequence"], "readiness frames did not advance")
+            previous = value
+
+
+def verify_progress_streams(output: Path) -> None:
+    streams = list((output / "progress-streams").glob("*.jsonl")) + [output / "app-final/support/automation-progress.jsonl"]
     for path in streams:
-        with path.open("rb") as source:
-            while raw := source.readline(65537):
-                require(len(raw) <= 65536, "observation stream record exceeds bound")
-                if not raw.endswith(b"\n"):
-                    require(source.read(1) == b"", "observation stream record is truncated before EOF")
-                    break  # Preserve, but never accept, an interrupted trailing append.
-                value = decode(raw.decode("utf-8"))
-                key = (value["instance"], value["sequence"])
-                if key in samples:
-                    require(value == samples[key], "input evidence differs from original observation stream")
-                    found.add(key)
-    require(found == samples.keys(), "input samples absent from original observation streams")
+        previous = None
+        for raw in path.read_bytes().splitlines(keepends=True):
+            if not raw.endswith(b"\n"):
+                break
+            value = decode(raw.decode("utf-8"))
+            require(value.get("schema_version") == 1 and type(value.get("stage")) is int and 1 <= value["stage"] <= 16 and
+                    type(value.get("detail")) is int and type(value.get("input_active")) is bool and
+                    type(value.get("sequence")) is int and type(value.get("input_sequence")) is int and
+                    isinstance(value.get("instance"), str) and isinstance(value.get("tick"), str) and value["tick"].isdigit(),
+                    "invalid progress trace record")
+            if previous:
+                require(value["instance"] == previous["instance"] and value["sequence"] > previous["sequence"] and
+                        value["input_sequence"] >= previous["input_sequence"], "progress trace regressed")
+            previous = value
+        require(previous is not None, "empty progress trace")
 
 
 def verify_capture_readiness(output: Path) -> None:
@@ -849,7 +993,14 @@ def run(args: argparse.Namespace) -> int:
     require(os.name == "nt", "live suite requires Windows; offline verify is portable")
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    runtime, identity = prepare(args, output)
+    try:
+        runtime, identity = prepare(args, output)
+    except (GateError, OSError, ValueError) as exc:
+        failure = {"schema_version": 1, "phase": "preparation", "status": "precondition_not_met",
+                   "error": str(exc), "scenarios": {name: {"status": "not_executed"} for name in scenario_names(args.suite)}}
+        save(output / "preparation.json", failure)
+        print(json.dumps(failure, ensure_ascii=False))
+        return 1
     command = [str(args.mcp_python), str(output / "artifacts/eden_mcp_bridge.py"),
                "--config", str(runtime / "eden-mcp.toml"), "--trace", str(output / "processes.jsonl"),
                "--native-dir", str(output)]
@@ -896,7 +1047,8 @@ def run(args: argparse.Namespace) -> int:
          profile_settings((runtime / "user/config/qt-config.ini").read_text(encoding="utf-8-sig")))
     app = runtime / "user" / APP
     for name in ("config.json", "rules.json", "state.json", "build.json", "ledger/used_nonces.jsonl", "activity/history.jsonl",
-                 "setup.json", "flags/disable.flag", "backups/install_pctl_snapshot.json", "support/automation-ui.jsonl"):
+                 "setup.json", "flags/disable.flag", "backups/install_pctl_snapshot.json", "support/automation-ui.jsonl",
+                 "support/automation-progress.jsonl", "support/automation-input.jsonl"):
         path = app / name
         if path.is_file():
             target = output / "app-final" / name
@@ -909,7 +1061,9 @@ def run(args: argparse.Namespace) -> int:
     if not require_audit:
         errors.append("run contains Windows crash events or audit unavailable")
     summary = {"schema_version": 1, "overall": "pass" if not errors else "partial",
-               "input_sampling_version": 1, "capture_readiness_version": 1, "actions": suite.step if suite else 0,
+               "input_sampling_version": 2, "capture_readiness_version": 1, "input_readiness_version": 1,
+               "progress_trace_version": 1 if getattr(args, "trace_progress", False) else 0,
+               "actions": suite.step if suite else 0,
                "suite": args.suite,
                "scenarios": suite.results if suite else {name: {"status": "not_executed"} for name in scenario_names(args.suite)},
                "health": suite.health if suite else [], "errors": errors,
@@ -940,6 +1094,8 @@ def main() -> int:
     live.add_argument("--suite", choices=("smoke", "main", "support"), default="smoke",
                       help="main covers core journeys; support covers diagnostics/disable/installation restore")
     live.add_argument("--timeout", type=int, default=300, choices=range(60, 1201), metavar="60..1200")
+    live.add_argument("--trace-progress", action="store_true",
+                      help="Enable isolated bounded numeric stage diagnostics; not a business assertion")
     offline = commands.add_parser("verify")
     offline.add_argument("--run", type=Path, required=True)
     args = parser.parse_args()

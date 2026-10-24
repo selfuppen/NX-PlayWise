@@ -12,6 +12,17 @@ static int pin_cursor;
 static int pin_opens;
 static bool pin_opened_empty;
 static int64_t fixed_time = 1800000000;
+static void check(bool condition, const char *label);
+static int eden_dispatches;
+static PtcEdenRequest *eden_dispatch_slot;
+static void test_eden_dispatch(void *ctx, const char *id, const char *json)
+{
+    ++eden_dispatches;
+    check(strcmp(id, "owned-request") == 0 && strcmp(json, "{\"owned\":true}") == 0,
+          "Eden dispatch uses its owned immutable request copy");
+    check(ctx == eden_dispatch_slot && !ptc_eden_request_submit(eden_dispatch_slot, "reentrant", "{}"),
+          "running Eden request cannot be overwritten by reentrant submission");
+}
 time_t time(time_t *out) { if (out) *out = (time_t)fixed_time; return (time_t)fixed_time; }
 Result setsysInitialize(void) { return 0; }
 Result setsysGetColorSetId(ColorSetId *out) { *out = ColorSetId_Light; return 0; }
@@ -57,6 +68,37 @@ bool pin_input(UiState *ui, const char *title, const char *guide, char *out, siz
 }
 static void check(bool condition, const char *label)
 { if (!condition) { fprintf(stderr, "FAIL setup: %s\n", label); ++failures; } }
+static void test_eden_request_release_boundary(void)
+{
+    PtcEdenRequest slot = {0};
+    char id[] = "owned-request", json[] = "{\"owned\":true}";
+    char large[PTC_IPC_MAX_REQUEST_SIZE + 2], long_id[PTC_COMPANION_REQUEST_ID_SIZE + 1];
+    eden_dispatches = 0;
+    eden_dispatch_slot = &slot;
+    check(ptc_eden_request_submit(&slot, id, json), "Eden accepts one bounded request");
+    id[0] = 'x'; json[0] = 'x';
+    check(!ptc_eden_request_submit(&slot, "second", "{}"), "queued Eden request cannot be overwritten");
+    for (int i = 0; i < 100; ++i)
+        check(!ptc_eden_request_dispatch(&slot, true, &slot, test_eden_dispatch),
+              "held input defers synchronous core work");
+    check(eden_dispatches == 0 && slot.state == PTC_EDEN_REQUEST_QUEUED,
+          "held input neither executes nor consumes the pending request");
+    check(!ptc_eden_request_dispatch(&slot, false, &slot, NULL), "missing processor leaves request pending");
+    check(ptc_eden_request_dispatch(&slot, false, &slot, test_eden_dispatch) && eden_dispatches == 1 &&
+          slot.state == PTC_EDEN_REQUEST_IDLE && !slot.id[0] && !slot.json[0],
+          "neutral input executes once and clears the owned request");
+    check(!ptc_eden_request_dispatch(&slot, false, &slot, test_eden_dispatch) && eden_dispatches == 1,
+          "dispatch never replays an outcome even when the callback produced no receipt");
+    memset(large, 'x', sizeof(large)); large[PTC_IPC_MAX_REQUEST_SIZE] = '\0';
+    check(ptc_eden_request_submit(&slot, "limit", large), "Eden accepts the protocol byte limit");
+    memset(&slot, 0, sizeof(slot));
+    large[PTC_IPC_MAX_REQUEST_SIZE] = 'x'; large[sizeof(large) - 1] = '\0';
+    memset(long_id, 'a', sizeof(long_id)); long_id[sizeof(long_id) - 1] = '\0';
+    check(!ptc_eden_request_submit(&slot, "limit", large) &&
+          !ptc_eden_request_submit(&slot, long_id, "{}") && !ptc_eden_request_submit(&slot, "bad/id", "{}") &&
+          !ptc_eden_request_submit(&slot, "empty", "") && !ptc_eden_request_submit(NULL, "none", "{}") &&
+          slot.state == PTC_EDEN_REQUEST_IDLE, "invalid or oversized Eden requests never enter the slot");
+}
 static void init(UiState *ui, PtcMemStorage *mem)
 {
     ptc_mem_storage_init(mem);
@@ -329,14 +371,20 @@ static void test_today_detail_refresh(void)
     char first_id[80]; snprintf(first_id, sizeof(first_id), "%s", ui.active_request_id);
     submit_status(&ui);
     check(strcmp(first_id, ui.active_request_id) == 0, "waiting prevents duplicate status request");
+    mem.storage.vtable->write_text_atomic(&mem.storage, APP_ROOT "/results/unrelated.json", "{}");
+    for (int i = 0; i < 100; ++i) poll_eden_ready_result(&ui);
+    check(ui.waiting && ui.model.waiting && ui.elapsed_ms == 0 && ui.transport.elapsed_ms == 0 &&
+          strcmp(first_id, ui.active_request_id) == 0,
+          "Eden pre-input poll keeps absent exact receipt pending without accelerating timeout or resubmitting");
     PtcResultState state;
     ptc_result_state_default(&state, 1);
     state.played_minutes_available = true; state.played_minutes = 69;
     ptc_result_ok_json(text, sizeof(text), ui.active_request_id, "status", NULL, false, &state, fixed_time);
     snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
     mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
-    poll_result(&ui, false);
+    poll_eden_ready_result(&ui);
     check(!ui.waiting && !ui.model.home_details_refresh_failed, "successful refresh resumes projection");
+    check(!ui.model.waiting, "ready Eden receipt clears the hit-test waiting gate before HID dispatch");
     check(ui.model.played_minutes_available && ui.model.played_minutes == 69,
         "refresh accepts the new reliable consumption reading");
     check(ui.model.overlay == PTC_UI_OVERLAY_HOME_DETAILS && ui.model.home_details_page == 1 &&
@@ -371,7 +419,7 @@ static void test_today_detail_refresh(void)
     ptc_result_error_json(text, sizeof(text), ui.active_request_id, "status", NULL, false, PTC_ERR_PCTL_READ_FAILED, &state, fixed_time);
     snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
     mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
-    poll_result(&ui, false);
+    poll_eden_ready_result(&ui);
     check(ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_HOME_DETAILS &&
         ui.model.home_details_refresh_failed, "backend failure keeps child detail and invalidates estimates");
     mem.fail_writes = true;
@@ -442,6 +490,7 @@ int main(void)
     static PtcMemStorage mem;
     UiState ui, reopened;
     char text[8192];
+    test_eden_request_release_boundary();
     init(&ui, &mem);
     check(ui.language_preference == PTC_UI_LANGUAGE_SYSTEM, "new installation follows system");
     ui.model.overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
@@ -677,6 +726,41 @@ int main(void)
                   "Eden mode input target is derived from production layout");
         }
         cJSON_Delete(json);
+        {
+            PtcEdenInputObservation input = {.sequence = UINT64_MAX, .active = true};
+            check(ptc_eden_format_input(text, sizeof(text), &input, 123, 999),
+                  "independent HID observation formats before UI presentation");
+            json = cJSON_Parse(text);
+            check(json && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "input_active")) &&
+                  cJSON_GetObjectItemCaseSensitive(json, "input_sampling_version")->valueint == 2 &&
+                  cJSON_GetObjectItemCaseSensitive(json, "input_stream_version")->valueint == 1 &&
+                  strcmp(cJSON_GetObjectItemCaseSensitive(json, "instance")->valuestring, "7b") == 0 &&
+                  strcmp(cJSON_GetObjectItemCaseSensitive(json, "tick")->valuestring, "999") == 0,
+                  "independent HID observation preserves typed edge and instance without UI data");
+            check(!strstr(text, "ui") && !strstr(text, "pin") && !strstr(text, "mask"),
+                  "independent HID observation excludes UI and input contents");
+            cJSON_Delete(json);
+            input.active = false;
+            check(ptc_eden_format_input(text, sizeof(text), &input, 123, 1000) && strstr(text, "\"input_active\":false"),
+                  "independent HID observation formats release");
+            check(!ptc_eden_format_input(small, sizeof(small), &input, 1, 1) && !small[0] &&
+                  !ptc_eden_format_input(text, sizeof(text), NULL, 1, 1) && !text[0],
+                  "independent HID observation rejects truncation and missing sample");
+            input.active = true;
+            check(ptc_eden_format_progress(text, sizeof(text), &input, PTC_EDEN_TRACE_PRESENT_BEGIN, -1,
+                    123, 7, 999), "Eden progress trace formats numeric-only stage data");
+            json = cJSON_Parse(text);
+            check(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "input_active")) &&
+                  cJSON_GetObjectItemCaseSensitive(json, "stage")->valueint == PTC_EDEN_TRACE_PRESENT_BEGIN &&
+                  cJSON_GetObjectItemCaseSensitive(json, "detail")->valueint == -1 &&
+                  strcmp(cJSON_GetObjectItemCaseSensitive(json, "tick")->valuestring, "999") == 0,
+                  "Eden progress trace retains types and signed diagnostic result");
+            cJSON_Delete(json);
+            check(!ptc_eden_format_progress(small, sizeof(small), &input, PTC_EDEN_TRACE_INPUT, 0, 1, 1, 1) && !small[0],
+                  "Eden progress trace rejects truncated records");
+            check(!ptc_eden_format_progress(text, sizeof(text), &input, 17, 0, 1, 1, 1) && !text[0],
+                  "Eden progress trace rejects unknown stage");
+        }
         model.parent_page = PTC_UI_PARENT_SUPPORT;
         model.disable_flag_present = true;
         model.recovery_active = false;

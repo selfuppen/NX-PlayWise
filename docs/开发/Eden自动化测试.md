@@ -1,6 +1,6 @@
 # Eden 自动化测试（发版前）
 
-此入口在隔离 profile 中执行真实 NRO 输入，配合进程内模拟后台、回执和持久化断言。它不证明真实 PCTL、IPC/SD 队列、Tesla、休眠、底座或生产候选资格。
+此入口在隔离 profile 中执行真实 NRO 输入，配合进程内模拟后台、回执和持久化断言。它不证明真实 PCTL、IPC/SD 队列、Tesla、休眠、底座或生产候选资格。Eden 当前没有 CFW/sysmodule 层，`.ovl` 不能作为浮窗加载（实测与其 VI/HID 缺口见[Eden与Tesla浮窗加载能力调研](../调研/Eden与Tesla浮窗加载能力调研.md)）。
 
 分层与覆盖责任见[分层测试策略](分层测试策略.md)；逐项操作、断言和扩展场景见[Eden主流程场景](Eden主流程场景.md)。`--suite smoke`（默认）只执行原7项入口烟测；发版前核心最小集合使用`--suite main --timeout 1200`，复用7项前置后执行10项主流程旅程，共17项，不重复前置认证测试。
 
@@ -49,9 +49,17 @@ smoke默认总期限300秒、最多180次输入；main使用1200秒预算、最�
 
 ## Eden 只读 UI 快照 v1
 
-当前执行器要求NRO具有`input_sampling_version:1`的只读采样观察；旧NRO须先经统一入口重建，缺少能力时禁止输入。主循环与PIN模态循环只记录`input_active`布尔值和递增`input_sequence`，不记录按键掩码、坐标或PIN内容。执行器每个动作只发送一次down，最多5秒等待同实例新序号的活跃采样，然后在finally发送一次up，再最多5秒等待后续中立采样。采样不证明点中了正确控件，页面/长度/业务回执断言仍保留；没有采样或释放证据即停止，不补发down。
+当前执行器要求NRO具有`input_sampling_version:2`的只读采样观察；旧NRO须先经统一入口重建，缺少能力时禁止输入。主循环与PIN模态循环在正常HID读取后、分发和绘制前独立发布`support/automation-input.jsonl`：只记录`input_active`布尔值、递增`input_sequence`及实例/时间/版本，不记录按键掩码、坐标或PIN内容。边沿立即发布，中立心跳最多每200毫秒一条，每实例上限16MiB，追加累计失败3次即停；下游因缺少新采样停止。执行器每个动作只发送一次down，最多5秒等待同实例新序号的活跃采样，然后在finally发送一次up，再最多5秒等待后续中立采样。采样不证明点中了正确控件，页面/长度/业务回执断言仍保留；没有采样或释放证据即停止，不补发down。
 
-下一次down之前的中立样本还必须`waiting=false`，避免状态刷新正在等待回执时页面拒绝保存等按键。down后的采样与释放不受该条件限制，不能为了等回执而延迟up。此门禁最多等待5秒，不能用输入已采样替代页面接受或同ID业务回执。
+下一次down之前的完成帧必须`waiting=false`，避免状态刷新正在等待回执时页面拒绝保存等按键。down后的采样与释放只依赖独立HID流，不等同步请求、绘制或帧提交返回，不能为了等回执而延迟up。此门禁最多等待5秒，不能用输入已采样替代页面接受或同ID业务回执。
+
+新执行器还要求`presentation_version:1`：观察只在`framebufferEnd`返回后发布，表示该帧已完成软件绘制和提交，不代表真实显示器或原生阻断效果。每次down前，最多5秒内取得同实例的一个中立基线及两份`sequence/input_sequence`均前进的中立、非waiting、非动画帧；等待中遇到活跃输入、waiting或动画会重新建立基线，不接受缓存不变的中立记录。`input-readiness/`保留每个动作三份原件，`input_readiness_version:1`的成功报告按动作数、字段类型和原始流逐份核对。旧NRO证据仍可离线核验，但缺少完成帧标记时不能用于新的实际输入。
+
+场景失败后至多调用一次只读`eden_get_runtime_metrics(sample_ms=500)`，保存帧计数和可用运行状态；指标不可用也独立保存错误，不替换原失败、不重发输入、不妨碍退出。单批成功不自动解释历史采样中断，完整UI、业务、原始输入流与健康收尾仍分别断言。
+
+需要区分阻塞阶段时显式加`--trace-progress`，只在本批私有profile写`automation-trace.flag`。Eden专用`automation-progress.jsonl`记录数字阶段：1输入采样、2输入分发结束、3/4模拟tick进入/返回、5/6结果轮询进入/返回、7绘制进入、8取得framebuffer、9内容绘制完成、16提交帧之前、10提交返回、11/12观察追加进入/返回、13/14同步模拟请求进入/返回、15观察格式化失败。除阶段、结果、instance/tick与输入序号/活跃布尔之外不记录自由文本、按键、坐标或凭据。只记录输入边沿附近少数帧、每秒心跳及请求边界，每实例最多16MiB，追加累计失败3次即停止阶段取证。原始阶段流按实例归档并核验序号，不将缺少返回行直接等同已确定根因；该诊断会增加少量I/O，修复后仍须关闭它进行正常专项回归。
+
+复制profile前，执行器统计本批实际复制的Eden可执行文件、config/keys/nand和语言资源大小，要求目标卷还可额外保留512MiB。容量不足时在创建新运行profile或启动MCP之前拒绝，保存`preparation.json`并将场景全部记为未执行；不会清理来源profile来腾空间。可用`--runtime-root`选择有足够空间的独立目录，实际路径与复制前容量绑定在`identity.json`中。容量检查通过不代表后续原生启动或业务测试通过。
 
 普通按钮保留200毫秒最短脉冲；护眼保存600毫秒，危险A确认从已采样后再保持1400毫秒。触摸确认已采样后立即释放，避免持有到下一个页面。方向键的最短脉冲从初次down起算，避免额外等待触发自动连发。原400毫秒触摸/200毫秒按钮的定时tap路径只属于旧批次，不能用旧成功宣称新驱动已通过。Windows原子替换快照时的只读占用仍可在1秒内重读，持久占用仍停止。
 
@@ -63,11 +71,15 @@ Windows快照读取以FILE_SHARE_READ／WRITE／DELETE打开短时句柄，从�
 
 模拟 PCTL 的加时读路径在实际读取时推进累计时间并采样日期／时间戳，避免把页面轮询缓存冒充新鲜加时读数；生产核心的新鲜度门禁保持不变。它仍然只是模拟累计使用量。
 
+Eden的只读status仍同步完成；其他请求复制到一个自有待处理槽（沿用4096字节协议上限），正常HID采到中立后才在模拟tick执行一次核心。排队或执行中拒绝覆盖，执行结束即清除槽，缺少结果也不自动重放；提交OK只表示接收，成功仍须同ID回执。该槽仅属模拟器进程内适配，不是持久SD队列，也不证明真实IPC的并发或崩溃语义。
+
+主循环在HID分发前仅处理当前请求ID已经落盘的结果，并同步命中测试的waiting标志，避免已完成的status仍等待下一次250毫秒轮询而吞掉输入。回执缺失时不提前调用结果轮询、不加速超时、不改ID或重发；成功/失败仍走原`poll_result`的校验与处理。生产端保持原轮询和等待门禁，这项适配不证明真实IPC时序。
+
 仅 `PLAYWISE_EDEN` 编译；由测试 profile 的 `support/automation-observe.flag` 显式启用。绘制路径最多每秒10次追加一条JSON到 `support/automation-ui.jsonl`，每个NRO实例最多追加128MiB，达到上限后停止观察发布，执行器因缺少新心跳停止。它不提交请求、不读取动作指令、不改认证或业务状态。仅供旧NRO兼容的`automation-ui.json`仍可读取；新发布不反复删除/替换观察路径，避免与Host读句柄竞争导致只剩`.write`临时文件。
 
-Host只读取流尾最多64KiB，选择最后一条以换行结束的完整JSON；未完成尾行不接受，已完成的损坏行直接拒绝，不向前寻找能解析的旧行。健康关闭后重开前，将上一实例流原样归档到`ui-streams/`再清理私有profile中的旧流；最终流保存到`app-final/support/`。离线核验逐条读取原始流，要求每份输入采样都存在相同实例/序号及完整内容的原记录。观察发布失败不影响产品流程；真实SD原子队列仍使用原有实现，本改动不证明或改变其语义。
+Host只读取流尾最多64KiB，选择最后一条以换行结束的完整JSON；未完成尾行不接受，已完成的损坏行直接拒绝，不向前寻找能解析的旧行。健康关闭后重开前，将上一实例UI/HID流原样归档到`ui-streams/`、`input-streams/`再清理私有profile中的旧流；最终流保存到`app-final/support/`。离线核验逐条读取原始流，要求每份输入采样和就绪帧都存在相同实例/序号及完整内容的原记录；UI与HID序号属于不同流，不混用。观察发布失败不影响产品流程；真实SD原子队列仍使用原有实现，本改动不证明或改变其语义。
 
-外壳：`schema_version:1`、内嵌 `release_id`、本次 NRO `instance`（十六进制 tick 起点）、正整数 `sequence`、十进制字符串 `tick`、`ui` 对象。instance 仅用于测试进程观察，不是主机 boot 身份。
+外壳：`schema_version:1`、整数`presentation_version:1`、内嵌 `release_id`、本次 NRO `instance`（十六进制 tick 起点）、正整数 `sequence`、十进制字符串 `tick`、`ui` 对象。instance 仅用于测试进程观察，不是主机 boot 身份。
 
 ui 白名单：view、parent_page、overlay、setup_step、setup_active、waiting、status_loaded、error_code、selected_index、pin_length、numpad_length、numpad_purpose、code_result_failed、code_result_pending、overlay_animating，以及 targets。枚举沿 `ui_model.h`：view 0孩子/1家长/3向导，overlay 0无/3确认/4数字输入/12兑换结果/13认证错误/22 PIN。targets 的 width/height 为1280/720，坐标中心直接来自生产布局函数；提供 setup_primary、child_code、pin_confirm、pin_0..9、code_0..9。执行器不写死页面 X 偏移，并等待弹层入场结束。
 
@@ -77,7 +89,7 @@ ui 白名单：view、parent_page、overlay、setup_step、setup_active、waitin
 
 支持专项增加`disable_flag_present`、`recovery_active`两个布尔值和`diagnostic_status`整数（0空闲、1导出中、2成功、3失败，来自`PtcUiDiagnosticStatus`）。支持页的`card_*`中心来自`ptc_ui_support_card_rect`，不能沿用设置页坐标；不导出诊断路径或自由文本。
 
-采样能力位于外壳：`input_sampling_version:1`、正整数`input_sequence`、布尔`input_active`。序号饱和而不回绕；新实例由原instance区别。采样状态只来自正常HID读取，观察路径不处理命令。
+采样能力位于外壳：`input_sampling_version:2`、正整数`input_sequence`、布尔`input_active`。独立HID流另有整数`schema_version:1`、`input_stream_version:1`、与`input_sequence`相同的`sequence`、十六进制`instance`和十进制字符串`tick`。序号饱和而不回绕；新实例由原instance区别。UI帧中的采样字段只作为完成帧关联，down/up握手读取独立HID流。旧`input_sampling_version:1`的历史报告继续按原UI流核验，不能用于新的运行。采样状态只来自正常HID读取，观察路径不处理命令。
 
 ## 证据与离线复核
 

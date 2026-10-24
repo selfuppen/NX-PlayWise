@@ -12,6 +12,51 @@ typedef struct {
     bool active;
 } PtcEdenInputObservation;
 
+void ptc_eden_trace_stage(unsigned stage, int detail);
+
+static inline bool ptc_eden_format_input(char *out, size_t size,
+    const PtcEdenInputObservation *input, uint64_t instance, uint64_t tick)
+{
+    if (!out || !size) return false;
+    out[0] = '\0';
+    if (!input) return false;
+    int n = snprintf(out, size,
+        "{\"schema_version\":1,\"input_stream_version\":1,\"input_sampling_version\":2,"
+        "\"instance\":\"%llx\",\"sequence\":%llu,\"tick\":\"%llu\","
+        "\"input_sequence\":%llu,\"input_active\":%s}",
+        (unsigned long long)instance, (unsigned long long)input->sequence,
+        (unsigned long long)tick, (unsigned long long)input->sequence, input->active ? "true" : "false");
+    if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
+    return true;
+}
+
+enum {
+    PTC_EDEN_TRACE_INPUT = 1, PTC_EDEN_TRACE_DISPATCH_DONE,
+    PTC_EDEN_TRACE_TICK_BEGIN, PTC_EDEN_TRACE_TICK_END,
+    PTC_EDEN_TRACE_POLL_BEGIN, PTC_EDEN_TRACE_POLL_END,
+    PTC_EDEN_TRACE_DRAW_BEGIN, PTC_EDEN_TRACE_FRAMEBUFFER_READY,
+    PTC_EDEN_TRACE_CONTENT_DONE, PTC_EDEN_TRACE_PRESENT_DONE,
+    PTC_EDEN_TRACE_OBSERVE_BEGIN, PTC_EDEN_TRACE_OBSERVE_END,
+    PTC_EDEN_TRACE_REQUEST_BEGIN, PTC_EDEN_TRACE_REQUEST_END,
+    PTC_EDEN_TRACE_FORMAT_FAILED, PTC_EDEN_TRACE_PRESENT_BEGIN
+};
+
+static inline bool ptc_eden_format_progress(char *out, size_t size,
+    const PtcEdenInputObservation *input, unsigned stage, int detail,
+    uint64_t instance, uint64_t sequence, uint64_t tick)
+{
+    if (!out || !size) return false;
+    out[0] = '\0';
+    if (!input || stage < PTC_EDEN_TRACE_INPUT || stage > PTC_EDEN_TRACE_PRESENT_BEGIN) return false;
+    int n = snprintf(out, size,
+        "{\"schema_version\":1,\"instance\":\"%llx\",\"sequence\":%llu,\"tick\":\"%llu\","
+        "\"stage\":%u,\"detail\":%d,\"input_sequence\":%llu,\"input_active\":%s}",
+        (unsigned long long)instance, (unsigned long long)sequence, (unsigned long long)tick,
+        stage, detail, (unsigned long long)input->sequence, input->active ? "true" : "false");
+    if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
+    return true;
+}
+
 static inline void ptc_eden_sample_input(PtcEdenInputObservation *input, bool active)
 {
     if (!input) return;

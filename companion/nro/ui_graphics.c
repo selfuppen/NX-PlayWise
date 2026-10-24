@@ -140,7 +140,7 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
         return;
     }
 #ifdef PLAYWISE_EDEN
-    ptc_eden_observe_ui(model);
+    ptc_eden_trace_stage(PTC_EDEN_TRACE_DRAW_BEGIN, 0);
 #endif
     g_palette = theme->palette;
     g_theme = *theme;
@@ -156,6 +156,9 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
     }
 #endif
     pixels = (uint32_t *)framebufferBegin(&g_ui.framebuffer, &stride_bytes);
+#ifdef PLAYWISE_EDEN
+    ptc_eden_trace_stage(PTC_EDEN_TRACE_FRAMEBUFFER_READY, pixels ? 1 : 0);
+#endif
     if (!pixels) {
         return;
     }
@@ -217,5 +220,16 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
     fill_rect(pixels, stride, (UiRect){1080, 12, 184, 28}, UI_DANGER);
     draw_text(pixels, stride, 1094, 18, "EDEN TEST", 16, UI_ON_ACCENT);
 #endif
+#ifdef PLAYWISE_EDEN
+    ptc_eden_trace_stage(PTC_EDEN_TRACE_CONTENT_DONE, 0);
+    ptc_eden_trace_stage(PTC_EDEN_TRACE_PRESENT_BEGIN, 0);
+#endif
     framebufferEnd(&g_ui.framebuffer);
+#ifdef PLAYWISE_EDEN
+    ptc_eden_trace_stage(PTC_EDEN_TRACE_PRESENT_DONE, 0);
+    /* A settled model is not evidence that its frame has been rendered.
+       Publish only after presentation, so the driver cannot act on a frame
+       that is still blocked in framebufferBegin/drawing/framebufferEnd. */
+    ptc_eden_observe_ui(model);
+#endif
 }

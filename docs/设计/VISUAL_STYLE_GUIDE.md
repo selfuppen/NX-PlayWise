@@ -4,6 +4,8 @@
 
 This guide defines the visual design system, color palette, and layout principles for PlayWise on Nintendo Switch. It provides clear standards for Companion NRO pages, settings menus, overlays, and detail panels to ensure consistent aesthetics, high readability, and reliable rendering across handheld and docked modes. Open [`theme_preview.html`](theme_preview.html) in your browser for an interactive preview of the full light/dark palette and UI components.
 
+When the parent Support & Recovery tab has an attention or incomplete status, stack the title and status badge within the tab. Measure the translated status text to size the badge within the tab padding; a fixed corner badge must not cover the title. Plan editor subpages that hide the root tabs must also hide this badge.
+
 ---
 
 ## 1. Design Philosophy & Runtime Contracts

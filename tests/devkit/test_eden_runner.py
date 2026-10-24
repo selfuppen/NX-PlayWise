@@ -18,6 +18,9 @@ from tools.automation.eden_runner import (
     scenario_names,
     verify_input_evidence,
     verify_capture_readiness,
+    verify_input_readiness,
+    verify_progress_streams,
+    check_runtime_capacity,
     read_observation_stream,
     verify_observation_streams,
 )
@@ -319,6 +322,9 @@ def test_observation_stream_partial_tail() -> None:
         rejected(lambda: verify_observation_streams(root))
         path.write_text(json.dumps({**value, "sequence": 2}) + '\n', encoding="utf-8")
         rejected(lambda: verify_observation_streams(root))
+        path.write_text(json.dumps(value) + '\n', encoding="utf-8")
+        save(root / "input-readiness/001-0.json", {**value, "sequence": 2})
+        rejected(lambda: verify_observation_streams(root))  # Readiness also requires original raw records.
 
 
 def test_preview_cancel_does_not_exit_child() -> None:
@@ -377,19 +383,167 @@ def test_sampled_input_releases_once_on_failure() -> None:
             suite = Suite(client, root, root, {}, 60)
             neutral = {"instance": "a", "input_sequence": 1, "input_active": False}
             sampled = {"instance": "a", "input_sequence": 2, "input_active": True}
-            sequence = [neutral, GateError("not sampled") if fails else sampled, neutral]
-            with patch.object(suite, "wait_input", side_effect=sequence), \
+            sequence = [GateError("not sampled") if fails else sampled, neutral]
+            with patch.object(suite, "wait_action_ready", return_value=neutral), \
+                    patch.object(suite, "wait_input", side_effect=sequence), \
                     patch("tools.automation.eden_runner.time.sleep"):
                 if fails:
                     rejected(lambda: suite.action(button="A"))
                 else:
                     suite.action(button="A")
             assert [args["action"] for name, args in client.calls if name == "eden_press_button"] == ["down", "up"]
+        client = Client()
+        suite = Suite(client, root, root, {}, 60)
+        with patch.object(suite, "wait_action_ready", side_effect=GateError("no presented progress")):
+            rejected(lambda: suite.action(button="A"))
+        assert not any(name == "eden_press_button" for name, _ in client.calls)
         suite = Suite(None, root, root, {}, 60)
-        with patch.object(suite, "observe", return_value={"input_sampling_version": True, "input_sequence": 1, "input_active": False}):
+        with patch.object(suite, "observe_input", return_value={"input_sampling_version": True, "input_sequence": 1, "input_active": False}):
             rejected(lambda: suite.wait_input(False))
-        with patch.object(suite, "observe", return_value={"instance": "b", "input_sampling_version": 1, "input_sequence": 2, "input_active": True}):
+        with patch.object(suite, "observe_input", return_value={"instance": "b", "input_sampling_version": 2, "input_sequence": 2, "input_active": True}):
             rejected(lambda: suite.wait_input(True, after=neutral))
+
+
+def test_input_requires_presented_progress() -> None:
+    from copy import deepcopy
+    first = {"instance": "a", "presentation_version": 1, "input_sampling_version": 2,
+             "sequence": 10, "input_sequence": 20, "input_active": False,
+             "ui": {"waiting": False, "overlay_animating": False}}
+    second = {**first, "sequence": 11, "input_sequence": 21}
+    third = {**first, "sequence": 12, "input_sequence": 22}
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        fourth = {**third, "sequence": 13, "input_sequence": 23}
+        with patch.object(suite, "wait_input", return_value={"instance": "a", "input_sequence": 21}), \
+                patch.object(suite, "observe", side_effect=[first, first, second, third, fourth]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            assert suite.wait_action_ready() == fourth
+        assert json.loads((root / "input-readiness/001-0.json").read_text())["input_sequence"] == 21
+        verify_input_readiness(root, 1)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        with patch.object(suite, "wait_input", return_value=first), \
+                patch.object(suite, "observe", side_effect=[first, first, second, second, third]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            assert suite.wait_action_ready() == third
+        verify_input_readiness(root, 1)
+        verify_input_readiness(root, 1)
+        path = root / "input-readiness/001-2.json"
+        for bad in (first, {**third, "instance": "b"}, {**third, "presentation_version": True},
+                    {**third, "ui": {"waiting": True, "overlay_animating": False}}):
+            path.write_text(json.dumps(bad), encoding="utf-8")
+            rejected(lambda: verify_input_readiness(root, 1))
+        path.unlink()
+        rejected(lambda: verify_input_readiness(root, 1))
+    for bad in ({**first, "presentation_version": 0}, {**first, "instance": "b"}):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            suite = Suite(None, root, root, {}, 60)
+            with patch.object(suite, "wait_input", return_value=first), \
+                    patch.object(suite, "observe", return_value=bad):
+                rejected(lambda: suite.wait_action_ready())
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        pending = {**third, "ui": {"waiting": True, "overlay_animating": False}}
+        after = [{**first, "sequence": i, "input_sequence": i + 10} for i in (13, 14, 15)]
+        with patch.object(suite, "wait_input", return_value=first), \
+                patch.object(suite, "observe", side_effect=[first, second, pending, *after]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            assert suite.wait_action_ready() == after[-1]
+        assert json.loads((root / "input-readiness/001-0.json").read_text())["sequence"] == 13
+        verify_input_readiness(root, 1)
+    # Cached snapshots and a still-rendering dialog never become readiness,
+    # even when the model says input is currently neutral.
+    for value in (first, {**third, "ui": {"waiting": False, "overlay_animating": True}}):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            suite = Suite(None, root, root, {}, 60)
+            ticks = iter(index / 4 for index in range(100))
+            with patch.object(suite, "wait_input", return_value=first), \
+                    patch.object(suite, "observe", return_value=deepcopy(value)), \
+                    patch("tools.automation.eden_runner.time.monotonic", side_effect=lambda: next(ticks)), \
+                    patch("tools.automation.eden_runner.time.sleep"):
+                rejected(lambda: suite.wait_action_ready())
+            assert not (root / "input-readiness").exists()
+
+
+def test_failure_metrics_preserve_original_error() -> None:
+    class Client:
+        def __init__(self, fail: bool):
+            self.fail, self.calls = fail, []
+        def tool(self, name, arguments=None, **kwargs):
+            self.calls.append((name, arguments))
+            if self.fail:
+                raise RuntimeError("diagnostic unavailable")
+            return {"frame_counter_before": 42, "frame_counter_after": 42}
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for fail in (False, True):
+            client = Client(fail)
+            suite = Suite(client, root, root, {}, 60)
+            name = f"input-{fail}"
+            def stopped():
+                raise GateError("original sampling stop")
+            with patch.object(suite, "capture", side_effect=GateError("capture unavailable")):
+                try:
+                    suite.run_case(name, stopped)
+                except GateError as exc:
+                    assert str(exc) == "original sampling stop"
+                else:
+                    raise AssertionError("original failure was swallowed")
+            assert client.calls == [("eden_get_runtime_metrics", {"sample_ms": 500})]
+            assert suite.results[name]["status"] == "failed_or_unknown"
+            assert (root / f"failure-metrics/{name}{'-error' if fail else ''}.json").is_file()
+
+
+def test_progress_stream_boundaries() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        path = root / "app-final/support/automation-progress.jsonl"
+        path.parent.mkdir(parents=True)
+        first = {"schema_version": 1, "instance": "a", "sequence": 1, "tick": "1", "stage": 7,
+                 "detail": 0, "input_sequence": 5, "input_active": False}
+        second = {**first, "sequence": 2, "stage": 16}
+        path.write_text(json.dumps(first) + '\n' + json.dumps(second) + '\n{"partial":', encoding="utf-8")
+        verify_progress_streams(root)
+        for bad in ({**second, "stage": True}, {**second, "sequence": 1}, {**second, "instance": "b"},
+                    {**second, "stage": 17}, {**second, "input_sequence": 4}):
+            path.write_text(json.dumps(first) + '\n' + json.dumps(bad) + '\n', encoding="utf-8")
+            rejected(lambda: verify_progress_streams(root))
+
+
+def test_profile_capacity_before_copy() -> None:
+    from types import SimpleNamespace
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory) / "runtime"
+        required = 1000 + 512 * 1024 * 1024
+        with patch("tools.automation.eden_runner.shutil.disk_usage", return_value=SimpleNamespace(free=required)):
+            result = check_runtime_capacity(root, 1000)
+        assert result["free_before"] == required and result["copy_bytes"] == 1000
+        with patch("tools.automation.eden_runner.shutil.disk_usage", return_value=SimpleNamespace(free=required - 1)):
+            rejected(lambda: check_runtime_capacity(root, 1000))
+        assert list(root.iterdir()) == []
+        rejected(lambda: check_runtime_capacity(root, True))
+    import argparse
+    from contextlib import redirect_stdout
+    from io import StringIO
+    from tools.automation.eden_runner import run
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory) / "refused"
+        args = argparse.Namespace(out=root, suite="support")
+        # Isolate only this module's platform boundary; leave pathlib and the
+        # real OS untouched so the preparation rejection runs on Host Linux too.
+        with patch("tools.automation.eden_runner.os", SimpleNamespace(name="nt")), \
+                patch("tools.automation.eden_runner.prepare", side_effect=GateError("runtime disk space insufficient")), \
+                patch("tools.automation.eden_runner.McpClient") as client, redirect_stdout(StringIO()):
+            assert run(args) == 1
+        client.assert_not_called()
+        refusal = json.loads((root / "preparation.json").read_text())
+        assert refusal["phase"] == "preparation" and refusal["status"] == "precondition_not_met"
+        assert all(case["status"] == "not_executed" for case in refusal["scenarios"].values())
 
 
 def test_input_evidence_roundtrip() -> None:
@@ -406,20 +560,81 @@ def test_input_evidence_roundtrip() -> None:
         rejected(lambda: verify_input_evidence(root, True))
 
 
-def test_pending_receipt_prevents_next_input() -> None:
+def test_independent_input_while_presentation_blocked() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         suite = Suite(None, root, root, {}, 60)
-        pending = {"instance": "a", "input_sampling_version": 1, "input_sequence": 2,
-                   "input_active": False, "ui": {"waiting": True}}
-        idle = {**pending, "input_sequence": 3, "ui": {"waiting": False}}
-        with patch.object(suite, "observe", side_effect=[pending, idle]), \
+        active = {"schema_version": 1, "input_stream_version": 1, "instance": "a", "tick": "123",
+                  "input_sampling_version": 2, "sequence": 2, "input_sequence": 2, "input_active": True}
+        idle = {**active, "sequence": 3, "input_sequence": 3, "input_active": False}
+        path = suite.app / "support/automation-input.jsonl"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(active) + '\n', encoding="utf-8")
+        # The HID edge must be observable before a synchronous request, draw,
+        # or presentation returns. The next down still uses the UI gate above.
+        with patch.object(suite, "observe", side_effect=GateError("presentation blocked")):
+            assert suite.wait_input(True, after={**idle, "input_sequence": 1}) == active
+            path.write_text(json.dumps(idle) + '\n', encoding="utf-8")
+            assert suite.wait_input(False, after=active) == idle
+        for bad in ({**idle, "schema_version": True}, {**idle, "tick": 123},
+                    {**idle, "input_sampling_version": 1}, {**idle, "sequence": True},
+                    {**idle, "input_sequence": 2}, {**idle, "input_active": 0}):
+            path.write_text(json.dumps(bad) + '\n', encoding="utf-8")
+            rejected(suite.observe_input)
+        path.write_text(json.dumps(idle) + '\n', encoding="utf-8")
+        with patch("tools.automation.eden_runner.time.time", return_value=path.stat().st_mtime + 5):
+            try:
+                suite.observe_input()
+                raise AssertionError("stale HID sample accepted")
+            except ObservationPending:
+                pass
+        # UI and HID sequences have independent namespaces, even in one instance.
+        save(root / "input-samples/001-active.json", active)
+        save(root / "input-samples/001-release.json", idle)
+        save(root / "input-readiness/001-0.json", {"instance": "a", "sequence": 2, "ui": {"view": 0}})
+        raw = root / "app-final/support"
+        raw.mkdir(parents=True)
+        (raw / "automation-input.jsonl").write_text(json.dumps(active) + '\n' + json.dumps(idle) + '\n', encoding="utf-8")
+        (raw / "automation-ui.jsonl").write_text(json.dumps({"instance": "a", "sequence": 2, "ui": {"view": 0}}) + '\n', encoding="utf-8")
+        verify_observation_streams(root)
+        verify_observation_streams(root)
+        (raw / "automation-input.jsonl").write_text(json.dumps(idle) + '\n', encoding="utf-8")
+        rejected(lambda: verify_observation_streams(root))
+        with patch.object(suite, "observe_input", side_effect=[ObservationPending("stale"), idle]), \
                 patch("tools.automation.eden_runner.time.sleep"):
             assert suite.wait_input(False) == idle
-        # Releasing an already sampled action must remain possible while its
-        # own receipt is pending; this gate applies only before the next down.
-        with patch.object(suite, "observe", return_value=pending):
-            assert suite.wait_input(False, after={**pending, "input_sequence": 1}) == pending
+
+
+def test_action_across_independent_stream_timings() -> None:
+    class Client:
+        def __init__(self):
+            self.calls = []
+        def tool(self, name, arguments=None):
+            self.calls.append((name, arguments))
+            return {"running": True, "backend": "eden-control", "pid": 1,
+                    "launch": {"target_reached": True, "phase": "game_ready"}}
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        client = Client()
+        suite = Suite(client, root, root, {}, 60)
+        neutral = {"instance": "a", "input_stream_version": 1, "input_sampling_version": 2,
+                   "input_sequence": 19, "input_active": False}
+        frames = [{"instance": "a", "presentation_version": 1, "input_sampling_version": 2,
+                   "sequence": seq, "input_sequence": seq, "input_active": False,
+                   "ui": {"waiting": False, "overlay_animating": False}} for seq in (18, 20, 21, 22)]
+        active = {**neutral, "input_sequence": 24, "input_active": True}
+        release = {**neutral, "input_sequence": 25}
+        with patch.object(suite, "observe", side_effect=frames), \
+                patch.object(suite, "observe_input", side_effect=[neutral, neutral, active, active, release]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            suite.action(button="A")
+        assert [args["action"] for name, args in client.calls if name == "eden_press_button"] == ["down", "up"]
+        verify_input_readiness(root, 1)
+        # Older UI/HID publications can cross in either direction, but the
+        # independent HID stream itself must never regress or change instance.
+        for bad in ({**active, "input_sequence": 23}, {**release, "instance": "b"}):
+            with patch.object(suite, "observe_input", return_value=bad):
+                rejected(lambda: suite.wait_input(False, after=active))
 
 
 def test_readonly_status_overlap_preserves_business_gate() -> None:
@@ -456,8 +671,13 @@ def main() -> None:
     test_preview_cancel_does_not_exit_child()
     test_stale_observation_waits_without_input()
     test_sampled_input_releases_once_on_failure()
+    test_input_requires_presented_progress()
+    test_failure_metrics_preserve_original_error()
+    test_progress_stream_boundaries()
+    test_profile_capacity_before_copy()
     test_input_evidence_roundtrip()
-    test_pending_receipt_prevents_next_input()
+    test_independent_input_while_presentation_blocked()
+    test_action_across_independent_stream_timings()
     test_readonly_status_overlap_preserves_business_gate()
     print("PASS: Eden input/exit gates, stdio failures, identity and evidence roundtrip")
 

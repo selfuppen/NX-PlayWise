@@ -237,6 +237,9 @@ void edit_scheduled_minutes(UiState *ui);
 void edit_grant_minutes(UiState *ui);
 void load_rule_drafts(UiState *ui);
 void poll_result(UiState *ui, bool force);
+#ifdef PLAYWISE_EDEN
+void poll_eden_ready_result(UiState *ui);
+#endif
 void refresh_setup_activation(UiState *ui);
 void enter_parent_area(UiState *ui);
 void select_setup_shortcut(UiState *ui, int index);

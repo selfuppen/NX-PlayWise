@@ -4,6 +4,8 @@
 #ifdef PLAYWISE_EDEN
 
 #include <stdbool.h>
+#include "eden_observe.h"
+#include "eden_request.h"
 
 #include "../../companion/transport_client.h"
 #include "../../platform/host/pctl_stub.h"
@@ -24,6 +26,7 @@ typedef struct {
     PtcTimeProvider time_provider;
     PtcSysmodule sysmodule;
     PtcOperationModeProvider operation_mode_provider;
+    PtcEdenRequest request;
     uint64_t last_usage_tick;
     uint64_t usage_carry_ns;
     bool initialized;

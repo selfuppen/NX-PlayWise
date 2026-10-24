@@ -9,6 +9,7 @@ if __package__ in (None, ""):
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -36,7 +37,15 @@ class CommandError(RuntimeError):
 
 
 def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    # Decode in this thread: Windows subprocess reader-thread decode failures
+    # can otherwise leave stdout=None while the child still exits zero.
+    raw = subprocess.run(command, cwd=ROOT, capture_output=True, env=env)
+    result = subprocess.CompletedProcess(command, raw.returncode,
+        raw.stdout.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n"),
+        raw.stderr.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n"))
     if check and result.returncode != 0:
         raise CommandError(command, result)
     return result
@@ -61,6 +70,7 @@ def run_python_regressions() -> None:
         "tests/mvp/test_token_v2.py",
         "tests/frontend/test_ptc_frontend_server.py",
         "tests/devkit/test_playwise_version.py",
+        "tests/devkit/test_test_runner.py",
         "tests/devkit/test_release_version.py",
         "tests/devkit/test_release_manifest.py",
         "tests/devkit/test_qualification_tools.py",

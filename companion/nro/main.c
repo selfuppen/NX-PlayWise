@@ -205,6 +205,9 @@ int main(int argc, char **argv)
             discard_theme_draft(&ui);
         }
         if (ui.status_refresh_pending) trigger_resume_status_refresh(&ui, &background_poll_elapsed_ms);
+#ifdef PLAYWISE_EDEN
+        poll_eden_ready_result(&ui);
+#endif
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
         held = padGetButtons(&pad);
@@ -405,14 +408,25 @@ int main(int argc, char **argv)
         }
 
         background_poll_elapsed_ms += INPUT_LOOP_MS;
+#ifdef PLAYWISE_EDEN
+        ptc_eden_trace_stage(PTC_EDEN_TRACE_DISPATCH_DONE, 0);
+#endif
         if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
 #ifdef PLAYWISE_EDEN
+            ptc_eden_trace_stage(PTC_EDEN_TRACE_TICK_BEGIN, 0);
             if (ptc_eden_runtime_tick(&eden_runtime)) eden_status_dirty = true;
+            ptc_eden_trace_stage(PTC_EDEN_TRACE_TICK_END, 0);
 #else
             poll_hot_reload(&ui);
 #endif
             poll_pending_redemption(&ui);
+#ifdef PLAYWISE_EDEN
+            ptc_eden_trace_stage(PTC_EDEN_TRACE_POLL_BEGIN, 0);
+#endif
             poll_result(&ui, false);
+#ifdef PLAYWISE_EDEN
+            ptc_eden_trace_stage(PTC_EDEN_TRACE_POLL_END, 0);
+#endif
             refresh_setup_activation(&ui);
 #ifdef PLAYWISE_EDEN
             if (eden_status_dirty && !ui.waiting && ui.model.overlay == PTC_UI_OVERLAY_NONE &&

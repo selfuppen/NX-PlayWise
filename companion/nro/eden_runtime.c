@@ -19,16 +19,76 @@
 
 static PtcStorage *eden_observe_storage;
 static PtcEdenInputObservation eden_input;
+static uint64_t eden_observe_instance, trace_bytes, trace_sequence, trace_last_tick;
+static unsigned trace_frames, trace_failures;
+static bool trace_checked, trace_enabled;
+static bool input_checked, input_enabled;
+static uint64_t input_last_tick, input_bytes;
+static unsigned input_failures;
+
+void ptc_eden_trace_stage(unsigned stage, int detail)
+{
+    char line[384];
+    if (!trace_enabled || (!trace_frames && stage != PTC_EDEN_TRACE_REQUEST_BEGIN &&
+            stage != PTC_EDEN_TRACE_REQUEST_END) || trace_bytes + sizeof(line) > 16ULL * 1024 * 1024) return;
+    uint64_t tick = svcGetSystemTick();
+    if (!eden_observe_instance) eden_observe_instance = tick;
+    if (ptc_eden_format_progress(line, sizeof(line), &eden_input, stage, detail,
+            eden_observe_instance, ++trace_sequence, tick)) {
+        if (eden_observe_storage->vtable->append_line(eden_observe_storage,
+                PLAYWISE_EDEN_SD_ROOT "/support/automation-progress.jsonl", line))
+            trace_bytes += strlen(line) + 1;
+        else if (++trace_failures >= 3) trace_enabled = false;
+    }
+}
 
 void ptc_eden_observe_input(bool active)
 {
     /* No key mask, touch coordinates or PIN digits leave the input loop. */
+    bool changed = eden_input.active != active;
     ptc_eden_sample_input(&eden_input, active);
+    if (!input_checked && eden_observe_storage) {
+        input_enabled = eden_observe_storage->vtable->exists(eden_observe_storage,
+            PLAYWISE_EDEN_SD_ROOT "/support/automation-observe.flag");
+        input_checked = true;
+    }
+    if (input_enabled) {
+        uint64_t tick = svcGetSystemTick();
+        char line[384];
+        /* Publish accepted HID edges before dispatch/rendering can block.
+           UI presentation is a separate channel, never the release handshake. */
+        if ((changed || !input_last_tick || armTicksToNs(tick - input_last_tick) >= 200000000ULL) &&
+            input_bytes + sizeof(line) <= 16ULL * 1024 * 1024) {
+            input_last_tick = tick;
+            if (!eden_observe_instance) eden_observe_instance = tick;
+            if (ptc_eden_format_input(line, sizeof(line), &eden_input, eden_observe_instance, tick)) {
+                if (eden_observe_storage->vtable->append_line(eden_observe_storage,
+                        PLAYWISE_EDEN_SD_ROOT "/support/automation-input.jsonl", line))
+                    input_bytes += strlen(line) + 1;
+                else if (++input_failures >= 3) input_enabled = false;
+            }
+        }
+    }
+    if (!trace_checked && eden_observe_storage) {
+        trace_enabled = eden_observe_storage->vtable->exists(eden_observe_storage,
+            PLAYWISE_EDEN_SD_ROOT "/support/automation-trace.flag");
+        trace_checked = true;
+    }
+    if (trace_enabled) {
+        uint64_t tick = svcGetSystemTick();
+        if (changed) trace_frames = 3;
+        else if (trace_frames) --trace_frames;
+        if (!trace_last_tick || armTicksToNs(tick - trace_last_tick) >= 1000000000ULL) {
+            if (!trace_frames) trace_frames = 1;
+            trace_last_tick = tick;
+        }
+        ptc_eden_trace_stage(PTC_EDEN_TRACE_INPUT, 0);
+    }
 }
 
 void ptc_eden_observe_ui(const PtcUiModel *model)
 {
-    static uint64_t instance, last_tick, sequence, stream_bytes;
+    static uint64_t last_tick, sequence, stream_bytes;
     uint64_t tick = svcGetSystemTick();
     char ui[8192], text[8704];
     int n;
@@ -36,21 +96,27 @@ void ptc_eden_observe_ui(const PtcUiModel *model)
     last_tick = tick;
     if (!eden_observe_storage->vtable->exists(eden_observe_storage,
             PLAYWISE_EDEN_SD_ROOT "/support/automation-observe.flag")) return;
-    if (!ptc_eden_format_ui(model, ui, sizeof(ui))) return;
-    if (!instance) instance = tick;
+    if (!ptc_eden_format_ui(model, ui, sizeof(ui))) {
+        ptc_eden_trace_stage(PTC_EDEN_TRACE_FORMAT_FAILED, 0);
+        return;
+    }
+    if (!eden_observe_instance) eden_observe_instance = tick;
     n = snprintf(text, sizeof(text),
-        "{\"schema_version\":1,\"release_id\":\"%s\",\"instance\":\"%llx\","
-        "\"sequence\":%llu,\"tick\":\"%llu\",\"input_sampling_version\":1,"
+        "{\"schema_version\":1,\"presentation_version\":1,\"release_id\":\"%s\",\"instance\":\"%llx\","
+        "\"sequence\":%llu,\"tick\":\"%llu\",\"input_sampling_version\":2,"
         "\"input_sequence\":%llu,\"input_active\":%s,\"ui\":%s}",
-        PLAYWISE_BUILD_RELEASE_ID, (unsigned long long)instance,
+        PLAYWISE_BUILD_RELEASE_ID, (unsigned long long)eden_observe_instance,
         (unsigned long long)++sequence, (unsigned long long)tick,
         (unsigned long long)eden_input.sequence, eden_input.active ? "true" : "false", ui);
     if (n > 0 && (size_t)n < sizeof(text) && stream_bytes + (uint64_t)n + 1 <= 128ULL * 1024 * 1024) {
         /* Host readers can overlap the emulator's remove/rename publication.
            A bounded test run retains complete newline-delimited observations
            without replacing a path that the host is currently reading. */
-        if (eden_observe_storage->vtable->append_line(eden_observe_storage,
-                PLAYWISE_EDEN_SD_ROOT "/support/automation-ui.jsonl", text))
+        ptc_eden_trace_stage(PTC_EDEN_TRACE_OBSERVE_BEGIN, 0);
+        bool ok = eden_observe_storage->vtable->append_line(eden_observe_storage,
+                PLAYWISE_EDEN_SD_ROOT "/support/automation-ui.jsonl", text);
+        ptc_eden_trace_stage(PTC_EDEN_TRACE_OBSERVE_END, ok ? 1 : 0);
+        if (ok)
             stream_bytes += (uint64_t)n + 1;
     }
 }
@@ -109,15 +175,33 @@ static bool eden_ipc_connect(void *ctx)
     return runtime && runtime->initialized;
 }
 
+static void eden_process_request(void *ctx, const char *request_id, const char *json)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    ptc_eden_trace_stage(PTC_EDEN_TRACE_REQUEST_BEGIN, 0);
+    ptc_sysmodule_process_request_direct(&runtime->sysmodule, json, request_id);
+    ptc_eden_trace_stage(PTC_EDEN_TRACE_REQUEST_END, 0);
+}
+
 static PtcCompanionStatus eden_ipc_submit(
     void *ctx, const char *request_id, const char *json, void **wait_token)
 {
     PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    PtcRequest request;
     char result_path[320];
-    if (!runtime || !runtime->initialized || !request_id || !json || !wait_token) {
+    if (!runtime || !runtime->initialized || !request_id || !json || !wait_token ||
+        runtime->request.state != PTC_EDEN_REQUEST_IDLE || !ptc_request_id_is_valid(request_id) ||
+        strlen(request_id) >= PTC_COMPANION_REQUEST_ID_SIZE || strlen(json) > PTC_IPC_MAX_REQUEST_SIZE) {
         return PTC_COMPANION_BAD_ARGUMENT;
     }
-    ptc_sysmodule_process_request_direct(&runtime->sysmodule, json, request_id);
+    if (ptc_request_parse(json, &request) != PTC_ERR_OK || request.type != PTC_REQUEST_STATUS) {
+        if (!ptc_eden_request_submit(&runtime->request, request_id, json)) return PTC_COMPANION_BAD_ARGUMENT;
+        *wait_token = runtime;
+        return PTC_COMPANION_OK; /* Accepted, not completed: result is still polled by the same ID. */
+    }
+    /* Keep cheap read-only status synchronous so the pre-HID ready-result
+       drain cannot acquire a new artificial background-poll waiting window. */
+    eden_process_request(runtime, request_id, json);
     snprintf(result_path, sizeof(result_path), "%s/results/%s.json", PLAYWISE_EDEN_SD_ROOT, request_id);
     if (!runtime->sysmodule.storage->vtable->exists(runtime->sysmodule.storage, result_path)) {
         return PTC_COMPANION_PENDING;
@@ -129,7 +213,8 @@ static PtcCompanionStatus eden_ipc_submit(
 static int eden_ipc_event_status(void *ctx, void *wait_token)
 {
     PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
-    return runtime && runtime->initialized && wait_token == runtime ? 1 : -1;
+    if (!runtime || !runtime->initialized || wait_token != runtime) return -1;
+    return runtime->request.state == PTC_EDEN_REQUEST_IDLE ? 1 : 0;
 }
 
 static PtcCompanionStatus eden_ipc_get_result(
@@ -284,6 +369,7 @@ bool ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
     uint64_t tick;
     bool usage_changed = false;
     if (!runtime || !runtime->initialized) return false;
+    (void)ptc_eden_request_dispatch(&runtime->request, eden_input.active, runtime, eden_process_request);
     now = eden_now(&runtime->time_provider);
     tick = armGetSystemTick();
     usage_changed = ptc_eden_refresh_usage(&runtime->pctl, now,

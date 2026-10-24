@@ -67,6 +67,24 @@ static void sync_setup_wizard(UiState *ui)
     ptc_ui_setup_sync(&ui->model);
 }
 
+#ifdef PLAYWISE_EDEN
+void poll_eden_ready_result(UiState *ui)
+{
+    char path[320];
+    if (!ui) return;
+    /* The in-process simulator has already written its reply. Consume only
+       that exact ready receipt before HID dispatch, rather than retaining an
+       artificial waiting window until the next 250 ms background poll. */
+    if (ui->waiting && ui->active_request_id[0] && ui->client.storage) {
+        int n = snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui->active_request_id);
+        if (n > 0 && (size_t)n < sizeof(path) &&
+            ui->client.storage->vtable->exists(ui->client.storage, path))
+            poll_result(ui, false);
+    }
+    ui->model.waiting = ui->waiting;
+}
+#endif
+
 void poll_result(UiState *ui, bool force)
 {
     if (!ui || ui->transport.suspended) return;

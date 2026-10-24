@@ -20,10 +20,27 @@ static struct {
     UiRect title, summary;
 } child_heading_trace;
 
+static struct {
+    bool enabled;
+    const char *status;
+    int title_count, status_count;
+    UiRect title, badge;
+} support_tab_trace;
+
 void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
 {
-    if (!child_heading_trace.enabled || !text) return;
+    if (!text) return;
     UiRect bounds = {x, baseline - size, measure_text(text, size), size};
+    if (support_tab_trace.enabled && bounds.y >= 100 && baseline <= 164) {
+        if (strcmp(text, ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)) == 0) {
+            support_tab_trace.title = bounds;
+            ++support_tab_trace.title_count;
+        } else if (support_tab_trace.status && strcmp(text, support_tab_trace.status) == 0) {
+            support_tab_trace.badge = bounds;
+            ++support_tab_trace.status_count;
+        }
+    }
+    if (!child_heading_trace.enabled) return;
     if (strcmp(text, ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST)) == 0) {
         child_heading_trace.title = bounds;
         ++child_heading_trace.title_count;
@@ -31,6 +48,59 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
         child_heading_trace.summary = bounds;
         ++child_heading_trace.summary_count;
     }
+}
+
+static int check_parent_tabs(const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        for (int dark = 0; dark < 2; ++dark) {
+            PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+                PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+            for (int state = 0; state < 5; ++state) {
+                for (int page = 0; page <= PTC_UI_PARENT_PAGE_COUNT; ++page) {
+                    PtcUiModel model = *baseline;
+                    bool subpage = page == PTC_UI_PARENT_PAGE_COUNT;
+                    model.view = PTC_UI_PARENT;
+                    model.parent_page = subpage ? PTC_UI_PARENT_PLAN : (PtcUiParentPage)page;
+                    model.last_parent_page = model.parent_page;
+                    model.plan_page = subpage ? PTC_UI_PLAN_PAGE_WEEKLY : PTC_UI_PLAN_PAGE_ROOT;
+                    model.disable_flag_present = state == 1;
+                    model.recovery_active = state == 2;
+                    snprintf(model.setup_phase, sizeof(model.setup_phase), "%s",
+                        state == 3 ? "pending" : (state == 4 ? "failed" : "active"));
+                    memset(&support_tab_trace, 0, sizeof(support_tab_trace));
+                    support_tab_trace.enabled = true;
+                    support_tab_trace.status = ptc_ui_settings_status_label(&model);
+                    ptc_ui_graphics_draw(&model, &theme);
+                    support_tab_trace.enabled = false;
+                    PtcUiRect tab = ptc_ui_parent_tab_rect(PTC_UI_PARENT_SUPPORT);
+                    UiRect title = support_tab_trace.title, badge = support_tab_trace.badge;
+                    bool fits = subpage ? support_tab_trace.title_count == 0 && support_tab_trace.status_count == 0 :
+                        support_tab_trace.title_count == 1 && title.x >= tab.x + 4 &&
+                        title.x + title.width <= tab.x + tab.w - 4 && title.y >= tab.y &&
+                        title.y + title.height <= tab.y + tab.h;
+                    if (!subpage && support_tab_trace.status) {
+                        fits = fits && support_tab_trace.status_count == 1 && badge.x >= tab.x + 8 &&
+                            badge.x + badge.width <= tab.x + tab.w - 8 && badge.y >= tab.y &&
+                            badge.y + badge.height <= tab.y + tab.h && title.y + title.height + 2 <= badge.y;
+                    } else {
+                        fits = fits && support_tab_trace.status_count == 0;
+                    }
+                    if (!fits) {
+                        fprintf(stderr, "FAIL: support tab lang=%d dark=%d state=%d page=%d title=%d [%d,%d,%d,%d] badge=%d [%d,%d,%d,%d]\n",
+                            lang, dark, state, page, support_tab_trace.title_count, title.x, title.y, title.width, title.height,
+                            support_tab_trace.status_count, badge.x, badge.y, badge.width, badge.height);
+                        ++failed;
+                    }
+                }
+            }
+        }
+    }
+    fprintf(stderr, "%s: support tab complete text, separated bounds and subpage visibility (3 languages, 2 themes, 5 states, 6 pages)\n",
+        failed ? "FAIL" : "PASS");
+    return failed ? 1 : 0;
 }
 
 static int check_child_forecast_heading(bool dark)
@@ -1334,6 +1404,9 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.selected_index = 4;
         failed |= save_preview(directory, "support", "support-healthy", &model, dark);
         failed |= render_support_guide_previews(directory, &model, dark);
+        snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
+        failed |= save_preview(directory, "support", "support-incomplete", &model, dark);
+        snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
         model.disable_flag_present = true;
         model.selected_index = 0;
         failed |= save_preview(directory, "support", "support-disabled", &model, dark);
@@ -1700,6 +1773,13 @@ int main(int argc, char **argv)
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
     snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
     snprintf(model.result_status, sizeof(model.result_status), "ok");
+
+    if (strcmp(argv[2], "--check-parent-tabs") == 0) {
+        failed = check_parent_tabs(&model);
+        FT_Done_Face(g_ui.face);
+        free(bytes);
+        return failed;
+    }
 
     #if defined(_WIN32)
     failed |= render_language_pass(argv[2], "", PTC_UI_LANGUAGE_SIMPLIFIED, &model);

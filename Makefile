@@ -159,6 +159,7 @@ $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro
 .PHONY: test-ui-primitives
 test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 	$(HOST_BUILD_DIR)/ui_preview --check-primitives
+	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-parent-tabs
 
 test-host: test-ui-primitives
 

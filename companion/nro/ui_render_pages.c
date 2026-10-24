@@ -378,20 +378,23 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
         bool active = index == (int)model->parent_page;
-        draw_text_center(pixels, stride, tab, LABELS[index], 18, active ? UI_ON_ACCENT : UI_INK);
+        const char *status = index == PTC_UI_PARENT_SUPPORT ? ptc_ui_settings_status_label(model) : NULL;
+        if (status) {
+            /* Share the tab vertically: an overlaid corner badge obscures
+               the title, and fixed badge widths truncate longer translations. */
+            UiRect title = {tab.x + 8, tab.y + 3, tab.width - 16, 18};
+            int width = measure_text(status, 11) + 16;
+            if (width > tab.width - 16) width = tab.width - 16;
+            UiRect badge = {tab.x + (tab.width - width) / 2, tab.y + tab.height - 18, width, 16};
+            uint32_t color = strcmp(status, ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED)) == 0 ? UI_DANGER : UI_WARNING;
+            draw_text_center(pixels, stride, title, LABELS[index], 16, active ? UI_ON_ACCENT : UI_INK);
+            fill_round_rect(pixels, stride, badge, 5, color);
+            draw_text_center(pixels, stride, badge, status, 11, UI_ON_ACCENT);
+        } else {
+            draw_text_center(pixels, stride, tab, LABELS[index], 18, active ? UI_ON_ACCENT : UI_INK);
+        }
     }
     draw_text(pixels, stride, 1038, 146, ptc_ui_text(PTC_UI_T_L_R_SWITCH), 19, UI_MUTED);
-}
-
-static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
-{
-    const char *label = ptc_ui_settings_status_label(model);
-    uint32_t color = label && strcmp(label, ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED)) == 0 ? UI_DANGER : UI_WARNING;
-    UiRect badge;
-    if (!label) return;
-    badge = (UiRect){54 + PTC_UI_PARENT_SUPPORT * 174 + 96, 113, 56, 24};
-    fill_round_rect(pixels, stride, badge, 6, color);
-    draw_text_center(pixels, stride, badge, label, 11, UI_ON_ACCENT);
 }
 
 static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1278,7 +1281,6 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
         draw_parent_settings_help(pixels, stride, model);
     }
-    draw_settings_badge(pixels, stride, model);
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
         model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
         draw_diagnostic_notice(pixels, stride, model);
