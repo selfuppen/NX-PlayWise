@@ -15,6 +15,8 @@ typedef struct { const void *address; size_t size; } PlFontData;
 #define R_SUCCEEDED(value) ((value) == 0)
 #define RGBA8_MAXALPHA(r,g,b) ((uint32_t)(r) | ((uint32_t)(g) << 8) | ((uint32_t)(b) << 16) | 0xFF000000u)
 extern uint32_t preview_pixels[1280 * 720];
+#define PTC_UI_PREVIEW_TEXT_TRACE 1
+void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size);
 static inline int plInitialize(int type) { (void)type; return 0; }
 static inline int plGetSharedFontByType(PlFontData *data, int type) { (void)data; (void)type; return 1; }
 static inline void plExit(void) {}

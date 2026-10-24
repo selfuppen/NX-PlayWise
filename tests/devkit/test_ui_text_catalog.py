@@ -72,6 +72,9 @@ def main() -> None:
             assert value.count("{") == value.count("}") == len(PARAM.findall(value)), (
                 f"invalid parameter syntax: {key}"
             )
+    for locale in locales:
+        for key in ("PTC_UI_T_EYE_CARE_LOGIC_TITLE_3", "PTC_UI_T_EYE_CARE_LOGIC_DESC_3"):
+            assert "1440" not in locale[key], f"obsolete unlimited-day timer proxy explanation: {key}"
     language_code = (COMPANION / "ui_language.c").read_text(encoding="utf-8")
     assert "ui_language_en.inc" not in language_code and "ui_language_map.inc" not in language_code, (
         "display must not depend on exact Chinese phrase matches or character conversion"

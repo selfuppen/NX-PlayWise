@@ -491,6 +491,9 @@ static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baselin
 /* 粗体走缓存的膨胀变体，单次绘制，无位移重影。 */
 void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
+#ifdef PTC_UI_PREVIEW_TEXT_TRACE
+    ptc_ui_preview_record_text(x, baseline, text, size);
+#endif
     draw_text_impl(pixels, stride, x, baseline, text, size, color, false);
 }
 

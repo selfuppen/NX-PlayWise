@@ -39,8 +39,16 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
 
     /* 顶部标题栏 */
     draw_child_calendar_icon(pixels, stride, container.x + 28, container.y + 20, UI_ACCENT);
-    draw_text(pixels, stride, container.x + 46, container.y + 26, ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST), 16, UI_RGB(UI_BLENDED(text_primary)));
-    draw_text(pixels, stride, container.x + 280, container.y + 26, ptc_ui_text(PTC_UI_T_REST_AS_PLANNED), 13, UI_MUTED);
+    int title_x = container.x + 46;
+    int heading_width = container.width - 62;
+    char title[192], summary[128];
+    fit_text(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_REST_AS_PLANNED), 13, heading_width / 2);
+    int summary_width = measure_text(summary, 13);
+    int summary_x = container.x + container.width - 16 - summary_width;
+    fit_text(title, sizeof(title), ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST), 16,
+             summary_x - title_x - 16);
+    draw_text(pixels, stride, title_x, container.y + 26, title, 16, UI_RGB(UI_BLENDED(text_primary)));
+    draw_text(pixels, stride, summary_x, container.y + 26, summary, 13, UI_MUTED);
 
     bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
     const int start_x = container.x + 16;

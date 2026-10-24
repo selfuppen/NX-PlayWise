@@ -1,0 +1,2967 @@
+<title>PlayWise 色彩方案</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    /* Studio chrome is deliberately neutral so the candidate palettes carry the colour. */
+    --chrome-bg: #F4F4F1;
+    --chrome-surface: #FFFFFF;
+    --chrome-raised: #ECECE6;
+    --chrome-line: #DFDFD7;
+    --chrome-line-strong: #C6C6BC;
+    --chrome-ink: #1B1B18;
+    --chrome-muted: #696960;
+    --chrome-faint: #97978C;
+    --chrome-shadow: 0 1px 1px rgba(25, 25, 20, .04), 0 20px 50px -28px rgba(25, 25, 20, .28);
+    --font-ui: "Instrument Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --chrome-bg: #111110;
+      --chrome-surface: #191918;
+      --chrome-raised: #232321;
+      --chrome-line: #2E2E2B;
+      --chrome-line-strong: #41413C;
+      --chrome-ink: #F2F1EB;
+      --chrome-muted: #A6A59B;
+      --chrome-faint: #74746B;
+      --chrome-shadow: 0 1px 1px rgba(0, 0, 0, .4), 0 22px 52px -28px rgba(0, 0, 0, .72);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --chrome-bg: #111110;
+    --chrome-surface: #191918;
+    --chrome-raised: #232321;
+    --chrome-line: #2E2E2B;
+    --chrome-line-strong: #41413C;
+    --chrome-ink: #F2F1EB;
+    --chrome-muted: #A6A59B;
+    --chrome-faint: #74746B;
+    --chrome-shadow: 0 1px 1px rgba(0, 0, 0, .4), 0 22px 52px -28px rgba(0, 0, 0, .72);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--chrome-bg);
+    color: var(--chrome-ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    background: var(--chrome-bg);
+    z-index: 40;
+  }
+  ::selection { background: color-mix(in srgb, var(--chrome-ink) 14%, transparent); }
+  button { font: inherit; color: inherit; }
+  button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--chrome-ink);
+    outline-offset: 3px;
+  }
+  h1, h2, h3, p, ul { margin: 0; }
+
+  .shell {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-bottom: 96px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--chrome-muted);
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    padding: 60px 0 0;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .masthead-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 28px;
+    flex-wrap: wrap;
+  }
+  .masthead h1 {
+    font-size: clamp(42px, 6.2vw, 68px);
+    line-height: .94;
+    letter-spacing: -.05em;
+    font-weight: 600;
+    margin: 16px 0 0;
+    text-wrap: balance;
+  }
+  .masthead h1 .thin {
+    color: var(--chrome-muted);
+    font-weight: 400;
+  }
+  .lede {
+    max-width: 62ch;
+    font-size: 15.5px;
+    line-height: 1.8;
+    color: var(--chrome-muted);
+    margin-top: 20px;
+  }
+  .lede strong { color: var(--chrome-ink); font-weight: 500; }
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    margin: 26px 0 22px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .04em;
+    color: var(--chrome-faint);
+  }
+  .masthead-meta span { display: inline-flex; align-items: center; gap: 8px; }
+  .masthead-meta span::before {
+    content: "";
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--chrome-line-strong);
+  }
+  .scheme-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    height: 5px;
+    border-radius: 3px 3px 0 0;
+    overflow: hidden;
+  }
+  .scheme-strip i { display: block; height: 100%; }
+
+  /* ---------- sticky controls ---------- */
+  .controls {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 30;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 13px 0;
+    margin: 0;
+    background: color-mix(in srgb, var(--chrome-bg) 88%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .controls-left, .controls-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .controls-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--chrome-faint);
+    margin-right: 2px;
+  }
+  .pills { display: flex; gap: 5px; flex-wrap: wrap; }
+  .pill {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--chrome-muted);
+    font-size: 12.5px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    transition: background .16s ease, border-color .16s ease, color .16s ease;
+  }
+  .pill:hover { color: var(--chrome-ink); }
+  .pill .sw {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14);
+    flex: 0 0 9px;
+  }
+  .pill[aria-pressed="true"] {
+    background: var(--chrome-surface);
+    border-color: var(--chrome-line-strong);
+    color: var(--chrome-ink);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  }
+  .seg {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    background: var(--chrome-raised);
+    border-radius: 10px;
+  }
+  .seg button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--chrome-muted);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .16s ease, color .16s ease;
+  }
+  .seg button[aria-pressed="true"] {
+    background: var(--chrome-surface);
+    color: var(--chrome-ink);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+  }
+  .seg button[disabled] { opacity: .45; cursor: not-allowed; }
+
+  /* ---------- sections ---------- */
+  .section { padding-top: 58px; }
+  .section-head {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .section-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--chrome-faint);
+    padding-top: 6px;
+  }
+  .section-head h2 {
+    font-size: clamp(26px, 3.3vw, 36px);
+    letter-spacing: -.035em;
+    font-weight: 600;
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+  .section-head p {
+    margin-top: 10px;
+    max-width: 68ch;
+    font-size: 14px;
+    line-height: 1.72;
+    color: var(--chrome-muted);
+  }
+
+  /* ---------- scheme cards ---------- */
+  .scheme-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 28px;
+  }
+  .scheme-card {
+    appearance: none;
+    text-align: left;
+    background: var(--chrome-surface);
+    border: 1px solid var(--chrome-line);
+    border-radius: 18px;
+    padding: 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    cursor: pointer;
+    color: inherit;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  .scheme-card:hover { transform: translateY(-2px); box-shadow: var(--chrome-shadow); }
+  .scheme-card[aria-pressed="true"] {
+    border-color: var(--chrome-ink);
+    box-shadow: 0 0 0 1px var(--chrome-ink);
+  }
+  .mini {
+    height: 146px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--page);
+    color: var(--ink);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    position: relative;
+    isolation: isolate;
+  }
+  .mini-hero {
+    background: var(--hero);
+    color: var(--on-hero);
+    border-radius: 9px;
+    padding: 9px 10px 8px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .mini-label {
+    font-size: 7.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--hero-2);
+  }
+  .mini-num {
+    font-size: 30px;
+    line-height: 1;
+    letter-spacing: -.04em;
+    font-weight: 600;
+    margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .mini-num small {
+    font-size: 9px;
+    letter-spacing: 0;
+    font-weight: 500;
+    color: var(--hero-2);
+    margin-left: 2px;
+  }
+  .mini-gauge {
+    height: 4px;
+    border-radius: 2px;
+    margin-top: 7px;
+    background: color-mix(in srgb, var(--on-hero) 18%, transparent);
+    overflow: hidden;
+  }
+  .mini-gauge i {
+    display: block;
+    width: 42%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--on-hero);
+  }
+  .mini-side {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 42%;
+    padding-top: 2px;
+  }
+  .mini-side i {
+    display: block;
+    height: 9px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--on-hero) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--on-hero) 10%, transparent);
+  }
+  .mini-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: auto;
+  }
+  .mini-chip {
+    font-size: 7px;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .mini-chip.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+  .mini-chip.warn { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-line); }
+  .mini-chip.bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-line); }
+  .mini-chip.night { background: var(--night-soft); color: var(--night); border-color: var(--night-line); }
+  .mini-swatches { display: flex; gap: 3px; }
+  .mini-swatches i {
+    height: 7px;
+    flex: 1;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
+  }
+  .scheme-meta {
+    padding: 1px 6px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .scheme-name {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .scheme-name h3 { font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
+  .scheme-name .en {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--chrome-faint);
+  }
+  .rec {
+    margin-left: auto;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--chrome-ink);
+    background: var(--chrome-raised);
+    padding: 3px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .scheme-keywords { font-size: 11.5px; color: var(--chrome-muted); }
+  .scheme-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--chrome-faint);
+    margin-top: 2px;
+  }
+  .swatches { display: flex; gap: 3px; }
+  .swatches i {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+  }
+
+  .recommend {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin-top: 16px;
+    padding: 18px 20px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 16px;
+    background: var(--chrome-surface);
+  }
+  .recommend .tag {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--chrome-faint);
+    padding-top: 3px;
+    white-space: nowrap;
+  }
+  .recommend p {
+    font-size: 13px;
+    line-height: 1.72;
+    color: var(--chrome-muted);
+  }
+  .recommend p b { color: var(--chrome-ink); font-weight: 600; }
+
+/* __CSS_STAGE__ */
+  /* ---------- preview stage ---------- */
+  .preview-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 296px;
+    gap: 18px;
+    align-items: start;
+    margin-top: 26px;
+  }
+  .stage {
+    background: var(--chrome-surface);
+    border: 1px solid var(--chrome-line);
+    border-radius: 20px;
+    padding: 13px;
+    box-shadow: var(--chrome-shadow);
+    min-width: 0;
+  }
+  .stage-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 1px 2px 12px;
+  }
+  .frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #000;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .22);
+  }
+  .frame.portrait {
+    aspect-ratio: 448 / 720;
+    max-width: 356px;
+    margin: 0 auto;
+  }
+  .screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1280px;
+    height: 720px;
+    transform-origin: top left;
+    will-change: transform;
+  }
+  .screen.portrait { width: 448px; height: 720px; }
+  .stage-note {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 3px 1px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: .03em;
+    color: var(--chrome-faint);
+  }
+  .stage-note b { color: var(--chrome-muted); font-weight: 500; }
+
+  .preview-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 76px);
+    min-width: 0;
+  }
+  .aside-block { border-top: 1px solid var(--chrome-line); padding-top: 15px; }
+  .aside-block:first-child { border-top: 0; padding-top: 0; }
+  .aside-block h3 {
+    font-size: 21px;
+    letter-spacing: -.03em;
+    font-weight: 600;
+    margin: 5px 0 1px;
+  }
+  .aside-en {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--chrome-faint);
+    margin-bottom: 8px;
+  }
+  .aside-block p {
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: var(--chrome-muted);
+  }
+  .aside-block ul {
+    list-style: none;
+    display: grid;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--chrome-muted);
+  }
+  .aside-block ul li {
+    position: relative;
+    padding-left: 13px;
+  }
+  .aside-block ul li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: .58em;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--chrome-line-strong);
+  }
+  .tag-row { display: flex; gap: 5px; flex-wrap: wrap; }
+  .tag {
+    font-size: 10.5px;
+    color: var(--chrome-muted);
+    border: 1px solid var(--chrome-line);
+    padding: 4px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .aside-note {
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--chrome-muted);
+  }
+  .aside-note code {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--chrome-ink);
+    background: var(--chrome-raised);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
+  /* ---------- Switch UI mock (1280 × 720) ---------- */
+  .ui {
+    width: 1280px;
+    height: 720px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
+  }
+  .ui-top {
+    flex: 0 0 104px;
+    height: 104px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 0 52px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 43%, var(--page));
+  }
+  .ui-brand { display: flex; align-items: center; gap: 17px; min-width: 0; }
+  .ui-logo {
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
+    border-radius: 17px;
+    display: grid;
+    place-items: center;
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 8px 18px -10px color-mix(in srgb, var(--accent) 75%, transparent);
+  }
+  .ui-title {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -.03em;
+    line-height: 1.05;
+  }
+  .ui-sub {
+    margin-top: 4px;
+    font-size: 14px;
+    color: var(--muted);
+    letter-spacing: .01em;
+  }
+  .ui-top-right { display: flex; align-items: center; gap: 12px; }
+  .ui-lang {
+    height: 40px;
+    padding: 0 15px;
+    border: 1px solid var(--line-strong);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--surface);
+  }
+  .ui-clock {
+    width: 440px;
+    padding: 11px 16px 12px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--surface);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .03);
+  }
+  .ui-clock-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .ui-clock-top b {
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: .02em;
+  }
+  .ui-pill {
+    font-size: 10px;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 5px;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .ui-sync { margin-left: auto; color: var(--disabled); font-size: 10px; }
+  .ui-clock-line {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .ui-clock-line b { color: var(--accent); font-size: 14px; font-weight: 700; }
+  .ui-clock-bar {
+    height: 6px;
+    margin-top: 7px;
+    border-radius: 3px;
+    background: var(--slot);
+    overflow: hidden;
+  }
+  .ui-clock-bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ok);
+  }
+
+  .ui-main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 272px;
+    gap: 16px;
+    padding: 20px 52px 18px;
+  }
+  .ui-left { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+  /* hero */
+  .ui-hero {
+    height: 330px;
+    flex: 0 0 330px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 408px;
+    gap: 24px;
+    padding: 26px 30px;
+    border-radius: 20px;
+    background: var(--hero);
+    color: var(--on-hero);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 40px -30px rgba(0, 0, 0, .62);
+  }
+  .ui-hero-main { display: flex; flex-direction: column; min-width: 0; position: relative; z-index: 1; }
+  .ui-hero-label {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--hero-2);
+    letter-spacing: .02em;
+  }
+  .ui-hero-number {
+    margin-top: 6px;
+    font-size: 84px;
+    line-height: .92;
+    font-weight: 700;
+    letter-spacing: -.055em;
+    color: var(--on-hero);
+  }
+  .ui-hero-number small {
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--hero-2);
+    margin-left: 8px;
+  }
+  .ui-gauge {
+    height: 10px;
+    margin-top: 18px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--on-hero) 16%, transparent);
+    overflow: hidden;
+  }
+  .ui-gauge i {
+    display: block;
+    width: 42%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--on-hero);
+  }
+  .ui-gauge-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--hero-2);
+  }
+  .ui-hero-foot {
+    margin-top: auto;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11px;
+    color: color-mix(in srgb, var(--hero-2) 82%, transparent);
+  }
+  .ui-hero-foot span { display: inline-flex; align-items: center; gap: 7px; }
+  .ui-hero-foot .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--on-hero);
+    opacity: .8;
+  }
+  .ui-hero-rules {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+  }
+  .ui-rule {
+    min-height: 64px;
+    padding: 0 15px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--on-hero) 13%, transparent);
+    background: color-mix(in srgb, var(--on-hero) 7%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .ui-rule b { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: .01em; }
+  .ui-rule small { display: block; margin-top: 3px; font-size: 10.5px; color: var(--hero-2); }
+  .ui-chip-ghost {
+    font-size: 10px;
+    line-height: 1;
+    padding: 5px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    border: 1px solid color-mix(in srgb, var(--on-hero) 15%, transparent);
+    background: color-mix(in srgb, var(--on-hero) 9%, transparent);
+    color: var(--hero-2);
+  }
+
+  /* week strip */
+  .ui-week {
+    flex: 1;
+    min-height: 0;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .ui-week-head { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+  .ui-week-head .ic { color: var(--accent); display: flex; align-self: center; }
+  .ui-week-head b { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+  .ui-week-head span { font-size: 11px; color: var(--muted); }
+  .ui-week-grid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .ui-day {
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--page);
+    padding: 7px 9px 9px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .ui-day .d { font-size: 10.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ui-day .dt { font-size: 9px; color: var(--disabled); }
+  .ui-day .v {
+    margin-top: 3px;
+    font-size: 20px;
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -.03em;
+    color: var(--ink);
+  }
+  .ui-day .v small { font-size: 9px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-left: 1px; }
+  .ui-day .s { margin-top: 1px; font-size: 9px; color: var(--muted); }
+  .ui-day .bar {
+    position: absolute;
+    left: 9px;
+    right: 9px;
+    bottom: 7px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--line);
+  }
+  .ui-day.today { background: var(--accent-soft); border-color: var(--accent); }
+  .ui-day.today .v { color: var(--accent); }
+  .ui-day.focus {
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 24%, transparent);
+  }
+  .ui-day.weekend { border-color: var(--ok-line); }
+  .ui-day.off .v { font-size: 12px; font-weight: 500; color: var(--disabled); letter-spacing: 0; }
+  .ui-day .bar.accent { background: var(--accent); }
+  .ui-day .bar.ok { background: var(--ok); }
+  .ui-day .bar.off { background: var(--line-strong); }
+
+  /* right rail */
+  .ui-rail { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
+  .ui-action {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    min-height: 78px;
+    padding: 13px 15px;
+    border-radius: 15px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .02);
+  }
+  .ui-action .ic {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .ui-action .t {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+  .ui-action .s { margin-top: 3px; font-size: 10.5px; color: var(--muted); line-height: 1.4; }
+  .ui-action.primary {
+    min-height: 88px;
+    background: var(--accent);
+    border-color: transparent;
+    color: var(--on-accent);
+    box-shadow: 0 18px 30px -24px color-mix(in srgb, var(--accent) 85%, transparent);
+  }
+  .ui-action.primary .ic {
+    background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+    color: var(--on-accent);
+  }
+  .ui-action.primary .s { color: color-mix(in srgb, var(--on-accent) 72%, transparent); }
+  .ui-keyset {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .ui-keycap {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    display: inline-grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    flex: 0 0 25px;
+  }
+  .ui-action.primary .ui-keycap { border-color: color-mix(in srgb, var(--on-accent) 65%, transparent); }
+  .ui-note {
+    margin-top: auto;
+    padding: 14px 15px;
+    border-radius: 15px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+  }
+  .ui-note .ok-ic {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    background: var(--ok-soft);
+    color: var(--ok);
+    border: 1px solid var(--ok-line);
+  }
+  .ui-note b { display: block; font-size: 12px; font-weight: 600; }
+  .ui-note p { margin-top: 3px; font-size: 10.5px; line-height: 1.45; color: var(--muted); }
+  .ui-note .stamp { margin-top: 8px; font-size: 9.5px; color: var(--disabled); }
+
+  /* footer */
+  .ui-foot {
+    flex: 0 0 68px;
+    height: 68px;
+    padding: 0 52px;
+    border-top: 1px solid var(--line);
+    background: var(--raised);
+    background: color-mix(in srgb, var(--raised) 70%, var(--page));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .ui-foot .group { display: flex; align-items: center; gap: 18px; }
+  .ui-foot .key { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .ui-foot .k {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--glyph-line);
+    background: var(--glyph);
+    color: var(--ink);
+    display: inline-grid;
+    place-items: center;
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+  .ui-foot .center { color: var(--disabled); font-size: 11px; }
+
+  /* ---------- parent screen ---------- */
+  .ui-parent .ui-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .ui-tabs {
+    flex: 0 0 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 52px;
+    min-width: 0;
+  }
+  .ui-tab {
+    height: 34px;
+    padding: 0 17px;
+    border-radius: 17px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--raised);
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .ui-tab.on {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .ui-tabs .hint { margin-left: auto; font-size: 10.5px; color: var(--disabled); white-space: nowrap; }
+  .ui-parent .ui-main { padding-top: 10px; }
+  .ui-hero.parent {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 24px 26px;
+    grid-template-columns: none;
+  }
+  .ui-hero.parent .ui-hero-number { font-size: 66px; }
+  .ui-hero.parent .ui-gauge { margin-top: 14px; }
+  .ui-hero.parent .ui-hero-foot { margin-top: 12px; }
+  .ui-stats {
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+  .ui-stat {
+    min-width: 0;
+    border-radius: 11px;
+    border: 1px solid color-mix(in srgb, var(--on-hero) 12%, transparent);
+    background: color-mix(in srgb, var(--on-hero) 7%, transparent);
+    padding: 10px 12px;
+  }
+  .ui-stat .l { font-size: 9.5px; color: var(--hero-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ui-stat .r { margin-top: 3px; display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+  .ui-stat .v { font-size: 16px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
+  .ui-stat .v small { font-size: 9px; font-weight: 500; color: var(--hero-2); margin-left: 2px; }
+  .ui-stat .mini-tag {
+    font-size: 8px;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--on-hero) 14%, transparent);
+    color: var(--hero-2);
+    white-space: nowrap;
+  }
+  .ui-parent-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .ui-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .ui-group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .ui-group-head span { font-size: 10px; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .ui-ops { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .ui-op {
+    min-width: 0;
+    min-height: 86px;
+    padding: 12px 13px;
+    border-radius: 13px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    position: relative;
+  }
+  .ui-op .ic {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .ui-op .ic.ok { background: var(--ok-soft); color: var(--ok); border: 1px solid var(--ok-line); }
+  .ui-op .ic.warn { background: var(--warn-soft); color: var(--warn-text); border: 1px solid var(--warn-line); }
+  .ui-op .ic.bad { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad-line); }
+  .ui-op .ic.night { background: var(--night-soft); color: var(--night); border: 1px solid var(--night-line); }
+  .ui-op .txt { min-width: 0; padding-right: 44px; }
+  .ui-op .t { font-size: 13.5px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; }
+  .ui-op .s { margin-top: 4px; font-size: 9.5px; line-height: 1.45; color: var(--muted); }
+  .ui-op .chip {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 8.5px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .ui-op .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+  .ui-op .chip.warn { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-line); }
+  .ui-op .chip.bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-line); }
+  .ui-op .chip.night { background: var(--night-soft); color: var(--night); border-color: var(--night-line); }
+  .ui-op.focus {
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 26%, transparent);
+  }
+  .ui-op.focus .chip { top: 9px; right: 9px; }
+  .ui-preset { display: flex; gap: 4px; margin-top: 7px; }
+  .ui-preset span {
+    font-size: 8.5px;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 4px;
+    background: var(--ok-soft);
+    color: var(--ok);
+    border: 1px solid var(--ok-line);
+    white-space: nowrap;
+  }
+
+  /* ---------- Tesla overlay mock (448 × 720) ---------- */
+  .ov {
+    width: 448px;
+    height: 720px;
+    position: relative;
+    overflow: hidden;
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
+    background:
+      radial-gradient(58% 42% at 16% 16%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%),
+      radial-gradient(54% 40% at 84% 80%, color-mix(in srgb, var(--night) 22%, transparent), transparent 72%),
+      linear-gradient(158deg, #26313a 0%, #0b1014 70%);
+  }
+  .ov::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .32);
+    pointer-events: none;
+  }
+  .ov-panel {
+    position: absolute;
+    inset: 8px;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 15px 17px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .ov-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 32px;
+    margin-bottom: 11px;
+  }
+  .ov-brand { font-size: 18px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; }
+  .ov-brand b { color: var(--accent); font-weight: 600; }
+  .ov-head-actions { display: flex; gap: 5px; }
+  .ov-btn {
+    height: 27px;
+    padding: 0 8px;
+    border-radius: 5px;
+    border: 1px solid var(--line-strong);
+    background: var(--raised);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .ov-btn .k {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    display: inline-grid;
+    place-items: center;
+    font-size: 8px;
+    font-weight: 700;
+  }
+  .ov-banner {
+    position: relative;
+    border-radius: 6px;
+    border: 1px solid var(--night-line);
+    background: var(--night-soft);
+    padding: 12px 13px 13px;
+    overflow: hidden;
+  }
+  .ov-banner .bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 4px;
+    background: var(--night);
+  }
+  .ov-banner h2 {
+    margin-top: 5px;
+    font-size: 32px;
+    line-height: 1.08;
+    font-weight: 700;
+    letter-spacing: -.035em;
+    color: var(--night);
+  }
+  .ov-banner p { margin-top: 6px; font-size: 15px; color: var(--ink); }
+  .ov-banner .meta { margin-top: 8px; font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+  .ov-guide {
+    margin: 11px 1px 0;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ov-guide .av {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    display: inline-grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  .ov-rules { margin-top: 15px; }
+  .ov-rules-head {
+    font-size: 10.5px;
+    color: var(--muted);
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--line);
+  }
+  .ov-rules-body { position: relative; padding-top: 7px; }
+  .ov-rules-body::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    top: 14px;
+    bottom: 14px;
+    width: 1px;
+    background: var(--line);
+  }
+  .ov-rule {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 4px 6px 4px 21px;
+    border-radius: 5px;
+  }
+  .ov-rule .dot {
+    position: absolute;
+    left: 2px;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    margin-top: -4.5px;
+    border-radius: 50%;
+    border: 1.5px solid var(--disabled);
+    background: var(--surface);
+  }
+  .ov-rule .t { flex: 1; font-size: 12.5px; color: var(--muted); }
+  .ov-rule .v { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .ov-rule.warn {
+    margin-top: 4px;
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-line);
+    border-left: 3px solid var(--warn);
+    padding-left: 19px;
+  }
+  .ov-rule.warn .dot { left: 2px; background: var(--warn); border-color: var(--warn); }
+  .ov-rule.warn .t { color: var(--ink); font-weight: 600; }
+  .ov-rule.warn .v { color: var(--warn-text); font-weight: 600; }
+  .ov-bottom { margin-top: auto; }
+  .ov-status {
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 5px;
+    border: 1px solid var(--line-strong);
+    background: var(--raised);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .ov-status span { font-size: 11px; color: var(--accent); white-space: nowrap; }
+  .ov-keys {
+    margin-top: 9px;
+    padding: 0 2px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  .ov-keys .k {
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: var(--glyph);
+    border: 1px solid var(--glyph-line);
+    color: var(--ink);
+    display: inline-grid;
+    place-items: center;
+    font-size: 8px;
+    font-weight: 700;
+    margin-right: 3px;
+  }
+  .ov-keys .time { margin-left: auto; color: var(--muted); }
+
+/* __CSS_COMPONENTS__ */
+  /* ---------- component board ---------- */
+  .comp-board {
+    margin-top: 26px;
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
+  }
+  .comp-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .comp {
+    min-width: 0;
+    min-height: 172px;
+    padding: 12px;
+    border-radius: 13px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .comp-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+  .comp-title { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .comp-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: .05em;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .comp-body { margin-top: auto; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .comp-note { font-size: 9px; line-height: 1.45; color: var(--muted); }
+
+  .surface-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .surface-row .lbl { width: 42px; flex: 0 0 42px; font-family: var(--font-mono); font-size: 8px; color: var(--muted); }
+  .surface-row .bar { flex: 1; height: 17px; border-radius: 4px; border: 1px solid var(--line); }
+  .surface-row .bar.page { background: var(--page); }
+  .surface-row .bar.surface { background: var(--surface); }
+  .surface-row .bar.raised { background: var(--raised); }
+  .surface-row .bar.soft { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .surface-row .bar.night { background: var(--night-soft); border-color: var(--night-line); }
+
+  .demo-btn {
+    height: 29px;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10.5px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .demo-btn.primary { background: var(--accent); color: var(--on-accent); }
+  .demo-btn.secondary { background: var(--surface); border-color: var(--line-strong); color: var(--ink); }
+  .demo-btn.ok { background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); }
+  .demo-btn.warn { background: var(--warn-soft); border-color: var(--warn-line); color: var(--warn-text); }
+  .demo-btn.bad { background: var(--bad); border-color: var(--bad); color: #FFFFFF; }
+  .demo-btn.coral { background: var(--bad-soft); border-color: var(--coral); color: var(--coral); }
+  .demo-btn.ghost { background: transparent; border-color: var(--line); color: var(--disabled); }
+  .demo-btn .k {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    display: inline-grid;
+    place-items: center;
+    font-size: 8px;
+    font-weight: 700;
+    opacity: .85;
+  }
+
+  .demo-chiprow { display: flex; flex-wrap: wrap; gap: 4px; }
+  .demo-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 21px;
+    padding: 0 7px;
+    border-radius: 5px;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .demo-chip::before {
+    content: "";
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .demo-chip.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+  .demo-chip.warn { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-line); }
+  .demo-chip.bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-line); }
+  .demo-chip.night { background: var(--night-soft); color: var(--night); border-color: var(--night-line); }
+
+  .demo-gauge { display: flex; align-items: center; gap: 8px; }
+  .demo-gauge .lbl { width: 40px; flex: 0 0 40px; font-family: var(--font-mono); font-size: 8px; color: var(--muted); }
+  .demo-gauge .track {
+    flex: 1;
+    height: 7px;
+    border-radius: 4px;
+    background: var(--slot);
+    border: 1px solid var(--slot-line);
+    overflow: hidden;
+  }
+  .demo-gauge .track i { display: block; height: 100%; border-radius: inherit; }
+  .demo-gauge .track i.accent { background: var(--accent); }
+  .demo-gauge .track i.ok { background: var(--ok); }
+  .demo-gauge .track i.warn { background: var(--warn); }
+
+  .demo-focus {
+    border: 2px solid var(--accent);
+    border-radius: 9px;
+    background: var(--accent-soft);
+    padding: 8px 9px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 26%, transparent);
+  }
+  .demo-focus .ic {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    border-radius: 7px;
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    color: var(--accent);
+  }
+  .demo-focus .t { font-size: 10.5px; font-weight: 600; color: var(--ink); }
+  .demo-focus .s { font-size: 8.5px; color: var(--muted); margin-top: 1px; }
+  .demo-focus .ch { margin-left: auto; font-size: 8px; color: var(--accent); white-space: nowrap; }
+
+  .demo-keys { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .demo-key {
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    border: 1px solid var(--glyph-line);
+    background: var(--glyph);
+    color: var(--ink);
+    display: inline-grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .demo-key.wide { width: 34px; border-radius: 14px; font-size: 9px; }
+  .demo-stat .l { font-size: 9px; color: var(--muted); }
+  .demo-stat .v {
+    margin-top: 3px;
+    font-size: 30px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -.04em;
+    color: var(--ink);
+  }
+  .demo-stat .v small { font-size: 10px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-left: 3px; }
+  .demo-stat .delta {
+    display: inline-flex;
+    margin-top: 7px;
+    font-size: 8.5px;
+    font-weight: 600;
+    color: var(--ok);
+    background: var(--ok-soft);
+    border: 1px solid var(--ok-line);
+    border-radius: 4px;
+    padding: 3px 6px;
+  }
+  .demo-night {
+    background: var(--night-soft);
+    border: 1px solid var(--night-line);
+    border-radius: 9px;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .demo-night .ic {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    color: var(--night);
+  }
+  .demo-night .t { font-size: 11px; font-weight: 600; color: var(--night); }
+  .demo-night .s { font-size: 8.5px; color: var(--muted); margin-top: 2px; }
+  .demo-night .v { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--night); white-space: nowrap; }
+
+  /* ---------- tables ---------- */
+  .palette-tools {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--chrome-line-strong);
+    background: var(--chrome-surface);
+    color: var(--chrome-ink);
+    font-size: 11.5px;
+    padding: 7px 11px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .btn:hover { background: var(--chrome-raised); }
+  .btn.primary { background: var(--chrome-ink); color: var(--chrome-bg); border-color: var(--chrome-ink); }
+  .btn.primary:hover { opacity: .88; }
+  .copy-fallback {
+    width: 100%;
+    min-height: 90px;
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid var(--chrome-line-strong);
+    border-radius: 9px;
+    background: var(--chrome-surface);
+    color: var(--chrome-ink);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .table-wrap {
+    margin-top: 12px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 14px;
+    overflow: auto;
+    background: var(--chrome-surface);
+  }
+  table { width: 100%; border-collapse: collapse; text-align: left; }
+  table.palette { min-width: 620px; }
+  table.contrast { min-width: 520px; }
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--chrome-faint);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--chrome-line);
+    background: var(--chrome-surface);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--chrome-line);
+    font-size: 11.5px;
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  tr.group-row td {
+    background: var(--chrome-raised);
+    color: var(--chrome-muted);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .role-name { color: var(--chrome-ink); white-space: nowrap; }
+  .role-key { font-family: var(--font-mono); font-size: 9px; color: var(--chrome-faint); margin-left: 7px; }
+  .sw-cell { display: flex; align-items: center; gap: 8px; }
+  .sw {
+    width: 19px;
+    height: 19px;
+    flex: 0 0 19px;
+    border-radius: 5px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12);
+    cursor: pointer;
+    padding: 0;
+    border: 0;
+  }
+  .hex {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--chrome-muted);
+    letter-spacing: .01em;
+  }
+  .ratio { font-family: var(--font-mono); font-size: 10.5px; color: var(--chrome-ink); }
+  .ratio-badge {
+    display: inline-block;
+    margin-left: 5px;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: .04em;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--chrome-line);
+    color: var(--chrome-muted);
+    vertical-align: 1px;
+  }
+  .ratio-badge.aaa { background: var(--chrome-ink); border-color: var(--chrome-ink); color: var(--chrome-bg); }
+  .ratio-badge.aa { background: var(--chrome-raised); border-color: var(--chrome-line-strong); color: var(--chrome-ink); }
+  .ratio-badge.fail { background: #F8E3E1; border-color: #D9A19B; color: #8F2F28; }
+  .table-note {
+    margin-top: 9px;
+    font-size: 10.5px;
+    line-height: 1.65;
+    color: var(--chrome-muted);
+  }
+  .table-note code { font-family: var(--font-mono); font-size: 9.5px; }
+
+  /* ---------- design language ---------- */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin-top: 24px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .compare > div { padding: 18px 20px; }
+  .compare .old { background: var(--chrome-raised); }
+  .compare .new { background: var(--chrome-surface); }
+  .compare h3 {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--chrome-faint);
+    margin-bottom: 10px;
+  }
+  .compare ul {
+    list-style: none;
+    display: grid;
+    gap: 9px;
+    font-size: 12.5px;
+    line-height: 1.62;
+    color: var(--chrome-muted);
+  }
+  .compare li { position: relative; padding-left: 13px; }
+  .compare li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: .6em;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--chrome-line-strong);
+  }
+  .compare .new li::before { background: var(--chrome-ink); }
+  .impl-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .impl {
+    padding: 16px 18px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 14px;
+    background: var(--chrome-surface);
+  }
+  .impl h3 { font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+  .impl p { font-size: 11.5px; line-height: 1.7; color: var(--chrome-muted); }
+  .impl code {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--chrome-ink);
+    background: var(--chrome-raised);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
+  .page-foot {
+    margin-top: 64px;
+    padding-top: 18px;
+    border-top: 1px solid var(--chrome-line);
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: .04em;
+    color: var(--chrome-faint);
+  }
+
+  /* toast */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%) translateY(10px);
+    z-index: 60;
+    background: var(--chrome-ink);
+    color: var(--chrome-bg);
+    font-size: 11.5px;
+    padding: 9px 14px;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    max-width: calc(100vw - 32px);
+    text-align: center;
+  }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 1080px) {
+    .scheme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .preview-layout { grid-template-columns: minmax(0, 1fr); }
+    .preview-aside {
+      position: static;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .aside-block { border-top: 1px solid var(--chrome-line); padding-top: 13px; }
+    .comp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    .masthead { padding-top: 40px; }
+    .masthead h1 { font-size: clamp(38px, 11vw, 52px); }
+    .section { padding-top: 44px; }
+    .section-head { grid-template-columns: 1fr; gap: 6px; }
+    .section-num { padding-top: 0; }
+    .scheme-grid { grid-template-columns: 1fr; }
+    .mini { height: 156px; }
+    .preview-aside { grid-template-columns: 1fr; }
+    .controls { align-items: flex-start; }
+    .controls-left, .controls-right { width: 100%; justify-content: space-between; }
+    .pills { flex: 1; }
+    .comp-grid { grid-template-columns: 1fr; }
+    .compare { grid-template-columns: 1fr; }
+    .impl-grid { grid-template-columns: 1fr; }
+    .recommend { flex-direction: column; gap: 7px; }
+    .stage { padding: 9px; border-radius: 15px; }
+    .frame { border-radius: 9px; }
+    .stage-note { font-size: 8.5px; }
+  }
+  @media (max-width: 430px) {
+    .scheme-name .en { display: none; }
+    .controls-label { display: none; }
+    .pill { padding: 7px 9px; }
+    .seg button { padding: 6px 9px; }
+    .masthead-meta { gap: 7px 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: .01ms !important;
+      animation-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
+<div class="shell">
+  <header class="masthead">
+    <div class="masthead-top">
+      <div>
+        <div class="eyebrow">PlayWise · Visual system 2026</div>
+        <h1>色彩<span class="thin">重估</span></h1>
+      </div>
+      <div class="eyebrow" style="text-align:right;line-height:1.7">NRO 1280×720<br>Overlay 448×720</div>
+    </div>
+    <p class="lede">现有四套风格只替换强调色，中性色与暗色底始终相同。下面四套方案把<strong>中性色、表面层级、语义色</strong>一起重做；强调色只负责焦点与主操作。每套都有亮色与暗色，按真实界面绘制。</p>
+    <div class="masthead-meta">
+      <span>4 套系统</span>
+      <span>8 组亮 / 暗</span>
+      <span>34 个颜色角色</span>
+      <span>WCAG AA 起步</span>
+    </div>
+    <div class="scheme-strip" aria-hidden="true">
+      <i style="background:#2C4A6E"></i>
+      <i style="background:#1F6B5C"></i>
+      <i style="background:#2F5FD0"></i>
+      <i style="background:#7A4670"></i>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="controls-left">
+      <span class="controls-label">方案</span>
+      <div class="pills" id="pills"></div>
+    </div>
+    <div class="controls-right">
+      <span class="controls-label">模式</span>
+      <div class="seg" id="modeSeg">
+        <button type="button" data-set-mode="light" aria-pressed="true">亮色</button>
+        <button type="button" data-set-mode="dark" aria-pressed="false">暗色</button>
+      </div>
+      <button class="btn" type="button" data-copy="choice">复制我的选择</button>
+    </div>
+  </div>
+
+  <section class="section" id="schemes">
+    <div class="section-head">
+      <div class="section-num">01</div>
+      <div>
+        <h2>四套完整系统</h2>
+        <p>每套方案都有自己的中性色、表面层级、语义色与 Hero 色。切换方案时，整张界面一起变化，而不是只换一个按钮颜色。</p>
+      </div>
+    </div>
+    <div class="scheme-grid" id="schemeGrid"></div>
+    <div class="recommend">
+      <div class="tag">我的建议</div>
+      <p><b>石墨 / Graphite</b>。中性灰分层最干净，晴蓝只用于主操作与焦点，信息密度高时最清楚；暗色是真正的近黑分层，OLED 观感最好。想要更温暖选纸墨，想要更健康选雾青，想要更柔和选暮霭。</p>
+    </div>
+  </section>
+
+  <section class="section" id="preview">
+    <div class="section-head">
+      <div class="section-num">02</div>
+      <div>
+        <h2>在真实界面上看颜色</h2>
+        <p>按现有 1280×720 NRO 与 448×720 Tesla 浮窗比例绘制。颜色只使用现有绘制能力：实色填充、1px 描边、圆角与语义软底；没有渐变、模糊或新几何。</p>
+      </div>
+    </div>
+    <div class="preview-layout">
+      <div class="stage">
+        <div class="stage-bar">
+          <div class="seg" id="screenSeg">
+            <button type="button" data-set-screen="child" aria-pressed="true">儿童主页</button>
+            <button type="button" data-set-screen="parent" aria-pressed="false">家长安排</button>
+            <button type="button" data-set-screen="overlay" aria-pressed="false">浮窗</button>
+          </div>
+          <div class="seg" id="modeSeg2">
+            <button type="button" data-set-mode="light" aria-pressed="true">亮色</button>
+            <button type="button" data-set-mode="dark" aria-pressed="false">暗色</button>
+          </div>
+        </div>
+        <div class="frame" id="frame">
+          <div class="screen" id="screen" aria-hidden="true"></div>
+        </div>
+        <div class="stage-note">
+          <span id="stageNote"></span>
+          <span>等比缩放 · 仅换色即可落地</span>
+        </div>
+      </div>
+      <aside class="preview-aside">
+        <div class="aside-block">
+          <span class="eyebrow">当前方案</span>
+          <h3 id="asideName"></h3>
+          <div class="aside-en" id="asideEn"></div>
+          <p id="asideDesc"></p>
+        </div>
+        <div class="aside-block">
+          <span class="eyebrow">关键词</span>
+          <div class="tag-row" id="asideTags" style="margin-top:8px"></div>
+        </div>
+        <div class="aside-block">
+          <span class="eyebrow">为什么这样配</span>
+          <ul id="asideNotes" style="margin-top:9px"></ul>
+        </div>
+        <div class="aside-block">
+          <span class="eyebrow">暗色契约</span>
+          <p class="aside-note" style="margin-top:8px">暗色值全部落在 <code>0x11</code> 网格上，可直接通过 <code>test_ui_palette_contract.py</code> 的 4-bit 检查。选择浮窗时固定使用暗色。</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section" id="components">
+    <div class="section-head">
+      <div class="section-num">03</div>
+      <div>
+        <h2>组件是配色的试金石</h2>
+        <p>同一组按钮、状态胶囊、额度槽、焦点框与键位徽章，在四套方案里都应清楚、安静、有层级。下面的组件随上方方案与亮暗模式同步。</p>
+      </div>
+    </div>
+    <div class="comp-board" id="compBoard">
+      <div class="comp-grid">
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">表面层级</span><span class="comp-label">surface</span></div>
+          <div class="comp-body">
+            <div class="surface-row"><span class="lbl">page</span><span class="bar page"></span></div>
+            <div class="surface-row"><span class="lbl">surface</span><span class="bar surface"></span></div>
+            <div class="surface-row"><span class="lbl">raised</span><span class="bar raised"></span></div>
+            <div class="surface-row"><span class="lbl">soft</span><span class="bar soft"></span></div>
+            <div class="surface-row"><span class="lbl">night</span><span class="bar night"></span></div>
+          </div>
+        </div>
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">按钮</span><span class="comp-label">action</span></div>
+          <div class="comp-body">
+            <div class="demo-btn primary"><span>输入加时码</span><span class="k">A</span></div>
+            <div class="demo-btn secondary"><span>查看详情</span><span class="k">Y</span></div>
+            <div class="demo-btn bad"><span>恢复原始状态</span><span class="k">长按</span></div>
+            <div class="demo-btn ghost"><span>缓冲暂不可领</span><span class="k">—</span></div>
+          </div>
+        </div>
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">状态胶囊</span><span class="comp-label">semantic</span></div>
+          <div class="comp-body">
+            <div class="demo-chiprow">
+              <span class="demo-chip ok">可用</span>
+              <span class="demo-chip warn">待刷新</span>
+              <span class="demo-chip bad">已用完</span>
+              <span class="demo-chip night">就寝</span>
+              <span class="demo-chip">已关闭</span>
+            </div>
+            <p class="comp-note">状态始终带文字，不只靠颜色区分。</p>
+          </div>
+        </div>
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">额度与进度</span><span class="comp-label">gauge</span></div>
+          <div class="comp-body">
+            <div class="demo-gauge"><span class="lbl">额度</span><span class="track"><i class="accent" style="width:42%"></i></span></div>
+            <div class="demo-gauge"><span class="lbl">已用</span><span class="track"><i class="ok" style="width:68%"></i></span></div>
+            <div class="demo-gauge"><span class="lbl">预警</span><span class="track"><i class="warn" style="width:22%"></i></span></div>
+            <p class="comp-note">槽与填充分开取色，暗色下仍可读。</p>
+          </div>
+        </div>
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">焦点</span><span class="comp-label">focus</span></div>
+          <div class="comp-body">
+            <div class="demo-focus">
+              <span class="ic">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+              </span>
+              <div><div class="t">设置今日额度</div><div class="s">由周计划生效</div></div>
+              <span class="ch">未设置</span>
+            </div>
+            <p class="comp-note">2px 强调边框 + 3px 焦点光晕。</p>
+          </div>
+        </div>
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">键位徽章</span><span class="comp-label">glyph</span></div>
+          <div class="comp-body">
+            <div class="demo-keys">
+              <span class="demo-key">A</span><span class="demo-key">B</span><span class="demo-key">X</span><span class="demo-key">Y</span><span class="demo-key wide">L</span><span class="demo-key wide">R</span><span class="demo-key wide">+</span>
+            </div>
+            <p class="comp-note">旧版遗留的青绿徽章换成方案中性色。</p>
+          </div>
+        </div>
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">数值卡</span><span class="comp-label">stat</span></div>
+          <div class="comp-body">
+            <div class="demo-stat"><div class="l">今天还可玩</div><div class="v">51<small>分钟</small></div><span class="delta">+10 已领取</span></div>
+          </div>
+        </div>
+        <div class="comp">
+          <div class="comp-head"><span class="comp-title">夜间语义</span><span class="comp-label">night</span></div>
+          <div class="comp-body">
+            <div class="demo-night">
+              <span class="ic">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.4A8.5 8.5 0 1 1 9.6 4 6.7 6.7 0 0 0 20 14.4Z"/></svg>
+              </span>
+              <div><div class="t">就寝计划</div><div class="s">今晚 21:00 开始</div></div>
+              <span class="v">1 小时 12 分</span>
+            </div>
+            <p class="comp-note">夜间色只用于作息，不承担品牌强调。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="palette">
+    <div class="section-head">
+      <div class="section-num">04</div>
+      <div>
+        <h2>调色板与落地值</h2>
+        <p>34 个颜色角色对应 <code style="font-family:var(--font-mono);font-size:.9em">ui_theme.c</code> 的 <code style="font-family:var(--font-mono);font-size:.9em">PtcUiPalette</code> 字段。点色块复制单个十六进制；下方可整段复制 CSS、C 结构体或 Overlay 调色板。</p>
+      </div>
+    </div>
+    <div class="palette-tools">
+      <button class="btn primary" type="button" data-copy="css">复制 CSS 变量</button>
+      <button class="btn" type="button" data-copy="light-c">复制亮色 C</button>
+      <button class="btn" type="button" data-copy="dark-c">复制暗色 C</button>
+      <button class="btn" type="button" data-copy="overlay-c">复制 Overlay C</button>
+      <button class="btn" type="button" data-copy="json">复制 JSON</button>
+    </div>
+    <textarea class="copy-fallback" id="copyFallback" hidden readonly spellcheck="false"></textarea>
+    <div class="table-wrap">
+      <table class="palette">
+        <thead>
+          <tr><th>角色</th><th>亮色</th><th>暗色</th></tr>
+        </thead>
+        <tbody id="paletteBody"></tbody>
+      </table>
+    </div>
+    <p class="table-note">暗色通道均为 <code>0x11</code> 的倍数，满足现有 4-bit 契约；Overlay 使用同一组暗色值的 nibble 形式，测试要求与 NRO 暗色 Delta = 0。</p>
+  </section>
+
+  <section class="section" id="contrast">
+    <div class="section-head">
+      <div class="section-num">05</div>
+      <div>
+        <h2>对比度不是感觉</h2>
+        <p>所有核心文字组合都按 WCAG 相对亮度计算，亮色与暗色并排给出，避免只在一个模式下成立。</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="contrast">
+        <thead>
+          <tr><th>组合</th><th>亮色</th><th>暗色</th><th>门槛</th></tr>
+        </thead>
+        <tbody id="contrastBody"></tbody>
+      </table>
+    </div>
+    <p class="table-note" id="contrastNote"></p>
+  </section>
+
+  <section class="section" id="language">
+    <div class="section-head">
+      <div class="section-num">06</div>
+      <div>
+        <h2>设计语言换了什么</h2>
+        <p>旧版四套方案共享同一副底子，所以切换只像换了一个按钮色。新版把中性色当成方案的一部分，语义色围绕底子重新调和，强调色退回它该在的位置。</p>
+      </div>
+    </div>
+    <div class="compare">
+      <div class="old">
+        <h3>旧版</h3>
+        <ul>
+          <li>四套风格共用同一组中性色，只替换强调色。</li>
+          <li>暗色底统一压在 #111122 / #112233 的蓝紫上。</li>
+          <li>键位徽章与额度槽遗留青绿 (#DFEAE6 / #42635B)。</li>
+          <li>大面积纯白卡片配荧光语义色，电视与夜间偏刺眼。</li>
+        </ul>
+      </div>
+      <div class="new">
+        <h3>新版</h3>
+        <ul>
+          <li>每套方案拥有自己的中性色与语义色。</li>
+          <li>暗色按方案着色：暖炭、墨绿、近黑、茄紫。</li>
+          <li>所有组件色从方案中性色派生，不再跨主题混色。</li>
+          <li>纸白 / 雾白表面，语义色降饱和，强调色只做焦点与主操作。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="impl-grid">
+      <div class="impl">
+        <h3>直接换色</h3>
+        <p><code>ui_theme.c</code> 的 8 组调色板替换即可，布局与绘制调用不改。Hero 保持实色，预览没有引入渲染器不支持的效果。</p>
+      </div>
+      <div class="impl">
+        <h3>4-bit 暗色</h3>
+        <p>新暗色值全部落在 <code>0x11</code> 网格上，现有 <code>test_ui_palette_contract.py</code> 的严格检查无需放宽。</p>
+      </div>
+      <div class="impl">
+        <h3>Overlay 同步</h3>
+        <p>Overlay 锁定暗色；<code>render_types.hpp</code> 的 nibble 值与 NRO 暗色一一对应，测试要求两者完全相等。</p>
+      </div>
+      <div class="impl">
+        <h3>下一步</h3>
+        <p>选定一套后，我可以把它落到 <code>ui_theme.c</code>、<code>render_types.hpp</code>、文档表格与预览截图，并跑完整的 devkitPro 打包回归。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page-foot">
+    <span>PlayWise · Companion NRO / Tesla Overlay</span>
+    <span>色彩方案预览 · 2026-10</span>
+  </footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* __JS_DATA__ */
+  const SCHEMES = {
+    paper: {
+      id: 'paper', name: '纸墨', en: 'Paper & Ink', rec: false,
+      keywords: ['暖纸', '墨蓝', '低眩光'],
+      desc: '暖中性纸面配墨蓝强调，像一本日程本。亮色不刺眼，暗色是暖炭黑，适合客厅电视与夜间查看。',
+      notes: [
+        '暖中性色和橙、红、绿语义色天然相容，旧版冷蓝底上的警告橙不再打架。',
+        '强调色仍是蓝，保留现有品牌记忆，迁移成本最低。',
+        'Hero 用深墨蓝而不是高饱和色块，大面积区域更安静。'
+      ],
+      light: {
+        page_bg: '#F5F1E8', surface: '#FFFDF8', surface_raised: '#EDE7DA',
+        border_decorative: '#E2DACB', border_control: '#8A8172',
+        text_primary: '#211E19', text_secondary: '#5D564B', text_disabled: '#8A8172',
+        accent: '#2C4A6E', focus: '#1B3350', on_accent: '#FFFFFF', accent_soft: '#E7EDF4',
+        hero: '#233D5B', on_hero: '#FBF9F4', hero_secondary: '#C3D1E0',
+        success: '#3E7A4E', success_soft: '#EBF3E9', success_border: '#A8CDA4',
+        warning: '#96601A', warning_soft: '#FAF1DF', warning_border: '#E3C07E', warning_text: '#7F4F10',
+        danger: '#AE3E38', danger_soft: '#FAEBE7', danger_border: '#E3A79F', coral: '#C46A55',
+        night: '#5D4A8A', night_soft: '#F0EBF7', night_border: '#C5B7DE',
+        scrim: '#E6DFD1', key_glyph_bg: '#EAE3D5', key_glyph_border: '#C3B7A3',
+        gauge_slot: '#E8E1D2', gauge_slot_border: '#6E6151', shadow_strength: 95
+      },
+      dark: {
+        page_bg: '#111111', surface: '#221111', surface_raised: '#332222',
+        border_decorative: '#443333', border_control: '#776666',
+        text_primary: '#FFEEDD', text_secondary: '#CCBBAA', text_disabled: '#776666',
+        accent: '#99BBDD', focus: '#BBDDFF', on_accent: '#112233', accent_soft: '#223344',
+        hero: '#223344', on_hero: '#FFEEDD', hero_secondary: '#AACCDD',
+        success: '#88CC99', success_soft: '#113322', success_border: '#336644',
+        warning: '#EEBB66', warning_soft: '#332211', warning_border: '#775522', warning_text: '#EEBB66',
+        danger: '#EE9988', danger_soft: '#441111', danger_border: '#883322', coral: '#EE9988',
+        night: '#CCAAEE', night_soft: '#221133', night_border: '#664488',
+        scrim: '#110000', key_glyph_bg: '#332222', key_glyph_border: '#554444',
+        gauge_slot: '#332222', gauge_slot_border: '#665555', shadow_strength: 140
+      }
+    },
+    mist: {
+      id: 'mist', name: '雾青', en: 'Mist Teal', rec: false,
+      keywords: ['雾绿', '青瓷', '呼吸感'],
+      desc: '冷调青灰纸面配深青强调，最接近健康与护眼的气质，长时间看不累。',
+      notes: [
+        '中性色带一点绿，和成功色同族但更灰，语义不会混。',
+        '强调色深而不艳，按钮与焦点清楚但不抢戏。',
+        '暗色是墨绿黑，夜间比蓝紫底更沉。'
+      ],
+      light: {
+        page_bg: '#F2F5F2', surface: '#FBFCFA', surface_raised: '#E9EFEA',
+        border_decorative: '#DCE4DE', border_control: '#7C8F86',
+        text_primary: '#182420', text_secondary: '#52645C', text_disabled: '#7F8C85',
+        accent: '#1F6B5C', focus: '#124F44', on_accent: '#FFFFFF', accent_soft: '#E2F0EB',
+        hero: '#1B4B43', on_hero: '#F7FCFA', hero_secondary: '#BFDCD3',
+        success: '#2E7D4F', success_soft: '#EAF5EE', success_border: '#9BD3AE',
+        warning: '#9A6212', warning_soft: '#FBF3E3', warning_border: '#E7C27B', warning_text: '#85510B',
+        danger: '#B33B45', danger_soft: '#FAECEC', danger_border: '#E4A3A8', coral: '#C96A5E',
+        night: '#5A4E9E', night_soft: '#EFEBF8', night_border: '#BFB4E0',
+        scrim: '#DCE5E0', key_glyph_bg: '#E6EDE8', key_glyph_border: '#B9C8C1',
+        gauge_slot: '#DCE7E1', gauge_slot_border: '#4A6B60', shadow_strength: 90
+      },
+      dark: {
+        page_bg: '#111111', surface: '#112222', surface_raised: '#223333',
+        border_decorative: '#334444', border_control: '#667777',
+        text_primary: '#EEFFFF', text_secondary: '#AACCCC', text_disabled: '#667777',
+        accent: '#77CCBB', focus: '#AADDDD', on_accent: '#002222', accent_soft: '#113333',
+        hero: '#114433', on_hero: '#EEFFFF', hero_secondary: '#AACCCC',
+        success: '#77CC99', success_soft: '#113322', success_border: '#336644',
+        warning: '#EEBB66', warning_soft: '#332211', warning_border: '#775522', warning_text: '#EEBB66',
+        danger: '#EE8899', danger_soft: '#441122', danger_border: '#882233', coral: '#EE8899',
+        night: '#BBAAFF', night_soft: '#221144', night_border: '#554488',
+        scrim: '#001111', key_glyph_bg: '#223333', key_glyph_border: '#445555',
+        gauge_slot: '#223333', gauge_slot_border: '#446655', shadow_strength: 140
+      }
+    },
+    graphite: {
+      id: 'graphite', name: '石墨', en: 'Graphite', rec: true,
+      keywords: ['冷灰', '晴蓝', '产品感'],
+      desc: '中性石墨灰配晴蓝强调，最干净、最像现代系统界面；信息密度高时最清楚。',
+      notes: [
+        '中性灰几乎不带色相，卡片层级靠明度与描边，不靠彩色。',
+        '晴蓝只出现在主操作、焦点和关键数字上，界面更克制。',
+        '暗色是真正的近黑分层，OLED 观感最好。'
+      ],
+      light: {
+        page_bg: '#F3F4F6', surface: '#FCFCFD', surface_raised: '#E9EBEF',
+        border_decorative: '#DDE0E5', border_control: '#7D8593',
+        text_primary: '#171A20', text_secondary: '#545B68', text_disabled: '#7E8592',
+        accent: '#2F5FD0', focus: '#1C46AC', on_accent: '#FFFFFF', accent_soft: '#E6ECFB',
+        hero: '#1E3566', on_hero: '#FFFFFF', hero_secondary: '#C3D2EE',
+        success: '#2C7A4B', success_soft: '#EAF5EE', success_border: '#9AD2AE',
+        warning: '#9A6114', warning_soft: '#FBF2E1', warning_border: '#E4C17B', warning_text: '#83500C',
+        danger: '#B53A45', danger_soft: '#FAEBEC', danger_border: '#E2A2A8', coral: '#C9665C',
+        night: '#5B4CB0', night_soft: '#EDEAF9', night_border: '#BDB4E8',
+        scrim: '#DEE1E7', key_glyph_bg: '#E7EAEE', key_glyph_border: '#BCC2CB',
+        gauge_slot: '#E3E7EC', gauge_slot_border: '#4C5666', shadow_strength: 95
+      },
+      dark: {
+        page_bg: '#111111', surface: '#222222', surface_raised: '#333333',
+        border_decorative: '#444444', border_control: '#777777',
+        text_primary: '#EEEEEE', text_secondary: '#BBBBBB', text_disabled: '#777777',
+        accent: '#88AAEE', focus: '#BBDDFF', on_accent: '#112233', accent_soft: '#223344',
+        hero: '#223355', on_hero: '#EEEEFF', hero_secondary: '#AABBCC',
+        success: '#77CC99', success_soft: '#113322', success_border: '#336644',
+        warning: '#EEBB66', warning_soft: '#332211', warning_border: '#775522', warning_text: '#EEBB66',
+        danger: '#EE8899', danger_soft: '#441122', danger_border: '#882233', coral: '#EE8899',
+        night: '#BBAAFF', night_soft: '#221144', night_border: '#554488',
+        scrim: '#000000', key_glyph_bg: '#333333', key_glyph_border: '#555555',
+        gauge_slot: '#333333', gauge_slot_border: '#666666', shadow_strength: 140
+      }
+    },
+    dusk: {
+      id: 'dusk', name: '暮霭', en: 'Dusk', rec: false,
+      keywords: ['藕灰', '梅紫', '夜间友好'],
+      desc: '灰紫中性色配梅紫强调，柔和、有温度；夜间语义改用靛蓝，避免和品牌紫混在一起。',
+      notes: [
+        '中性色带一点藕紫，比纯灰更有记忆点。',
+        '夜间语义从紫改为靛蓝，和品牌紫拉开距离。',
+        '暗色是茄紫炭黑，适合睡前场景。'
+      ],
+      light: {
+        page_bg: '#F5F2F5', surface: '#FDFBFD', surface_raised: '#EDE7ED',
+        border_decorative: '#E1D9E1', border_control: '#877C88',
+        text_primary: '#221D24', text_secondary: '#5D5360', text_disabled: '#8B7F8C',
+        accent: '#7A4670', focus: '#5A2F52', on_accent: '#FFFFFF', accent_soft: '#F3E8F1',
+        hero: '#4E2E48', on_hero: '#FCF7FB', hero_secondary: '#D9C0D4',
+        success: '#3F7A55', success_soft: '#EAF4ED', success_border: '#A0CCA9',
+        warning: '#96601A', warning_soft: '#FAF1DF', warning_border: '#E3C07E', warning_text: '#7F4F10',
+        danger: '#B03E46', danger_soft: '#FAEAEC', danger_border: '#E3A3A8', coral: '#C46A63',
+        night: '#4653A8', night_soft: '#EAEBF8', night_border: '#B4BAE3',
+        scrim: '#E7DEE5', key_glyph_bg: '#ECE5EB', key_glyph_border: '#C4B8C2',
+        gauge_slot: '#EAE2E9', gauge_slot_border: '#6F606D', shadow_strength: 95
+      },
+      dark: {
+        page_bg: '#111111', surface: '#221122', surface_raised: '#332233',
+        border_decorative: '#443344', border_control: '#776677',
+        text_primary: '#FFEEFF', text_secondary: '#CCBBCC', text_disabled: '#776677',
+        accent: '#DD99CC', focus: '#EEBBEE', on_accent: '#331122', accent_soft: '#332233',
+        hero: '#331133', on_hero: '#FFEEFF', hero_secondary: '#CCBBCC',
+        success: '#77CC99', success_soft: '#113322', success_border: '#336644',
+        warning: '#EEBB66', warning_soft: '#332211', warning_border: '#775522', warning_text: '#EEBB66',
+        danger: '#EE8899', danger_soft: '#441122', danger_border: '#882233', coral: '#EE8899',
+        night: '#99AAFF', night_soft: '#222244', night_border: '#444488',
+        scrim: '#110011', key_glyph_bg: '#332233', key_glyph_border: '#554455',
+        gauge_slot: '#332233', gauge_slot_border: '#665566', shadow_strength: 140
+      }
+    }
+  };
+
+  const SCHEME_ORDER = ['graphite', 'paper', 'mist', 'dusk'];
+
+  const VAR_MAP = {
+    page_bg: '--page', surface: '--surface', surface_raised: '--raised',
+    border_decorative: '--line', border_control: '--line-strong',
+    text_primary: '--ink', text_secondary: '--muted', text_disabled: '--disabled',
+    accent: '--accent', focus: '--focus', on_accent: '--on-accent', accent_soft: '--accent-soft',
+    hero: '--hero', on_hero: '--on-hero', hero_secondary: '--hero-2',
+    success: '--ok', success_soft: '--ok-soft', success_border: '--ok-line',
+    warning: '--warn', warning_soft: '--warn-soft', warning_border: '--warn-line', warning_text: '--warn-text',
+    danger: '--bad', danger_soft: '--bad-soft', danger_border: '--bad-line', coral: '--coral',
+    night: '--night', night_soft: '--night-soft', night_border: '--night-line',
+    scrim: '--scrim', key_glyph_bg: '--glyph', key_glyph_border: '--glyph-line',
+    gauge_slot: '--slot', gauge_slot_border: '--slot-line'
+  };
+
+  const ROLE_GROUPS = [
+    { name: '表面与边界', roles: [['page_bg', '页面底色'], ['surface', '卡片'], ['surface_raised', '次级表面'], ['border_decorative', '装饰描边'], ['border_control', '控件描边'], ['scrim', '遮罩']] },
+    { name: '文字', roles: [['text_primary', '主文字'], ['text_secondary', '次要文字'], ['text_disabled', '禁用文字']] },
+    { name: '强调与焦点', roles: [['accent', '强调'], ['accent_soft', '强调软底'], ['on_accent', '强调上文字'], ['focus', '焦点']] },
+    { name: 'Hero', roles: [['hero', 'Hero 底'], ['on_hero', 'Hero 主文字'], ['hero_secondary', 'Hero 次文字']] },
+    { name: '语义', roles: [['success', '成功'], ['success_soft', '成功软底'], ['success_border', '成功边框'], ['warning', '提醒'], ['warning_soft', '提醒软底'], ['warning_border', '提醒边框'], ['warning_text', '提醒文字'], ['danger', '危险'], ['danger_soft', '危险软底'], ['danger_border', '危险边框'], ['coral', '珊瑚 / 长按']] },
+    { name: '夜间', roles: [['night', '夜间'], ['night_soft', '夜间软底'], ['night_border', '夜间边框']] },
+    { name: '组件', roles: [['key_glyph_bg', '键位底'], ['key_glyph_border', '键位描边'], ['gauge_slot', '额度槽'], ['gauge_slot_border', '额度槽描边']] }
+  ];
+
+  const PAIRS = [
+    ['正文 / 页面', 'text_primary', 'page_bg', 7],
+    ['正文 / 卡片', 'text_primary', 'surface', 7],
+    ['次要文字 / 卡片', 'text_secondary', 'surface', 4.5],
+    ['强调文字 / 卡片', 'accent', 'surface', 4.5],
+    ['强调按钮字 / 强调', 'on_accent', 'accent', 4.5],
+    ['强调 / 强调软底', 'accent', 'accent_soft', 4.5],
+    ['Hero 主文字 / Hero', 'on_hero', 'hero', 4.5],
+    ['Hero 次文字 / Hero', 'hero_secondary', 'hero', 4.5],
+    ['成功 / 成功软底', 'success', 'success_soft', 4.5],
+    ['提醒字 / 提醒软底', 'warning_text', 'warning_soft', 4.5],
+    ['危险 / 危险软底', 'danger', 'danger_soft', 4.5],
+    ['夜间 / 夜间软底', 'night', 'night_soft', 4.5],
+    ['控件描边 / 卡片', 'border_control', 'surface', 3]
+  ];
+
+  const COPY_ORDER = [
+    'page_bg', 'surface', 'surface_raised', 'border_decorative', 'border_control',
+    'text_primary', 'text_secondary', 'text_disabled', 'accent', 'focus', 'on_accent',
+    'accent_soft', 'success', 'warning', 'danger', 'hero', 'on_hero', 'hero_secondary',
+    'coral', 'success_soft', 'warning_soft', 'danger_soft', 'scrim', 'key_glyph_bg',
+    'key_glyph_border', 'gauge_slot', 'gauge_slot_border', 'shadow_strength',
+    'success_border', 'warning_border', 'danger_border', 'warning_text',
+    'night', 'night_soft', 'night_border'
+  ];
+
+  const OVERLAY_MAP = [
+    ['card_bg', 'surface'], ['card_raised', 'surface_raised'],
+    ['border_decorative', 'border_decorative'], ['border_control', 'border_control'],
+    ['text_primary', 'text_primary'], ['text_secondary', 'text_secondary'],
+    ['text_disabled', 'text_disabled'], ['accent', 'accent'], ['accent_soft', 'accent_soft'],
+    ['success', 'success'], ['success_soft', 'success_soft'], ['success_border', 'success_border'],
+    ['warning', 'warning'], ['warning_soft', 'warning_soft'], ['warning_border', 'warning_border'],
+    ['danger', 'danger'], ['danger_soft', 'danger_soft'], ['danger_border', 'danger_border'],
+    ['night', 'night'], ['night_soft', 'night_soft'], ['night_border', 'night_border']
+  ];
+
+  function paletteVars(p) {
+    return Object.keys(VAR_MAP).map(function (k) { return VAR_MAP[k] + ':' + p[k]; }).join(';');
+  }
+
+  function ic(name, size, sw) {
+    size = size || 18;
+    sw = sw || 1.8;
+    const paths = {
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/>',
+      moon: '<path d="M20 14.4A8.5 8.5 0 1 1 9.6 4 6.7 6.7 0 0 0 20 14.4Z"/>',
+      eye: '<path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.4"/>',
+      controller: '<path d="M7 9h10a4 4 0 0 1 4 4v1.2a3.8 3.8 0 0 1-4 3.8c-1.4 0-2.3-.8-3.2-2H10.2c-.9 1.2-1.8 2-3.2 2a3.8 3.8 0 0 1-4-3.8V13a4 4 0 0 1 4-4Z"/><path d="M8 12v2.4M6.8 13.2h2.4"/><circle cx="16" cy="12.4" r=".9" fill="currentColor" stroke="none"/><circle cx="18" cy="14.2" r=".9" fill="currentColor" stroke="none"/>',
+      calendar: '<rect x="3.5" y="5.5" width="17" height="15" rx="2.6"/><path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>',
+      key: '<circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H21M17 12v3.6M19.6 12v2.6"/>',
+      code: '<rect x="3.5" y="5.5" width="17" height="13" rx="2.6"/><path d="M8 10l2 2-2 2M13.5 14h3"/>',
+      refresh: '<path d="M20 11.5A8 8 0 1 0 18.4 16"/><path d="M20 5.5v6h-6"/>',
+      check: '<path d="M5 12.5l4.2 4L19 6.5"/>',
+      globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.7 5.2 3.7 8.5S14.4 18.2 12 20.5c-2.4-2.3-3.7-5.2-3.7-8.5S9.6 5.8 12 3.5Z"/>',
+      shield: '<path d="M12 3.5l7 2.8v5.6c0 4-3 7.1-7 8.6-4-1.5-7-4.6-7-8.6V6.3l7-2.8Z"/>',
+      chevron: '<path d="M9.5 6l6 6-6 6"/>',
+      dots: '<circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+      back: '<path d="M15 6l-6 6 6 6"/>',
+      user: '<circle cx="12" cy="8.5" r="3.4"/><path d="M5.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/>',
+      sliders: '<path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/>',
+      history: '<path d="M4 12a8 8 0 1 1 2.3 5.6"/><path d="M4 5v5h5"/><path d="M12 8.5V12l2.5 1.6"/>',
+      export: '<path d="M12 15V4M8.5 7.5L12 4l3.5 3.5"/><path d="M5 13v5.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V13"/>',
+      stop: '<circle cx="12" cy="12" r="8"/><path d="M9 9h6v6H9z"/>',
+      info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>',
+      restore: '<path d="M4 11a8 8 0 1 1 2.4 5.7"/><path d="M4 5v6h6"/>',
+      audio: '<path d="M5 10v4h3l4 3V7l-4 3H5Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/>',
+      language: '<path d="M4 5h8M8 5v2M5 19l4-10 4 10M6.2 15.5h5.6"/><path d="M14 12h6M17 9v9"/>',
+      activity: '<path d="M3 12h4l2.2-6 4 12 2.3-6H21"/>',
+      device: '<rect x="4" y="3.5" width="12" height="17" rx="2.6"/><path d="M10 17.5h.01"/><rect x="12.5" y="8" width="7.5" height="12" rx="2.2"/>',
+      doublecheck: '<path d="M2.5 12.5l3.6 3.6L14 7.5"/><path d="M9.5 13.5l2.6 2.6L21 7.5"/>'
+    };
+    return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" stroke-width="' + sw + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (paths[name] || '') + '</svg>';
+  }
+
+  function logoSvg() {
+    return '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="18.6" cy="5.4" r="2" fill="currentColor"/><circle cx="5.4" cy="18.6" r="1.6" fill="currentColor"/></svg>';
+  }
+
+/* __JS_TEMPLATES__ */
+  function topBar(title, sub) {
+    return '<header class="ui-top">' +
+      '<div class="ui-brand">' +
+        '<div class="ui-logo">' + logoSvg() + '</div>' +
+        '<div><div class="ui-title">' + title + '</div><div class="ui-sub">' + sub + '</div></div>' +
+      '</div>' +
+      '<div class="ui-top-right">' +
+        '<div class="ui-lang">' + ic('globe', 15) + '中 / EN</div>' +
+        '<div class="ui-clock">' +
+          '<div class="ui-clock-top"><b>08:16</b><span>1月1日 周四</span><span class="ui-pill">周计划</span><span class="ui-pill">掌机模式</span><span class="ui-sync">2 秒前更新</span></div>' +
+          '<div class="ui-clock-line">今天还可玩：<b>51 分钟</b></div>' +
+          '<div class="ui-clock-bar"><i style="width:62%"></i></div>' +
+        '</div>' +
+      '</div>' +
+    '</header>';
+  }
+
+  function childScreen() {
+    const days = [
+      { d: '今天安排', dt: '01/01', v: '120', u: '分钟', s: '周计划', cls: 'today', bar: 'accent' },
+      { d: '明天安排', dt: '01/02', v: '90', u: '分钟', s: '周计划', cls: 'focus', bar: 'accent' },
+      { d: '周六', dt: '01/03', v: '暂不可用', u: '', s: '暂不可用', cls: 'weekend off', bar: 'ok' },
+      { d: '周日', dt: '01/04', v: '暂不可用', u: '', s: '暂不可用', cls: 'weekend off', bar: 'ok' },
+      { d: '周一', dt: '01/05', v: '暂不可用', u: '', s: '暂不可用', cls: 'off', bar: 'off' },
+      { d: '周二', dt: '01/06', v: '暂不可用', u: '', s: '暂不可用', cls: 'off', bar: 'off' },
+      { d: '周三', dt: '01/07', v: '暂不可用', u: '', s: '暂不可用', cls: 'off', bar: 'off' }
+    ];
+    const dayHtml = days.map(function (x) {
+      return '<div class="ui-day ' + x.cls + '">' +
+        '<div class="d">' + x.d + '</div>' +
+        '<div class="dt">' + x.dt + '</div>' +
+        '<div class="v">' + x.v + (x.u ? '<small>' + x.u + '</small>' : '') + '</div>' +
+        '<div class="s">' + x.s + '</div>' +
+        '<span class="bar ' + x.bar + '"></span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="ui ui-child">' +
+      topBar('自律即自由', '合理安排时间，做自己的主人') +
+      '<main class="ui-main">' +
+        '<div class="ui-left">' +
+          '<section class="ui-hero">' +
+            '<div class="ui-hero-main">' +
+              '<div class="ui-hero-label">今天还可玩</div>' +
+              '<div class="ui-hero-number">51<small>分钟</small></div>' +
+              '<div class="ui-gauge"><i></i></div>' +
+              '<div class="ui-gauge-meta"><span>已玩约 69 分钟</span><span>还剩 51 分钟</span></div>' +
+              '<div class="ui-hero-foot"><span><i class="dot"></i>今日限时 / 周计划</span><span>上次刷新: 2 秒前</span></div>' +
+            '</div>' +
+            '<div class="ui-hero-rules">' +
+              '<div class="ui-rule"><div><b>护眼休息</b><small>护眼已关闭</small></div><span class="ui-chip-ghost">已关闭</span></div>' +
+              '<div class="ui-rule"><div><b>就寝时间</b><small>当前关闭</small></div><span class="ui-chip-ghost">已关闭</span></div>' +
+              '<div class="ui-rule"><div><b>电视模式规则</b><small>未启用电视模式限制，掌机与电视均可自由使用</small></div><span class="ui-chip-ghost">已关闭</span></div>' +
+            '</div>' +
+          '</section>' +
+          '<section class="ui-week">' +
+            '<div class="ui-week-head"><span class="ic">' + ic('calendar', 17) + '</span><b>未来 7 天计划与就寝预测</b><span>合理安排休息</span></div>' +
+            '<div class="ui-week-grid">' + dayHtml + '</div>' +
+          '</section>' +
+        '</div>' +
+        '<aside class="ui-rail">' +
+          '<div class="ui-action primary">' +
+            '<span class="ic">' + ic('code', 20) + '</span>' +
+            '<div><div class="t">输入加时码</div><div class="s">家长生成 8 位授权码</div></div>' +
+            '<span class="ui-keycap" style="margin-left:auto">A</span>' +
+          '</div>' +
+          '<div class="ui-action">' +
+            '<span class="ic">' + ic('plus', 20) + '</span>' +
+            '<div><div class="t">领取缓冲 +10 分钟</div><div class="s">今日可领取一次</div></div>' +
+          '</div>' +
+          '<div class="ui-action">' +
+            '<span class="ic">' + ic('history', 20) + '</span>' +
+            '<div><div class="t">使用详情</div><div class="s">查看规则与今日记录</div></div>' +
+          '</div>' +
+          '<div class="ui-note">' +
+            '<span class="ok-ic">' + ic('check', 16) + '</span>' +
+            '<div><b>状态自动同步</b><p>今天的安排会在后台保持更新</p><div class="stamp">上次刷新: 2 秒前</div></div>' +
+          '</div>' +
+        '</aside>' +
+      '</main>' +
+      '<footer class="ui-foot">' +
+        '<div class="group"><span class="key"><span class="k">A</span>输入加时码</span></div>' +
+        '<div class="center">状态会在后台自动同步</div>' +
+        '<div class="group"><span class="key"><span class="k">B</span>退出</span><span class="key"><span class="k">Y</span>刷新</span></div>' +
+      '</footer>' +
+    '</div>';
+  }
+
+  function parentScreen() {
+    const stat = function (label, value, unit, tag) {
+      return '<div class="ui-stat"><div class="l">' + label + '</div><div class="r"><div class="v">' + value +
+        (unit ? '<small>' + unit + '</small>' : '') + '</div><span class="mini-tag">' + tag + '</span></div></div>';
+    };
+    const op = function (icon, tone, title, sub, chip, chipTone, extra, focus) {
+      return '<div class="ui-op' + (focus ? ' focus' : '') + '">' +
+        '<span class="ic ' + tone + '">' + ic(icon, 17) + '</span>' +
+        '<div class="txt"><div class="t">' + title + '</div><div class="s">' + sub + '</div>' + (extra || '') + '</div>' +
+        '<span class="chip ' + (chipTone || '') + '">' + chip + '</span>' +
+      '</div>';
+    };
+    const preset = '<div class="ui-preset"><span>+15</span><span>+30</span><span>+60</span><span>自定义</span></div>';
+
+    return '<div class="ui ui-parent">' +
+      topBar('今日安排', '今天的额度调整与单次措施') +
+      '<div class="ui-tabs">' +
+        '<span class="ui-tab on">今日安排</span>' +
+        '<span class="ui-tab">时间计划</span>' +
+        '<span class="ui-tab">离线加时</span>' +
+        '<span class="ui-tab">安全与偏好</span>' +
+        '<span class="ui-tab">支持与恢复</span>' +
+        '<span class="hint">L / R 切换</span>' +
+      '</div>' +
+      '<main class="ui-main">' +
+        '<section class="ui-hero parent">' +
+          '<div class="ui-hero-main">' +
+            '<div class="ui-hero-label">今天还可玩</div>' +
+            '<div class="ui-hero-number">51<small>分钟</small></div>' +
+            '<div class="ui-gauge"><i></i></div>' +
+            '<div class="ui-gauge-meta"><span>已玩约 69 分钟</span><span>还剩 51 分钟</span></div>' +
+            '<div class="ui-hero-foot"><span><i class="dot"></i>今日限时 / 周计划</span><span>上次刷新: 2 秒前</span></div>' +
+          '</div>' +
+          '<div class="ui-stats">' +
+            stat('今日额度', '120', '分钟', '周计划') +
+            stat('额度已耗（估算）', '69', '分钟', '估算') +
+            stat('护眼休息', '已关闭', '', '已关闭') +
+            stat('就寝时间', '当前关闭', '', '已关闭') +
+          '</div>' +
+        '</section>' +
+        '<div class="ui-parent-right">' +
+          '<section class="ui-group">' +
+            '<div class="ui-group-head">今日额度调整（仅今天）<span>明天恢复原计划</span></div>' +
+            '<div class="ui-ops">' +
+              op('clock', '', '设置今日额度', '当前由周计划生效', '未设置', '', '', true) +
+              op('plus', 'ok', '快速加时', '家长授权后即时生效', '可领取', 'ok', preset, false) +
+              op('moon', 'night', '今日不限时', '仅今天不限时；就寝照常', '未启用', '', '', false) +
+              op('restore', '', '清除今日调整', '今天没有单独额度调整', '未清除', '', '', false) +
+            '</div>' +
+          '</section>' +
+          '<section class="ui-group">' +
+            '<div class="ui-group-head">其他今日操作<span>就寝、护眼与电视模式独立限制</span></div>' +
+            '<div class="ui-ops">' +
+              op('moon', 'night', '跳过本次就寝', '就寝计划已关闭，无可跳过时段', '未跳过', '', '', false) +
+              op('eye', 'warn', '跳过本次休息', '护眼已关闭，请在时间计划中开启', '未启用', 'warn', '', false) +
+              op('check', 'ok', '自主缓冲', '今日可领取 10 分钟', '可领取', 'ok', '', false) +
+              op('controller', '', '今日解除电视模式限制', '电视模式规则未启用', '未启用', '', '', false) +
+            '</div>' +
+          '</section>' +
+        '</div>' +
+      '</main>' +
+      '<footer class="ui-foot">' +
+        '<div class="group"><span class="key"><span class="k">L</span>上一页</span><span class="key"><span class="k">R</span>下一页</span></div>' +
+        '<div class="center">状态会在后台自动同步</div>' +
+        '<div class="group"><span class="key"><span class="k">B</span>返回孩子页</span><span class="key"><span class="k">Y</span>刷新</span><span class="key"><span class="k">+</span>今日安排详情</span></div>' +
+      '</footer>' +
+    '</div>';
+  }
+
+  function overlayScreen() {
+    return '<div class="ov">' +
+      '<div class="ov-panel">' +
+        '<div class="ov-head">' +
+          '<div class="ov-brand">自律约定·<b>任我玩</b></div>' +
+          '<div class="ov-head-actions">' +
+            '<span class="ov-btn"><span class="k">R</span>家长区</span>' +
+            '<span class="ov-btn"><span class="k">Y</span>刷新</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ov-banner">' +
+          '<span class="bar"></span>' +
+          '<h2>到睡觉时间啦</h2>' +
+          '<p>好好休息，明天再玩吧</p>' +
+          '<div class="meta">休息时段 00:00 – 00:00 · 早点睡长身体</div>' +
+        '</div>' +
+        '<div class="ov-guide"><span class="av">' + ic('user', 12) + '</span>想继续玩，请找爸爸妈妈</div>' +
+        '<div class="ov-rules">' +
+          '<div class="ov-rules-head">其他规则</div>' +
+          '<div class="ov-rules-body">' +
+            '<div class="ov-rule"><span class="dot"></span><span class="t">护眼</span><span class="v">当前关闭</span></div>' +
+            '<div class="ov-rule warn"><span class="dot"></span><span class="t">电视规则</span><span class="v">待刷新确认</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ov-bottom">' +
+          '<div class="ov-status">命令与状态<span>查看详情 (-)</span></div>' +
+          '<div class="ov-keys"><span><span class="k">B</span>返回</span><span><span class="k">X</span>文 / A 确定</span><span class="time">14:25</span></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+/* __JS_LOGIC__ */
+  const state = { scheme: 'graphite', mode: 'light', screen: 'child' };
+
+  const els = {
+    pills: document.getElementById('pills'),
+    schemeGrid: document.getElementById('schemeGrid'),
+    screen: document.getElementById('screen'),
+    frame: document.getElementById('frame'),
+    stageNote: document.getElementById('stageNote'),
+    asideName: document.getElementById('asideName'),
+    asideEn: document.getElementById('asideEn'),
+    asideDesc: document.getElementById('asideDesc'),
+    asideTags: document.getElementById('asideTags'),
+    asideNotes: document.getElementById('asideNotes'),
+    compBoard: document.getElementById('compBoard'),
+    paletteBody: document.getElementById('paletteBody'),
+    contrastBody: document.getElementById('contrastBody'),
+    contrastNote: document.getElementById('contrastNote')
+  };
+
+  function applyPalette(el, p) {
+    Object.keys(VAR_MAP).forEach(function (k) {
+      el.style.setProperty(VAR_MAP[k], p[k]);
+    });
+  }
+
+  function srgb(c) {
+    c = c / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+
+  function lum(hex) {
+    const h = hex.replace('#', '');
+    return 0.2126 * srgb(parseInt(h.slice(0, 2), 16)) +
+      0.7152 * srgb(parseInt(h.slice(2, 4), 16)) +
+      0.0722 * srgb(parseInt(h.slice(4, 6), 16));
+  }
+
+  function ratio(a, b) {
+    const l1 = lum(a), l2 = lum(b);
+    const hi = Math.max(l1, l2), lo = Math.min(l1, l2);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  function miniHtml(s, mode) {
+    const p = s[mode];
+    return '<div class="mini" style="' + paletteVars(p) + '" aria-hidden="true">' +
+      '<div class="mini-hero">' +
+        '<div><div class="mini-label">今天还可玩</div><div class="mini-num">51<small>分钟</small></div><div class="mini-gauge"><i></i></div></div>' +
+        '<div class="mini-side"><i></i><i></i><i></i></div>' +
+      '</div>' +
+      '<div class="mini-chips"><span class="mini-chip ok">可用</span><span class="mini-chip warn">提醒</span><span class="mini-chip bad">限制</span><span class="mini-chip night">就寝</span></div>' +
+      '<div class="mini-swatches">' +
+        '<i style="background:' + p.page_bg + '"></i>' +
+        '<i style="background:' + p.surface + '"></i>' +
+        '<i style="background:' + p.accent + '"></i>' +
+        '<i style="background:' + p.hero + '"></i>' +
+        '<i style="background:' + p.success + '"></i>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderPills() {
+    els.pills.innerHTML = SCHEME_ORDER.map(function (id) {
+      const s = SCHEMES[id];
+      const p = s[state.mode];
+      return '<button class="pill" type="button" data-set-scheme="' + id + '" aria-pressed="' +
+        String(id === state.scheme) + '"><span class="sw" style="background:' + p.accent + '"></span>' + s.name + '</button>';
+    }).join('');
+  }
+
+  function renderSchemeCards() {
+    els.schemeGrid.innerHTML = SCHEME_ORDER.map(function (id) {
+      const s = SCHEMES[id];
+      const p = s[state.mode];
+      const swatches = [p.accent, p.hero, p.ok, p.warn, p.night].map(function (c) {
+        return '<i style="background:' + c + '"></i>';
+      }).join('');
+      return '<button class="scheme-card" type="button" data-set-scheme="' + id + '" aria-pressed="' +
+        String(id === state.scheme) + '">' +
+        miniHtml(s, state.mode) +
+        '<div class="scheme-meta">' +
+          '<div class="scheme-name"><h3>' + s.name + '</h3><span class="en">' + s.en + '</span>' +
+            (s.rec ? '<span class="rec">推荐</span>' : '') + '</div>' +
+          '<div class="scheme-keywords">' + s.keywords.join(' · ') + '</div>' +
+          '<div class="scheme-foot"><span>正文 ' + ratio(p.text_primary, p.surface).toFixed(1) + ':1</span>' +
+            '<span class="swatches">' + swatches + '</span></div>' +
+        '</div>' +
+      '</button>';
+    }).join('');
+  }
+
+  function renderPreview() {
+    const isOv = state.screen === 'overlay';
+    const mode = isOv ? 'dark' : state.mode;
+    const s = SCHEMES[state.scheme];
+    const p = s[mode];
+    els.screen.className = 'screen' + (isOv ? ' portrait' : '');
+    els.frame.className = 'frame' + (isOv ? ' portrait' : '');
+    applyPalette(els.screen, p);
+    els.screen.innerHTML = isOv ? overlayScreen() : (state.screen === 'parent' ? parentScreen() : childScreen());
+    requestAnimationFrame(fitFrame);
+  }
+
+  function fitFrame() {
+    const frame = els.frame, screen = els.screen;
+    if (!frame || !screen) return;
+    const isOv = screen.classList.contains('portrait');
+    const w = isOv ? 448 : 1280, h = 720;
+    const fw = frame.clientWidth, fh = frame.clientHeight;
+    if (!fw || !fh) return;
+    const scale = Math.min(fw / w, fh / h);
+    const x = (fw - w * scale) / 2;
+    const y = (fh - h * scale) / 2;
+    screen.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
+  }
+
+  function renderAside() {
+    const s = SCHEMES[state.scheme];
+    els.asideName.textContent = s.name;
+    els.asideEn.textContent = s.en + (s.rec ? ' · 推荐' : '');
+    els.asideDesc.textContent = s.desc;
+    els.asideTags.innerHTML = s.keywords.map(function (k) { return '<span class="tag">' + k + '</span>'; }).join('');
+    els.asideNotes.innerHTML = s.notes.map(function (n) { return '<li>' + n + '</li>'; }).join('');
+  }
+
+  function renderComponents() {
+    applyPalette(els.compBoard, SCHEMES[state.scheme][state.mode]);
+  }
+
+  function swatchCell(v) {
+    if (typeof v !== 'string') return '<span class="hex">' + v + '</span>';
+    return '<span class="sw-cell"><button class="sw" type="button" data-copy-hex="' + v + '" title="复制 ' + v +
+      '" aria-label="复制 ' + v + '" style="background:' + v + '"></button><span class="hex">' + v.toUpperCase() + '</span></span>';
+  }
+
+  function renderPaletteTable() {
+    const s = SCHEMES[state.scheme];
+    const l = s.light, d = s.dark;
+    let html = '';
+    ROLE_GROUPS.forEach(function (g) {
+      html += '<tr class="group-row"><td colspan="3">' + g.name + '</td></tr>';
+      g.roles.forEach(function (r) {
+        const key = r[0], label = r[1];
+        html += '<tr><td><span class="role-name">' + label + '</span><span class="role-key">' + key + '</span></td>' +
+          '<td>' + swatchCell(l[key]) + '</td><td>' + swatchCell(d[key]) + '</td></tr>';
+      });
+    });
+    html += '<tr class="group-row"><td colspan="3">阴影</td></tr>' +
+      '<tr><td><span class="role-name">阴影强度</span><span class="role-key">shadow_strength</span></td>' +
+      '<td><span class="hex">' + l.shadow_strength + '</span></td><td><span class="hex">' + d.shadow_strength + '</span></td></tr>';
+    els.paletteBody.innerHTML = html;
+  }
+
+  function ratioCell(v, need) {
+    let badge = '3:1', cls = '';
+    if (v >= 7) { badge = 'AAA'; cls = 'aaa'; }
+    else if (v >= 4.5) { badge = 'AA'; cls = 'aa'; }
+    if (v < need) { badge = 'FAIL'; cls = 'fail'; }
+    return '<span class="ratio">' + v.toFixed(2) + ':1</span><span class="ratio-badge ' + cls + '">' + badge + '</span>';
+  }
+
+  function renderContrastTable() {
+    const s = SCHEMES[state.scheme];
+    let html = '';
+    PAIRS.forEach(function (pair) {
+      const lr = ratio(s.light[pair[1]], s.light[pair[2]]);
+      const dr = ratio(s.dark[pair[1]], s.dark[pair[2]]);
+      html += '<tr><td class="role-name">' + pair[0] + '</td><td>' + ratioCell(lr, pair[3]) +
+        '</td><td>' + ratioCell(dr, pair[3]) + '</td><td class="hex">' + pair[3].toFixed(1) + ':1</td></tr>';
+    });
+    els.contrastBody.innerHTML = html;
+
+    let minP = 99, minS = 99, minA = 99;
+    SCHEME_ORDER.forEach(function (id) {
+      ['light', 'dark'].forEach(function (m) {
+        const p = SCHEMES[id][m];
+        minP = Math.min(minP, ratio(p.text_primary, p.surface));
+        minS = Math.min(minS, ratio(p.text_secondary, p.surface));
+        minA = Math.min(minA, ratio(p.accent, p.surface));
+      });
+    });
+    els.contrastNote.textContent = '四套方案 × 亮暗：正文最低 ' + minP.toFixed(1) + ':1，次要文字最低 ' +
+      minS.toFixed(1) + ':1，强调色最低 ' + minA.toFixed(1) + ':1。所有核心组合均通过各自门槛。';
+  }
+
+  function syncControls() {
+    const isOv = state.screen === 'overlay';
+    const eff = isOv ? 'dark' : state.mode;
+    document.querySelectorAll('[data-set-mode]').forEach(function (btn) {
+      const m = btn.getAttribute('data-set-mode');
+      btn.setAttribute('aria-pressed', String(m === eff));
+      btn.disabled = isOv && m === 'light';
+    });
+    document.querySelectorAll('[data-set-screen]').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', String(btn.getAttribute('data-set-screen') === state.screen));
+    });
+    const s = SCHEMES[state.scheme];
+    els.stageNote.textContent = (isOv ? '448 × 720 · Tesla 固定暗色' : '1280 × 720 · ' + (eff === 'light' ? '亮色' : '暗色')) +
+      ' · ' + s.name + ' / ' + s.en;
+  }
+
+  function renderAll() {
+    renderPills();
+    renderSchemeCards();
+    renderPreview();
+    renderAside();
+    renderComponents();
+    renderPaletteTable();
+    renderContrastTable();
+    syncControls();
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem('playwise-color-preview-v1', JSON.stringify({
+        scheme: state.scheme, mode: state.mode, screen: state.screen
+      }));
+    } catch (e) { /* private mode or blocked storage */ }
+  }
+
+  function restoreState() {
+    try {
+      const raw = localStorage.getItem('playwise-color-preview-v1');
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s && SCHEMES[s.scheme]) state.scheme = s.scheme;
+        if (s && (s.mode === 'light' || s.mode === 'dark')) state.mode = s.mode;
+        if (s && ['child', 'parent', 'overlay'].indexOf(s.screen) >= 0) state.screen = s.screen;
+      }
+    } catch (e) { /* ignore */ }
+    const hash = (location.hash || '').replace('#', '');
+    if (SCHEMES[hash]) state.scheme = hash;
+    if (state.screen === 'overlay') state.mode = 'dark';
+  }
+
+  function setScheme(id) {
+    if (!SCHEMES[id]) return;
+    state.scheme = id;
+    saveState();
+    renderAll();
+  }
+
+  function setMode(mode) {
+    if (mode !== 'light' && mode !== 'dark') return;
+    if (state.screen === 'overlay' && mode === 'light') return;
+    state.mode = mode;
+    saveState();
+    renderAll();
+  }
+
+  function setScreen(screen) {
+    if (['child', 'parent', 'overlay'].indexOf(screen) < 0) return;
+    state.screen = screen;
+    if (screen === 'overlay') state.mode = 'dark';
+    saveState();
+    renderAll();
+  }
+
+  function kebab(k) { return k.replace(/_/g, '-'); }
+
+  function buildCss(s) {
+    const out = ['/* PlayWise · ' + s.name + ' / ' + s.en + ' */'];
+    ['light', 'dark'].forEach(function (mode) {
+      out.push(':root[data-pw-scheme="' + s.id + '"][data-pw-mode="' + mode + '"] {');
+      COPY_ORDER.forEach(function (k) {
+        out.push('  --' + kebab(k) + ': ' + s[mode][k] + ';');
+      });
+      out.push('}');
+    });
+    return out.join('\n') + '\n';
+  }
+
+  function buildC(s, mode) {
+    const p = s[mode];
+    const lines = COPY_ORDER.map(function (k) {
+      const v = k === 'shadow_strength' ? p[k] : '0x' + p[k].replace('#', '').toUpperCase();
+      return '    .' + k + ' = ' + v + ',';
+    });
+    return 'static const PtcUiPalette ' + mode.toUpperCase() + '_' + s.id.toUpperCase() + '_PALETTE = {\n' +
+      lines.join('\n') + '\n};\n';
+  }
+
+  function nib(hex) {
+    return '0x' + (parseInt(hex, 16) / 17).toString(16).toUpperCase();
+  }
+
+  function buildOverlayC(s) {
+    const p = s.dark;
+    const lines = [
+      'constexpr OverlayPalette DARK_OVERLAY_' + s.id.toUpperCase() + '_PALETTE = {',
+      '    .panel_bg = { 0x0, 0x0, 0x0, 0xD },'
+    ];
+    OVERLAY_MAP.forEach(function (m) {
+      const h = p[m[1]].replace('#', '');
+      lines.push('    .' + m[0] + ' = { ' + nib(h.slice(0, 2)) + ', ' + nib(h.slice(2, 4)) + ', ' + nib(h.slice(4, 6)) + ', 0xF },');
+    });
+    lines.push('};');
+    return lines.join('\n') + '\n';
+  }
+
+  function buildChoice(s) {
+    const l = s.light, d = s.dark;
+    return 'PlayWise 色彩方案：' + s.name + ' / ' + s.en + '\n' +
+      '亮色  page ' + l.page_bg + ' · surface ' + l.surface + ' · accent ' + l.accent + ' · hero ' + l.hero + '\n' +
+      '暗色  page ' + d.page_bg + ' · surface ' + d.surface + ' · accent ' + d.accent + ' · hero ' + d.hero + '\n' +
+      '推荐：' + (s.rec ? '是' : '否');
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('on');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('on'); }, 1900);
+  }
+
+  function fallbackCopy(text, ok) {
+    const ta = document.getElementById('copyFallback');
+    if (!ta) { toast('复制失败，请手动选择'); return; }
+    ta.hidden = false;
+    ta.value = text;
+    ta.focus();
+    ta.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+    if (copied) {
+      ok();
+      setTimeout(function () { ta.hidden = true; }, 1400);
+    } else {
+      toast('文本已选中，请按 Ctrl / Cmd + C');
+    }
+  }
+
+  function copyText(text, label) {
+    const ok = function () { toast(label + ' 已复制'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, function () { fallbackCopy(text, ok); });
+    } else {
+      fallbackCopy(text, ok);
+    }
+  }
+
+  function handleCopy(kind) {
+    const s = SCHEMES[state.scheme];
+    if (kind === 'css') { copyText(buildCss(s), 'CSS 变量'); return; }
+    if (kind === 'light-c') { copyText(buildC(s, 'light'), '亮色 C 结构体'); return; }
+    if (kind === 'dark-c') { copyText(buildC(s, 'dark'), '暗色 C 结构体'); return; }
+    if (kind === 'overlay-c') { copyText(buildOverlayC(s), 'Overlay C 结构体'); return; }
+    if (kind === 'json') { copyText(JSON.stringify({ id: s.id, name: s.name, en: s.en, light: s.light, dark: s.dark }, null, 2), 'JSON'); return; }
+    if (kind === 'choice') { copyText(buildChoice(s), '我的选择'); }
+  }
+
+  document.addEventListener('click', function (e) {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    const scheme = t.closest('[data-set-scheme]');
+    if (scheme) { setScheme(scheme.getAttribute('data-set-scheme')); return; }
+    const mode = t.closest('[data-set-mode]');
+    if (mode) { if (!mode.disabled) setMode(mode.getAttribute('data-set-mode')); return; }
+    const screen = t.closest('[data-set-screen]');
+    if (screen) { setScreen(screen.getAttribute('data-set-screen')); return; }
+    const hex = t.closest('[data-copy-hex]');
+    if (hex) { copyText(hex.getAttribute('data-copy-hex'), hex.getAttribute('data-copy-hex')); return; }
+    const copy = t.closest('[data-copy]');
+    if (copy) { handleCopy(copy.getAttribute('data-copy')); }
+  });
+
+  restoreState();
+  renderAll();
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { fitFrame(); }).observe(els.frame);
+  }
+  window.addEventListener('resize', fitFrame);
+  window.addEventListener('load', fitFrame);
+  requestAnimationFrame(fitFrame);
+</script>

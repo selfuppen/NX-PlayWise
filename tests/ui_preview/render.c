@@ -14,6 +14,40 @@
 
 uint32_t preview_pixels[1280 * 720];
 
+static struct {
+    bool enabled;
+    int title_count, summary_count;
+    UiRect title, summary;
+} child_heading_trace;
+
+void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
+{
+    if (!child_heading_trace.enabled || !text) return;
+    UiRect bounds = {x, baseline - size, measure_text(text, size), size};
+    if (strcmp(text, ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST)) == 0) {
+        child_heading_trace.title = bounds;
+        ++child_heading_trace.title_count;
+    } else if (strcmp(text, ptc_ui_text(PTC_UI_T_REST_AS_PLANNED)) == 0) {
+        child_heading_trace.summary = bounds;
+        ++child_heading_trace.summary_count;
+    }
+}
+
+static int check_child_forecast_heading(bool dark)
+{
+    PtcUiRect box = ptc_ui_home_summary_rect(false);
+    UiRect title = child_heading_trace.title, summary = child_heading_trace.summary;
+    bool fits = child_heading_trace.title_count == 1 && child_heading_trace.summary_count == 1 &&
+        title.x >= box.x + 16 && title.x + title.width + 12 <= summary.x &&
+        summary.x + summary.width <= box.x + box.w - 16 &&
+        title.y >= box.y + 274 && summary.y >= box.y + 274 &&
+        title.y + title.height <= box.y + 314 && summary.y + summary.height <= box.y + 314;
+    fprintf(stderr, "%s: child forecast heading lang=%d dark=%d title=[%d,%d) summary=[%d,%d)\n",
+        fits ? "PASS" : "FAIL", (int)ptc_ui_language_get_resolved(), dark,
+        title.x, title.x + title.width, summary.x, summary.x + summary.width);
+    return fits ? 0 : 1;
+}
+
 static int check_primitives(void)
 {
     const uint32_t background = pack_rgb(0x182838), ink = pack_rgb(0xe0c0a0);
@@ -182,7 +216,12 @@ static int save_preview(const char *directory, const char *module, const char *n
     settled.last_parent_page = settled.parent_page;
     settled.rendered_overlay = settled.overlay;
     settled.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+    memset(&child_heading_trace, 0, sizeof(child_heading_trace));
+    child_heading_trace.enabled = strcmp(module, "child") == 0 && strcmp(name, "child") == 0;
     ptc_ui_graphics_draw(&settled, &theme);
+    bool check_heading = child_heading_trace.enabled;
+    child_heading_trace.enabled = false;
+    if (check_heading && check_child_forecast_heading(dark)) return 1;
     draw_text(preview_pixels, 1280, 540, 100, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
     n = snprintf(dir_path, sizeof(dir_path), "%s/%s", directory, module);
     if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
