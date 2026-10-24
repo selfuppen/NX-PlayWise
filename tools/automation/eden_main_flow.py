@@ -261,6 +261,7 @@ class MainFlow:
 
     def eye_journey(self) -> None:
         self.plan(4, page=4)
+        self.capture("eye-policy-guide")
         self.action(target="eye_master")
         before = self.ids()
         self.action(button="Plus", hold_ms=600)
