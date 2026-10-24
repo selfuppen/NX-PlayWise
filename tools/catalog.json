@@ -2,7 +2,7 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-24",
   "scope": "playwise/tools",
-  "script_count": 64,
+  "script_count": 65,
   "scripts": [
     {
       "path": "device/input_connection.py",
@@ -262,6 +262,11 @@
       "path": "automation/eden_main_flow.py",
       "category": "automation",
       "purpose": "发版前中文业务旅程串行编排与离线断言复核"
+    },
+    {
+      "path": "automation/eden_support_flow.py",
+      "category": "automation",
+      "purpose": "独立支持恢复旅程、诊断脱敏与停用后重开证据核验"
     },
     {
       "path": "automation/eden_mcp_bridge.py",

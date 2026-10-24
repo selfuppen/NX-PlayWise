@@ -1,6 +1,9 @@
 #include "eden_timer.h"
 #include "../../sysmodule/sysmodule_internal.h"
 
+#include <stdio.h>
+#include <string.h>
+
 bool ptc_eden_refresh_usage(PtcPctlStub *pctl, PtcClockSnapshot now,
     uint64_t elapsed_ns, uint64_t *carry_ns)
 {
@@ -62,5 +65,26 @@ bool ptc_eden_restore_timer(PtcSysmodule *core, PtcPctlStub *pctl,
         target.mode = ptc_compose_base_target(base, &target.minutes);
     }
     pctl->status.play_timer_enabled = true;
+    {
+        char path[320];
+        PtcSetupState setup;
+        snprintf(path, sizeof(path), "%s/flags/disable.flag", core->app_root);
+        if (core->storage->vtable->exists(core->storage, path)) {
+            if (!load_setup_state(core, &setup)) return false;
+            if (strcmp(setup.phase, "restored") == 0) {
+                PtcPctlSettingsSnapshot original, restored;
+                PtcPctlStatus status;
+                bool raw_ok = false, timer_ok = false;
+                if (!load_install_snapshot(core, &original)) return false;
+                /* The NRO owns this in-memory stub. Reconstruct its restored
+                   installation image, not the stale pre-restore policy target.
+                   The stub selects the day through last_target metadata. */
+                pctl->last_target.weekday = target.weekday;
+                pctl->applied = true;
+                return restore_snapshot_exact(core, &original, &restored, &status,
+                    target.weekday, &raw_ok, &timer_ok) == PTC_ERR_OK && raw_ok && timer_ok;
+            }
+        }
+    }
     return pctl->pctl.vtable->apply_target(&pctl->pctl, &target) == PTC_ERR_OK;
 }

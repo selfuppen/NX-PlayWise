@@ -50,6 +50,7 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         "\"daily_restriction_active\":%s,\"dock_restriction_active\":%s,"
         "\"bedtime_active\":%s,\"bedtime_skipped\":%s,\"eye_resting\":%s,"
         "\"restricted_now\":%d,\"unrestricted_today\":%d,\"today_minutes\":%u,"
+        "\"disable_flag_present\":%s,\"recovery_active\":%s,\"diagnostic_status\":%d,"
         "\"targets\":{\"width\":1280,\"height\":720",
         (int)m->view, (int)m->parent_page, (int)m->overlay, m->setup_step,
         strcmp(m->setup_phase, "active") == 0 ? "true" : "false",
@@ -66,7 +67,9 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         m->daily_restriction_active ? "true" : "false", m->dock_restriction_active ? "true" : "false",
         m->bedtime_active ? "true" : "false", m->bedtime_skipped ? "true" : "false",
         strcmp(m->eye_care_phase, "resting") == 0 ? "true" : "false",
-        m->restricted_now, m->unrestricted_today, (unsigned)m->forecast[0].minutes);
+        m->restricted_now, m->unrestricted_today, (unsigned)m->forecast[0].minutes,
+        m->disable_flag_present ? "true" : "false", m->recovery_active ? "true" : "false",
+        (int)m->diagnostic_status);
     if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
     used = (size_t)n;
     if (!ptc_eden_target(out, size, &used, "setup_primary", ptc_ui_setup_primary_rect()) ||
@@ -83,7 +86,8 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
     for (int i = 0; i < 8; ++i) {
         char key[24];
         PtcUiRect rect = m->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_today_card_rect(i) :
-            (m->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_plan_card_rect(i) : ptc_ui_settings_card_rect(i));
+            (m->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_plan_card_rect(i) :
+             (m->parent_page == PTC_UI_PARENT_SUPPORT ? ptc_ui_support_card_rect(i) : ptc_ui_settings_card_rect(i)));
         snprintf(key, sizeof(key), "card_%d", i);
         if (!ptc_eden_target(out, size, &used, key, rect)) goto fail;
     }

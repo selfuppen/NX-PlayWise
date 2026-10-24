@@ -619,6 +619,24 @@ int main(void)
                   "Eden mode input target is derived from production layout");
         }
         cJSON_Delete(json);
+        model.parent_page = PTC_UI_PARENT_SUPPORT;
+        model.disable_flag_present = true;
+        model.recovery_active = false;
+        model.diagnostic_status = PTC_UI_DIAGNOSTIC_SUCCESS;
+        check(ptc_eden_format_ui(&model, text, sizeof(text)), "support observation formats");
+        json = cJSON_Parse(text);
+        check(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "disable_flag_present")) &&
+              cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "recovery_active")) &&
+              cJSON_GetObjectItemCaseSensitive(json, "diagnostic_status")->valueint == PTC_UI_DIAGNOSTIC_SUCCESS,
+              "support observation exposes typed recovery and local diagnostic state");
+        {
+            cJSON *target = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json, "targets"), "card_3");
+            PtcUiRect rect = ptc_ui_support_card_rect(3);
+            check(cJSON_GetArrayItem(target, 0)->valueint == rect.x + rect.w / 2 &&
+                  cJSON_GetArrayItem(target, 1)->valueint == rect.y + rect.h / 2,
+                  "support recovery target uses its own production layout");
+        }
+        cJSON_Delete(json);
         check(!ptc_eden_format_ui(&model, small, sizeof(small)) && small[0] == '\0',
               "Eden observation never publishes truncated JSON");
         check(!ptc_eden_format_ui(NULL, text, sizeof(text)), "Eden observation rejects missing model");

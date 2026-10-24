@@ -28,7 +28,7 @@ void ptc_eden_observe_input(bool active)
 
 void ptc_eden_observe_ui(const PtcUiModel *model)
 {
-    static uint64_t instance, last_tick, sequence;
+    static uint64_t instance, last_tick, sequence, stream_bytes;
     uint64_t tick = svcGetSystemTick();
     char ui[8192], text[8704];
     int n;
@@ -45,9 +45,14 @@ void ptc_eden_observe_ui(const PtcUiModel *model)
         PLAYWISE_BUILD_RELEASE_ID, (unsigned long long)instance,
         (unsigned long long)++sequence, (unsigned long long)tick,
         (unsigned long long)eden_input.sequence, eden_input.active ? "true" : "false", ui);
-    if (n > 0 && (size_t)n < sizeof(text))
-        (void)eden_observe_storage->vtable->write_text_atomic(eden_observe_storage,
-            PLAYWISE_EDEN_SD_ROOT "/support/automation-ui.json", text);
+    if (n > 0 && (size_t)n < sizeof(text) && stream_bytes + (uint64_t)n + 1 <= 128ULL * 1024 * 1024) {
+        /* Host readers can overlap the emulator's remove/rename publication.
+           A bounded test run retains complete newline-delimited observations
+           without replacing a path that the host is currently reading. */
+        if (eden_observe_storage->vtable->append_line(eden_observe_storage,
+                PLAYWISE_EDEN_SD_ROOT "/support/automation-ui.jsonl", text))
+            stream_bytes += (uint64_t)n + 1;
+    }
 }
 
 /* The emulator has no reliable time service wrapper for the sysmodule path, but

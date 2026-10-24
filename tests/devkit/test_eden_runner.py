@@ -17,6 +17,9 @@ from tools.automation.eden_runner import (
     open_shared_read, read_observation_file,
     scenario_names,
     verify_input_evidence,
+    verify_capture_readiness,
+    read_observation_stream,
+    verify_observation_streams,
 )
 
 
@@ -232,6 +235,92 @@ def test_main_suite_and_fail_closed() -> None:
         rejected(lambda: verify(root))
 
 
+def test_support_suite_evidence_gates() -> None:
+    from copy import deepcopy
+    from tools.automation.eden_support_flow import (
+        SUPPORT_SCENARIOS, verify_diagnostic, verify_restored_status, verify_support,
+    )
+    assert scenario_names("support") == SUPPORT_SCENARIOS
+    assert len(set(SUPPORT_SCENARIOS)) == 6 and "pin_wrong" not in SUPPORT_SCENARIOS
+    diagnostic = {"version": 1, "redaction": "credentials-auth-codes-and-nonces-omitted",
+                  "runtime_snapshot": {"status_loaded": True, "disable_flag_present": True, "status_age_seconds": 0}}
+    verify_diagnostic(diagnostic, True)
+    rejected(lambda: verify_diagnostic(diagnostic, False))
+    diagnostic["config.json"] = {"nested": [{"grant_secret": "private"}]}
+    rejected(lambda: verify_diagnostic(diagnostic, True))
+    baseline = {"state": {"limited_today": 1, "blocked_today": 0, "unrestricted_today": 0,
+                          "play_timer_enabled": 1, "remaining_minutes": 90, "played_minutes": 30}}
+    restored = {"status": "ok", "setup": {"phase": "restored", "disable_flag_present": True, "recovery_active": False},
+                "state": {**baseline["state"], "remaining_available": True, "played_minutes_available": True}}
+    verify_restored_status(restored, baseline)
+    changed = deepcopy(restored)
+    changed["state"]["remaining_minutes"] = 120
+    rejected(lambda: verify_restored_status(changed, baseline))
+    changed = deepcopy(restored)
+    changed["setup"]["recovery_active"] = True
+    rejected(lambda: verify_restored_status(changed, baseline))
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for name in SUPPORT_SCENARIOS[1:]:
+            save(root / f"assertions/{name}.json", {"passed": True, "checks": ["fixture"]})
+        rejected(lambda: verify_support(root))  # Positive flags cannot replace underlying files/receipts.
+
+
+def test_post_screenshot_neutral_progress() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        cached = {"instance": "a", "sequence": 10, "input_sequence": 20, "input_active": False, "ui": {"waiting": False}}
+        first = {**cached, "sequence": 11, "input_sequence": 21}
+        second = {**cached, "sequence": 12, "input_sequence": 22}
+        with patch.object(suite, "observe", side_effect=[cached, cached, first, first, second]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            suite.wait_capture_resume("test")
+        save(root / "checkpoints/test.json", {"screenshot_call": 1})
+        verify_capture_readiness(root)
+        # A screenshot followed only by cached/identical neutral data is not readiness.
+        path = root / "capture-readiness/test-2.json"
+        path.write_text(json.dumps(first), encoding="utf-8")
+        rejected(lambda: verify_capture_readiness(root))
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        with patch.object(suite, "observe", side_effect=[cached, {**first, "instance": "b"}]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            rejected(lambda: suite.wait_capture_resume("wrong-instance"))
+
+
+def test_observation_stream_partial_tail() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "observations.jsonl"
+        path.write_bytes(b'{"sequence":1}\n{"sequence":2')
+        assert read_observation_stream(path)[0] == {"sequence": 1}
+        with path.open("ab") as stream:
+            stream.write(b'}\n')
+        assert read_observation_stream(path)[0] == {"sequence": 2}
+        # Read a bounded tail even when the first byte of that tail is inside
+        # an old record, and reject a corrupt completed last record.
+        path.write_bytes(b'x' * 100000 + b'\n{"sequence":3}\n')
+        assert read_observation_stream(path)[0] == {"sequence": 3}
+        with path.open("ab") as stream:
+            stream.write(b'not-json\n')
+        rejected(lambda: read_observation_stream(path))
+        path.write_bytes(b'{"sequence":4')
+        rejected(lambda: read_observation_stream(path))
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        value = {"instance": "a", "sequence": 1, "ui": {"view": 0}}
+        save(root / "input-samples/001-sample.json", value)
+        path = root / "app-final/support/automation-ui.jsonl"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(value) + '\n{"unfinished":', encoding="utf-8")
+        verify_observation_streams(root)
+        path.write_text(json.dumps({**value, "ui": {"view": 1}}) + '\n', encoding="utf-8")
+        rejected(lambda: verify_observation_streams(root))
+        path.write_text(json.dumps({**value, "sequence": 2}) + '\n', encoding="utf-8")
+        rejected(lambda: verify_observation_streams(root))
+
+
 def test_preview_cancel_does_not_exit_child() -> None:
     from tools.automation.eden_main_flow import MainFlow
     class Fake(MainFlow):
@@ -361,6 +450,9 @@ def main() -> None:
     test_actual_profile_paths_gate_input()
     test_report_roundtrip_and_tamper()
     test_main_suite_and_fail_closed()
+    test_support_suite_evidence_gates()
+    test_post_screenshot_neutral_progress()
+    test_observation_stream_partial_tail()
     test_preview_cancel_does_not_exit_child()
     test_stale_observation_waits_without_input()
     test_sampled_input_releases_once_on_failure()

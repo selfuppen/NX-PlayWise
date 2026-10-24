@@ -29,7 +29,10 @@ SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
-    require(suite in ("smoke", "main"), "unknown suite")
+    require(suite in ("smoke", "main", "support"), "unknown suite")
+    if suite == "support":
+        from tools.automation.eden_support_flow import SUPPORT_SCENARIOS
+        return SUPPORT_SCENARIOS
     if suite == "main":
         from tools.automation.eden_main_flow import MAIN_SCENARIOS
         return SCENARIOS + MAIN_SCENARIOS
@@ -102,6 +105,19 @@ def read_observation_file(path: Path) -> tuple[dict, float]:
         modified = os.fstat(source.fileno()).st_mtime
     require(len(raw) <= 65536, "UI observation exceeds bounded size")
     return decode(raw.decode("utf-8-sig")), modified
+
+
+def read_observation_stream(path: Path) -> tuple[dict, float]:
+    with open_shared_read(path) as source:
+        info = os.fstat(source.fileno())
+        source.seek(max(0, info.st_size - 65536))
+        raw = source.read(65536)
+    # An unfinished trailing record is not a published observation. The
+    # preceding complete line must parse; never search backwards past bad JSON.
+    if b"\n" not in raw:
+        raise ObservationPending("no complete observation stream record")
+    complete = raw.rsplit(b"\n", 1)[0].rsplit(b"\n", 1)[-1]
+    return decode(complete.decode("utf-8-sig")), info.st_mtime
 
 
 def save(path: Path, value: object) -> None:
@@ -343,8 +359,10 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     shutil.copy2(args.manifest, artifacts / "manifest.json")
     for name in ("eden_runner.py", "eden_mcp_bridge.py"):
         shutil.copy2(Path(__file__).with_name(name), artifacts / name)
-    if args.suite == "main":
+    if args.suite in ("main", "support"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
+    if args.suite == "support":
+        shutil.copy2(Path(__file__).with_name("eden_support_flow.py"), artifacts / "eden_support_flow.py")
     config_text = "[portable]\n" + "\n".join(f"{k} = {json.dumps(v)}" for k, v in {
         "root": runtime.as_posix(), "executable": "eden.exe", "profile_template": "user",
         "session_root": (runtime / "sessions").as_posix(),
@@ -381,13 +399,14 @@ class Suite:
 
     def observe(self) -> dict:
         self.bounded()
-        path = self.app / "support/automation-ui.json"
+        stream = self.app / "support/automation-ui.jsonl"
+        path = stream if stream.is_file() else self.app / "support/automation-ui.json"
         # Windows may briefly deny reads while Eden atomically replaces the
         # snapshot. Retry this read only; never replay an input or transaction.
         deadline = min(self.deadline, time.monotonic() + 1)
         while True:
             try:
-                value, modified = read_observation_file(path)
+                value, modified = read_observation_stream(path) if path == stream else read_observation_file(path)
                 break
             except OSError:
                 if time.monotonic() >= deadline:
@@ -466,10 +485,44 @@ class Suite:
         self.client.tool("eden_take_screenshot")
         value["screenshot_call"] = self.client.counter
         save(self.output / f"checkpoints/{name}.json", value)
+        self.wait_capture_resume(name)
+
+    def wait_capture_resume(self, name: str) -> None:
+        # Screenshot RPC completion does not prove the guest resumed its HID
+        # loop. Never reuse a cached neutral sample from before the capture.
+        deadline = min(self.deadline, time.monotonic() + 20)
+        baseline = None
+        ready = 0
+        while time.monotonic() < deadline:
+            try:
+                value = self.observe()
+                if baseline is not None:
+                    require(value["instance"] == baseline["instance"], "instance changed after screenshot")
+                    if (value["input_sequence"] > baseline["input_sequence"] and
+                            value["sequence"] > baseline["sequence"] and value["input_active"] is False and
+                            value["ui"]["waiting"] is False):
+                        ready += 1
+                        save(self.output / f"capture-readiness/{name}-{ready}.json", value)
+                        if ready == 2:
+                            return
+                        baseline = value
+                else:
+                    baseline = value
+                    save(self.output / f"capture-readiness/{name}-baseline.json", value)
+            except (OSError, ValueError, ObservationPending):
+                pass
+            time.sleep(0.05)
+        raise GateError("guest did not resume two neutral heartbeats after screenshot; no dependent input")
 
     def start(self) -> None:
         self.bounded()
         observation = self.app / "support/automation-ui.json"
+        stream = self.app / "support/automation-ui.jsonl"
+        if stream.is_file():
+            target = self.output / f"ui-streams/{uuid.uuid4().hex}.jsonl"
+            target.parent.mkdir(exist_ok=True)
+            shutil.copy2(stream, target)
+            stream.unlink()
         observation.unlink(missing_ok=True)  # One owned transient snapshot, while emulator is stopped.
         remaining = self.deadline - time.monotonic()
         status = self.client.tool("eden_start_game", {"base_path": str(self.output / "artifacts/pctc-eden.nro"),
@@ -701,6 +754,14 @@ def verify(output: Path) -> dict:
             healthy_exit(row["pid"], row["reply"], row["events"])
         if summary.get("input_sampling_version") == 1:
             verify_input_evidence(output, summary["actions"])
+        if summary.get("capture_readiness_version") == 1:
+            verify_capture_readiness(output)
+        if (output / "app-final/support/automation-ui.jsonl").is_file():
+            verify_observation_streams(output)
+        if summary.get("suite") == "support":
+            from tools.automation.eden_support_flow import verify_support
+            verify_support(output)
+            return summary
         require(read(output / "checkpoints/setup.json")["ui"]["view"] == 1 and
                 read(output / "checkpoints/reopen.json")["ui"]["view"] == 0 and
                 read(output / "checkpoints/pin_correct_parent.json")["ui"]["view"] == 1,
@@ -723,6 +784,43 @@ def verify(output: Path) -> dict:
         ledger = output / "app-final/ledger/used_nonces.jsonl"
         require(digest(ledger) == read(output / "assertions/grant.json")["ledger_sha256"], "nonce evidence differs")
     return summary
+
+
+def verify_observation_streams(output: Path) -> None:
+    samples = {}
+    for path in (output / "input-samples").glob("*.json"):
+        value = read(path)
+        key = (value["instance"], value["sequence"])
+        require(key not in samples or samples[key] == value, "same observation sequence has different input samples")
+        samples[key] = value
+    found = set()
+    streams = list((output / "ui-streams").glob("*.jsonl")) + [output / "app-final/support/automation-ui.jsonl"]
+    for path in streams:
+        with path.open("rb") as source:
+            while raw := source.readline(65537):
+                require(len(raw) <= 65536, "observation stream record exceeds bound")
+                if not raw.endswith(b"\n"):
+                    require(source.read(1) == b"", "observation stream record is truncated before EOF")
+                    break  # Preserve, but never accept, an interrupted trailing append.
+                value = decode(raw.decode("utf-8"))
+                key = (value["instance"], value["sequence"])
+                if key in samples:
+                    require(value == samples[key], "input evidence differs from original observation stream")
+                    found.add(key)
+    require(found == samples.keys(), "input samples absent from original observation streams")
+
+
+def verify_capture_readiness(output: Path) -> None:
+    for point in (output / "checkpoints").glob("*.json"):
+        baseline = read(output / f"capture-readiness/{point.stem}-baseline.json")
+        for index in (1, 2):
+            value = read(output / f"capture-readiness/{point.stem}-{index}.json")
+            require(value["instance"] == baseline["instance"] and
+                    type(value["sequence"]) is int and value["sequence"] > baseline["sequence"] and
+                    type(value["input_sequence"]) is int and value["input_sequence"] > baseline["input_sequence"] and
+                    value["input_active"] is False and value["ui"]["waiting"] is False,
+                    "post-screenshot neutral heartbeat evidence differs")
+            baseline = value
 
 
 def verify_input_evidence(output: Path, actions: int) -> None:
@@ -768,6 +866,11 @@ def run(args: argparse.Namespace) -> int:
             class MainSuite(MainFlow, Suite):
                 pass
             suite_class = MainSuite
+        elif args.suite == "support":
+            from tools.automation.eden_support_flow import SupportFlow
+            class SupportSuite(SupportFlow, Suite):
+                pass
+            suite_class = SupportSuite
         suite = suite_class(client, output, runtime, identity, args.timeout, args.suite)
         suite.execute()
     except Exception as exc:
@@ -792,7 +895,8 @@ def run(args: argparse.Namespace) -> int:
     save(output / "profile-settings-final.json",
          profile_settings((runtime / "user/config/qt-config.ini").read_text(encoding="utf-8-sig")))
     app = runtime / "user" / APP
-    for name in ("config.json", "rules.json", "state.json", "build.json", "ledger/used_nonces.jsonl", "activity/history.jsonl"):
+    for name in ("config.json", "rules.json", "state.json", "build.json", "ledger/used_nonces.jsonl", "activity/history.jsonl",
+                 "setup.json", "flags/disable.flag", "backups/install_pctl_snapshot.json", "support/automation-ui.jsonl"):
         path = app / name
         if path.is_file():
             target = output / "app-final" / name
@@ -805,7 +909,7 @@ def run(args: argparse.Namespace) -> int:
     if not require_audit:
         errors.append("run contains Windows crash events or audit unavailable")
     summary = {"schema_version": 1, "overall": "pass" if not errors else "partial",
-               "input_sampling_version": 1, "actions": suite.step if suite else 0,
+               "input_sampling_version": 1, "capture_readiness_version": 1, "actions": suite.step if suite else 0,
                "suite": args.suite,
                "scenarios": suite.results if suite else {name: {"status": "not_executed"} for name in scenario_names(args.suite)},
                "health": suite.health if suite else [], "errors": errors,
@@ -833,8 +937,8 @@ def main() -> int:
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--suite", choices=("smoke", "main"), default="smoke",
-                      help="main adds plan/buffer/restrictions/backup and business persistence")
+    live.add_argument("--suite", choices=("smoke", "main", "support"), default="smoke",
+                      help="main covers core journeys; support covers diagnostics/disable/installation restore")
     live.add_argument("--timeout", type=int, default=300, choices=range(60, 1201), metavar="60..1200")
     offline = commands.add_parser("verify")
     offline.add_argument("--run", type=Path, required=True)

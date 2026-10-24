@@ -23,6 +23,10 @@ python -X utf8 tools/automation/eden_runner.py verify --run "device-reports/eden
 
 主流程在相同run命令追加`--suite main --timeout 1200`，仍使用全新输出目录；不要接着在原smoke目录补写新成绩。
 
+支持与恢复专项使用`--suite support --timeout 600`，单独创建隔离profile，依次执行首次设置、正常兑换前置、诊断导出、紧急停用、完整安装恢复和恢复后重开，共6项。它复用正常输入/回执门禁，不重复PIN错误等入口烟测；不计入main的17项。紧急停用是本地标记写入，须核对后台status已观察到该标记；完整恢复才以唯一`restore_install_snapshot`回执核对。专项要求两次健康进程退出，动作上限180，超时不重发。
+
+Eden重开会重建进程内PCTL stub；`restored + disable.flag`必须从原安装快照重建模拟设置及timer，不能重套旧`last_enforced`额度。快照不可读或模拟恢复失败时拒绝初始化，不降级到旧规则。Host覆盖timer开/关、设置镜像一致及失败不放行；这些均不证明真实主机重启或PCTL硬件生命周期。
+
 每次启动的Eden就绪等待最多60秒；MCP还会在创建进程前准备profile/预检，因此启动RPC的总预算为150秒，两者均受suite剩余期限约束。只到control_ready或超时仍禁止输入，不自动重启重试。
 
 页面等待允许在原20秒内等有效身份的旧快照出现新心跳；四秒新鲜度门槛不变，没有新鲜快照不发送输入。身份错误和未来文件时间直接停止，输入前的独立检查仍保留。此等待只重读观察，不重发操作。
@@ -55,9 +59,13 @@ Windows快照读取以FILE_SHARE_READ／WRITE／DELETE打开短时句柄，从�
 
 每个逻辑动作最多一对down/up，main的500次动作预算对应最多1000次原生输入调用，释放后保留150毫秒中立间隔。短脉冲无回执的旧批次保留未知，不在原批补发；采样确认也不能证明真机短按体验。
 
+截图RPC返回后先重新取观察基线，再最多等待20秒，要求同实例先后出现两份序号和输入序号均前进的中立、非waiting观察，才允许后续输入。`capture-readiness/`保留基线和两份原件，`capture_readiness_version:1`报告须离线核对；旧缓存中立样本不能证明截图后已恢复。该等待不持有输入，不延长down/up各5秒采样上限，也不自动重发。
+
 模拟 PCTL 的加时读路径在实际读取时推进累计时间并采样日期／时间戳，避免把页面轮询缓存冒充新鲜加时读数；生产核心的新鲜度门禁保持不变。它仍然只是模拟累计使用量。
 
-仅 `PLAYWISE_EDEN` 编译；由测试 profile 的 `support/automation-observe.flag` 显式启用。绘制路径最多每秒10次写入 `support/automation-ui.json`，不提交请求、不读取动作指令、不改认证或业务状态。快照失败不影响产品流程，执行器因缺少/过期快照停止输入。
+仅 `PLAYWISE_EDEN` 编译；由测试 profile 的 `support/automation-observe.flag` 显式启用。绘制路径最多每秒10次追加一条JSON到 `support/automation-ui.jsonl`，每个NRO实例最多追加128MiB，达到上限后停止观察发布，执行器因缺少新心跳停止。它不提交请求、不读取动作指令、不改认证或业务状态。仅供旧NRO兼容的`automation-ui.json`仍可读取；新发布不反复删除/替换观察路径，避免与Host读句柄竞争导致只剩`.write`临时文件。
+
+Host只读取流尾最多64KiB，选择最后一条以换行结束的完整JSON；未完成尾行不接受，已完成的损坏行直接拒绝，不向前寻找能解析的旧行。健康关闭后重开前，将上一实例流原样归档到`ui-streams/`再清理私有profile中的旧流；最终流保存到`app-final/support/`。离线核验逐条读取原始流，要求每份输入采样都存在相同实例/序号及完整内容的原记录。观察发布失败不影响产品流程；真实SD原子队列仍使用原有实现，本改动不证明或改变其语义。
 
 外壳：`schema_version:1`、内嵌 `release_id`、本次 NRO `instance`（十六进制 tick 起点）、正整数 `sequence`、十进制字符串 `tick`、`ui` 对象。instance 仅用于测试进程观察，不是主机 boot 身份。
 
@@ -66,6 +74,8 @@ ui 白名单：view、parent_page、overlay、setup_step、setup_active、waitin
 不导出 PIN、加时码、配对密钥、弹窗自由文本或可复用认证材料。长度只用于等待每次独立输入处理完成；不能作为认证成功证明，仍核对进入页面、认证计数及对应业务回执。
 
 主流程扩展同一只读schema v1的数字/布尔白名单：plan_page、overlay_selection、editor_index、weekly_dirty、confirm_hold_required、config_groups、config_backup_ready、daily_buffer_available/claimed、daily_restriction_active、dock_restriction_active、bedtime_active/skipped、eye_resting、restricted_now、unrestricted_today和today_minutes。targets另提供页签、对应页面卡片、周编辑、时长字段、备份字段、电视页及规则总开关的生产布局中心；时长键盘使用其专属生产几何。观察不接受动作指令，不赋予认证。formatter空间不足不发布截断JSON，Host测试覆盖类型、布局中心、敏感文本排除与失败路径。
+
+支持专项增加`disable_flag_present`、`recovery_active`两个布尔值和`diagnostic_status`整数（0空闲、1导出中、2成功、3失败，来自`PtcUiDiagnosticStatus`）。支持页的`card_*`中心来自`ptc_ui_support_card_rect`，不能沿用设置页坐标；不导出诊断路径或自由文本。
 
 采样能力位于外壳：`input_sampling_version:1`、正整数`input_sequence`、布尔`input_active`。序号饱和而不回绕；新实例由原instance区别。采样状态只来自正常HID读取，观察路径不处理命令。
 

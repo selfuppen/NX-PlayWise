@@ -1477,6 +1477,43 @@ static void test_eden_timer_restart(void)
     free(f.mem);
 }
 
+static void test_eden_restored_restart(void)
+{
+    for (unsigned timer = 0; timer < 2; ++timer) {
+        Fixture f;
+        PtcPctlSettingsSnapshot original, observed;
+        uint64_t carry = 0;
+        init_fixture(&f);
+        f.pctl.status.play_timer_enabled = timer != 0;
+        expect(f.pctl.pctl.vtable->snapshot_settings(&f.pctl.pctl, &original) == PTC_ERR_OK &&
+            save_install_snapshot(&f.core, &original, f.clock.snapshot.unix_seconds),
+            "Eden restored restart retains an installation snapshot");
+        request(&f, "eden-set-150", "set_today_limit", "{\"minutes\":150}");
+        expect(result_has(&f, "eden-set-150", "\"status\":\"ok\""), "Eden restart normal policy seed succeeds");
+        request(&f, "eden-install-restore", "restore_install_snapshot", "{}");
+        expect(result_has(&f, "eden-install-restore", "\"status\":\"ok\""), "Eden restart installation restore succeeds");
+        ptc_pctl_stub_init(&f.pctl);
+        /* A policy apply must not be used to reconstruct a restored stub. */
+        f.pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+        expect(ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry) &&
+            f.pctl.configured_minutes == 120 && f.pctl.status.play_timer_enabled == (timer != 0),
+            "Eden restored restart ignores the stale 150-minute policy and restores timer lifecycle");
+        expect(f.pctl.pctl.vtable->snapshot_settings(&f.pctl.pctl, &observed) == PTC_ERR_OK &&
+            ptc_pctl_settings_snapshot_equal(&original, &observed),
+            "Eden restored restart reconstructs the original stub settings image");
+        f.mem->fail_read_path_contains = "install_pctl_snapshot.json";
+        expect(!ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry),
+            "Eden restored restart rejects unreadable snapshot without policy fallback");
+        f.mem->fail_read_path_contains = NULL;
+        f.pctl.restore_error = PTC_ERR_PCTL_RESTORE_FAILED;
+        expect(!ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry),
+            "Eden restored restart rejects a failed restore without policy fallback");
+        expect(f.mem->storage.vtable->exists(&f.mem->storage, "app/flags/disable.flag"),
+            "Eden failed initialization never clears the disabled state");
+        free(f.mem);
+    }
+}
+
 static void direct_sample(Fixture *f, uint64_t ns, uint32_t seconds)
 {
     f->clock.snapshot.unix_seconds += seconds;
@@ -1934,6 +1971,7 @@ int ptc_test_control_safety(void)
     test_direct_usage_history();
     test_dock_midnight_allowance_change();
     test_eden_timer_restart();
+    test_eden_restored_restart();
     test_eden_grant_sampling();
     test_persisted_eden_mode();
     test_dock_policy();
