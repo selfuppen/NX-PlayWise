@@ -1,4 +1,5 @@
 #include "nro_app_internal.h"
+#include "eden_observe.h"
 
 static bool keyboard_input_initial(
     const char *header,
@@ -201,6 +202,9 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
             plus_samples = 0;
             plus_was_held = plus_keyboard = false;
         }
+#ifdef PLAYWISE_EDEN
+        ptc_eden_observe_input(buttons_held != 0 || touch_active);
+#endif
         left_digit = ptc_ui_pin_digit_from_vector(left.x, left.y, STICK_DEADZONE);
         right_digit = ptc_ui_pin_digit_from_vector(right.x, right.y, STICK_DEADZONE);
         if (left_digit < 0) left_latched = -1;

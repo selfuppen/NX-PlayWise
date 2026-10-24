@@ -28,8 +28,20 @@ APP = Path("sdmc/switch/playwise-eden")
 SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_success", "code_replay")
 
 
+def scenario_names(suite: str) -> tuple[str, ...]:
+    require(suite in ("smoke", "main"), "unknown suite")
+    if suite == "main":
+        from tools.automation.eden_main_flow import MAIN_SCENARIOS
+        return SCENARIOS + MAIN_SCENARIOS
+    return SCENARIOS
+
+
 class GateError(RuntimeError):
     pass
+
+
+class ObservationPending(GateError):
+    """A valid observation needs a new heartbeat before any input is allowed."""
 
 
 def require(ok: bool, message: str) -> None:
@@ -304,6 +316,25 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     rules = {"version": 1, "week": [{"mode": "limit", "minutes": 120} for _ in range(7)],
              "today_override_present": False, "today_override_day_index": 0,
              "today_override_mode": "limit", "today_override_minutes": 120}
+    if args.suite == "main":
+        rules.update(version=2, eye_care_enabled=False, eye_care_play_minutes=1, eye_care_rest_minutes=1,
+                     holiday_enabled=False, holiday_mode="limit", holiday_minutes=90,
+                     bedtime_enabled=False, bedtime_calendar_enabled=False,
+                     bedtime_week=[{"enabled": True, "start_minute": 1, "end_minute": 0} for _ in range(7)],
+                     bedtime_holiday_mode="inherit", bedtime_makeup_mode="inherit", bedtime_scheduled_present=False)
+        year = datetime.now(timezone.utc).year
+        calendar = {"format_version": 1, "region_id": "EDEN", "region_name": "Eden test year",
+                    "year": year, "holidays": [{"name": "Test holiday", "from": f"{year}-01-01", "to": f"{year}-12-31"}],
+                    "workdays": []}
+        calendar_text = json.dumps(calendar, ensure_ascii=False)
+        calendar_hash = hashlib.sha256(calendar_text.encode("utf-8")).hexdigest()
+        entry = {"region_id": "EDEN", "region_name": "Eden test year", "year": year, "sha256": calendar_hash}
+        library = app / f"calendars/library/EDEN-{year}-{calendar_hash}.json"
+        library.parent.mkdir(parents=True, exist_ok=True)
+        library.write_text(calendar_text, encoding="utf-8")
+        save(app / "calendars/catalog.json", {"entries": [entry]})
+        save(app / "calendars/active.json", {"option_id": "EDEN", "entries": [entry]})
+        save(output / "fixtures/calendar.json", calendar)
     save(app / "rules.json", rules)
     save(output / "fixtures/rules.json", rules)
     artifacts = output / "artifacts"
@@ -312,6 +343,8 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     shutil.copy2(args.manifest, artifacts / "manifest.json")
     for name in ("eden_runner.py", "eden_mcp_bridge.py"):
         shutil.copy2(Path(__file__).with_name(name), artifacts / name)
+    if args.suite == "main":
+        shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
     config_text = "[portable]\n" + "\n".join(f"{k} = {json.dumps(v)}" for k, v in {
         "root": runtime.as_posix(), "executable": "eden.exe", "profile_template": "user",
         "session_root": (runtime / "sessions").as_posix(),
@@ -331,17 +364,20 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
 
 
 class Suite:
-    def __init__(self, client: McpClient, output: Path, runtime: Path, identity: dict, seconds: int) -> None:
+    def __init__(self, client: McpClient, output: Path, runtime: Path, identity: dict, seconds: int,
+                 suite: str = "smoke") -> None:
         self.client, self.output, self.runtime, self.identity = client, output, runtime, identity
         self.app = runtime / "user" / APP
         self.deadline = time.monotonic() + seconds
         self.pid: int | None = None
         self.step = 0
-        self.results = {name: {"status": "not_executed"} for name in SCENARIOS}
+        self.suite = suite
+        self.results = {name: {"status": "not_executed"} for name in scenario_names(suite)}
         self.health: list[dict] = []
 
     def bounded(self) -> None:
-        require(time.monotonic() < self.deadline and self.step < 180, "suite time/action limit reached")
+        require(time.monotonic() < self.deadline and self.step < (500 if self.suite == "main" else 180),
+                "suite time/action limit reached")
 
     def observe(self) -> dict:
         self.bounded()
@@ -358,8 +394,10 @@ class Suite:
                     raise
                 time.sleep(0.02)
         validate_observation(value, self.identity["manifest"]["release_id"])
-        require(time.time() - modified < 4,
-                "UI observation heartbeat stale; input prohibited")
+        age = time.time() - modified
+        require(age >= 0, "UI observation timestamp is in the future; input prohibited")
+        if age >= 4:
+            raise ObservationPending("UI observation heartbeat stale; input prohibited")
         return value
 
     def wait_ui(self, **expected: object) -> dict:
@@ -370,38 +408,73 @@ class Suite:
                 if not value["ui"].get("overlay_animating", True) and all(value["ui"].get(key) == item for key, item in expected.items()):
                     save(self.output / f"observations/{self.step:03d}-{uuid.uuid4().hex[:8]}.json", value)
                     return value
-            except (OSError, ValueError):
+            except (OSError, ValueError, ObservationPending):
                 pass
             time.sleep(0.1)
         raise GateError(f"UI precondition timeout: {expected}; no dependent input")
 
-    def action(self, button: str | None = None, target: str | None = None) -> None:
+    def action(self, button: str | None = None, target: str | None = None, hold_ms: int = 200) -> None:
         self.bounded()
         healthy_launch(self.client.tool("eden_status"))
-        value = self.observe()
+        value = self.wait_input(False)
         self.step += 1
+        require(200 <= hold_ms <= 1400, "input hold exceeds bound")
+        name = "eden_press_button" if button else "eden_touch_screen"
         if button:
-            self.client.tool("eden_press_button", {"button": button, "hold_ms": 200})
+            arguments = {"button": button}
         else:
             geometry = value["ui"]["targets"]
             x, y = geometry[target]
-            self.client.tool("eden_touch_screen", {"x": x, "y": y, "duration_ms": 400,
-                             "source_width": geometry["width"], "source_height": geometry["height"]})
-        # Eden replies before its scheduled release. Allow both the pulse and
-        # a neutral interval to reach the slower guest; a missed input fails
-        # the following UI assertion and is never automatically repeated.
-        time.sleep(1.2)
+            arguments = {"x": x, "y": y, "source_width": geometry["width"], "source_height": geometry["height"]}
+        # One down, then one up even on failure. Tool acknowledgement is not
+        # guest sampling; the observer must see the active input and release.
+        pressed_at = time.monotonic()
+        try:
+            self.client.tool(name, {**arguments, "action": "down"})
+            sampled = self.wait_input(True, after=value)
+            if button:
+                remaining = hold_ms / 1000 if hold_ms >= 1000 else max(0, hold_ms / 1000 - (time.monotonic() - pressed_at))
+                time.sleep(remaining)
+        finally:
+            self.client.tool(name, {**arguments, "action": "up"})
+        self.wait_input(False, after=sampled)
+        time.sleep(0.15)
+
+    def wait_input(self, active: bool, after: dict | None = None) -> dict:
+        deadline = min(self.deadline, time.monotonic() + 5)
+        while time.monotonic() < deadline:
+            try:
+                value = self.observe()
+                require(type(value.get("input_sampling_version")) is int and value["input_sampling_version"] == 1 and
+                        type(value.get("input_sequence")) is int and value["input_sequence"] >= 0 and
+                        type(value.get("input_active")) is bool,
+                        "NRO lacks bounded input sampling; input prohibited")
+                if after:
+                    require(value["instance"] == after["instance"] and value["input_sequence"] >= after["input_sequence"],
+                            "input instance/sequence changed; input prohibited")
+                ready = after is not None or active or not value["ui"]["waiting"]
+                if ready and value["input_sequence"] > 0 and value["input_active"] is active and (not after or value["input_sequence"] > after["input_sequence"]):
+                    save(self.output / f"input-samples/{self.step:03d}-{uuid.uuid4().hex[:8]}.json", value)
+                    return value
+            except (OSError, ValueError, ObservationPending):
+                pass
+            time.sleep(0.05)
+        raise GateError("guest did not sample input/release within five seconds; no replay")
 
     def capture(self, name: str) -> None:
         value = self.observe()
         self.client.tool("eden_take_screenshot")
+        value["screenshot_call"] = self.client.counter
         save(self.output / f"checkpoints/{name}.json", value)
 
     def start(self) -> None:
+        self.bounded()
         observation = self.app / "support/automation-ui.json"
         observation.unlink(missing_ok=True)  # One owned transient snapshot, while emulator is stopped.
+        remaining = self.deadline - time.monotonic()
         status = self.client.tool("eden_start_game", {"base_path": str(self.output / "artifacts/pctc-eden.nro"),
-                                  "wait_until": "game_ready", "timeout_s": 35}, timeout=45)
+                                  "wait_until": "game_ready", "timeout_s": max(1, min(60, int(remaining)))},
+                                  timeout=min(150, remaining))
         healthy_launch(status)
         self.pid = status["pid"]
         require(Path(status.get("effective_profile_root", "")).resolve() == (self.runtime / "user").resolve(),
@@ -443,10 +516,16 @@ class Suite:
                             found.append(receipt(path, kind, before))
                     except (OSError, ValueError):
                         pass
-            require(len(found) <= 1, "ambiguous business receipts; stop without replay")
+            require(kind == "status" or len(found) <= 1, "ambiguous business receipts; stop without replay")
             if found:
-                value = found[0]
-                save(self.output / f"receipts/{value['request_id']}.json", value)
+                if kind == "status":
+                    # Automatic UI polling can overlap the explicit read. All
+                    # are read-only: retain each, reject errors, select newest.
+                    require(all(row.get("status") == "ok" and type(row.get("completed_at")) is int
+                                and row["completed_at"] >= 0 for row in found), "invalid read-only status receipt")
+                for row in found:
+                    save(self.output / f"receipts/{row['request_id']}.json", row)
+                value = max(found, key=lambda row: (row["completed_at"], row["request_id"])) if kind == "status" else found[0]
                 return value
             time.sleep(0.1)
         raise GateError(f"{kind} receipt timeout; outcome unknown, no resubmission")
@@ -585,7 +664,7 @@ class Suite:
 
     def execute(self) -> None:
         self.start()
-        for name in SCENARIOS:
+        for name in scenario_names(self.suite):
             self.run_case(name, getattr(self, name))
 
 
@@ -613,12 +692,15 @@ def verify(output: Path) -> dict:
         require(path.stat().st_size == row["bytes"] and digest(path) == row["sha256"], "evidence bytes changed")
     require("summary.json" in seen and "identity.json" in seen, "evidence identity/summary missing")
     summary = read(output / "summary.json")
-    require(summary.get("schema_version") == 1 and set(summary["scenarios"]) == set(SCENARIOS), "invalid summary schema")
+    names = scenario_names(summary.get("suite", "smoke"))
+    require(summary.get("schema_version") == 1 and set(summary["scenarios"]) == set(names), "invalid summary schema")
     if summary["overall"] == "pass":
         require(all(row["status"] == "pass" for row in summary["scenarios"].values()) and not summary["errors"] and
-                len(summary["health"]) == 2, "incomplete suite cannot pass")
+                len(summary["health"]) == (3 if summary.get("suite") == "main" else 2), "incomplete suite cannot pass")
         for row in summary["health"]:
             healthy_exit(row["pid"], row["reply"], row["events"])
+        if summary.get("input_sampling_version") == 1:
+            verify_input_evidence(output, summary["actions"])
         require(read(output / "checkpoints/setup.json")["ui"]["view"] == 1 and
                 read(output / "checkpoints/reopen.json")["ui"]["view"] == 0 and
                 read(output / "checkpoints/pin_correct_parent.json")["ui"]["view"] == 1,
@@ -632,11 +714,37 @@ def verify(output: Path) -> dict:
         require(sum(row.get("type") == "offline_code" and row.get("status") == "ok" for row in rows) == 1 and
                 sum(row.get("type") == "preview_offline_code" and row.get("error", {}).get("code") == 206 for row in rows) == 1,
                 "successful redemption/replay rejection evidence incomplete")
-        require(read(output / "app-final/rules.json")["today_override_minutes"] == 150,
-                "persisted allowance assertion differs")
+        if summary.get("suite") == "main":
+            from tools.automation.eden_main_flow import verify_main
+            verify_main(output)
+        else:
+            require(read(output / "app-final/rules.json")["today_override_minutes"] == 150,
+                    "persisted allowance assertion differs")
         ledger = output / "app-final/ledger/used_nonces.jsonl"
         require(digest(ledger) == read(output / "assertions/grant.json")["ledger_sha256"], "nonce evidence differs")
     return summary
+
+
+def verify_input_evidence(output: Path, actions: int) -> None:
+    require(type(actions) is int and 0 < actions <= 500, "invalid action count")
+    calls = [read(p)["params"] for p in sorted((output / "calls").glob("*.json"))]
+    inputs = [p for p in calls if p.get("name") in ("eden_press_button", "eden_touch_screen")]
+    require(len(inputs) == 2 * actions, "input down/up count differs")
+    for down, up in zip(inputs[::2], inputs[1::2]):
+        a, b = dict(down["arguments"]), dict(up["arguments"])
+        require(a.pop("action") == "down" and b.pop("action") == "up" and a == b and
+                down["name"] == up["name"], "unpaired/replayed input")
+    groups: dict[int, list[dict]] = {}
+    for path in (output / "input-samples").glob("*.json"):
+        value = read(path)
+        require(type(value.get("input_active")) is bool and type(value.get("input_sequence")) is int and
+                value["input_sequence"] > 0, "invalid sampled input evidence")
+        groups.setdefault(int(path.name.split("-", 1)[0]), []).append(value)
+    for step in range(1, actions + 1):
+        rows = groups.get(step, [])
+        active = [r for r in rows if r["input_active"]]
+        require(len(active) == 1 and any(not r["input_active"] and r["instance"] == active[0]["instance"] and
+                r["input_sequence"] > active[0]["input_sequence"] for r in rows), "sampled input lacks later neutral release")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -654,7 +762,13 @@ def run(args: argparse.Namespace) -> int:
     errors = []
     try:
         client = McpClient(command, output / "server-stderr.log", output)
-        suite = Suite(client, output, runtime, identity, args.timeout)
+        suite_class = Suite
+        if args.suite == "main":
+            from tools.automation.eden_main_flow import MainFlow
+            class MainSuite(MainFlow, Suite):
+                pass
+            suite_class = MainSuite
+        suite = suite_class(client, output, runtime, identity, args.timeout, args.suite)
         suite.execute()
     except Exception as exc:
         errors.append(str(exc))
@@ -691,7 +805,9 @@ def run(args: argparse.Namespace) -> int:
     if not require_audit:
         errors.append("run contains Windows crash events or audit unavailable")
     summary = {"schema_version": 1, "overall": "pass" if not errors else "partial",
-               "scenarios": suite.results if suite else {name: {"status": "not_executed"} for name in SCENARIOS},
+               "input_sampling_version": 1, "actions": suite.step if suite else 0,
+               "suite": args.suite,
+               "scenarios": suite.results if suite else {name: {"status": "not_executed"} for name in scenario_names(args.suite)},
                "health": suite.health if suite else [], "errors": errors,
                "scope": identity["scope"], "source_changes_do_not_qualify_real_device": True}
     seal(output, summary)
@@ -717,7 +833,9 @@ def main() -> int:
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--timeout", type=int, default=300, choices=range(60, 901), metavar="60..900")
+    live.add_argument("--suite", choices=("smoke", "main"), default="smoke",
+                      help="main adds plan/buffer/restrictions/backup and business persistence")
+    live.add_argument("--timeout", type=int, default=300, choices=range(60, 1201), metavar="60..1200")
     offline = commands.add_parser("verify")
     offline.add_argument("--run", type=Path, required=True)
     args = parser.parse_args()

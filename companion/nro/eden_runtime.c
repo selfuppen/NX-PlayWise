@@ -18,12 +18,19 @@
 #include "release_manifest.h"
 
 static PtcStorage *eden_observe_storage;
+static PtcEdenInputObservation eden_input;
+
+void ptc_eden_observe_input(bool active)
+{
+    /* No key mask, touch coordinates or PIN digits leave the input loop. */
+    ptc_eden_sample_input(&eden_input, active);
+}
 
 void ptc_eden_observe_ui(const PtcUiModel *model)
 {
     static uint64_t instance, last_tick, sequence;
     uint64_t tick = svcGetSystemTick();
-    char ui[1536], text[2048];
+    char ui[8192], text[8704];
     int n;
     if (!eden_observe_storage || (last_tick && armTicksToNs(tick - last_tick) < 100000000ULL)) return;
     last_tick = tick;
@@ -33,9 +40,11 @@ void ptc_eden_observe_ui(const PtcUiModel *model)
     if (!instance) instance = tick;
     n = snprintf(text, sizeof(text),
         "{\"schema_version\":1,\"release_id\":\"%s\",\"instance\":\"%llx\","
-        "\"sequence\":%llu,\"tick\":\"%llu\",\"ui\":%s}",
+        "\"sequence\":%llu,\"tick\":\"%llu\",\"input_sampling_version\":1,"
+        "\"input_sequence\":%llu,\"input_active\":%s,\"ui\":%s}",
         PLAYWISE_BUILD_RELEASE_ID, (unsigned long long)instance,
-        (unsigned long long)++sequence, (unsigned long long)tick, ui);
+        (unsigned long long)++sequence, (unsigned long long)tick,
+        (unsigned long long)eden_input.sequence, eden_input.active ? "true" : "false", ui);
     if (n > 0 && (size_t)n < sizeof(text))
         (void)eden_observe_storage->vtable->write_text_atomic(eden_observe_storage,
             PLAYWISE_EDEN_SD_ROOT "/support/automation-ui.json", text);

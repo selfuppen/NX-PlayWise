@@ -567,8 +567,16 @@ int main(void)
     test_parent_pin_error();
     {
         PtcUiModel model = {0};
-        char text[1536], small[8];
+        char text[8192], small[8];
+        PtcEdenInputObservation input = {0};
         cJSON *json;
+        ptc_eden_sample_input(&input, true);
+        check(input.sequence == 1 && input.active, "Eden observes a sampled active input without exporting its value");
+        ptc_eden_sample_input(&input, false);
+        check(input.sequence == 2 && !input.active, "Eden observes a later neutral release");
+        input.sequence = UINT64_MAX;
+        ptc_eden_sample_input(&input, true);
+        check(input.sequence == UINT64_MAX, "Eden input sequence saturates instead of wrapping");
         model.view = PTC_UI_SETUP;
         model.overlay = PTC_UI_OVERLAY_PIN;
         snprintf(model.pin_text, sizeof(model.pin_text), "987654");
@@ -599,6 +607,17 @@ int main(void)
         json = cJSON_Parse(text);
         check(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "overlay_animating")),
               "plain page remains stable with saturated opening frames");
+        check(cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(json, "plan_page")) &&
+              cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(json, "daily_buffer_claimed")),
+              "journey observation exposes typed navigation and business projections");
+        {
+            cJSON *targets = cJSON_GetObjectItemCaseSensitive(json, "targets");
+            cJSON *target = cJSON_GetObjectItemCaseSensitive(targets, "dock_7");
+            PtcUiRect rect = ptc_ui_dock_field_rect(7);
+            check(cJSON_IsArray(target) && cJSON_GetArrayItem(target, 0)->valueint == rect.x + rect.w / 2 &&
+                  cJSON_GetArrayItem(target, 1)->valueint == rect.y + rect.h / 2,
+                  "Eden mode input target is derived from production layout");
+        }
         cJSON_Delete(json);
         check(!ptc_eden_format_ui(&model, small, sizeof(small)) && small[0] == '\0',
               "Eden observation never publishes truncated JSON");

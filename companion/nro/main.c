@@ -1,4 +1,5 @@
 #include "nro_app_internal.h"
+#include "eden_observe.h"
 
 __attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_RELEASE_MANIFEST_JSON;
 
@@ -228,6 +229,9 @@ int main(int argc, char **argv)
             ui.r_stick_prev_h_dir = 0;
         }
         padRepeaterUpdate(&direction_repeater, held & DIRECTION_BUTTON_MASK);
+#ifdef PLAYWISE_EDEN
+        ptc_eden_observe_input(held != 0 || touch_active);
+#endif
         down |= padRepeaterGetButtons(&direction_repeater);
         parent_minus_released = ptc_ui_single_button_release_update(
             &ui.minus_pending, HidNpadButton_Minus, down, held,

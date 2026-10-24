@@ -12,9 +12,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from tools.automation.eden_runner import (
-    GateError, McpClient, SCENARIOS, Suite, decode, healthy_exit, healthy_launch,
+    GateError, ObservationPending, McpClient, SCENARIOS, Suite, decode, healthy_exit, healthy_launch,
     receipt, save, seal, validate_observation, verify, profile_settings, set_profile_timezone,
     open_shared_read, read_observation_file,
+    scenario_names,
+    verify_input_evidence,
 )
 
 
@@ -195,10 +197,156 @@ def test_report_roundtrip_and_tamper() -> None:
         assert verify(root) == summary == verify(root)
         (root / "identity.json").write_text('{}', encoding="utf-8")
         rejected(lambda: verify(root))
+
+
+def test_main_suite_and_fail_closed() -> None:
+    from tools.automation.eden_main_flow import MAIN_SCENARIOS, MainFlow, verify_main
+    assert scenario_names("smoke") == SCENARIOS
+    assert scenario_names("main") == SCENARIOS + MAIN_SCENARIOS
+    assert len(set(scenario_names("main"))) == len(scenario_names("main"))
+    rejected(lambda: scenario_names("unknown"))
+    class Fake(MainFlow):
+        def __init__(self):
+            self.confirmations = 0
+        def wait_ui(self, **expected):
+            return {}
+        def observe(self):
+            return {"ui": {"overlay": 3}}
+        def confirm(self):
+            self.confirmations += 1
+        def wait_receipt(self, kind, before):
+            return {"status": "error"}
+    flow = Fake()
+    rejected(lambda: flow.submitted("set_weekly_template", set()))
+    assert flow.confirmations == 3  # Bounded dialog handling, no business-action retry.
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for name in MAIN_SCENARIOS:
+            save(root / f"assertions/{name}.json", {"passed": True, "checks": ["fixture"]})
+        # A collection of positive flags without underlying business material
+        # cannot qualify as a completed journey.
+        rejected(lambda: verify_main(root))
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         save(root / "evidence-manifest.json", {"schema_version": 1, "files": [{"path": "../outside"}]})
         rejected(lambda: verify(root))
+
+
+def test_preview_cancel_does_not_exit_child() -> None:
+    from tools.automation.eden_main_flow import MainFlow
+    class Fake(MainFlow):
+        def action(self, **kwargs):
+            self.buttons.append(kwargs["button"])
+        def wait_ui(self, **expected):
+            self.expected = expected
+        def ids(self):
+            return set()
+        def type_code(self, code):
+            return set()
+        def wait_receipt(self, kind, before):
+            return {"status": "ok"}
+        def checked(self, *args, **kwargs):
+            self.passed = True
+    with tempfile.TemporaryDirectory() as directory:
+        fake = Fake()
+        fake.app = Path(directory)
+        (fake.app / "results").mkdir()
+        (fake.app / "ledger").mkdir()
+        (fake.app / "rules.json").write_text('{}', encoding="utf-8")
+        (fake.app / "ledger/used_nonces.jsonl").write_text('', encoding="utf-8")
+        fake.code_day = 2488
+        fake.buttons = []
+        fake.code_cancel_journey()
+        assert fake.passed and fake.buttons == ["B", "B"]
+        assert fake.expected == {"view": 0, "overlay": 0}
+
+
+def test_stale_observation_waits_without_input() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        fresh = {"ui": {"overlay": 0, "overlay_animating": False}}
+        with patch.object(suite, "observe", side_effect=[ObservationPending("stale"), fresh]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            assert suite.wait_ui(overlay=0) == fresh
+        with patch.object(suite, "observe", side_effect=GateError("wrong identity")):
+            rejected(lambda: suite.wait_ui(overlay=0))
+
+
+def test_sampled_input_releases_once_on_failure() -> None:
+    class Client:
+        def __init__(self):
+            self.calls = []
+        def tool(self, name, arguments=None):
+            self.calls.append((name, arguments))
+            return {"running": True, "backend": "eden-control", "pid": 1,
+                    "launch": {"target_reached": True, "phase": "game_ready"}}
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for fails in (False, True):
+            client = Client()
+            suite = Suite(client, root, root, {}, 60)
+            neutral = {"instance": "a", "input_sequence": 1, "input_active": False}
+            sampled = {"instance": "a", "input_sequence": 2, "input_active": True}
+            sequence = [neutral, GateError("not sampled") if fails else sampled, neutral]
+            with patch.object(suite, "wait_input", side_effect=sequence), \
+                    patch("tools.automation.eden_runner.time.sleep"):
+                if fails:
+                    rejected(lambda: suite.action(button="A"))
+                else:
+                    suite.action(button="A")
+            assert [args["action"] for name, args in client.calls if name == "eden_press_button"] == ["down", "up"]
+        suite = Suite(None, root, root, {}, 60)
+        with patch.object(suite, "observe", return_value={"input_sampling_version": True, "input_sequence": 1, "input_active": False}):
+            rejected(lambda: suite.wait_input(False))
+        with patch.object(suite, "observe", return_value={"instance": "b", "input_sampling_version": 1, "input_sequence": 2, "input_active": True}):
+            rejected(lambda: suite.wait_input(True, after=neutral))
+
+
+def test_input_evidence_roundtrip() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for number, action in enumerate(("down", "up")):
+            save(root / f"calls/{number:04d}.json", {"params": {"name": "eden_press_button", "arguments": {"button": "A", "action": action}}})
+        save(root / "input-samples/001-active.json", {"instance": "a", "input_sequence": 2, "input_active": True})
+        save(root / "input-samples/001-release.json", {"instance": "a", "input_sequence": 3, "input_active": False})
+        verify_input_evidence(root, 1)
+        verify_input_evidence(root, 1)
+        (root / "input-samples/001-release.json").write_text('{"instance":"b","input_sequence":3,"input_active":false}', encoding="utf-8")
+        rejected(lambda: verify_input_evidence(root, 1))
+        rejected(lambda: verify_input_evidence(root, True))
+
+
+def test_pending_receipt_prevents_next_input() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        pending = {"instance": "a", "input_sampling_version": 1, "input_sequence": 2,
+                   "input_active": False, "ui": {"waiting": True}}
+        idle = {**pending, "input_sequence": 3, "ui": {"waiting": False}}
+        with patch.object(suite, "observe", side_effect=[pending, idle]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            assert suite.wait_input(False) == idle
+        # Releasing an already sampled action must remain possible while its
+        # own receipt is pending; this gate applies only before the next down.
+        with patch.object(suite, "observe", return_value=pending):
+            assert suite.wait_input(False, after={**pending, "input_sequence": 1}) == pending
+
+
+def test_readonly_status_overlap_preserves_business_gate() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60)
+        for name, completed in (("first", 10), ("second", 11)):
+            save(suite.app / f"results/{name}.json", {"request_id": name, "type": "status",
+                                                   "status": "ok", "completed_at": completed})
+        assert suite.wait_receipt("status", set())["request_id"] == "second"
+        assert len(list((root / "receipts").glob("*.json"))) == 2
+        (suite.app / "results/first.json").write_text(json.dumps({"request_id": "first", "type": "status", "status": "error", "completed_at": 10}), encoding="utf-8")
+        rejected(lambda: suite.wait_receipt("status", set()))
+        for name in ("first", "second"):
+            (suite.app / f"results/{name}.json").write_text(json.dumps({"request_id": name, "type": "set_eye_care_policy", "status": "ok"}), encoding="utf-8")
+        rejected(lambda: suite.wait_receipt("set_eye_care_policy", set()))
 
 
 def main() -> None:
@@ -212,6 +360,13 @@ def main() -> None:
     test_chinese_profile_preserved()
     test_actual_profile_paths_gate_input()
     test_report_roundtrip_and_tamper()
+    test_main_suite_and_fail_closed()
+    test_preview_cancel_does_not_exit_child()
+    test_stale_observation_waits_without_input()
+    test_sampled_input_releases_once_on_failure()
+    test_input_evidence_roundtrip()
+    test_pending_receipt_prevents_next_input()
+    test_readonly_status_overlap_preserves_business_gate()
     print("PASS: Eden input/exit gates, stdio failures, identity and evidence roundtrip")
 
 
