@@ -1214,7 +1214,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
 
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_THEME;
-            settings_dlg.overlay_selection = 1;
+            settings_dlg.overlay_selection = 3;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
             failed |= save_preview(directory, "settings", "settings-theme", &settings_dlg, dark);
 

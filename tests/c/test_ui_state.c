@@ -1229,8 +1229,15 @@ static double contrast_ratio(uint32_t left, uint32_t right)
 static void test_theme_resolution(void)
 {
     PtcUiThemePreference preference = PTC_UI_THEME_DARK;
+    PtcUiThemeStyle style = PTC_UI_THEME_STYLE_COUNT;
     PtcUiThemeView view;
     const PtcUiPalette *dark;
+    check_int(ptc_ui_theme_get_style(), PTC_UI_THEME_STYLE_SLATE, "graphite is the default UI style");
+    check_true(ptc_ui_theme_parse_style("slate", &style) && style == PTC_UI_THEME_STYLE_SLATE,
+               "graphite keeps its persisted legacy style name");
+    check_true(strcmp(ptc_ui_theme_style_keyword(PTC_UI_THEME_STYLE_SLATE), "graphite") == 0 &&
+               strcmp(ptc_ui_theme_style_keyword(PTC_UI_THEME_STYLE_INDIGO), "paper") == 0,
+               "style keywords follow the customer-facing palette names");
     check_true(ptc_ui_theme_parse_preference("system", &preference) && preference == PTC_UI_THEME_SYSTEM,
                "system theme preference parses");
     check_true(ptc_ui_theme_parse_preference("dark", &preference) && preference == PTC_UI_THEME_DARK,

@@ -1485,7 +1485,7 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
             /* Mode 1: 仅允许电视模式 (TV dock prominent, handheld prohibited) */
             /* Prominent TV dock display */
             fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 12, icon_tile.y + 12, 34, 24}, 3, UI_ACCENT);
-            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 14, icon_tile.y + 14, 30, 20}, pack_rgb(0x245BC4));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 14, icon_tile.y + 14, 30, 20}, pack_rgb(UI_BLENDED(focus)));
             draw_text_center(pixels, stride, (UiRect){icon_tile.x + 14, icon_tile.y + 16, 30, 16}, "TV", 11, UI_ON_ACCENT);
             /* Dock base */
             fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 18, icon_tile.y + 36, 22, 6}, 2, UI_INK);
@@ -1512,7 +1512,7 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
             fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 46, icon_tile.y + 28, 2, 4}, pack_rgb(UI_BLENDED(accent)));
             /* Mini TV dock target */
             fill_round_rect(pixels, stride, (UiRect){icon_tile.x + 52, icon_tile.y + 22, 16, 14}, 2, UI_INK);
-            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 54, icon_tile.y + 24, 12, 10}, pack_rgb(0x245BC4));
+            fill_rect_packed(pixels, stride, (UiRect){icon_tile.x + 54, icon_tile.y + 24, 12, 10}, pack_rgb(UI_BLENDED(accent)));
 
             int text_x = row.x + 98;
             draw_text(pixels, stride, text_x, row.y + 30,

@@ -22,10 +22,10 @@ typedef enum {
 } PtcUiResolvedTheme;
 
 typedef enum {
-    PTC_UI_THEME_STYLE_INDIGO = 0,   /* 沉静靛蓝 (Serene Indigo) - 默认 */
-    PTC_UI_THEME_STYLE_TEAL = 1,     /* 清爽青绿 (Ocean Teal) */
-    PTC_UI_THEME_STYLE_AMETHYST = 2, /* 暮紫星夜 (Night Amethyst) */
-    PTC_UI_THEME_STYLE_SLATE = 3,    /* 极简冷灰 (Slate Neutral) */
+    PTC_UI_THEME_STYLE_SLATE = 0,    /* 石墨 (Graphite) - 默认 */
+    PTC_UI_THEME_STYLE_INDIGO = 1,   /* 纸墨 (Paper & Ink) */
+    PTC_UI_THEME_STYLE_TEAL = 2,     /* 雾青 (Mist Teal) */
+    PTC_UI_THEME_STYLE_AMETHYST = 3, /* 暮霭 (Dusk) */
     PTC_UI_THEME_STYLE_COUNT = 4
 } PtcUiThemeStyle;
 
@@ -86,9 +86,10 @@ PtcUiResolvedTheme ptc_ui_theme_resolve(
     PtcUiThemePreference preference,
     PtcUiSystemTheme system_theme);
 
-/* 主题风格解析与本地化辅助 */
+/* 主题风格解析与本地化辅助。name 用于持久化兼容，keyword 用于界面英文关键词。 */
 bool ptc_ui_theme_parse_style(const char *text, PtcUiThemeStyle *out);
 const char *ptc_ui_theme_style_name(PtcUiThemeStyle style);
+const char *ptc_ui_theme_style_keyword(PtcUiThemeStyle style);
 const char *ptc_ui_theme_style_label(PtcUiThemeStyle style);
 const char *ptc_ui_theme_style_desc(PtcUiThemeStyle style);
 

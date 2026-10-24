@@ -4,7 +4,7 @@ UiRuntime g_ui;
 const PtcUiPalette *g_palette;
 PtcUiThemeView g_theme = {
     .preference = PTC_UI_THEME_SYSTEM,
-    .style = PTC_UI_THEME_STYLE_INDIGO,
+    .style = PTC_UI_THEME_STYLE_SLATE,
     .resolved = PTC_UI_RESOLVED_LIGHT,
     .palette = NULL,
     .system_theme_available = false

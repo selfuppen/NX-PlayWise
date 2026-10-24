@@ -200,6 +200,8 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
     const char *shell_hint = !g_theme.system_theme_available
         ? ptc_ui_text(PTC_UI_T_THE_SYSTEM_THEME_IS_TEMPORARILY_UNAVAILABLE_AND)
         : ptc_ui_text(PTC_UI_T_THEME_SHELL_HINT);
+    const PtcUiPalette *light_pal = ptc_ui_theme_style_palette(PTC_UI_RESOLVED_LIGHT, g_theme.style);
+    const PtcUiPalette *dark_pal = ptc_ui_theme_style_palette(PTC_UI_RESOLVED_DARK, g_theme.style);
 
     draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_APPEARANCE_THEME), shell_hint);
 
@@ -209,17 +211,24 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         bool selected = (index == model->overlay_selection);
         bool is_current = ((int)g_theme.preference == index);
 
+        if (selected) {
+            UiRect halo = {option.x - 3, option.y - 3, option.width + 6, option.height + 6};
+            draw_rect_outline(pixels, stride, halo, 17, 1, UI_FOCUS);
+        }
         fill_round_rect(pixels, stride, option, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+        draw_rect_outline(pixels, stride, option, 14, selected ? 4 : 1, selected ? UI_ACCENT : UI_BORDER);
+        if (selected) {
+            fill_round_rect(pixels, stride, (UiRect){option.x + 6, option.y + 16, 4, option.height - 32}, 2, UI_ACCENT);
+        }
 
         draw_text(pixels, stride, option.x + 18, option.y + 26, LABELS[index], 20, UI_INK);
 
         if (is_current) {
             UiRect cur_badge = {option.x + option.width - 78, option.y + 12, 62, 22};
-            fill_round_rect(pixels, stride, cur_badge, 11, UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, cur_badge, 11, 1, UI_SUCCESS_BORDER);
+            fill_round_rect(pixels, stride, cur_badge, 11, UI_ACCENT);
+            draw_rect_outline(pixels, stride, cur_badge, 11, 1, UI_FOCUS);
             draw_text_center(pixels, stride, cur_badge,
-                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 12, UI_SUCCESS);
+                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 12, UI_ON_ACCENT);
         }
 
         draw_wrapped_text(pixels, stride, option.x + 18, option.y + 50, DETAILS[index],
@@ -230,54 +239,54 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         draw_rect_outline(pixels, stride, preview, 10, 1, selected ? UI_ACCENT : UI_BORDER);
 
         if (index == PTC_UI_THEME_LIGHT) {
-            fill_round_rect(pixels, stride, preview, 10, UI_RGB(0xF0F3FA));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 20}, 5, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, preview, 10, UI_RGB(light_pal->page_bg));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 20}, 5, UI_RGB(light_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 15, 10, 10}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(0x172640));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(light_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(light_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 44, 56, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(0x53627A));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(light_pal->text_secondary));
 
             fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(0xE8EDF7));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(light_pal->surface_raised));
         } else if (index == PTC_UI_THEME_DARK) {
-            fill_round_rect(pixels, stride, preview, 10, UI_RGB(0x111122));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 20}, 5, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, preview, 10, UI_RGB(dark_pal->page_bg));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 10, preview.width - 20, 20}, 5, UI_RGB(dark_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 16, preview.y + 15, 10, 10}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(0xEEEEFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 32, preview.y + 18, 48, 4}, 2, UI_RGB(dark_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 36, preview.width - 20, 32}, 6, UI_RGB(dark_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 44, 56, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(0xAABBCC));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 18, preview.y + 54, 88, 4}, 2, UI_RGB(dark_pal->text_secondary));
 
             fill_round_rect(pixels, stride, (UiRect){preview.x + 10, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(0x223344));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 16 + (preview.width - 26) / 2, preview.y + 74, (preview.width - 26) / 2, 24}, 5, UI_RGB(dark_pal->surface_raised));
         } else {
             int half_w = preview.width / 2;
-            fill_round_rect(pixels, stride, (UiRect){preview.x, preview.y, half_w, preview.height}, 10, UI_RGB(0xF0F3FA));
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w, preview.y, preview.width - half_w, preview.height}, 10, UI_RGB(0x111122));
-            fill_rect_packed(pixels, stride, (UiRect){preview.x + half_w, preview.y, 1, preview.height}, UI_RGB(0x6E7D94));
+            fill_round_rect(pixels, stride, (UiRect){preview.x, preview.y, half_w, preview.height}, 10, UI_RGB(light_pal->page_bg));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w, preview.y, preview.width - half_w, preview.height}, 10, UI_RGB(dark_pal->page_bg));
+            fill_rect_packed(pixels, stride, (UiRect){preview.x + half_w, preview.y, 1, preview.height}, UI_RGB(light_pal->border_control));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, half_w - 14, 20}, 5, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 10, half_w - 14, 20}, 5, UI_RGB(light_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 15, 8, 8}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 26, preview.y + 18, 32, 4}, 2, UI_RGB(0x172640));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 26, preview.y + 18, 32, 4}, 2, UI_RGB(light_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(0xFFFFFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(light_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 44, 40, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(0x53627A));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + 14, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(light_pal->text_secondary));
 
             fill_round_rect(pixels, stride, (UiRect){preview.x + 8, preview.y + 74, half_w - 14, 24}, 5, UI_ACCENT);
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 10, half_w - 14, 20}, 5, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 10, half_w - 14, 20}, 5, UI_RGB(dark_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 15, 8, 8}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 24, preview.y + 18, 32, 4}, 2, UI_RGB(0xEEEEFF));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 24, preview.y + 18, 32, 4}, 2, UI_RGB(dark_pal->text_primary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(0x1A2333));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 36, half_w - 14, 32}, 6, UI_RGB(dark_pal->surface));
             fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 44, 40, 5}, 2, UI_ACCENT);
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(0xAABBCC));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 12, preview.y + 54, half_w - 28, 4}, 2, UI_RGB(dark_pal->text_secondary));
 
-            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 74, half_w - 14, 24}, 5, UI_RGB(0x223344));
+            fill_round_rect(pixels, stride, (UiRect){preview.x + half_w + 6, preview.y + 74, half_w - 14, 24}, 5, UI_RGB(dark_pal->surface_raised));
         }
 
         // Action button at bottom of mode card
@@ -304,9 +313,19 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         bool selected = (model->overlay_selection == 3 + i);
         bool is_current = (ptc_ui_theme_get_style() == (PtcUiThemeStyle)i);
         const PtcUiPalette *spal = ptc_ui_theme_style_palette(g_theme.resolved, (PtcUiThemeStyle)i);
+        const uint32_t card_accent = selected ? UI_RGB(spal->accent) : UI_ACCENT;
+        const uint32_t card_on_accent = selected ? UI_RGB(spal->on_accent) : UI_ON_ACCENT;
+        const uint32_t card_focus = selected ? UI_RGB(spal->focus) : UI_FOCUS;
 
-        fill_round_rect(pixels, stride, s_rect, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, s_rect, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+        if (selected) {
+            UiRect halo = {s_rect.x - 3, s_rect.y - 3, s_rect.width + 6, s_rect.height + 6};
+            draw_rect_outline(pixels, stride, halo, 17, 1, card_focus);
+        }
+        fill_round_rect(pixels, stride, s_rect, 14, selected ? UI_RGB(spal->accent_soft) : UI_RAISED);
+        draw_rect_outline(pixels, stride, s_rect, 14, selected ? 4 : 1, selected ? card_accent : UI_BORDER);
+        if (selected) {
+            fill_round_rect(pixels, stride, (UiRect){s_rect.x + 6, s_rect.y + 16, 4, s_rect.height - 32}, 2, card_accent);
+        }
 
         // Color Swatches Row
         int sw_x = s_rect.x + 16;
@@ -320,10 +339,10 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
         // Active Badge if currently active style
         if (is_current) {
             UiRect cur_badge = {s_rect.x + s_rect.width - 66, s_rect.y + 14, 52, 20};
-            fill_round_rect(pixels, stride, cur_badge, 10, UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, cur_badge, 10, 1, UI_SUCCESS_BORDER);
+            fill_round_rect(pixels, stride, cur_badge, 10, UI_ACCENT);
+            draw_rect_outline(pixels, stride, cur_badge, 10, 1, UI_FOCUS);
             draw_text_center(pixels, stride, cur_badge,
-                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 11, UI_SUCCESS);
+                             ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE), 11, UI_ON_ACCENT);
         }
 
         // Style Title
@@ -331,7 +350,7 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
         // Style Keyword (Chinese only) & Description
         if (!is_en) {
-            draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 80, ptc_ui_theme_style_name((PtcUiThemeStyle)i), 12, UI_ACCENT);
+            draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 80, ptc_ui_theme_style_keyword((PtcUiThemeStyle)i), 12, UI_ACCENT);
             draw_wrapped_text(pixels, stride, s_rect.x + 16, s_rect.y + 100, ptc_ui_theme_style_desc((PtcUiThemeStyle)i),
                               12, s_rect.width - 32, 16, 2, UI_MUTED);
         } else {
@@ -341,12 +360,12 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
         // Action Pill at Bottom
         UiRect action_btn = {s_rect.x + 16, s_rect.y + s_rect.height - 38, s_rect.width - 32, 28};
-        fill_round_rect(pixels, stride, action_btn, 14, selected ? UI_ACCENT : UI_SURFACE);
-        draw_rect_outline(pixels, stride, action_btn, 14, 1, selected ? UI_FOCUS : UI_CONTROL);
+        fill_round_rect(pixels, stride, action_btn, 14, selected ? card_accent : UI_SURFACE);
+        draw_rect_outline(pixels, stride, action_btn, 14, 1, selected ? card_focus : UI_CONTROL);
         draw_text_center(pixels, stride, action_btn,
                          selected ? ptc_ui_text(PTC_UI_T_THEME_STYLE_APPLY)
                                   : (is_current ? ptc_ui_text(PTC_UI_T_THEME_STYLE_IN_USE) : ptc_ui_text(PTC_UI_T_THEME_STYLE_SELECT)),
-                         12, selected ? UI_ON_ACCENT : UI_INK);
+                         12, selected ? card_on_accent : UI_INK);
     }
 
     home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),

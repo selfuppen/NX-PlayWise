@@ -21,36 +21,38 @@ This guide defines the visual design system, color palette, and layout principle
 
 ### 1.3 Dual-Theme System Contract
 All pages must adapt seamlessly to both color modes, matching system or user preferences:
-* **Light Mode**: Crisp, airy, using white cards over cool tinted blue-gray backgrounds.
-* **Dark Mode**: Low-glare, high-contrast, using deep navy-slate backgrounds paired with vibrant accents for eye comfort in dark environments.
+* **Light Mode**: Warm paper, mist white and graphite-cool white surfaces with low-glare ink text for bright rooms and TV viewing.
+* **Dark Mode**: Per-style warm charcoal, ink-green, near-black or aubergine layers with restrained semantic tints for low-light comfort.
 
 ---
 
 ## 2. Color Palette & Semantic System
 
-### 2.1 Base Surface & Brand Styles (`companion/nro/ui_theme.c`)
+### 2.1 Base Surface & UI Styles (`companion/nro/ui_theme.c`)
 
-PlayWise supports real-time runtime switching across 4 calibrated brand styles with zero code changes, adhering strictly to the 4-bit RGBA4444 dark contract (each channel is a multiple of 0x11, contrast $\ge 6.7:1$ against `#112233` surface):
+PlayWise supports real-time runtime switching across 4 calibrated UI styles with zero code changes, adhering strictly to the 4-bit RGBA4444 dark contract (each channel is a multiple of 0x11; the default Graphite dark body text reaches about 13.7:1 against its card surface, and every style meets its own contrast floors). Each style owns its neutral ramp, surface layers and semantic colors; the accent is reserved for focus and primary actions:
 
-| Brand Style | Light Accent (`accent`) | Light Soft (`accent_soft`) | Dark Accent (4-bit) | Dark Soft (4-bit) | Aesthetic & Concept |
+| UI Style | Light Accent (`accent`) | Light Soft (`accent_soft`) | Dark Accent (4-bit) | Dark Soft (4-bit) | Aesthetic & Concept |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **0. Serene Indigo (Default)** | `#245BC4` | `#E4EDFF` | `#77AAFF` | `#223355` | Rational, focused, deep digital aesthetic |
-| **1. Ocean Teal** | `#0D7A70` | `#E0F4F2` | `#44DDCC` | `#113333` | Organic, refreshing, vitality & eye-comfort |
-| **2. Night Amethyst** | `#6340B8` | `#F1ECFC` | `#BB99FF` | `#332255` | Gentle, dreamy, elegant night-sky violet |
-| **3. Slate Neutral** | `#3B5270` | `#EAF0F6` | `#99BBDD` | `#223344` | Understated, modern, clean industrial slate |
+| **0. Graphite (Default)** | `#2F5FD0` | `#E6ECFB` | `#88AAEE` | `#223344` | Cool graphite, clear blue, product-like near-black layers |
+| **1. Paper & Ink** | `#2C4A6E` | `#E7EDF4` | `#99BBDD` | `#223344` | Warm paper, ink-blue, low glare, warm-charcoal night |
+| **2. Mist Teal** | `#1F6B5C` | `#E2F0EB` | `#77CCBB` | `#113333` | Mist green, porcelain teal, breathing room |
+| **3. Dusk** | `#7A4670` | `#F3E8F1` | `#DD99CC` | `#332233` | Mauve-grey, plum accent, gentle and night-friendly |
 
 #### Global Surface & Structural Colors
 
+The table below shows the default Graphite style. Switching styles changes the neutral layers, semantic colors and Overlay palette together.
+
 | Semantic Role | Light Mode | Dark Mode | Usage Description |
 | :--- | :--- | :--- | :--- |
-| **Page Background (`page_bg`)** | `#F0F3FA` | `#111122` | Global canvas backdrop, calm teal/night tint |
-| **Base Surface (`surface`)** | `#FFFFFF` | `#112233` | Top-level cards, main panels (4-bit RGBA4444 safe) |
-| **Raised Surface (`surface_raised`)** | `#E8EDF7` | `#223344` | Secondary containers, result summary cards |
-| **Decorative Border (`border_decorative`)** | `#DBE1E9` | `#334455` | Subtle card dividers and panel strokes (1px) |
-| **Control Border (`border_control`)** | `#6E7D94` | `#778899` | Interactive buttons, inactive input frames |
-| **Primary Text (`text_primary`)** | `#172640` | `#EEEEFF` | Key headlines, major numbers, body emphasis |
-| **Secondary Text (`text_secondary`)** | `#53627A` | `#AABBCC` | Subtitles, labels, auxiliary metrics |
-| **Disabled Text (`text_disabled`)** | `#9199A5` | `#667788` | Disabled actions, placeholders, decorative glyphs |
+| **Page Background (`page_bg`)** | `#F3F4F6` | `#111111` | Cool grey / neutral charcoal canvas |
+| **Base Surface (`surface`)** | `#FCFCFD` | `#222222` | Top-level cards, main panels (4-bit RGBA4444 safe) |
+| **Raised Surface (`surface_raised`)** | `#E9EBEF` | `#333333` | Secondary containers, result summary cards |
+| **Decorative Border (`border_decorative`)** | `#DDE0E5` | `#444444` | Subtle card dividers and panel strokes (1px) |
+| **Control Border (`border_control`)** | `#7D8593` | `#888888` | Interactive buttons, inactive input frames |
+| **Primary Text (`text_primary`)** | `#171A20` | `#EEEEEE` | Key headlines, major numbers, body emphasis |
+| **Secondary Text (`text_secondary`)** | `#545B68` | `#BBBBBB` | Subtitles, labels, auxiliary metrics |
+| **Disabled Text (`text_disabled`)** | `#7E8592` | `#777777` | Disabled actions, placeholders, decorative glyphs |
 
 ---
 
@@ -61,48 +63,49 @@ PlayWise follows modern UI principles pairing **saturated foregrounds with ultra
 #### A. Active / Success / Sufficient (Success)
 * **Context**: Quota active, grant confirmed, rules satisfied, schedule running.
 * **Light Mode**:
-  * Soft Background (`UI_SUCCESS_SOFT`): `#EDF9F0` (subtle mint)
-  * Border: `#86EFAC` (soft bright green, 1–2px)
-  * Solid / Text / Foreground (`UI_SUCCESS`): `#15803D` (vivid emerald green)
+  * Soft Background (`UI_SUCCESS_SOFT`): `#EAF5EE` (restrained green)
+  * Border: `#9AD2AE` (muted grass green, 1–2px)
+  * Solid / Text / Foreground (`UI_SUCCESS`): `#2C7A4B` (calm green)
 * **Dark Mode**:
-  * Soft Background: `#113322` (deep jade green)
-  * Border: `#226633`
-  * Solid / Text / Foreground: `#55DD77` (high-visibility bright green)
+  * Soft Background: `#113322` (deep green)
+  * Border: `#336644`
+  * Solid / Text / Foreground: `#77CC99` (soft bright green)
 
 #### B. Warning / Rest / Pending (Warning)
 * **Context**: Eye-care rest underway, quota running low, pending changes, bedtime approaching.
 * **Light Mode**:
-  * Soft Background (`UI_WARNING_SOFT`): `#FFFBEB` (warm soft apricot/cream)
-  * Border: `#FCD34D` (warm amber border, 1–2px, reinforcing outer contour)
-  * Solid / Text / Foreground (`UI_WARNING`): `#B45309` (high-contrast amber orange, WCAG AA >= 4.5:1 compliant)
+  * Soft Background (`UI_WARNING_SOFT`): `#FBF2E1` (warm amber cream)
+  * Border: `#E4C17B` (warm amber border, 1–2px, reinforcing outer contour)
+  * Solid / Text / Foreground (`UI_WARNING`): `#9A6114` (deep amber, WCAG AA >= 4.5:1 compliant)
+  * Warning text on soft background (`warning_text`): `#83500C`
 * **Dark Mode**:
-  * Soft Background: `#332211` (deep warm sepia)
-  * Border: `#885511`
-  * Solid / Text / Foreground: `#FFBB33` (bright golden orange)
+  * Soft Background: `#332211` (deep warm brown)
+  * Border: `#775522`
+  * Solid / Text / Foreground: `#EEBB66` (soft warm gold)
 
 #### C. Restriction / Danger / Exhausted (Danger)
 * **Context**: Daily limit reached, bedtime lock active, quota exhausted, safety error.
 * **Light Mode**:
-  * Soft Background (`UI_DANGER_SOFT`): `#FEF2F2` (light rose)
-  * Border: `#FCA5A5` (rose pink)
-  * Solid / Text / Foreground (`UI_DANGER`): `#C42B45` (vivid ruby crimson)
+  * Soft Background (`UI_DANGER_SOFT`): `#FAEBEC` (soft red)
+  * Border: `#E2A2A8` (red)
+  * Solid / Text / Foreground (`UI_DANGER`): `#B53A45` (calm red)
 * **Dark Mode**:
-  * Soft Background: `#441122` (deep roseate)
+  * Soft Background: `#441122` (deep red)
   * Border: `#882233`
-  * Solid / Text / Foreground: `#FF7788` (fluorescent coral red)
+  * Solid / Text / Foreground: `#EE8899` (soft coral red)
 
-#### D. Brand Accent & Information (Accent / Info)
+#### D. Primary Accent & Information (Accent / Info)
 * **Context**: Focus rings, decision sequence pills, keyframe dots, default active segments.
-* **Light Mode**: Accent `#126B5B` (Teal), Soft background `#E4EDFF`.
-* **Dark Mode**: Accent `#33DDBB` (Cyan-Teal), Soft background `#223355`.
+* **Light Mode**: Accent `#2F5FD0` (clear blue), Soft background `#E6ECFB`.
+* **Dark Mode**: Accent `#88AAEE` (mist blue), Soft background `#223344`.
 
 ---
 
 
 #### E. Night & Bedtime Schedule (Night)
 * **Context**: Bedtime schedule active, nightly curfew countdown, peaceful wind-down.
-* **Light Mode**: Solid `#5B47D6` (night star purple), Soft background `#F0EDFF`, Border `#C4B5FD`.
-* **Dark Mode**: Solid `#AA99FF`, Soft background `#221144`, Border `#5544AA`.
+* **Light Mode**: Solid `#5B4CB0` (night violet), Soft background `#EDEAF9`, Border `#BDB4E8`.
+* **Dark Mode**: Solid `#BBAAFF`, Soft background `#221144`, Border `#554488`.
 
 ## 3. Spatial Typography & Dynamic Alignment Contracts
 
@@ -162,17 +165,17 @@ Across the Nintendo Switch 1280x720 global canvas, all main pages (Child Home, P
   * Bottom badge: 4px rounded pill or micro-icon conveying status.
 
 ### 4.2 24-Hour Activity Track
-* **Track Slot**: Height 14–18px, corner radius 8px, background `UI_RAISED` or `0xE0E6F0`.
+* **Track Slot**: Height 14–18px, corner radius 8px, background `UI_RAISED`.
 * **Segments**:
-  * **Played Segment**: Brand accent (`UI_ACCENT`).
+  * **Played Segment**: Primary accent (`UI_ACCENT`).
   * **Bedtime Lock Segment**: Dark slate / danger-soft diagonal strip with crescent moon icon.
-  * **Remaining Playable**: Soft mint (`#86EFAC`) or translucent accent.
+  * **Remaining Playable**: Success border (`#9AD2AE`) or translucent accent.
 * **Current Time Needle**: Vertical high-contrast line with subtle outer shadow and indicator tip.
 
 ### 4.3 Continuous Play Forecast Bar
 * **Alternating Session & Rest Chunks**:
-  * Play Session: Vivid blue (`#1890FF` / `#245BC4`), rounded rectangle.
-  * Rest Period: Warm amber (`#FFFBEB` bg + `#FA8C16` border), displaying rest duration clearly.
+  * Play Session: Deep blue (`#1E3566` / `#2F5FD0`), rounded rectangle.
+  * Rest Period: Warm amber (`#FBF2E1` bg + `#9A6114` border), displaying rest duration clearly.
   * Exhaustion Point: Pulsing micro-circle paired with an endpoint time balloon.
 
 ![Today: plan and status composite control preview](../images/usage-en/parent/today-planning-light.png)
@@ -207,9 +210,9 @@ The view moves beyond rigid and cramped layouts, adopting conversational, parent
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
   * Child and parent cards, code slots, keypad keys and buttons share closed rounded outlines (radius r=4 for cards/buttons, full half-height for pills). CPU span calculations render smooth rounded fills and outer borders; both normal 1px and emphasized 2px borders remain continuous without jagged seams.
-  * Card Surface: `#112233` with high `0xE6` opacity, effectively shielding background game graphics.
-  * Decorative Border: `#334455` with subtle `0xB0` opacity, providing restrained, clean edges.
-  * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm sepia warning `#332211`, dark jade success `#193C32`).
+  * Card Surface: `#222222` with high `0xE6` opacity, effectively shielding background game graphics.
+  * Decorative Border: `#444444` with subtle `0xB0` opacity, providing restrained, clean edges.
+  * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm brown warning `#332211`, deep moss success `#113322`).
 * **Font, Glyph & Handheld Legibility Contract**:
   * Due to Tesla sysmodule memory constraints (~6MB heap allocation), overlays cannot bundle external TTF/OTF fonts.
   * **Overlay text must never use Unicode 4-byte Emojis or miscellaneous Dingbats**, preventing mojibake or missing-glyph boxes on hardware.
@@ -266,8 +269,8 @@ When authoring or updating Companion NRO pages or overlays:
 - [ ] **Dual-Theme Compatible (NRO)**: All colors resolve through `palette->xxx`, `UI_xxx`, or dark/light ternaries; no hardcoded single-mode colors.
 - [ ] **Overlay Dark Baseline**: Overlay strictly locks to the dark palette, with surfaces tuned to Tesla's translucent black background.
 - [ ] **Overlay Zero-Emoji Contract**: Overlay strings contain no 4-byte emojis; controller prompts strictly use official Switch font glyphs (`\uE0E0`, etc.).
-- [ ] **Contrast & Luminance**: Text passes legibility standards on handheld screens (Light mode primary text $\ge$ `#172640`, Dark mode primary text $\ge$ `#F3F6FD`).
-- [ ] **Semantic Color Harmony**: Active/success uses fresh green (`#52C41A` / `#EDF9F0`), rest/warning uses high-contrast warm amber (`#D95A00` / `#FFFBEB`), limits use crimson (`#B92F46` / `#FFE9ED`). Avoid muddy yellow/brown tones.
+- [ ] **Contrast & Luminance**: Text passes legibility standards on handheld screens (Light mode primary text $\ge$ `#171A20`, Dark mode primary text $\ge$ `#EEEEEE`).
+- [ ] **Semantic Color Harmony**: Active/success uses calm green (`#2C7A4B` / `#EAF5EE`), rest/warning uses deep amber (`#9A6114` / `#FBF2E1`), limits use red (`#B53A45` / `#FAEBEC`). Avoid muddy yellow/brown tones.
 - [ ] **Dynamic Text Measurement**: Adjacent items and badges calculate positions dynamically using `measure_text(...)`.
 - [ ] **Edge-to-Edge Right Alignment**: Right-hand descriptions and metrics align strictly via `card_x + card_w - padding - desc_w`.
 - [ ] **Text Overflow Protection**: Long strings or localized variations use `fit_text(...)` with ellipses to prevent layout breaking.

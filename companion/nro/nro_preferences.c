@@ -134,7 +134,7 @@ void load_ui_preferences(UiState *ui)
     ui->model.setup_eye_care_enabled = false;
     ui->model.setup_bedtime_enabled = false;
     ui->theme_preference = PTC_UI_THEME_SYSTEM;
-    ui->theme_style = PTC_UI_THEME_STYLE_INDIGO;
+    ui->theme_style = PTC_UI_THEME_STYLE_SLATE;
     ptc_ui_theme_set_style(ui->theme_style);
     ui->language_preference = PTC_UI_LANGUAGE_SYSTEM;
     ui->model.language_preference = PTC_UI_LANGUAGE_SYSTEM;

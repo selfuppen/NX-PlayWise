@@ -68,10 +68,10 @@ def main() -> None:
     overlay_hpp = (ROOT / "companion" / "overlay" / "source" / "render_types.hpp").read_text(encoding="utf-8")
 
     styles = [
+        ("slate", "LIGHT_SLATE_PALETTE", "DARK_SLATE_PALETTE", "DARK_OVERLAY_SLATE_PALETTE"),
         ("indigo", "LIGHT_PALETTE", "DARK_PALETTE", "DARK_OVERLAY_PALETTE"),
         ("teal", "LIGHT_TEAL_PALETTE", "DARK_TEAL_PALETTE", "DARK_OVERLAY_TEAL_PALETTE"),
         ("amethyst", "LIGHT_AMETHYST_PALETTE", "DARK_AMETHYST_PALETTE", "DARK_OVERLAY_AMETHYST_PALETTE"),
-        ("slate", "LIGHT_SLATE_PALETTE", "DARK_SLATE_PALETTE", "DARK_OVERLAY_SLATE_PALETTE"),
     ]
 
     required_keys = [
@@ -161,7 +161,7 @@ def main() -> None:
                 f"Color mismatch in style '{style_name}': Overlay {ov_name}.{ov_k} (0x{ov_val:06X}) vs NRO {dark_name}.{nro_k} (0x{nro_val:06X})"
             )
 
-    print("PASS: ui palette contract verified successfully across all 4 theme styles (Indigo, Teal, Amethyst, Slate)")
+    print("PASS: ui palette contract verified successfully across all 4 theme styles (Graphite, Paper & Ink, Mist Teal, Dusk)")
 
 
 if __name__ == "__main__":

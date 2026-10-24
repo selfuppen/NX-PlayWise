@@ -179,7 +179,6 @@ static void handle_theme_overlay_input(UiState *ui, u64 down)
         if (ui->model.overlay_selection < 3) {
             PtcUiThemePreference preference = (PtcUiThemePreference)ui->model.overlay_selection;
             if (apply_theme_preference(ui, preference)) {
-                ptc_ui_cancel_overlay(&ui->model);
                 snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THEME_CHANGED_TO_S),
                          ptc_ui_theme_preference_label(preference));
             } else {
@@ -188,7 +187,6 @@ static void handle_theme_overlay_input(UiState *ui, u64 down)
         } else {
             PtcUiThemeStyle style = (PtcUiThemeStyle)(ui->model.overlay_selection - 3);
             if (apply_theme_style(ui, style)) {
-                ptc_ui_cancel_overlay(&ui->model);
                 snprintf(ui->model.message, sizeof(ui->model.message), "%s: %s",
                          ptc_ui_text(PTC_UI_T_APPEARANCE_THEME), ptc_ui_theme_style_label(style));
             } else {

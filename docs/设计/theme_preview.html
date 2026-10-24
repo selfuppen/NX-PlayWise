@@ -17,55 +17,55 @@
       --meta-muted: #8b949e;
       --meta-accent: #58a6ff;
 
-      /* PlayWise Light Palette */
-      --pw-light-page-bg: #F0F3FA;
-      --pw-light-surface: #FFFFFF;
-      --pw-light-surface-raised: #E8EDF7;
-      --pw-light-border-decorative: #DBE1E9;
-      --pw-light-border-control: #7A968F;
-      --pw-light-text-primary: #172640;
-      --pw-light-text-secondary: #53627A;
-      --pw-light-text-disabled: #9199A5;
-      --pw-light-accent: #245BC4;
-      --pw-light-accent-soft: #E4EDFF;
-      --pw-light-focus: #1247A8;
+      /* PlayWise Light Palette (Graphite, default) */
+      --pw-light-page-bg: #F3F4F6;
+      --pw-light-surface: #FCFCFD;
+      --pw-light-surface-raised: #E9EBEF;
+      --pw-light-border-decorative: #DDE0E5;
+      --pw-light-border-control: #7D8593;
+      --pw-light-text-primary: #171A20;
+      --pw-light-text-secondary: #545B68;
+      --pw-light-text-disabled: #7E8592;
+      --pw-light-accent: #2F5FD0;
+      --pw-light-accent-soft: #E6ECFB;
+      --pw-light-focus: #1C46AC;
       --pw-light-on-accent: #FFFFFF;
-      --pw-light-success: #15803D;
-      --pw-light-success-vivid: #16A34A;
-      --pw-light-success-soft: #EDF9F0;
-      --pw-light-success-border: #86EFAC;
-      --pw-light-warning: #B45309;
-      --pw-light-warning-deep: #B45309;
-      --pw-light-warning-soft: #FFFBEB;
-      --pw-light-warning-border: #FCD34D;
-      --pw-light-danger: #C42B45;
-      --pw-light-danger-vivid: #DC2626;
-      --pw-light-danger-soft: #FEF2F2;
-      --pw-light-danger-border: #FCA5A5;
+      --pw-light-success: #2C7A4B;
+      --pw-light-success-vivid: #2C7A4B;
+      --pw-light-success-soft: #EAF5EE;
+      --pw-light-success-border: #9AD2AE;
+      --pw-light-warning: #9A6114;
+      --pw-light-warning-deep: #83500C;
+      --pw-light-warning-soft: #FBF2E1;
+      --pw-light-warning-border: #E4C17B;
+      --pw-light-danger: #B53A45;
+      --pw-light-danger-vivid: #B53A45;
+      --pw-light-danger-soft: #FAEBEC;
+      --pw-light-danger-border: #E2A2A8;
 
-      /* PlayWise Dark Palette */
-      --pw-dark-page-bg: #111122;
-      --pw-dark-surface: #112233;
-      --pw-dark-surface-raised: #223344;
-      --pw-dark-border-decorative: #334455;
-      --pw-dark-border-control: #778899;
-      --pw-dark-text-primary: #EEEEFF;
-      --pw-dark-text-secondary: #AABBCC;
-      --pw-dark-text-disabled: #667788;
-      --pw-dark-accent: #77AAFF;
-      --pw-dark-accent-soft: #223355;
-      --pw-dark-focus: #AACCFF;
-      --pw-dark-on-accent: #112244;
-      --pw-dark-success: #55DD77;
-      --pw-dark-success-vivid: #55DD77;
+      /* PlayWise Dark Palette (cool graphite) */
+      --pw-dark-page-bg: #111111;
+      --pw-dark-surface: #222222;
+      --pw-dark-surface-raised: #333333;
+      --pw-dark-border-decorative: #444444;
+      --pw-dark-border-control: #888888;
+      --pw-dark-text-primary: #EEEEEE;
+      --pw-dark-text-secondary: #BBBBBB;
+      --pw-dark-text-disabled: #777777;
+      --pw-dark-accent: #88AAEE;
+      --pw-dark-accent-soft: #223344;
+      --pw-dark-focus: #BBDDFF;
+      --pw-dark-on-accent: #112233;
+      --pw-dark-success: #77CC99;
+      --pw-dark-success-vivid: #77CC99;
       --pw-dark-success-soft: #113322;
-      --pw-dark-success-border: #226633;
-      --pw-dark-warning: #FFBB33;
-      --pw-dark-warning-deep: #FFBB33;
+      --pw-dark-success-border: #336644;
+      --pw-dark-warning: #EEBB66;
+      --pw-dark-warning-deep: #EEBB66;
       --pw-dark-warning-soft: #332211;
-      --pw-dark-warning-border: #885511;
-      --pw-dark-danger: #FF7788;
-      --pw-dark-danger-vivid: #FF7788;
+      --pw-dark-warning-border: #775522;
+      --pw-dark-danger: #EE8899;
+      --pw-dark-danger-vivid: #EE8899;
       --pw-dark-danger-soft: #441122;
       --pw-dark-danger-border: #882233;
 
@@ -884,10 +884,10 @@
     </div>
     <div class="header-controls">
       <div class="style-toggle-group">
-        <button class="toggle-btn active" id="btnStyleIndigo" onclick="setStyle('indigo')">沉静靛蓝</button>
-        <button class="toggle-btn" id="btnStyleTeal" onclick="setStyle('teal')">清爽青绿</button>
-        <button class="toggle-btn" id="btnStyleAmethyst" onclick="setStyle('amethyst')">暮紫星夜</button>
-        <button class="toggle-btn" id="btnStyleSlate" onclick="setStyle('slate')">极简冷灰</button>
+        <button class="toggle-btn active" id="btnStyleSlate" onclick="setStyle('slate')">石墨</button>
+        <button class="toggle-btn" id="btnStyleIndigo" onclick="setStyle('indigo')">纸墨</button>
+        <button class="toggle-btn" id="btnStyleTeal" onclick="setStyle('teal')">雾青</button>
+        <button class="toggle-btn" id="btnStyleAmethyst" onclick="setStyle('amethyst')">暮霭</button>
       </div>
       <span class="mode-tag" id="currentModeLabel">浅色模式 (Light Mode)</span>
       <div class="theme-toggle-group">
@@ -1114,7 +1114,7 @@
           <span class="section-title-num">03</span>
           状态语义色规范 (Semantic Status Colors)
         </h2>
-        <p class="section-desc">严格遵循“高饱和前景 + 超浅柔和软底”的现代设计语言，杜绝发灰脏沉中间调</p>
+        <p class="section-desc">降饱和语义前景配同族柔和软底，杜绝发灰脏沉中间调</p>
       </div>
     </div>
 
@@ -1131,15 +1131,15 @@
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--success-soft); border-color: var(--success-border); color: var(--success);">
             <span class="status-swatch-role">软底 (UI_SUCCESS_SOFT)</span>
-            <span class="status-swatch-code" id="hexSuccessSoft">#EDF9F0</span>
+            <span class="status-swatch-code" id="hexSuccessSoft">#EBF3E9</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--success-border); color: var(--text-primary);">
             <span class="status-swatch-role">边框 (Border 1~2px)</span>
-            <span class="status-swatch-code" id="hexSuccessBorder">#86EFAC</span>
+            <span class="status-swatch-code" id="hexSuccessBorder">#A8CDA4</span>
           </div>
           <div class="status-swatch-item" style="background: var(--success); border-color: var(--success); color: #fff;">
             <span class="status-swatch-role">实体/胶囊/前景 (UI_SUCCESS)</span>
-            <span class="status-swatch-code" id="hexSuccessSolid">#16A34A</span>
+            <span class="status-swatch-code" id="hexSuccessSolid">#3E7A4E</span>
           </div>
         </div>
       </div>
@@ -1155,15 +1155,15 @@
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--warning-soft); border-color: var(--warning-border); color: var(--warning-deep);">
             <span class="status-swatch-role">软底 (UI_WARNING_SOFT)</span>
-            <span class="status-swatch-code" id="hexWarningSoft">#FFFBEB</span>
+            <span class="status-swatch-code" id="hexWarningSoft">#FAF1DF</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--warning-border); color: var(--text-primary);">
             <span class="status-swatch-role">边框 (Border 1~2px)</span>
-            <span class="status-swatch-code" id="hexWarningBorder">#FFD591</span>
+            <span class="status-swatch-code" id="hexWarningBorder">#E3C07E</span>
           </div>
           <div class="status-swatch-item" style="background: var(--warning); border-color: var(--warning); color: #fff;">
             <span class="status-swatch-role">实体/胶囊/前景 (UI_WARNING)</span>
-            <span class="status-swatch-code" id="hexWarningSolid">#FA8C16</span>
+            <span class="status-swatch-code" id="hexWarningSolid">#96601A</span>
           </div>
         </div>
       </div>
@@ -1179,15 +1179,15 @@
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--danger-soft); border-color: var(--danger-border); color: var(--danger);">
             <span class="status-swatch-role">软底 (UI_DANGER_SOFT)</span>
-            <span class="status-swatch-code" id="hexDangerSoft">#FEF2F2</span>
+            <span class="status-swatch-code" id="hexDangerSoft">#FAEBE7</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--danger-border); color: var(--text-primary);">
             <span class="status-swatch-role">边框 (Border 1~2px)</span>
-            <span class="status-swatch-code" id="hexDangerBorder">#FCA5A5</span>
+            <span class="status-swatch-code" id="hexDangerBorder">#E3A79F</span>
           </div>
           <div class="status-swatch-item" style="background: var(--danger); border-color: var(--danger); color: #fff;">
             <span class="status-swatch-role">实体/胶囊/前景 (UI_DANGER)</span>
-            <span class="status-swatch-code" id="hexDangerSolid">#C42B45</span>
+            <span class="status-swatch-code" id="hexDangerSolid">#AE3E38</span>
           </div>
         </div>
       </div>
@@ -1196,22 +1196,22 @@
       <div class="status-card">
         <div class="status-card-header">
           <span class="status-pill-demo" style="background: var(--accent-soft); color: var(--accent); border: 1.5px solid var(--accent);">
-            ◆ 主品牌与信息 (Accent / Info)
+            ◆ 主强调与信息 (Accent / Info)
           </span>
         </div>
         <p class="status-card-desc">今日规划标题圆点、选中高亮、折线推演关键帧、默认活动段。</p>
         <div class="status-swatch-list">
           <div class="status-swatch-item" style="background: var(--accent-soft); border-color: var(--accent); color: var(--accent);">
             <span class="status-swatch-role">软底 (UI_ACCENT_SOFT)</span>
-            <span class="status-swatch-code" id="hexAccentSoft">#E4EDFF</span>
+            <span class="status-swatch-code" id="hexAccentSoft">#E7EDF4</span>
           </div>
           <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--accent); color: var(--text-primary);">
             <span class="status-swatch-role">高亮轮廓 (Focus Outline)</span>
-            <span class="status-swatch-code" id="hexFocus">#1247A8</span>
+            <span class="status-swatch-code" id="hexFocus">#1B3350</span>
           </div>
           <div class="status-swatch-item" style="background: var(--accent); border-color: var(--accent); color: var(--on-accent);">
-            <span class="status-swatch-role">品牌主色 (UI_ACCENT)</span>
-            <span class="status-swatch-code" id="hexAccentSolid">#245BC4</span>
+            <span class="status-swatch-role">主强调色 (UI_ACCENT)</span>
+            <span class="status-swatch-code" id="hexAccentSolid">#2C4A6E</span>
           </div>
         </div>
       </div>
@@ -1243,7 +1243,7 @@
         <span class="check-icon">✓</span>
         <div>
           <div class="check-title">高可读性明度对比</div>
-          <div class="check-desc">浅色模式正文字色 ≥ <code>#172640</code>，深色模式正文字色 ≥ <code>#EEEEFF</code>，无昏暗发沉现象。</div>
+          <div class="check-desc">浅色模式正文字色 ≥ <code>#211E19</code>，深色模式正文字色 ≥ <code>#FFEEDD</code>，无昏暗发沉现象。</div>
         </div>
       </div>
 
@@ -1288,70 +1288,282 @@
   <script>
     const PALETTE_DATA = {
       light: [
-        { key: "page_bg", cName: ".page_bg", hex: "#F0F3FA", name: "页面底色", desc: "全局背景色，微偏蓝冷调，衬托前景卡片", textCol: "#172640" },
-        { key: "surface", cName: ".surface", hex: "#FFFFFF", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#172640" },
-        { key: "surface_raised", cName: ".surface_raised", hex: "#E8EDF7", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#172640" },
-        { key: "border_decorative", cName: ".border_decorative", hex: "#DBE1E9", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#172640" },
-        { key: "border_control", cName: ".border_control", hex: "#7A968F", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#FFFFFF" },
-        { key: "text_primary", cName: ".text_primary", hex: "#172640", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#FFFFFF" },
-        { key: "text_secondary", cName: ".text_secondary", hex: "#53627A", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#FFFFFF" },
-        { key: "text_disabled", cName: ".text_disabled", hex: "#9199A5", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#FFFFFF" },
-        { key: "accent", cName: ".accent", hex: "#245BC4", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#FFFFFF" },
-        { key: "accent_soft", cName: ".accent_soft", hex: "#E4EDFF", name: "主色软底", desc: "主色对应浅色软背景", textCol: "#245BC4" },
-        { key: "focus", cName: ".focus", hex: "#1247A8", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#FFFFFF" },
-        { key: "success", cName: ".success", hex: "#15803D", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#FFFFFF" },
-        { key: "success_soft", cName: ".success_soft", hex: "#EDF9F0", name: "成功极浅软底", desc: "极浅薄荷浅绿软底", textCol: "#15803D" },
-        { key: "warning", cName: ".warning", hex: "#FA8C16", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#FFFFFF" },
-        { key: "warning_soft", cName: ".warning_soft", hex: "#FFFBEB", name: "提醒柔和软底", desc: "温暖柔和杏白/米白软底", textCol: "#D46B08" },
-        { key: "danger", cName: ".danger", hex: "#C42B45", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#FFFFFF" },
-        { key: "danger_soft", cName: ".danger_soft", hex: "#FEF2F2", name: "危险粉樱软底", desc: "淡粉樱软底", textCol: "#C42B45" }
+        { key: "page_bg", cName: ".page_bg", hex: "#F3F4F6", name: "页面底色", desc: "冷灰底色，低眩光，衬托前景卡片", textCol: "#111111" },
+        { key: "surface", cName: ".surface", hex: "#FCFCFD", name: "基础表面", desc: "冷白卡片，替代刺眼纯白", textCol: "#111111" },
+        { key: "surface_raised", cName: ".surface_raised", hex: "#E9EBEF", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#111111" },
+        { key: "border_decorative", cName: ".border_decorative", hex: "#DDE0E5", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#111111" },
+        { key: "border_control", cName: ".border_control", hex: "#7D8593", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#FFFFFF" },
+        { key: "text_primary", cName: ".text_primary", hex: "#171A20", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#FFFFFF" },
+        { key: "text_secondary", cName: ".text_secondary", hex: "#545B68", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#FFFFFF" },
+        { key: "text_disabled", cName: ".text_disabled", hex: "#7E8592", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#FFFFFF" },
+        { key: "accent", cName: ".accent", hex: "#2F5FD0", name: "主强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#FFFFFF" },
+        { key: "accent_soft", cName: ".accent_soft", hex: "#E6ECFB", name: "主色软底", desc: "主色对应的浅蓝软背景", textCol: "#2F5FD0" },
+        { key: "focus", cName: ".focus", hex: "#1C46AC", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#FFFFFF" },
+        { key: "success", cName: ".success", hex: "#2C7A4B", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#FFFFFF" },
+        { key: "success_soft", cName: ".success_soft", hex: "#EAF5EE", name: "成功极浅软底", desc: "柔和绿软底", textCol: "#2C7A4B" },
+        { key: "warning", cName: ".warning", hex: "#9A6114", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#FFFFFF" },
+        { key: "warning_soft", cName: ".warning_soft", hex: "#FBF2E1", name: "提醒柔和软底", desc: "柔和琥珀软底", textCol: "#83500C" },
+        { key: "danger", cName: ".danger", hex: "#B53A45", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#FFFFFF" },
+        { key: "danger_soft", cName: ".danger_soft", hex: "#FAEBEC", name: "危险粉樱软底", desc: "柔和红软底", textCol: "#B53A45" }
       ],
       dark: [
-        { key: "page_bg", cName: ".page_bg", hex: "#111122", name: "页面底色", desc: "全局背景色，深邃蓝黑冷调", textCol: "#EEEEFF" },
-        { key: "surface", cName: ".surface", hex: "#112233", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#EEEEFF" },
-        { key: "surface_raised", cName: ".surface_raised", hex: "#223344", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#EEEEFF" },
-        { key: "border_decorative", cName: ".border_decorative", hex: "#334455", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#EEEEFF" },
-        { key: "border_control", cName: ".border_control", hex: "#778899", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#111122" },
-        { key: "text_primary", cName: ".text_primary", hex: "#EEEEFF", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#111122" },
-        { key: "text_secondary", cName: ".text_secondary", hex: "#AABBCC", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#111122" },
-        { key: "text_disabled", cName: ".text_disabled", hex: "#667788", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#111122" },
-        { key: "accent", cName: ".accent", hex: "#77AAFF", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#112244" },
-        { key: "accent_soft", cName: ".accent_soft", hex: "#223355", name: "主色软底", desc: "主色对应暗蓝软背景", textCol: "#77AAFF" },
-        { key: "focus", cName: ".focus", hex: "#AACCFF", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#112244" },
-        { key: "success", cName: ".success", hex: "#55DD77", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#111122" },
-        { key: "success_soft", cName: ".success_soft", hex: "#113322", name: "成功极浅软底", desc: "暗翡翠绿软底", textCol: "#55DD77" },
-        { key: "warning", cName: ".warning", hex: "#FFBB33", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#111122" },
-        { key: "warning_soft", cName: ".warning_soft", hex: "#332211", name: "提醒柔和软底", desc: "深暖褐棕软底", textCol: "#FFBB33" },
-        { key: "danger", cName: ".danger", hex: "#FF7788", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#111122" },
-        { key: "danger_soft", cName: ".danger_soft", hex: "#441122", name: "危险粉樱软底", desc: "暗樱红软底", textCol: "#FF7788" }
+        { key: "page_bg", cName: ".page_bg", hex: "#111111", name: "页面底色", desc: "中性炭黑底色，夜间低眩光", textCol: "#FFFFFF" },
+        { key: "surface", cName: ".surface", hex: "#222222", name: "基础表面", desc: "深灰卡片，阻隔游戏画面强光", textCol: "#FFFFFF" },
+        { key: "surface_raised", cName: ".surface_raised", hex: "#333333", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#FFFFFF" },
+        { key: "border_decorative", cName: ".border_decorative", hex: "#444444", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#FFFFFF" },
+        { key: "border_control", cName: ".border_control", hex: "#888888", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#FFFFFF" },
+        { key: "text_primary", cName: ".text_primary", hex: "#EEEEEE", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#111111" },
+        { key: "text_secondary", cName: ".text_secondary", hex: "#BBBBBB", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#111111" },
+        { key: "text_disabled", cName: ".text_disabled", hex: "#777777", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#FFFFFF" },
+        { key: "accent", cName: ".accent", hex: "#88AAEE", name: "主强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#111111" },
+        { key: "accent_soft", cName: ".accent_soft", hex: "#223344", name: "主色软底", desc: "4-bit 安全的深墨蓝软底", textCol: "#88AAEE" },
+        { key: "focus", cName: ".focus", hex: "#BBDDFF", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#111111" },
+        { key: "success", cName: ".success", hex: "#77CC99", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#111111" },
+        { key: "success_soft", cName: ".success_soft", hex: "#113322", name: "成功极浅软底", desc: "深苔绿软底", textCol: "#77CC99" },
+        { key: "warning", cName: ".warning", hex: "#EEBB66", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#111111" },
+        { key: "warning_soft", cName: ".warning_soft", hex: "#332211", name: "提醒柔和软底", desc: "深褐软底", textCol: "#EEBB66" },
+        { key: "danger", cName: ".danger", hex: "#EE8899", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#FFFFFF" },
+        { key: "danger_soft", cName: ".danger_soft", hex: "#441122", name: "危险粉樱软底", desc: "暗陶红软底", textCol: "#EE8899" }
       ]
     };
 
     const STYLE_DATA = {
       indigo: {
-        name: '沉静靛蓝 (Serene Indigo)',
-        light: { accent: '#245BC4', accentSoft: '#E4EDFF', focus: '#1247A8', hero: '#214EA3' },
-        dark:  { accent: '#77AAFF', accentSoft: '#223355', focus: '#AACCFF', hero: '#223388', onAccent: '#112244' }
+        name: '纸墨 (Paper & Ink)',
+        light: {
+          page_bg: "#F5F1E8",
+          surface: "#FFFDF8",
+          surface_raised: "#EDE7DA",
+          border_decorative: "#E2DACB",
+          border_control: "#8A8172",
+          text_primary: "#211E19",
+          text_secondary: "#5D564B",
+          text_disabled: "#8A8172",
+          accent: "#2C4A6E",
+          accent_soft: "#E7EDF4",
+          focus: "#1B3350",
+          on_accent: "#FFFFFF",
+          success: "#3E7A4E",
+          success_soft: "#EBF3E9",
+          success_border: "#A8CDA4",
+          warning: "#96601A",
+          warning_soft: "#FAF1DF",
+          warning_border: "#E3C07E",
+          warning_text: "#7F4F10",
+          danger: "#AE3E38",
+          danger_soft: "#FAEBE7",
+          danger_border: "#E3A79F"
+        },
+        dark: {
+          page_bg: "#111111",
+          surface: "#221111",
+          surface_raised: "#332222",
+          border_decorative: "#443333",
+          border_control: "#887777",
+          text_primary: "#FFEEDD",
+          text_secondary: "#CCBBAA",
+          text_disabled: "#776666",
+          accent: "#99BBDD",
+          accent_soft: "#223344",
+          focus: "#BBDDFF",
+          on_accent: "#112233",
+          success: "#88CC99",
+          success_soft: "#113322",
+          success_border: "#336644",
+          warning: "#EEBB66",
+          warning_soft: "#332211",
+          warning_border: "#775522",
+          warning_text: "#EEBB66",
+          danger: "#EE9988",
+          danger_soft: "#441111",
+          danger_border: "#883322"
+        }
       },
       teal: {
-        name: '清爽青绿 (Ocean Teal)',
-        light: { accent: '#0D7A70', accentSoft: '#E0F4F2', focus: '#08544D', hero: '#0B665E' },
-        dark:  { accent: '#44DDCC', accentSoft: '#113333', focus: '#77FFEE', hero: '#115555', onAccent: '#002222' }
+        name: '雾青 (Mist Teal)',
+        light: {
+          page_bg: "#F2F5F2",
+          surface: "#FBFCFA",
+          surface_raised: "#E9EFEA",
+          border_decorative: "#DCE4DE",
+          border_control: "#768A81",
+          text_primary: "#182420",
+          text_secondary: "#52645C",
+          text_disabled: "#7F8C85",
+          accent: "#1F6B5C",
+          accent_soft: "#E2F0EB",
+          focus: "#124F44",
+          on_accent: "#FFFFFF",
+          success: "#2E7D4F",
+          success_soft: "#EAF5EE",
+          success_border: "#9BD3AE",
+          warning: "#9A6212",
+          warning_soft: "#FBF3E3",
+          warning_border: "#E7C27B",
+          warning_text: "#85510B",
+          danger: "#B33B45",
+          danger_soft: "#FAECEC",
+          danger_border: "#E4A3A8"
+        },
+        dark: {
+          page_bg: "#111111",
+          surface: "#112222",
+          surface_raised: "#223333",
+          border_decorative: "#334444",
+          border_control: "#778888",
+          text_primary: "#EEFFFF",
+          text_secondary: "#AACCCC",
+          text_disabled: "#667777",
+          accent: "#77CCBB",
+          accent_soft: "#113333",
+          focus: "#AADDDD",
+          on_accent: "#002222",
+          success: "#77CC99",
+          success_soft: "#113322",
+          success_border: "#336644",
+          warning: "#EEBB66",
+          warning_soft: "#332211",
+          warning_border: "#775522",
+          warning_text: "#EEBB66",
+          danger: "#EE8899",
+          danger_soft: "#441122",
+          danger_border: "#882233"
+        }
       },
       amethyst: {
-        name: '暮紫星夜 (Night Amethyst)',
-        light: { accent: '#6340B8', accentSoft: '#F1ECFC', focus: '#482B96', hero: '#5332A0' },
-        dark:  { accent: '#BB99FF', accentSoft: '#332255', focus: '#DDCCFF', hero: '#442277', onAccent: '#221144' }
+        name: '暮霭 (Dusk)',
+        light: {
+          page_bg: "#F5F2F5",
+          surface: "#FDFBFD",
+          surface_raised: "#EDE7ED",
+          border_decorative: "#E1D9E1",
+          border_control: "#877C88",
+          text_primary: "#221D24",
+          text_secondary: "#5D5360",
+          text_disabled: "#8B7F8C",
+          accent: "#7A4670",
+          accent_soft: "#F3E8F1",
+          focus: "#5A2F52",
+          on_accent: "#FFFFFF",
+          success: "#3F7A55",
+          success_soft: "#EAF4ED",
+          success_border: "#A0CCA9",
+          warning: "#96601A",
+          warning_soft: "#FAF1DF",
+          warning_border: "#E3C07E",
+          warning_text: "#7F4F10",
+          danger: "#B03E46",
+          danger_soft: "#FAEAEC",
+          danger_border: "#E3A3A8"
+        },
+        dark: {
+          page_bg: "#111111",
+          surface: "#221122",
+          surface_raised: "#332233",
+          border_decorative: "#443344",
+          border_control: "#887788",
+          text_primary: "#FFEEFF",
+          text_secondary: "#CCBBCC",
+          text_disabled: "#776677",
+          accent: "#DD99CC",
+          accent_soft: "#332233",
+          focus: "#EEBBEE",
+          on_accent: "#331122",
+          success: "#77CC99",
+          success_soft: "#113322",
+          success_border: "#336644",
+          warning: "#EEBB66",
+          warning_soft: "#332211",
+          warning_border: "#775522",
+          warning_text: "#EEBB66",
+          danger: "#EE8899",
+          danger_soft: "#441122",
+          danger_border: "#882233"
+        }
       },
       slate: {
-        name: '极简冷灰 (Slate Neutral)',
-        light: { accent: '#3B5270', accentSoft: '#EAF0F6', focus: '#25364D', hero: '#30435C' },
-        dark:  { accent: '#99BBDD', accentSoft: '#223344', focus: '#CCDDEE', hero: '#224466', onAccent: '#112233' }
+        name: '石墨 (Graphite)',
+        light: {
+          page_bg: "#F3F4F6",
+          surface: "#FCFCFD",
+          surface_raised: "#E9EBEF",
+          border_decorative: "#DDE0E5",
+          border_control: "#7D8593",
+          text_primary: "#171A20",
+          text_secondary: "#545B68",
+          text_disabled: "#7E8592",
+          accent: "#2F5FD0",
+          accent_soft: "#E6ECFB",
+          focus: "#1C46AC",
+          on_accent: "#FFFFFF",
+          success: "#2C7A4B",
+          success_soft: "#EAF5EE",
+          success_border: "#9AD2AE",
+          warning: "#9A6114",
+          warning_soft: "#FBF2E1",
+          warning_border: "#E4C17B",
+          warning_text: "#83500C",
+          danger: "#B53A45",
+          danger_soft: "#FAEBEC",
+          danger_border: "#E2A2A8"
+        },
+        dark: {
+          page_bg: "#111111",
+          surface: "#222222",
+          surface_raised: "#333333",
+          border_decorative: "#444444",
+          border_control: "#888888",
+          text_primary: "#EEEEEE",
+          text_secondary: "#BBBBBB",
+          text_disabled: "#777777",
+          accent: "#88AAEE",
+          accent_soft: "#223344",
+          focus: "#BBDDFF",
+          on_accent: "#112233",
+          success: "#77CC99",
+          success_soft: "#113322",
+          success_border: "#336644",
+          warning: "#EEBB66",
+          warning_soft: "#332211",
+          warning_border: "#775522",
+          warning_text: "#EEBB66",
+          danger: "#EE8899",
+          danger_soft: "#441122",
+          danger_border: "#882233"
+        }
       }
     };
 
+    const STYLE_CSS_KEYS = {
+      page_bg: 'page-bg', surface: 'surface', surface_raised: 'surface-raised',
+      border_decorative: 'border-decorative', border_control: 'border-control',
+      text_primary: 'text-primary', text_secondary: 'text-secondary', text_disabled: 'text-disabled',
+      accent: 'accent', accent_soft: 'accent-soft', focus: 'focus', on_accent: 'on-accent',
+      success: 'success', success_soft: 'success-soft', success_border: 'success-border',
+      warning: 'warning', warning_soft: 'warning-soft', warning_border: 'warning-border', warning_text: 'warning-deep',
+      danger: 'danger', danger_soft: 'danger-soft', danger_border: 'danger-border'
+    };
+
     let currentTheme = 'light';
-    let currentStyle = 'indigo';
+    let currentStyle = 'slate';
+
+    function paletteTextColor(hex) {
+      const h = hex.replace('#', '');
+      const lin = [0, 2, 4].map(i => {
+        const v = parseInt(h.slice(i, i + 2), 16) / 255;
+        return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      });
+      const l = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+      return l > 0.45 ? '#111111' : '#FFFFFF';
+    }
+
+    function itemTextColor(key, palette, mode) {
+      if (key === 'accent_soft') return palette.accent;
+      if (key === 'success_soft') return palette.success;
+      if (key === 'warning_soft') return palette.warning_text;
+      if (key === 'danger_soft') return palette.danger;
+      return paletteTextColor(palette[key]);
+    }
 
     function setStyle(style) {
       if (!STYLE_DATA[style]) return;
@@ -1364,31 +1576,20 @@
 
       const s = STYLE_DATA[style];
       const root = document.documentElement;
-      root.style.setProperty('--pw-light-accent', s.light.accent);
-      root.style.setProperty('--pw-light-accent-soft', s.light.accentSoft);
-      root.style.setProperty('--pw-light-focus', s.light.focus);
-      root.style.setProperty('--pw-light-hero', s.light.hero);
+      ['light', 'dark'].forEach(mode => {
+        const p = s[mode];
+        Object.keys(STYLE_CSS_KEYS).forEach(key => {
+          root.style.setProperty(`--pw-${mode}-${STYLE_CSS_KEYS[key]}`, p[key]);
+        });
+        root.style.setProperty(`--pw-${mode}-success-vivid`, p.success);
+        root.style.setProperty(`--pw-${mode}-danger-vivid`, p.danger);
 
-      root.style.setProperty('--pw-dark-accent', s.dark.accent);
-      root.style.setProperty('--pw-dark-accent-soft', s.dark.accentSoft);
-      root.style.setProperty('--pw-dark-focus', s.dark.focus);
-      root.style.setProperty('--pw-dark-hero', s.dark.hero);
-      root.style.setProperty('--pw-dark-on-accent', s.dark.onAccent);
-
-      // Update palette data
-      const la = PALETTE_DATA.light.find(x => x.key === 'accent');
-      if (la) { la.hex = s.light.accent; la.desc = s.name + ' 强调色'; }
-      const las = PALETTE_DATA.light.find(x => x.key === 'accent_soft');
-      if (las) { las.hex = s.light.accentSoft; }
-      const lf = PALETTE_DATA.light.find(x => x.key === 'focus');
-      if (lf) { lf.hex = s.light.focus; }
-
-      const da = PALETTE_DATA.dark.find(x => x.key === 'accent');
-      if (da) { da.hex = s.dark.accent; da.desc = s.name + ' 4-bit 严格安全强调色'; }
-      const das = PALETTE_DATA.dark.find(x => x.key === 'accent_soft');
-      if (das) { das.hex = s.dark.accentSoft; }
-      const df = PALETTE_DATA.dark.find(x => x.key === 'focus');
-      if (df) { df.hex = s.dark.focus; }
+        PALETTE_DATA[mode].forEach(item => {
+          item.hex = p[item.key];
+          item.textCol = itemTextColor(item.key, p, mode);
+          if (item.key === 'accent') item.desc = s.name + (mode === 'dark' ? ' 4-bit 严格安全强调色' : ' 强调色');
+        });
+      });
 
       renderPaletteGrid();
       updateSemanticCodes();
@@ -1400,10 +1601,10 @@
       zh: {
         brand_name: "视觉风格与调色板交互预览",
         brand_sub: "Nintendo Switch 界面调色与微几何规范",
-        style_indigo: "沉静靛蓝",
-        style_teal: "清爽青绿",
-        style_amethyst: "暮紫星夜",
-        style_slate: "极简冷灰",
+        style_indigo: "纸墨",
+        style_teal: "雾青",
+        style_amethyst: "暮霭",
+        style_slate: "石墨",
         mode_light: "浅色模式 (Light Mode)",
         mode_dark: "深色模式 (Dark Mode)",
         btn_light: "浅色 (Light)",
@@ -1414,7 +1615,7 @@
         sec2_title: "双主题全量调色板 (Full Light / Dark Color Palettes)",
         sec2_desc: "点击色卡可直接复制对应十六进制 HEX 颜色值与 C 宏定义命名",
         sec3_title: "状态语义色与层级规范 (Semantic States & Levels)",
-        sec3_desc: "高饱和实体配极浅软底，严格杜绝发灰脏黄色，强化 OLED 与液晶屏辨识度",
+        sec3_desc: "暖纸底配降饱和语义色，严格杜绝发灰脏黄色，兼顾电视与夜间辨识度",
         copy_hint: "点击复制",
         toast_copy: "已复制",
         color_val: "颜色值"
@@ -1422,10 +1623,10 @@
       en: {
         brand_name: "Visual Design & Palette Explorer",
         brand_sub: "Nintendo Switch UI Palettes & Micro-Geometry Specification",
-        style_indigo: "Serene Indigo",
-        style_teal: "Fresh Teal",
-        style_amethyst: "Twilight Amethyst",
-        style_slate: "Minimal Slate",
+        style_indigo: "Paper & Ink",
+        style_teal: "Mist Teal",
+        style_amethyst: "Dusk",
+        style_slate: "Graphite",
         mode_light: "Light Mode",
         mode_dark: "Dark Mode",
         btn_light: "Light",
@@ -1436,7 +1637,7 @@
         sec2_title: "Full Light / Dark Color Palettes",
         sec2_desc: "Click any color swatch to copy its HEX value and C constant name",
         sec3_title: "Semantic States & Contrast Hierarchy",
-        sec3_desc: "High-saturation solids with ultra-soft tints for optimal readability on OLED & LCD screens",
+        sec3_desc: "Warm paper surfaces with restrained semantic tints for OLED, LCD and low-light viewing",
         copy_hint: "Click to copy",
         toast_copy: "Copied",
         color_val: "Color value"
@@ -1526,22 +1727,22 @@
     }
 
     function updateSemanticCodes() {
-      const isDark = currentTheme === 'dark';
-      document.getElementById('hexSuccessSoft').textContent = isDark ? '#113322' : '#EDF9F0';
-      document.getElementById('hexSuccessBorder').textContent = isDark ? '#226633' : '#86EFAC';
-      document.getElementById('hexSuccessSolid').textContent = isDark ? '#55DD77' : '#16A34A';
+      const s = STYLE_DATA[currentStyle][currentTheme];
+      document.getElementById('hexSuccessSoft').textContent = s.success_soft;
+      document.getElementById('hexSuccessBorder').textContent = s.success_border;
+      document.getElementById('hexSuccessSolid').textContent = s.success;
 
-      document.getElementById('hexWarningSoft').textContent = isDark ? '#332211' : '#FFFBEB';
-      document.getElementById('hexWarningBorder').textContent = isDark ? '#885511' : '#FFD591';
-      document.getElementById('hexWarningSolid').textContent = isDark ? '#FFBB33' : '#FA8C16';
+      document.getElementById('hexWarningSoft').textContent = s.warning_soft;
+      document.getElementById('hexWarningBorder').textContent = s.warning_border;
+      document.getElementById('hexWarningSolid').textContent = s.warning;
 
-      document.getElementById('hexDangerSoft').textContent = isDark ? '#441122' : '#FEF2F2';
-      document.getElementById('hexDangerBorder').textContent = isDark ? '#882233' : '#FCA5A5';
-      document.getElementById('hexDangerSolid').textContent = isDark ? '#FF7788' : '#C42B45';
+      document.getElementById('hexDangerSoft').textContent = s.danger_soft;
+      document.getElementById('hexDangerBorder').textContent = s.danger_border;
+      document.getElementById('hexDangerSolid').textContent = s.danger;
 
-      document.getElementById('hexAccentSoft').textContent = isDark ? '#223355' : '#E4EDFF';
-      document.getElementById('hexFocus').textContent = isDark ? '#AACCFF' : '#1247A8';
-      document.getElementById('hexAccentSolid').textContent = isDark ? '#77AAFF' : '#245BC4';
+      document.getElementById('hexAccentSoft').textContent = s.accent_soft;
+      document.getElementById('hexFocus').textContent = s.focus;
+      document.getElementById('hexAccentSolid').textContent = s.accent;
     }
 
     function copyText(text, label) {
@@ -1565,8 +1766,7 @@
 
     // Initialize on load
     document.addEventListener('DOMContentLoaded', () => {
-      renderPaletteGrid();
-      updateSemanticCodes();
+      setStyle('slate');
     });
   </script>
 </body>
