@@ -57,6 +57,7 @@ Use the [research index](调研/README.md) (Chinese) to separate reusable refere
 | [Enabling system Parental Controls](调研/开启系统家长控制功能调研.md) | Native PIN registration, handover prerequisites and proposed entry point | 2026-10-06 |
 | [Non-PCTL suspension and overlay capabilities](调研/非PCTL暂停与浮窗能力调研.md) | Source-level display, input, process suspension and recovery capabilities | 2026-10-06 |
 | [Overlay memory and freeze risk audit](调研/Overlay内存与死机风险自查.md) | Bounded glyph ownership, resource teardown, thread races and hardware evidence limits | 2026-10-13 |
+| [Eden and Tesla overlay loading capabilities](调研/Eden与Tesla浮窗加载能力调研.md) | Missing CFW/sysmodule support, VI and HID measurements, emulator-only limits | 2026-10-24 |
 | [PCTL1952 feature impact analysis](调研/专题分析/PCTL1952功能影响分析.md) | Cross-feature analysis bound to its original source baseline, not the current backlog | 2026-10-14 |
 | [Historical investigations](调研/历史调查/README.md) | Five diagnostic, capability-probe and handoff records with original version and evidence boundaries | 2026-10 |
 

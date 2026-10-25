@@ -2,7 +2,7 @@
 
 [开发文档入口](../docs/开发/README.md) · [测试操作手册](../docs/开发/测试操作手册.md)
 
-本目录核对于2026-10-19：60个Python／PowerShell脚本及`ptc_frontend/`的14个既有跟踪文件。分类清单同时保存在[catalog.json](catalog.json)，每个脚本恰好一项；根目录仅保留6个日常入口，其余按实际子目录管理。
+Python／PowerShell脚本的当前数量与分类清单保存在[catalog.json](catalog.json)，每个脚本恰好一项；根目录仅保留6个日常入口，其余按实际子目录管理。`ptc_frontend/`保留家长网页产品源码。
 
 ## 日常怎么选
 
@@ -174,6 +174,9 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | [automation/eden_main_flow.py](automation/eden_main_flow.py) | 发版前中文业务旅程串行编排与离线断言复核 |
 | [automation/eden_support_flow.py](automation/eden_support_flow.py) | 支持恢复专项：诊断、停用、安装恢复与重开，保留正常业务痕迹 |
 | [automation/eden_mcp_bridge.py](automation/eden_mcp_bridge.py) | 在显式指定的外部Python/MCP环境启动定制Eden，记录自建PID |
+| [automation/eden_runtime.py](automation/eden_runtime.py) | 共用程序硬链接与固件缓存，每批独立profile、容量和所有权门禁 |
+| [automation/eden_runtime_cleanup.ps1](automation/eden_runtime_cleanup.ps1) | 封存核验后解除本批链接并清理临时目录，失败保留有界现场 |
+| [automation/eden_web_flow.py](automation/eden_web_flow.py) | X02网页导入／发码→NRO兑换与重开持久化；浏览器驱动为同目录eden_web_browser.js |
 
 准备、命令、只读UI快照与证明边界见[开发说明](../docs/开发/Eden自动化测试.md)。日常基础测试不启动此执行器；Host单元测试和默认Eden NRO构建／产物校验继续保留，均不启动模拟器。这些工具不连接真实Switch。
 

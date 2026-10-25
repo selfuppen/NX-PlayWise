@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "reviewed_date": "2026-10-24",
+  "reviewed_date": "2026-10-25",
   "scope": "playwise/tools",
-  "script_count": 65,
+  "script_count": 68,
   "scripts": [
     {
       "path": "device/input_connection.py",
@@ -272,6 +272,21 @@
       "path": "automation/eden_mcp_bridge.py",
       "category": "automation",
       "purpose": "启动外部Eden MCP运行时并记录自建进程身份"
+    },
+    {
+      "path": "automation/eden_runtime.py",
+      "category": "automation",
+      "purpose": "共享Eden程序与固件、隔离profile、容量和所有权门禁"
+    },
+    {
+      "path": "automation/eden_runtime_cleanup.ps1",
+      "category": "automation",
+      "purpose": "核对绝对路径及链接目标后清理本批运行目录，不穿越共享资源"
+    },
+    {
+      "path": "automation/eden_web_flow.py",
+      "category": "automation",
+      "purpose": "X02真实浏览器配对发码至NRO兑换、nonce持久化旅程"
     },
     {
       "path": "automation/sys_botbase_client.py",

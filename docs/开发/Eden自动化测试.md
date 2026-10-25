@@ -16,8 +16,10 @@ Eden 场景回归集中到发版前。固定候选 NRO／manifest 后，执行�
 
 需要带 protocol 2 的定制 Eden、配置好的 profile，以及装有 `eden-mcp 0.5.0` 的外部 Python。执行器本身和 Host 回归只用标准库；不会联网安装依赖、修改全局 MCP 配置或原 profile。外部依赖可显式用 `--mcp-site` 指定。
 
+shared原生运行要求Windows、NTFS文件硬链接／目录联接和PowerShell 7（`pwsh`）。Host的纯Python边界仍跨平台；Windows链接／清理fixture仅在具备该能力时运行，并在测试进程中替换进程快照查询，不依赖或操作真实Eden进程。
+
 ```powershell
-python -X utf8 tools/automation/eden_runner.py run --eden "<Eden目录>/eden.exe" --profile "<Eden目录>/user" --mcp-python "<MCP环境>/python.exe" --mcp-site "<MCP依赖目录>" --out "device-reports/eden-automation/<全新批次>"
+python -X utf8 tools/automation/eden_runner.py run --runtime-mode shared --eden "<Eden目录>/eden.exe" --profile "<Eden目录>/user" --mcp-python "<MCP环境>/python.exe" --mcp-site "<MCP依赖目录>" --runtime-root "<数据盘>/PlayWise-Eden/runs" --application-root "<Eden同卷>/PlayWise-Eden-AppLinks/managed" --firmware-cache "<数据盘>/PlayWise-Eden/shared-resources/firmware/Contents" --out "device-reports/eden-automation/<全新批次>"
 python -X utf8 tools/automation/eden_runner.py verify --run "device-reports/eden-automation/<批次>"
 ```
 
@@ -31,9 +33,31 @@ Eden重开会重建进程内PCTL stub；`restored + disable.flag`必须从原安
 
 页面等待允许在原20秒内等有效身份的旧快照出现新心跳；四秒新鲜度门槛不变，没有新鲜快照不发送输入。身份错误和未来文件时间直接停止，输入前的独立检查仍保留。此等待只重读观察，不重发操作。
 
-输出目录必须不存在；每次创建新的 `build/eden-runtimes/<随机ID>`。只复制 config、keys、nand，不复制操作者 SD/认证数据；全部存储路径重写到新 profile。敏感运行材料保留在该私有目录，不进入证据清单。固定测试规则为每周每日 120 分钟，PIN 由正常首次设置创建默认 `110`；不接受或记录家庭 PIN。
+输出目录必须不存在；每次在runtime-root创建随机ID私有profile，config、keys与可变NAND独立复制，不复制操作者SD／认证数据或已安装游戏。全部可写存储路径重写到本批profile，固定规则为每周每日120分钟，PIN由正常首次设置创建默认`110`，不接受或记录家庭PIN。默认`--runtime-mode shared`；`--runtime-mode copy`仅保留旧整份复制行为，须显式选择且不自动清理。
 
-可用 `--runtime-root <本地可写目录>` 将私有 exe／profile 放在指定磁盘；报告仍由 `--out` 单独指定。此入口始终复制所选软件，不能把它描述成直接操作原安装。开始输入前同时核对 MCP 的 effective_profile_root 与实际 Eden 日志中的 ConfigDir／SDMCDir；不同则停止。本机二进制的直启会优先使用相邻user目录，不能依赖 MCP 的 EDEN_USER_DIR 实现隔离。
+`--runtime-root`选择私有profile数据盘，建议容量充足的D盘；报告仍由`--out`指定。`--application-root`必须与源exe同卷，用NTFS文件硬链接创建本批程序入口，应用物理复制为0；入口旁user目录联接到私有profile。省略时使用源exe卷的`PlayWise-Eden-AppLinks/managed`。`--firmware-cache`是独立共享Contents目录：不存在时只复制一次并核验，已存在时必须逐文件匹配来源，否则拒绝而不覆盖；省略时为runtime-root相邻`shared-resources/firmware/Contents`。不同固件版本使用不同缓存路径。languages只读复用，密钥／可变NAND／SD／日志／缓存仍按批隔离。
+
+开始输入前同时核对MCP的effective_profile_root与原生日志ConfigDir／SDMCDir，路径不符则停止。本机原生版优先使用相邻user，不能靠EDEN_USER_DIR或切换cwd实现隔离，也没有通用的独立ini启动参数。原型依据见[轻量profile能力验证](验收记录/2026-10/自动化与交互/Eden临时文件清理与轻量Profile验证-20261025.md)；正式执行器批次见[共享资源与X02记录](验收记录/2026-10/自动化与交互/Eden共享资源执行器与X02网页闭环-20261025.md)。每批保存runtime-ownership.json和runtime-prepared.json，分别绑定所有权／来源资源哈希，以及实际复制量／准备时间；同时持有application-root下独占租约，已有租约或已有Eden进程则拒绝准备，不接管或自动杀进程。
+
+## 临时文件与共享资源收尾
+
+每批开始前登记临时目录、共享资源身份及容量预算。成功批次在所属进程健康退出后，先保存NRO／构建身份、配置与数据前提、输入／回执／原始流、必要截图和日志，封存哈希清单，再从已写JSON读回并重复离线核验；核验必须能在删除运行目录后独立完成。随后清理本批临时运行文件，另存删除清单与结果，不回写原封存材料。后续测试计划只存于版本化文档或独立记录，不能只留在待删除profile中。
+
+失败或未知批次先保留诊断所需现场，记录原因、范围和复查时间；有完整证据后优先移除可重建且与保留来源一致的资源，不再为每批永久保留或压缩一整份固件／程序。共享资源按内容哈希固定，记录引用关系；无人使用且确实由测试管理的旧缓存才纳入单独清理。来源安装、来源profile及密钥／固件原件、MCP依赖、已有原始报告不随运行目录清除。
+
+shared模式在业务和健康收尾成功后验证来源／共享缓存未变，封存并重复核验，再调用PowerShell清理。本批联接全部核对目标后单独解除，只删除UUID绑定的程序入口和私有profile根；禁止递归穿越共享资源。清理后再重复核验报告，结果保存到`<原out>-cleanup/`，绑定原始证据清单哈希，不改写已封存报告。该目录单独封存哈希清单，并读回、重复核对JSON键／类型与来源绑定；`verify --run`同时核验已有的清理清单。失败／未知批次保留目录并登记24小时内复查时间，健康停进程后释放本批租约；若清理中断，保留追加流水，不盲目重放。业务pass和清理失败须分别记录，CLI仍返回失败。
+
+硬链接共享文件内容，执行器在私有配置中禁用更新，固定程序哈希并检查来源完整性；测试期间不得外部更新或原地修改来源exe。跨卷不能建文件硬链接，不会静默退回全复制；容量统计不把硬链接逻辑大小算成重复物理复制。缓存仅核验和读用，不在每批结束时删除；旧缓存和历史失败现场按独立清单复核后清理。copy兼容模式仍需独立收尾，不能据shared实现声明所有旧批次会自动清理。
+
+## X02网页配对与发码扩展
+
+选择`--suite web --timeout 600`，使用全新profile和报告目录，执行5项：首次设置、NRO正常PIN配对／导出、真实浏览器导入／发码、NRO兑换、重开持久化。使用固定Eden测试资料，不接触真实家庭配置。网页源码和浏览器驱动封存在本批artifacts，环回HTTP只服务该冻结网页与测试导出；不把Python或CLI生成的码作为网页结果。
+
+执行到发码阶段会保存`browser-request.json`并输出`browser_required`，最多等待180秒。读取该JSON的origin，将本批`artifacts/eden_web_browser.js`中的唯一`__EDEN_ORIGIN__`替换为该origin，通过Playwright代码执行工具运行（本环境为`browser_run_code_unsafe`）。驱动新建独立browser context，通过文件选择／确认导入和普通发码表单操作，验证重载后配对／nonce仍在，上传必要截图与一次JSON结果后关闭context。单独启动CLI不会自行启动浏览器，须由外部工具在期限内驱动；无浏览器结果、绑定错误或超时则禁止NRO码输入，不重发或自动重启。
+
+浏览器码来自DOM，日期取NRO新鲜status的day_index；核对实际导出设备、30分钟面额、浏览器nonce、NRO预览／成功回执、活动、120→150额度和重开后的同一nonce。浏览器存储是本批真实Chromium上下文，非全局浏览器资料；手机摄像头光学扫码、PWA安装和断网能力不在本项范围。`web`不计入main17；浏览器和两次NRO退出均须通过，结束后沿用shared收尾。
+
+## 配置与执行边界
 
 语言／地区／渲染器默认完整沿用来源profile，NRO保留“跟随系统”，不强制切到英文。`--time-zone-index 34` 可只在私有配置中显式固定本build的PRC时区；fixtures/profile-settings.json 记录来源值、实际值和覆盖项，profile-settings-final.json 记录退出后持久化值。启动及重开均留截图，验证中文起点时须结合日志和画面，不只看配置数值。
 

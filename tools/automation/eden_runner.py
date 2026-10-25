@@ -29,7 +29,10 @@ SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
-    require(suite in ("smoke", "main", "support"), "unknown suite")
+    require(suite in ("smoke", "main", "support", "web"), "unknown suite")
+    if suite == "web":
+        from tools.automation.eden_web_flow import WEB_SCENARIOS
+        return WEB_SCENARIOS
     if suite == "support":
         from tools.automation.eden_support_flow import SUPPORT_SCENARIOS
         return SUPPORT_SCENARIOS
@@ -305,23 +308,32 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     from tools.package_remote import verify_eden_nro
     manifest = read(args.manifest)
     verify_eden_nro(args.nro, manifest)
-    sources = [args.eden]
-    for name in ("config", "keys", "nand"):
-        require((args.profile / name).is_dir(), f"profile component missing: {name}")
-        sources.extend(p for p in (args.profile / name).rglob("*") if p.is_file())
-    languages = args.eden.parent / "languages"
-    if languages.is_dir():
-        sources.extend(p for p in languages.rglob("*") if p.is_file())
-    capacity = check_runtime_capacity(args.runtime_root.resolve(), sum(p.stat().st_size for p in sources))
-    runtime = args.runtime_root.resolve() / uuid.uuid4().hex
-    profile = runtime / "user"
-    profile.mkdir(parents=True, exist_ok=False)
-    shutil.copy2(args.eden, runtime / "eden.exe")
-    for name in ("config", "keys", "nand"):
-        shutil.copytree(args.profile / name, profile / name, symlinks=False)
+    runtime_mode = getattr(args, "runtime_mode", "copy")
+    if runtime_mode == "shared":
+        from tools.automation import eden_runtime
+        application_root = args.application_root or Path(args.eden.anchor) / "PlayWise-Eden-AppLinks/managed"
+        firmware_cache = args.firmware_cache or args.runtime_root.parent / "shared-resources/firmware/Contents"
+        runtime, profile, ownership = eden_runtime.prepare(args.eden, args.profile, args.runtime_root,
+                                                         application_root, firmware_cache, output)
+        capacity = ownership["runtime_capacity"]
+    else:
+        sources = [args.eden]
+        for name in ("config", "keys", "nand"):
+            require((args.profile / name).is_dir(), f"profile component missing: {name}")
+            sources.extend(p for p in (args.profile / name).rglob("*") if p.is_file())
+        languages = args.eden.parent / "languages"
+        if languages.is_dir():
+            sources.extend(p for p in languages.rglob("*") if p.is_file())
+        capacity = check_runtime_capacity(args.runtime_root.resolve(), sum(p.stat().st_size for p in sources))
+        runtime = args.runtime_root.resolve() / uuid.uuid4().hex
+        profile = runtime / "user"
+        profile.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(args.eden, runtime / "eden.exe")
+        for name in ("config", "keys", "nand"):
+            shutil.copytree(args.profile / name, profile / name, symlinks=False)
+        if languages.is_dir():
+            shutil.copytree(languages, runtime / "languages")
     # Never seed the operator's SD or PlayWise authentication state.
-    if (args.eden.parent / "languages").is_dir():
-        shutil.copytree(args.eden.parent / "languages", runtime / "languages")
     config = profile / "config/qt-config.ini"
     text = config.read_text(encoding="utf-8-sig")
     source_config_sha256 = digest(args.profile / "config/qt-config.ini")
@@ -332,6 +344,7 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
         require(re.search(rf"(?m)^{re.escape(key)}=", text) is not None, f"missing profile path {key}")
         text = re.sub(rf"(?m)^{re.escape(key)}=.*$", lambda _: f"{key}={(profile / folder).as_posix()}", text)
     text = re.sub(r"(?m)^check_for_updates=.*$", "check_for_updates=false", text)
+    text = re.sub(r"(?m)^check_for_updates\\default=.*$", r"check_for_updates\\default=false", text)
     if args.renderer_backend is not None:
         require(re.search(r"(?m)^backend=", text) is not None, "missing renderer backend setting")
         text = re.sub(r"(?m)^backend=.*$", f"backend={args.renderer_backend}", text)
@@ -378,17 +391,24 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     shutil.copy2(args.manifest, artifacts / "manifest.json")
     for name in ("eden_runner.py", "eden_mcp_bridge.py"):
         shutil.copy2(Path(__file__).with_name(name), artifacts / name)
-    if args.suite in ("main", "support"):
+    if args.suite in ("main", "support", "web"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
     if args.suite == "support":
         shutil.copy2(Path(__file__).with_name("eden_support_flow.py"), artifacts / "eden_support_flow.py")
+    if args.suite == "web":
+        for name in ("eden_web_flow.py", "eden_web_browser.js"):
+            shutil.copy2(Path(__file__).with_name(name), artifacts / name)
+        shutil.copytree(ROOT / "tools/ptc_frontend", artifacts / "frontend")
+    if runtime_mode == "shared":
+        for name in ("eden_runtime.py", "eden_runtime_cleanup.ps1"):
+            shutil.copy2(Path(__file__).with_name(name), artifacts / name)
     config_text = "[portable]\n" + "\n".join(f"{k} = {json.dumps(v)}" for k, v in {
         "root": runtime.as_posix(), "executable": "eden.exe", "profile_template": "user",
-        "session_root": (runtime / "sessions").as_posix(),
+        "session_root": (profile.parent / "sessions").as_posix(),
     }.items()) + "\nrequire_control = true\nauto_prune_sessions = false\n"
     (runtime / "eden-mcp.toml").write_text(config_text, encoding="utf-8")
     identity = {"schema_version": 1, "run_id": runtime.name, "started_at": datetime.now(timezone.utc).isoformat(),
-                "runtime_capacity": capacity,
+                "runtime_capacity": capacity, "runtime_mode": runtime_mode,
                 "nro_sha256": digest(artifacts / "pctc-eden.nro"), "eden_sha256": digest(runtime / "eden.exe"),
                 "manifest": manifest, "runtime": str(runtime), "profile": str(profile),
                 "source_executable": str(args.eden.resolve()), "source_profile": str(args.profile.resolve()),
@@ -861,6 +881,10 @@ def verify(output: Path) -> dict:
             from tools.automation.eden_support_flow import verify_support
             verify_support(output)
             return summary
+        if summary.get("suite") == "web":
+            from tools.automation.eden_web_flow import verify_web
+            verify_web(output)
+            return summary
         require(read(output / "checkpoints/setup.json")["ui"]["view"] == 1 and
                 read(output / "checkpoints/reopen.json")["ui"]["view"] == 0 and
                 read(output / "checkpoints/pin_correct_parent.json")["ui"]["view"] == 1,
@@ -999,6 +1023,9 @@ def run(args: argparse.Namespace) -> int:
         failure = {"schema_version": 1, "phase": "preparation", "status": "precondition_not_met",
                    "error": str(exc), "scenarios": {name: {"status": "not_executed"} for name in scenario_names(args.suite)}}
         save(output / "preparation.json", failure)
+        if (output / "runtime-ownership.json").is_file():
+            from tools.automation.eden_runtime import finish
+            finish(output, False)
         print(json.dumps(failure, ensure_ascii=False))
         return 1
     command = [str(args.mcp_python), str(output / "artifacts/eden_mcp_bridge.py"),
@@ -1022,6 +1049,11 @@ def run(args: argparse.Namespace) -> int:
             class SupportSuite(SupportFlow, Suite):
                 pass
             suite_class = SupportSuite
+        elif args.suite == "web":
+            from tools.automation.eden_web_flow import WebFlow
+            class WebSuite(WebFlow, Suite):
+                pass
+            suite_class = WebSuite
         suite = suite_class(client, output, runtime, identity, args.timeout, args.suite)
         suite.execute()
     except Exception as exc:
@@ -1060,6 +1092,12 @@ def run(args: argparse.Namespace) -> int:
     require_audit = audit.get("query_ok") and not audit.get("crashes")
     if not require_audit:
         errors.append("run contains Windows crash events or audit unavailable")
+    if identity.get("runtime_mode") == "shared":
+        from tools.automation.eden_runtime import verify_protected
+        try:
+            verify_protected(read(output / "runtime-ownership.json"))
+        except (OSError, ValueError) as exc:
+            errors.append(f"shared resource integrity: {exc}")
     summary = {"schema_version": 1, "overall": "pass" if not errors else "partial",
                "input_sampling_version": 2, "capture_readiness_version": 1, "input_readiness_version": 1,
                "progress_trace_version": 1 if getattr(args, "trace_progress", False) else 0,
@@ -1069,7 +1107,17 @@ def run(args: argparse.Namespace) -> int:
                "health": suite.health if suite else [], "errors": errors,
                "scope": identity["scope"], "source_changes_do_not_qualify_real_device": True}
     seal(output, summary)
-    require(verify(output) == verify(output) == summary, "offline serialization/repeat verification differs")
+    try:
+        require(verify(output) == verify(output) == summary, "offline serialization/repeat verification differs")
+    except (RuntimeError, OSError, ValueError):
+        if identity.get("runtime_mode") == "shared":
+            from tools.automation.eden_runtime import finish
+            finish(output, False)
+        raise
+    if identity.get("runtime_mode") == "shared":
+        from tools.automation.eden_runtime import finish
+        finish(output, summary["overall"] == "pass")
+        require(verify(output) == verify(output) == summary, "evidence verification differs after runtime cleanup")
     print(json.dumps({"overall": summary["overall"], "scenarios": summary["scenarios"], "errors": errors, "output": str(output)}, ensure_ascii=False))
     return 0 if summary["overall"] == "pass" else 1
 
@@ -1087,11 +1135,17 @@ def main() -> int:
     live.add_argument("--time-zone-index", type=int,
                       help="optional system timezone enum override in the private profile only (PRC=34 in this build)")
     live.add_argument("--runtime-root", type=Path, default=ROOT / "build/eden-runtimes",
-                      help="parent directory for fresh private exe/profile copies")
+                      help="parent directory for fresh private profile data")
+    live.add_argument("--runtime-mode", choices=("shared", "copy"), default="shared",
+                      help="shared reuses executable/firmware and cleans verified successful runs; copy is legacy")
+    live.add_argument("--application-root", type=Path,
+                      help="shared exe hardlink entries on the source exe volume; default drive:/PlayWise-Eden-AppLinks/managed")
+    live.add_argument("--firmware-cache", type=Path,
+                      help="shared immutable Contents directory; validated against source, copied only if absent")
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--suite", choices=("smoke", "main", "support"), default="smoke",
+    live.add_argument("--suite", choices=("smoke", "main", "support", "web"), default="smoke",
                       help="main covers core journeys; support covers diagnostics/disable/installation restore")
     live.add_argument("--timeout", type=int, default=300, choices=range(60, 1201), metavar="60..1200")
     live.add_argument("--trace-progress", action="store_true",
@@ -1102,10 +1156,13 @@ def main() -> int:
     try:
         if args.command == "verify":
             value = verify(args.run.resolve())
+            if args.run.with_name(args.run.name + "-cleanup").joinpath("evidence-manifest.json").is_file():
+                from tools.automation.eden_runtime import verify_cleanup
+                verify_cleanup(args.run.resolve())
             print(f"PASS: evidence verification; recorded overall={value['overall']}")
             return 0
         return run(args)
-    except (GateError, OSError, ValueError) as exc:
+    except (RuntimeError, OSError, ValueError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
 
