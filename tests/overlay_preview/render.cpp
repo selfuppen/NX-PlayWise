@@ -871,9 +871,9 @@ int main(int argc, char **argv) {
                 renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
                 draw_overlay_footer_hints(&renderer, {14, 14, 15, 15});
 
-                char time_buf[16];
-                get_overlay_current_time(time_buf, sizeof(time_buf));
-                if (!time_buf[0] || std::strcmp(time_buf, "--:--") == 0) std::snprintf(time_buf, sizeof(time_buf), "12:34");
+                // Documentation samples must not dirty the source tree whenever
+                // the build clock advances. The installed Overlay keeps live time.
+                const char *time_buf = "12:34";
                 const auto time_measured = renderer.drawString(time_buf, false, 0, 0, PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
                 const int time_x = 448 - 30 - static_cast<int>(time_measured.first);
                 renderer.drawString(time_buf, false, time_x, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
