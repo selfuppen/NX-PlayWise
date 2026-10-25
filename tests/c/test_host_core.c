@@ -733,6 +733,27 @@ static void test_bedtime_rules_and_protocol(void)
         !request.bedtime_apply_immediately &&
         request.bedtime_policy.week[5].start_minute == 1320,
         "bedtime policy preserves activation and independent weekday values");
+    rules.bedtime.holiday_rule.mode = PTC_BEDTIME_OVERRIDE_INHERIT;
+    rules.bedtime.holiday_rule.window = (PtcBedtimeWindow){true, 1300, 400};
+    rules.bedtime.makeup_workday_rule.mode = PTC_BEDTIME_OVERRIDE_DISABLED;
+    rules.bedtime.makeup_workday_rule.window = (PtcBedtimeWindow){false, 1350, 450};
+    rules.bedtime.scheduled_override.present = false;
+    rules.bedtime.scheduled_override.start_day_index = 2489;
+    rules.bedtime.scheduled_override.end_day_index = 2490;
+    rules.bedtime.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    rules.bedtime.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1380, 480};
+    check_true(ptc_companion_set_bedtime_policy_request_json(json, sizeof(json), "inactive-windows", 1, &rules.bedtime, true) > 0 &&
+        ptc_request_parse(json, &request) == PTC_ERR_OK && request.bedtime_policy.holiday_rule.window.enabled &&
+        request.bedtime_policy.holiday_rule.window.start_minute == 1300 &&
+        !request.bedtime_policy.makeup_workday_rule.window.enabled && request.bedtime_policy.makeup_workday_rule.window.end_minute == 450 &&
+        !request.bedtime_policy.scheduled_override.present && request.bedtime_policy.scheduled_override.start_day_index == 2489 &&
+        request.bedtime_policy.scheduled_override.end_day_index == 2490 &&
+        request.bedtime_policy.scheduled_override.rule.window.start_minute == 1380,
+        "complete policy roundtrip preserves inherited, disabled and absent-date window values");
+    rules.bedtime.holiday_rule.window.start_minute = 1440;
+    check_true(ptc_companion_set_bedtime_policy_request_json(json, sizeof(json), "invalid-inactive-window", 1, &rules.bedtime, true) > 0 &&
+        ptc_request_parse(json, &request) == PTC_ERR_BAD_REQUEST,
+        "inactive window optional minutes still reject out-of-range values");
     check_true(ptc_companion_skip_bedtime_request_json(
         json, sizeof(json), "bedtime-skip-1", 1, instance) > 0 &&
         ptc_request_parse(json, &request) == PTC_ERR_OK &&

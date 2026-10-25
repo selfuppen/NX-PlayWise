@@ -178,6 +178,21 @@ static bool eden_ipc_connect(void *ctx)
 static void eden_process_request(void *ctx, const char *request_id, const char *json)
 {
     PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    static unsigned recorded_requests;
+    PtcRequest parsed;
+    char request_path[320];
+    /* Bounded test-only raw evidence for non-secret plan writes. Failure to
+     * record never changes execution; the runner separately rejects missing evidence. */
+    if (recorded_requests < 32 && eden_observe_storage &&
+        eden_observe_storage->vtable->exists(eden_observe_storage,
+            PLAYWISE_EDEN_SD_ROOT "/support/automation-observe.flag") &&
+        ptc_request_parse(json, &parsed) == PTC_ERR_OK && ptc_eden_plan_request_recordable(parsed.type) &&
+        ptc_request_id_is_valid(request_id)) {
+        ++recorded_requests;
+        snprintf(request_path, sizeof(request_path), PLAYWISE_EDEN_SD_ROOT "/support/automation-request-%s.json", request_id);
+        if (!eden_observe_storage->vtable->exists(eden_observe_storage, request_path))
+            (void)eden_observe_storage->vtable->write_text_atomic(eden_observe_storage, request_path, json);
+    }
     ptc_eden_trace_stage(PTC_EDEN_TRACE_REQUEST_BEGIN, 0);
     ptc_sysmodule_process_request_direct(&runtime->sysmodule, json, request_id);
     ptc_eden_trace_stage(PTC_EDEN_TRACE_REQUEST_END, 0);

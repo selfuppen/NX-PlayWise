@@ -334,16 +334,18 @@ void load_rule_drafts(UiState *ui)
             cJSON_GetObjectItemCaseSensitive(root, "bedtime_calendar_enabled"));
         rules.bedtime.holiday_rule.mode = parse_bedtime_override_mode(
             rule_json_string(root, "bedtime_holiday_mode"));
-        rules.bedtime.holiday_rule.window.enabled = cJSON_IsTrue(
-            cJSON_GetObjectItemCaseSensitive(root, "bedtime_holiday_enabled"));
+        /* Optional legacy fields retain storage defaults, so a weekly save
+         * cannot silently disable another section's stored window. */
+        item = cJSON_GetObjectItemCaseSensitive(root, "bedtime_holiday_enabled");
+        if (cJSON_IsBool(item)) rules.bedtime.holiday_rule.window.enabled = cJSON_IsTrue(item);
         rules.bedtime.holiday_rule.window.start_minute = (uint16_t)rule_json_int(
             root, "bedtime_holiday_start_minute", rules.bedtime.holiday_rule.window.start_minute);
         rules.bedtime.holiday_rule.window.end_minute = (uint16_t)rule_json_int(
             root, "bedtime_holiday_end_minute", rules.bedtime.holiday_rule.window.end_minute);
         rules.bedtime.makeup_workday_rule.mode = parse_bedtime_override_mode(
             rule_json_string(root, "bedtime_makeup_mode"));
-        rules.bedtime.makeup_workday_rule.window.enabled = cJSON_IsTrue(
-            cJSON_GetObjectItemCaseSensitive(root, "bedtime_makeup_enabled"));
+        item = cJSON_GetObjectItemCaseSensitive(root, "bedtime_makeup_enabled");
+        if (cJSON_IsBool(item)) rules.bedtime.makeup_workday_rule.window.enabled = cJSON_IsTrue(item);
         rules.bedtime.makeup_workday_rule.window.start_minute = (uint16_t)rule_json_int(
             root, "bedtime_makeup_start_minute", rules.bedtime.makeup_workday_rule.window.start_minute);
         rules.bedtime.makeup_workday_rule.window.end_minute = (uint16_t)rule_json_int(

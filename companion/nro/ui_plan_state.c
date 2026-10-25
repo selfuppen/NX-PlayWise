@@ -87,6 +87,16 @@ static void format_ui_text_string(PtcUiTextId id, const char *name, const char *
     PtcUiTextArg args[] = {PTC_UI_TEXT_STRING(name, value)};
     (void)ptc_ui_text_format(id, out, size, args, 1);
 }
+static bool bedtime_windows_equal(const PtcBedtimeWindow *a, const PtcBedtimeWindow *b)
+{
+    return a->enabled == b->enabled && a->start_minute == b->start_minute && a->end_minute == b->end_minute;
+}
+
+static bool bedtime_specials_equal(const PtcBedtimeSpecialRule *a, const PtcBedtimeSpecialRule *b)
+{
+    return a->mode == b->mode && bedtime_windows_equal(&a->window, &b->window);
+}
+
 bool ptc_ui_bedtime_section_dirty(const PtcUiModel *model, PtcUiBedtimeSection section)
 {
     const PtcBedtimePolicy *draft;
@@ -97,15 +107,19 @@ bool ptc_ui_bedtime_section_dirty(const PtcUiModel *model, PtcUiBedtimeSection s
     if (draft->enabled != saved->enabled) return true;
     switch (section) {
     case PTC_UI_BEDTIME_WEEKLY:
-        return memcmp(draft->week, saved->week, sizeof(saved->week)) != 0;
+        /* Struct padding is not policy state, even after assignment/reload. */
+        for (unsigned i = 0; i < 7; ++i)
+            if (!bedtime_windows_equal(&draft->week[i], &saved->week[i])) return true;
+        return false;
     case PTC_UI_BEDTIME_CALENDAR:
         return draft->calendar_enabled != saved->calendar_enabled ||
-            memcmp(&draft->holiday_rule, &saved->holiday_rule, sizeof(saved->holiday_rule)) != 0 ||
-            memcmp(&draft->makeup_workday_rule, &saved->makeup_workday_rule,
-                sizeof(saved->makeup_workday_rule)) != 0;
+            !bedtime_specials_equal(&draft->holiday_rule, &saved->holiday_rule) ||
+            !bedtime_specials_equal(&draft->makeup_workday_rule, &saved->makeup_workday_rule);
     case PTC_UI_BEDTIME_SCHEDULED:
-        return memcmp(&draft->scheduled_override, &saved->scheduled_override,
-            sizeof(saved->scheduled_override)) != 0;
+        return draft->scheduled_override.present != saved->scheduled_override.present ||
+            draft->scheduled_override.start_day_index != saved->scheduled_override.start_day_index ||
+            draft->scheduled_override.end_day_index != saved->scheduled_override.end_day_index ||
+            !bedtime_specials_equal(&draft->scheduled_override.rule, &saved->scheduled_override.rule);
     default:
         return false;
     }

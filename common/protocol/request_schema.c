@@ -349,8 +349,13 @@ static bool parse_bedtime_special(const char *text, const char *prefix, PtcBedti
     snprintf(end_key, sizeof(end_key), "%s_end_minute", prefix);
     if (!json_string(text, mode_key, mode, sizeof(mode)) || !parse_bedtime_mode(mode, &out->mode)) return false;
     if (out->mode != PTC_BEDTIME_OVERRIDE_CUSTOM) {
-        out->window.enabled = false;
-        return true;
+        /* Inactive values still belong to the saved partition. Preserve
+         * explicit values instead of clearing them during a different page's save. */
+        return (!find_key(text, enabled_key) || json_bool_required(text, enabled_key, &out->window.enabled)) &&
+            (!find_key(text, start_key) || json_u16(text, start_key, &out->window.start_minute)) &&
+            (!find_key(text, end_key) || json_u16(text, end_key, &out->window.end_minute)) &&
+            out->window.start_minute < 1440u && out->window.end_minute < 1440u &&
+            ptc_bedtime_window_is_valid(&out->window);
     }
     return json_bool_required(text, enabled_key, &out->window.enabled) && out->window.enabled &&
         json_u16(text, start_key, &out->window.start_minute) &&
@@ -375,6 +380,13 @@ static bool parse_bedtime_policy(const char *text, PtcBedtimePolicy *out)
         if (!json_u16(text, "bedtime_scheduled_start_day_index", &out->scheduled_override.start_day_index) ||
             !json_u16(text, "bedtime_scheduled_end_day_index", &out->scheduled_override.end_day_index) ||
             !parse_bedtime_special(text, "bedtime_scheduled", &out->scheduled_override.rule)) return false;
+    } else {
+        if ((find_key(text, "bedtime_scheduled_start_day_index") &&
+             !json_u16(text, "bedtime_scheduled_start_day_index", &out->scheduled_override.start_day_index)) ||
+            (find_key(text, "bedtime_scheduled_end_day_index") &&
+             !json_u16(text, "bedtime_scheduled_end_day_index", &out->scheduled_override.end_day_index)) ||
+            (find_key(text, "bedtime_scheduled_mode") &&
+             !parse_bedtime_special(text, "bedtime_scheduled", &out->scheduled_override.rule))) return false;
     }
     return ptc_bedtime_policy_is_valid(out);
 }

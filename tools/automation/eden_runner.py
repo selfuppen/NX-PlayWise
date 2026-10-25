@@ -29,7 +29,10 @@ SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
-    require(suite in ("smoke", "main", "support", "web"), "unknown suite")
+    require(suite in ("smoke", "main", "support", "web", "plans"), "unknown suite")
+    if suite == "plans":
+        from tools.automation.eden_plan_flow import PLAN_SCENARIOS
+        return PLAN_SCENARIOS
     if suite == "web":
         from tools.automation.eden_web_flow import WEB_SCENARIOS
         return WEB_SCENARIOS
@@ -159,6 +162,14 @@ def receipt(path: Path, request_type: str, excluded: set[str]) -> dict:
     require(value.get("request_id") == path.stem and path.stem not in excluded and
             value.get("type") == request_type, "receipt ID/type or freshness differs")
     return value
+
+
+def validate_native_environment(log: str) -> dict:
+    denied = [line for line in log.splitlines() if re.search(r'\.nca\b.*permission denied', line, re.I)]
+    fallback = re.findall(r"SynthesizeSystemArchive:.*?'(Font(?:Standard|ChineseSimple|ChineseTraditional))'", log)
+    require(not denied, 'Eden cannot open installed firmware NCA; input prohibited')
+    require(not fallback, 'Eden synthesized a required system font instead of using firmware; input prohibited')
+    return {'schema_version': 1, 'firmware_nca_permission_errors': 0, 'synthesized_required_fonts': []}
 
 
 class McpClient:
@@ -383,6 +394,9 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
         save(app / "calendars/catalog.json", {"entries": [entry]})
         save(app / "calendars/active.json", {"option_id": "EDEN", "entries": [entry]})
         save(output / "fixtures/calendar.json", calendar)
+    if args.suite == "plans":
+        from tools.automation.eden_plan_flow import prepare_plans
+        prepare_plans(app, output, rules)
     save(app / "rules.json", rules)
     save(output / "fixtures/rules.json", rules)
     artifacts = output / "artifacts"
@@ -391,10 +405,12 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     shutil.copy2(args.manifest, artifacts / "manifest.json")
     for name in ("eden_runner.py", "eden_mcp_bridge.py"):
         shutil.copy2(Path(__file__).with_name(name), artifacts / name)
-    if args.suite in ("main", "support", "web"):
+    if args.suite in ("main", "support", "web", "plans"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
     if args.suite == "support":
         shutil.copy2(Path(__file__).with_name("eden_support_flow.py"), artifacts / "eden_support_flow.py")
+    if args.suite == "plans":
+        shutil.copy2(Path(__file__).with_name("eden_plan_flow.py"), artifacts / "eden_plan_flow.py")
     if args.suite == "web":
         for name in ("eden_web_flow.py", "eden_web_browser.js"):
             shutil.copy2(Path(__file__).with_name(name), artifacts / name)
@@ -417,6 +433,8 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
                 "runner_sha256": digest(artifacts / "eden_runner.py"),
                 "bridge_sha256": digest(artifacts / "eden_mcp_bridge.py"),
                 "scope": "Eden simulated UI/business only; no production qualification"}
+    if args.suite == 'plans':
+        identity['plans_language'] = getattr(args, 'plans_language', 'system')
     save(output / "identity.json", identity)
     return runtime, identity
 
@@ -434,7 +452,7 @@ class Suite:
         self.health: list[dict] = []
 
     def bounded(self) -> None:
-        require(time.monotonic() < self.deadline and self.step < (500 if self.suite == "main" else 180),
+        require(time.monotonic() < self.deadline and self.step < (500 if self.suite in ("main", "plans") else 180),
                 "suite time/action limit reached")
 
     def observe(self) -> dict:
@@ -641,12 +659,19 @@ class Suite:
                 "MCP selected a different profile; input prohibited")
         native_log = (self.runtime / "user/log/eden_log.txt").read_text(encoding="utf-8-sig", errors="replace")
         for key, expected in (("ConfigDir", self.runtime / "user/config"),
+                              ("NANDDir", self.runtime / "user/nand"),
                               ("SDMCDir", self.runtime / "user/sdmc")):
             matched = re.search(rf"(?m)LogSettings: {key}: (.+)\r?$", native_log)
             require(matched is not None and Path(matched.group(1).strip()).resolve() == expected.resolve(),
                     f"actual Eden {key} is not isolated; input prohibited")
         self.wait_ui()
         require(read(self.app / "build.json") == self.identity["manifest"], "fresh SD build identity differs")
+        native_log = (self.runtime / "user/log/eden_log.txt").read_text(encoding="utf-8-sig", errors="replace")
+        log_path = self.output / f"native-environment/{self.pid}.log"
+        log_path.parent.mkdir(exist_ok=True)
+        log_path.write_text(native_log, encoding="utf-8")
+        report = validate_native_environment(native_log)
+        save(log_path.with_suffix('.json'), {**report, 'pid': self.pid, 'log_sha256': digest(log_path)})
         self.capture(f"startup-{self.pid}")
 
     def stop(self) -> None:
@@ -869,6 +894,27 @@ def verify(output: Path) -> dict:
             healthy_exit(row["pid"], row["reply"], row["events"])
         if summary.get("input_sampling_version") in (1, 2):
             verify_input_evidence(output, summary["actions"])
+        if summary.get("native_environment_version") == 1:
+            if read(output / 'identity.json').get('runtime_mode') == 'shared':
+                from tools.automation.eden_runtime import fingerprint
+                owner = read(output / 'runtime-ownership.json')
+                access = read(output / 'firmware-access.json')
+                expected = fingerprint(owner['firmware_before'])
+                require(type(access.get('schema_version')) is int and access['schema_version'] == 1 and
+                        access.get('policy') == 'writable_handles_content_hash_guard_v1' and
+                        access.get('cache') == owner['firmware_cache'] and
+                        type(access.get('files_checked')) is int and access['files_checked'] == len(owner['firmware_before']) and
+                        access.get('content_unchanged') is True and
+                        access.get('content_fingerprint_before') == access.get('content_fingerprint_after') == expected and
+                        isinstance(access.get('read_only_cleared'), list) and
+                        len(set(access['read_only_cleared'])) == len(access['read_only_cleared']) and
+                        set(access['read_only_cleared']) <= {r['path'] for r in owner['firmware_before']},
+                        'firmware access evidence differs')
+            for row in summary['health']:
+                path = output / f"native-environment/{row['pid']}.log"
+                report = read(path.with_suffix('.json'))
+                require(report == {**validate_native_environment(path.read_text(encoding='utf-8')),
+                                   'pid': row['pid'], 'log_sha256': digest(path)}, 'native environment evidence differs')
         if summary.get("capture_readiness_version") == 1:
             verify_capture_readiness(output)
         if summary.get("input_readiness_version") == 1:
@@ -884,6 +930,10 @@ def verify(output: Path) -> dict:
         if summary.get("suite") == "web":
             from tools.automation.eden_web_flow import verify_web
             verify_web(output)
+            return summary
+        if summary.get("suite") == "plans":
+            from tools.automation.eden_plan_flow import verify_plans
+            verify_plans(output)
             return summary
         require(read(output / "checkpoints/setup.json")["ui"]["view"] == 1 and
                 read(output / "checkpoints/reopen.json")["ui"]["view"] == 0 and
@@ -1054,6 +1104,11 @@ def run(args: argparse.Namespace) -> int:
             class WebSuite(WebFlow, Suite):
                 pass
             suite_class = WebSuite
+        elif args.suite == "plans":
+            from tools.automation.eden_plan_flow import PlanFlow
+            class PlanSuite(PlanFlow, Suite):
+                pass
+            suite_class = PlanSuite
         suite = suite_class(client, output, runtime, identity, args.timeout, args.suite)
         suite.execute()
     except Exception as exc:
@@ -1089,6 +1144,12 @@ def run(args: argparse.Namespace) -> int:
     if (app / "auth.json").is_file():
         auth = read(app / "auth.json")
         save(output / "app-final/auth-counters.json", {key: auth[key] for key in ("failed_attempts", "cooldown_until")})
+    if args.suite == "plans":
+        for name in ("calendars", "calendar-import", "inbox"):
+            if (app / name).is_dir():
+                shutil.copytree(app / name, output / "app-final" / name)
+        for path in (app / "support").glob("automation-request-*.json"):
+            shutil.copy2(path, output / "app-final/support" / path.name)
     require_audit = audit.get("query_ok") and not audit.get("crashes")
     if not require_audit:
         errors.append("run contains Windows crash events or audit unavailable")
@@ -1099,6 +1160,7 @@ def run(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as exc:
             errors.append(f"shared resource integrity: {exc}")
     summary = {"schema_version": 1, "overall": "pass" if not errors else "partial",
+               "native_environment_version": 1,
                "input_sampling_version": 2, "capture_readiness_version": 1, "input_readiness_version": 1,
                "progress_trace_version": 1 if getattr(args, "trace_progress", False) else 0,
                "actions": suite.step if suite else 0,
@@ -1145,14 +1207,18 @@ def main() -> int:
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--suite", choices=("smoke", "main", "support", "web"), default="smoke",
+    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans"), default="smoke",
                       help="main covers core journeys; support covers diagnostics/disable/installation restore")
+    live.add_argument('--plans-language', choices=('system', 'en'), default='system',
+                      help='plans only: explicit English UI layout check through the normal language menu')
     live.add_argument("--timeout", type=int, default=300, choices=range(60, 1201), metavar="60..1200")
     live.add_argument("--trace-progress", action="store_true",
                       help="Enable isolated bounded numeric stage diagnostics; not a business assertion")
     offline = commands.add_parser("verify")
     offline.add_argument("--run", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == 'run' and args.plans_language != 'system' and args.suite != 'plans':
+        parser.error('--plans-language en requires --suite plans')
     try:
         if args.command == "verify":
             value = verify(args.run.resolve())

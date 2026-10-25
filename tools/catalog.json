@@ -2,7 +2,7 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-25",
   "scope": "playwise/tools",
-  "script_count": 68,
+  "script_count": 69,
   "scripts": [
     {
       "path": "device/input_connection.py",
@@ -288,6 +288,11 @@
       "category": "automation",
       "purpose": "X02真实浏览器配对发码至NRO兑换、nonce持久化旅程"
     },
+      {
+        "path": "automation/eden_plan_flow.py",
+        "category": "automation",
+        "purpose": "X01日历导入应用与X04就寝分区草稿、重开持久化"
+      },
     {
       "path": "automation/sys_botbase_client.py",
       "category": "automation",

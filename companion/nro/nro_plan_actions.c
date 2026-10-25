@@ -262,12 +262,11 @@ void select_bedtime_section(UiState *ui, int section)
 void open_bedtime_window_editor(UiState *ui, int weekday)
 {
     if (!ui || weekday < 0 || weekday >= 7) return;
-    const char *WEEKDAY_NAMES[] = {ptc_ui_text(PTC_UI_T_MONDAY), ptc_ui_text(PTC_UI_T_TUESDAY), ptc_ui_text(PTC_UI_T_WEDNESDAY), ptc_ui_text(PTC_UI_T_THURSDAY), ptc_ui_text(PTC_UI_T_FRIDAY), ptc_ui_text(PTC_UI_T_SATURDAY), ptc_ui_text(PTC_UI_T_SUNDAY)};
     ui->model.bedtime_editor_day = weekday;
     ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     ui->model.overlay_selection = 0;
     ui->model.confirm_hold_required = false;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_S_BEDTIME_WINDOW), WEEKDAY_NAMES[weekday]);
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_S_BEDTIME_WINDOW), ptc_ui_weekday_label((unsigned)weekday));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
         ptc_ui_text(PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT));
 }

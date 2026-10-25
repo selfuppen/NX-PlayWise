@@ -16,6 +16,7 @@ from tools.automation.eden_runner import (
     receipt, save, seal, validate_observation, verify, profile_settings, set_profile_timezone,
     open_shared_read, read_observation_file,
     scenario_names,
+    validate_native_environment,
     verify_input_evidence,
     verify_capture_readiness,
     verify_input_readiness,
@@ -35,6 +36,11 @@ def rejected(function) -> None:
 
 
 def test_health_gates() -> None:
+    assert validate_native_environment('Loaded font from installed firmware') == {
+        'schema_version': 1, 'firmware_nca_permission_errors': 0, 'synthesized_required_fonts': []}
+    rejected(lambda: validate_native_environment('Open: path=D:/nand/registered/a.NCA, ec_message=permission denied'))
+    for font in ('FontStandard', 'FontChineseSimple', 'FontChineseTraditional'):
+        rejected(lambda: validate_native_environment(f"SynthesizeSystemArchive: Synthesizing system archive '{font}' (0x814)."))
     good = {"running": True, "pid": 123, "backend": "eden-control",
             "launch": {"phase": "game_ready", "target_reached": True}}
     healthy_launch(good)
@@ -178,13 +184,13 @@ def test_actual_profile_paths_gate_input() -> None:
         captured = []
         suite.capture = captured.append
         save(suite.app / "build.json", manifest)
-        for key in ("ConfigDir", "SDMCDir"):
-            lines = {"ConfigDir": root / "user/config", "SDMCDir": root / "user/sdmc"}
+        for key in ("ConfigDir", "NANDDir", "SDMCDir"):
+            lines = {"ConfigDir": root / "user/config", "NANDDir": root / "user/nand", "SDMCDir": root / "user/sdmc"}
             lines[key] = root / "operator/user"
             log.write_text("\n".join(f"LogSettings: {k}: {v}" for k, v in lines.items()), encoding="utf-8")
             rejected(suite.start)
             assert not captured and set(client.calls) == {"eden_start_game"}
-        log.write_text(f"LogSettings: ConfigDir: {root / 'user/config'}\nLogSettings: SDMCDir: {root / 'user/sdmc'}\n", encoding="utf-8")
+        log.write_text(f"LogSettings: ConfigDir: {root / 'user/config'}\nLogSettings: NANDDir: {root / 'user/nand'}\nLogSettings: SDMCDir: {root / 'user/sdmc'}\n", encoding="utf-8")
         client.profile = root / "operator/user"
         rejected(suite.start)
         assert not captured

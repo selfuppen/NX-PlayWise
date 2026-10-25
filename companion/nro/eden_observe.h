@@ -6,6 +6,13 @@
 #include <string.h>
 #include "ui_model.h"
 #include "ui_layout.h"
+#include "../../common/protocol/request_type.h"
+
+static inline bool ptc_eden_plan_request_recordable(PtcRequestType type)
+{
+    return type == PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR ||
+        type == PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR || type == PTC_REQUEST_SET_BEDTIME_POLICY;
+}
 
 typedef struct {
     uint64_t sequence;
@@ -74,6 +81,15 @@ static inline bool ptc_eden_target(char *out, size_t size, size_t *used,
     return true;
 }
 
+/* Stable numeric source IDs; never copy a model's arbitrary string to JSON. */
+static inline int ptc_eden_rule_source(const char *source)
+{
+    static const char *names[] = {"weekly", "today_override", "scheduled_override",
+        "statutory_holiday", "makeup_workday"};
+    if (source) for (int i = 0; i < 5; ++i) if (!strcmp(source, names[i])) return i;
+    return -1;
+}
+
 /* Test-only observation, never an action or authentication interface. Keep this
  * whitelist numeric: model strings can contain PINs, codes or pairing secrets. */
 static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t size)
@@ -95,8 +111,7 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         "\"daily_restriction_active\":%s,\"dock_restriction_active\":%s,"
         "\"bedtime_active\":%s,\"bedtime_skipped\":%s,\"eye_resting\":%s,"
         "\"restricted_now\":%d,\"unrestricted_today\":%d,\"today_minutes\":%u,"
-        "\"disable_flag_present\":%s,\"recovery_active\":%s,\"diagnostic_status\":%d,"
-        "\"targets\":{\"width\":1280,\"height\":720",
+        "\"disable_flag_present\":%s,\"recovery_active\":%s,\"diagnostic_status\":%d,",
         (int)m->view, (int)m->parent_page, (int)m->overlay, m->setup_step,
         strcmp(m->setup_phase, "active") == 0 ? "true" : "false",
         m->waiting ? "true" : "false", m->status_loaded ? "true" : "false",
@@ -117,6 +132,59 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         (int)m->diagnostic_status);
     if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
     used = (size_t)n;
+    /* Insert read-only plan state before geometry. Policy values contain no
+     * authentication material and are also checked against saved receipts. */
+    n = snprintf(out + used, size - used,
+        "\"calendar_tab\":%d,\"calendar_selected\":%d,\"calendar_count\":%d,"
+        "\"calendar_builtin\":%s,\"bedtime_section\":%d,\"bedtime_dirty\":%s,"
+        "\"bedtime_editor_day\":%d,\"bedtime_special_kind\":%d,"
+        "\"bedtime_draft_enabled\":%s,\"bedtime_draft_calendar\":%s,"
+        "\"bedtime_draft_present\":%s,\"bedtime_draft_start_day\":%u,\"bedtime_draft_end_day\":%u,"
+        "\"bedtime_windows\":[",
+        m->calendar_manager_tab, m->calendar_manager_selected, m->calendar_manager_count,
+        m->calendar_builtin ? "true" : "false", (int)m->bedtime_section, m->bedtime_dirty ? "true" : "false",
+        m->bedtime_editor_day, m->bedtime_special_kind,
+        m->draft_bedtime_policy.enabled ? "true" : "false", m->draft_bedtime_policy.calendar_enabled ? "true" : "false",
+        m->draft_bedtime_policy.scheduled_override.present ? "true" : "false",
+        (unsigned)m->draft_bedtime_policy.scheduled_override.start_day_index,
+        (unsigned)m->draft_bedtime_policy.scheduled_override.end_day_index);
+    if (n < 0 || (size_t)n >= size - used) goto fail;
+    used += (size_t)n;
+    for (int i = 0; i < 10; ++i) {
+        const PtcBedtimeSpecialRule *special = i < 7 ? NULL :
+            (i == 7 ? &m->draft_bedtime_policy.holiday_rule :
+             (i == 8 ? &m->draft_bedtime_policy.makeup_workday_rule : &m->draft_bedtime_policy.scheduled_override.rule));
+        const PtcBedtimeWindow *w = i < 7 ? &m->draft_bedtime_policy.week[i] : &special->window;
+        n = snprintf(out + used, size - used, "%s[%d,%u,%u]", i ? "," : "",
+            special ? (int)special->mode : (int)w->enabled, (unsigned)w->start_minute, (unsigned)w->end_minute);
+        if (n < 0 || (size_t)n >= size - used) goto fail;
+        used += (size_t)n;
+    }
+    n = snprintf(out + used, size - used, "],\"forecast\":[");
+    if (n < 0 || (size_t)n >= size - used) goto fail;
+    used += (size_t)n;
+    for (unsigned i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
+        const PtcResultForecastDay *f = &m->forecast[i];
+        n = snprintf(out + used, size - used, "%s[%u,%d,%u,%d,%s]", i ? "," : "",
+            (unsigned)f->day_index, f->mode, (unsigned)f->minutes,
+            ptc_eden_rule_source(f->rule_source), f->calendar_covered ? "true" : "false");
+        if (n < 0 || (size_t)n >= size - used) goto fail;
+        used += (size_t)n;
+    }
+    n = snprintf(out + used, size - used, "],\"targets\":{\"width\":1280,\"height\":720");
+    if (n < 0 || (size_t)n >= size - used) goto fail;
+    used += (size_t)n;
+    if (!ptc_eden_target(out, size, &used, "holiday_manage", ptc_ui_holiday_manage_rect())) goto fail;
+    for (int i = 0; i < 11; ++i) {
+        char key[24];
+        snprintf(key, sizeof(key), "bedtime_field_%d", i);
+        if (!ptc_eden_target(out, size, &used, key, ptc_ui_bedtime_field_rect(m->bedtime_section, i))) goto fail;
+    }
+    for (int i = 0; i < 5; ++i) {
+        char key[24];
+        snprintf(key, sizeof(key), "bedtime_preset_%d", i);
+        if (!ptc_eden_target(out, size, &used, key, ptc_ui_bedtime_preset_rect(m->overlay, i))) goto fail;
+    }
     if (!ptc_eden_target(out, size, &used, "setup_primary", ptc_ui_setup_primary_rect()) ||
         !ptc_eden_target(out, size, &used, "child_code", ptc_ui_child_submit_rect()) ||
         !ptc_eden_target(out, size, &used, "pin_confirm", ptc_ui_pin_confirm_rect())) goto fail;

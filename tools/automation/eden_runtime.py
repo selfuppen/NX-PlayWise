@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import time
 import uuid
@@ -109,6 +110,28 @@ def protected(eden: Path, profile: Path) -> dict:
             'languages': tree(languages) if languages.is_dir() else []}
 
 
+def firmware_access(cache: Path, expected: list[dict]) -> dict:
+    """Eden opens NCA files read/write even when only reading their content.
+
+    Only the owned cache's read-only attribute may change, under the run lease.
+    No bytes are written; full hashes remain the immutable-resource contract.
+    """
+    require(tree(cache) == expected, 'firmware cache differs before access check')
+    cleared = []
+    for path in files(cache):
+        info = path.stat()
+        if getattr(info, 'st_file_attributes', 0) & 1:
+            path.chmod(info.st_mode | stat.S_IWRITE)
+            cleared.append(path.relative_to(cache).as_posix())
+        with path.open('r+b'):
+            pass  # Check the actual handle mode without modifying firmware data.
+    require(tree(cache) == expected, 'firmware bytes changed during access check')
+    return {'schema_version': 1, 'policy': 'writable_handles_content_hash_guard_v1',
+            'cache': str(cache), 'files_checked': len(expected), 'read_only_cleared': cleared,
+            'content_fingerprint_before': fingerprint(expected),
+            'content_fingerprint_after': fingerprint(tree(cache)), 'content_unchanged': True}
+
+
 def prepare(eden: Path, source: Path, runtime_root: Path, application_root: Path,
             firmware_cache: Path, output: Path) -> tuple[Path, Path, dict]:
     require(os.name == 'nt', 'shared mode requires Windows NTFS hardlinks/junctions')
@@ -137,8 +160,6 @@ def prepare(eden: Path, source: Path, runtime_root: Path, application_root: Path
         capacity(firmware_cache.parent, sum(row['bytes'] for row in firmware))
         shutil.copytree(source / 'nand/system/Contents', firmware_cache)
         require(tree(firmware_cache) == firmware, 'firmware copy verification differs')
-        powershell("$ErrorActionPreference='Stop'; Get-ChildItem -LiteralPath $env:PW_CACHE -File -Recurse | "
-                   "ForEach-Object { $_.IsReadOnly=$true }", PW_CACHE=str(firmware_cache))
         cache_copied = sum(row['bytes'] for row in firmware)
     run_id = uuid.uuid4().hex
     runtime = application_root / run_id
@@ -163,6 +184,7 @@ def prepare(eden: Path, source: Path, runtime_root: Path, application_root: Path
                  'profile_copied_bytes': copied, 'firmware_cache_copied_bytes': cache_copied,
                  'runtime_capacity': budget}
     write(output / 'runtime-ownership.json', ownership)
+    write(output / 'firmware-access.json', firmware_access(firmware_cache, firmware))
     profile.mkdir(parents=True, exist_ok=False)
     runtime.mkdir(exist_ok=False)
     for p, rel in selected:

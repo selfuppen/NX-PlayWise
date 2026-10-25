@@ -664,6 +664,15 @@ static void test_bedtime_save_restriction_projection(void)
         PtcUiModel scoped = {0};
         scoped.bedtime_policy = rules.bedtime;
         scoped.draft_bedtime_policy = rules.bedtime;
+        if (offsetof(PtcBedtimeWindow, start_minute) > sizeof(bool)) {
+            ((unsigned char *)&scoped.draft_bedtime_policy.week[0])[sizeof(bool)] ^= 0x5a;
+            ((unsigned char *)&scoped.draft_bedtime_policy.holiday_rule.window)[sizeof(bool)] ^= 0xa5;
+            ((unsigned char *)&scoped.draft_bedtime_policy.scheduled_override.rule.window)[sizeof(bool)] ^= 0x3c;
+        }
+        check_true(!ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_WEEKLY) &&
+                   !ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_CALENDAR) &&
+                   !ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_SCHEDULED),
+                   "padding-only differences never create bedtime drafts");
         scoped.draft_bedtime_policy.week[0].start_minute += 15;
         check_true(ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_WEEKLY) &&
                    !ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_CALENDAR) &&

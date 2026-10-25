@@ -394,18 +394,21 @@ static void draw_bedtime_editor_fields(
 {
     UiRect mode = to_uirect(ptc_ui_bedtime_overlay_field_rect(model->overlay, 0));
     draw_plan_card(pixels, stride, mode, model->overlay_selection == 0);
-    draw_text(pixels, stride, mode.x + 18, mode.y + 36,
-        show_toggle ? ptc_ui_text(PTC_UI_T_TODAY_S_BEDTIME_LIMIT) : ptc_ui_text(PTC_UI_T_RULE_PATTERN), 18, UI_INK);
-    draw_text(pixels, stride, mode.x + 170, mode.y + 36, mode_label, 18, mode_color);
+    const char *title = show_toggle ? ptc_ui_text(PTC_UI_T_TODAY_S_BEDTIME_LIMIT) : ptc_ui_text(PTC_UI_T_RULE_PATTERN);
+    const char *hint = show_toggle ? ptc_ui_text(PTC_UI_T_A_X_SWITCH) : ptc_ui_text(PTC_UI_T_A_X_SWITCH_MODE);
+    int right = mode.x + mode.width - 18;
+    if (show_toggle) right -= 76;
+    int hint_x = right - measure_text(hint, 13);
+    int value_x = hint_x - 20 - measure_text(mode_label, 18);
+    char fitted_title[192];
+    fit_text(fitted_title, sizeof(fitted_title), title, 18, value_x - (mode.x + 18) - 20);
+    draw_text(pixels, stride, mode.x + 18, mode.y + 36, fitted_title, 18, UI_INK);
+    draw_text(pixels, stride, value_x, mode.y + 36, mode_label, 18, mode_color);
+    draw_text(pixels, stride, hint_x, mode.y + 36, hint, 13, UI_MUTED);
     if (show_toggle) {
         UiRect toggle = {mode.x + mode.width - 76, mode.y + 15, 58, 28};
         draw_toggle_switch(pixels, stride, toggle, window->enabled,
             model->overlay_selection == 0, false, NULL, NULL);
-        draw_text(pixels, stride, mode.x + mode.width - 174, mode.y + 36,
-            ptc_ui_text(PTC_UI_T_A_X_SWITCH), 13, UI_MUTED);
-    } else {
-        draw_text(pixels, stride, mode.x + mode.width - 188, mode.y + 36,
-            ptc_ui_text(PTC_UI_T_A_X_SWITCH_MODE), 13, UI_MUTED);
     }
 
     for (int field = 1; field < 3; ++field) {
@@ -450,7 +453,7 @@ static void draw_bedtime_editor_timeline(
             snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_CLOSED_TODAY_USE_WILL_NOT_BE_RESTRICTED));
         }
         draw_text_center(pixels, stride,
-            (UiRect){bar.x + 150, tick_y - 14, bar.width - 300, 28},
+            (UiRect){bar.x, tick_y + 4, bar.width, 24},
             summary, 12, window->enabled ? UI_ACCENT : UI_MUTED);
     } else {
         fill_round_rect(pixels, stride, bar, 6, UI_PAGE);

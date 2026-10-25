@@ -267,6 +267,31 @@ static void test_parent_pin_error(void)
           !handle_parent_auth_error_touch(&ui, 640, 470) && ui.auth_retry_action == AUTH_RETRY_CHANGE_PIN,
           "sensitive-operation error keeps its existing handlers and retry action");
 }
+static void test_bedtime_legacy_optional_windows(void)
+{
+    static PtcMemStorage mem;
+    UiState ui;
+    init(&ui, &mem);
+    mem.storage.vtable->write_text_atomic(&mem.storage, APP_ROOT "/rules.json",
+        "{\"version\":2,\"bedtime_holiday_mode\":\"inherit\",\"bedtime_makeup_mode\":\"inherit\"}");
+    load_rule_drafts(&ui);
+    check(ui.model.bedtime_policy.holiday_rule.window.enabled &&
+          ui.model.bedtime_policy.makeup_workday_rule.window.enabled,
+          "legacy absent optional special window flags retain storage defaults");
+    ui.model.draft_bedtime_policy = ui.model.bedtime_policy;
+    ui.model.draft_bedtime_policy.week[1].start_minute = 1290;
+    PtcBedtimePolicy merged = ptc_ui_bedtime_section_policy(&ui.model, PTC_UI_BEDTIME_WEEKLY);
+    check(merged.holiday_rule.window.enabled && merged.makeup_workday_rule.window.enabled,
+          "saving weekly legacy draft preserves unrelated special window flags");
+    mem.storage.vtable->write_text_atomic(&mem.storage, APP_ROOT "/rules.json",
+        "{\"version\":2,\"bedtime_holiday_mode\":\"inherit\",\"bedtime_makeup_mode\":\"inherit\","
+        "\"bedtime_holiday_enabled\":false,\"bedtime_makeup_enabled\":false}");
+    load_rule_drafts(&ui);
+    check(!ui.model.bedtime_policy.holiday_rule.window.enabled &&
+          !ui.model.bedtime_policy.makeup_workday_rule.window.enabled,
+          "explicit false special window flags remain false instead of receiving defaults");
+}
+
 static void test_config_backup_ui(void)
 {
     static PtcMemStorage mem; UiState ui; char stage[256], text[8192], path[320];
@@ -669,6 +694,7 @@ int main(void)
     check(!ui.status_refresh_pending && ui.status_refresh_origin == PTC_UI_STATUS_OTHER && ui.waiting,
           "resume dispatch consumes its cause once without changing status submission");
     test_config_backup_ui();
+    test_bedtime_legacy_optional_windows();
     test_today_detail_refresh();
     test_parent_pin_error();
     test_theme_draft_commit();
@@ -677,6 +703,12 @@ int main(void)
         char text[8192], small[8];
         PtcEdenInputObservation input = {0};
         cJSON *json;
+        check(ptc_eden_plan_request_recordable(PTC_REQUEST_SET_BEDTIME_POLICY) &&
+              ptc_eden_plan_request_recordable(PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR) &&
+              ptc_eden_plan_request_recordable(PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR) &&
+              !ptc_eden_plan_request_recordable(PTC_REQUEST_OFFLINE_CODE) &&
+              !ptc_eden_plan_request_recordable(PTC_REQUEST_STATUS),
+              "plan raw evidence whitelist excludes codes and unrelated requests");
         ptc_eden_sample_input(&input, true);
         check(input.sequence == 1 && input.active, "Eden observes a sampled active input without exporting its value");
         ptc_eden_sample_input(&input, false);
@@ -777,6 +809,35 @@ int main(void)
             check(cJSON_GetArrayItem(target, 0)->valueint == rect.x + rect.w / 2 &&
                   cJSON_GetArrayItem(target, 1)->valueint == rect.y + rect.h / 2,
                   "support recovery target uses its own production layout");
+        }
+        cJSON_Delete(json);
+        model.bedtime_section = PTC_UI_BEDTIME_SCHEDULED;
+        model.bedtime_dirty = true;
+        model.draft_bedtime_policy.scheduled_override.present = true;
+        model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+        model.draft_bedtime_policy.scheduled_override.rule.window.start_minute = 1380;
+        model.forecast[0].rule_source = "statutory_holiday";
+        model.forecast[1].rule_source = "987654-sensitive-unknown";
+        model.forecast[0].minutes = 90;
+        check(ptc_eden_format_ui(&model, text, sizeof(text)), "plan observations fit bounded output");
+        json = cJSON_Parse(text);
+        check(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "bedtime_dirty")) &&
+              cJSON_GetObjectItemCaseSensitive(json, "bedtime_section")->valueint == 2 &&
+              cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "bedtime_draft_present")),
+              "plan observations expose typed partition and draft state");
+        {
+            cJSON *forecast = cJSON_GetObjectItemCaseSensitive(json, "forecast");
+            cJSON *windows = cJSON_GetObjectItemCaseSensitive(json, "bedtime_windows");
+            cJSON *target = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json, "targets"), "bedtime_field_3");
+            PtcUiRect rect = ptc_ui_bedtime_field_rect(PTC_UI_BEDTIME_SCHEDULED, 3);
+            check(cJSON_GetArraySize(forecast) == 7 && cJSON_GetArrayItem(cJSON_GetArrayItem(forecast, 0), 3)->valueint == 3 &&
+                  cJSON_GetArrayItem(cJSON_GetArrayItem(forecast, 1), 3)->valueint == -1 && !strstr(text, "sensitive-unknown"),
+                  "forecast source whitelist rejects unknown strings without exporting text");
+            check(cJSON_GetArraySize(windows) == 10 && cJSON_GetArrayItem(cJSON_GetArrayItem(windows, 9), 1)->valueint == 1380,
+                  "draft windows include specified-date custom minutes");
+            check(cJSON_GetArrayItem(target, 0)->valueint == rect.x + rect.w / 2 &&
+                  cJSON_GetArrayItem(target, 1)->valueint == rect.y + rect.h / 2,
+                  "specified-date target uses production geometry");
         }
         cJSON_Delete(json);
         check(!ptc_eden_format_ui(&model, small, sizeof(small)) && small[0] == '\0',

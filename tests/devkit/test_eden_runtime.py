@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 import tempfile
 import subprocess
@@ -73,6 +74,25 @@ def test_source_selection_and_capacity() -> None:
             assert runtime.capacity(data, 9)['copy_bytes'] == 9
             rejected(lambda: runtime.capacity(data, 10))
         assert not list(data.iterdir())
+
+
+def test_firmware_access_without_content_writes() -> None:
+    with tempfile.TemporaryDirectory() as folder:
+        eden, source, data, aliases, cache = fixture(Path(folder))
+        expected = runtime.tree(cache)
+        item = cache / 'registered/firmware.nca'
+        if os.name == 'nt':
+            item.chmod(stat.S_IREAD)
+            rejected(lambda: item.open('r+b'))
+        report = runtime.firmware_access(cache, expected)
+        assert report['files_checked'] == 1 and report['content_unchanged'] is True
+        assert report['content_fingerprint_before'] == report['content_fingerprint_after']
+        assert report['read_only_cleared'] == (['registered/firmware.nca'] if os.name == 'nt' else [])
+        with item.open('r+b'):
+            pass
+        assert runtime.tree(cache) == expected
+        item.write_text('tampered', encoding='utf-8')
+        rejected(lambda: runtime.firmware_access(cache, expected))
 
 
 def test_cache_tamper_and_lease_conflict() -> None:
@@ -158,6 +178,7 @@ def test_prepare_failure_retains_without_blocking_next_batch() -> None:
 
 def main() -> None:
     test_source_selection_and_capacity()
+    test_firmware_access_without_content_writes()
     test_cache_tamper_and_lease_conflict()
     test_hardlink_isolation_cleanup_and_protection()
     test_prepare_failure_retains_without_blocking_next_batch()
