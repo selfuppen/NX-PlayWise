@@ -422,8 +422,10 @@ static void draw_bedtime_editor_fields(
         snprintf(value, sizeof(value), "%02u:%02u", minute / 60, minute % 60);
         draw_text(pixels, stride, row.x + 18, row.y + 52, value, 22,
             custom ? UI_ACCENT : UI_DISABLED);
-        draw_text(pixels, stride, row.x + row.width - 108, row.y + 50,
-            custom ? ptc_ui_text(PTC_UI_T_A_FINE_ADJUSTMENT) : ptc_ui_text(PTC_UI_T_NOT_EDITABLE), 13, custom ? UI_MUTED : UI_DISABLED);
+        const char *hint = custom ? ptc_ui_text(PTC_UI_T_A_FINE_ADJUSTMENT) : ptc_ui_text(PTC_UI_T_NOT_EDITABLE);
+        int hint_x = row.x + row.width - 18 - measure_text(hint, 13);
+        draw_text(pixels, stride, hint_x, row.y + 50, hint, 13,
+            custom ? UI_MUTED : UI_DISABLED);
     }
 }
 
@@ -489,9 +491,9 @@ static void draw_bedtime_window_overlay(uint32_t *pixels, uint32_t stride, const
         window->enabled ? ptc_ui_text(PTC_UI_T_ON) : ptc_ui_text(PTC_UI_T_OFF), window->enabled ? UI_SUCCESS : UI_MUTED,
         true, true);
     draw_bedtime_editor_timeline(pixels, stride, model, window, true, "");
-    draw_text(pixels, stride, dialog.x + 44, dialog.y + 424,
-        ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_FIELD_A_FINE_ADJUSTMENT), 13, UI_MUTED);
     draw_text(pixels, stride, dialog.x + 44, dialog.y + 450,
+        ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_FIELD_A_FINE_ADJUSTMENT), 13, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 44, dialog.y + 476,
         ptc_ui_text(PTC_UI_T_BEDTIME_PERIOD_MUST_SPAN_MIDNIGHT_USE_IS), 13, UI_WARNING);
 
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
@@ -519,12 +521,12 @@ static void draw_bedtime_special_overlay(uint32_t *pixels, uint32_t stride, cons
         bedtime_override_label(rule->mode), mode_color, custom, false);
     draw_bedtime_editor_timeline(pixels, stride, model, &rule->window,
         custom, neutral);
-    draw_text(pixels, stride, dialog.x + 44, dialog.y + 424,
+    draw_text(pixels, stride, dialog.x + 44, dialog.y + 450,
         custom
             ? ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_FIELD_A_FINE_ADJUSTMENT_2)
             : ptc_ui_text(PTC_UI_T_A_X_CHANGES_MODE_SELECT_CUSTOM_WINDOW),
         13, UI_MUTED);
-    draw_text(pixels, stride, dialog.x + 44, dialog.y + 450,
+    draw_text(pixels, stride, dialog.x + 44, dialog.y + 476,
         custom ? ptc_ui_text(PTC_UI_T_THE_CUSTOM_WINDOW_MUST_SPAN_MIDNIGHT_THE)
                : ptc_ui_text(PTC_UI_T_FOLLOW_AND_FREE_MODES_WILL_NOT_USE),
         13, custom ? UI_WARNING : UI_MUTED);

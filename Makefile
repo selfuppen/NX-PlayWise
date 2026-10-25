@@ -160,6 +160,7 @@ $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro
 test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 	$(HOST_BUILD_DIR)/ui_preview --check-primitives
 	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-parent-tabs
+	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-bedtime-editors
 
 test-host: test-ui-primitives
 
@@ -178,7 +179,7 @@ render-nro-previews: $(HOST_BUILD_DIR)/ui_preview
 		exit 1; \
 	fi
 	mkdir -p build/ui-previews
-	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
+	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews --all-styles
 
 render-overlay-previews: $(HOST_BUILD_DIR)/overlay_preview
 	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \

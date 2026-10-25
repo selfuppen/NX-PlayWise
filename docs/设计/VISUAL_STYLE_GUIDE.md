@@ -265,6 +265,8 @@ The view moves beyond rigid and cramped layouts, adopting conversational, parent
 
 ## 5. Development Checklist for New Pages
 
+Weekly and special bedtime window editors reserve two 18px guide lines at 26px line spacing before the mode row at dialog-relative Y=130. Time fields, the timeline, presets and footer notes share the shifted production geometry with touch hit testing. Measure the fine-adjustment or disabled hint and right-align it with 18px card padding; verify complete guides and separated time/hint text across all three languages, four styles and both light/dark modes. Host fixtures must use the real opening guide rather than an empty description.
+
 The parent today page is named “今日安排” in both Chinese locales and `Today's Schedule` in English; detail titles and return prompts use the same name. Parent-entry PIN errors use the existing 760px by 360px dialog with theme-aware danger colors. Its three buttons are `B Back`, `X Support & Recovery`, and `A Re-enter`. During cooldown, retry shows remaining seconds and is disabled; back and support remain available. Measure and fit multilingual text, and share geometry between drawing and touch. The entry support button opens read-only Support & Recovery; other sensitive actions retain their troubleshooting guide button.
 
 When authoring or updating Companion NRO pages or overlays:

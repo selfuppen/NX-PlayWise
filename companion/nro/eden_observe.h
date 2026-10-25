@@ -185,6 +185,14 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         snprintf(key, sizeof(key), "bedtime_preset_%d", i);
         if (!ptc_eden_target(out, size, &used, key, ptc_ui_bedtime_preset_rect(m->overlay, i))) goto fail;
     }
+    for (int i = 0; i < 3; ++i) {
+        char key[24];
+        snprintf(key, sizeof(key), "bedtime_editor_%d", i);
+        if (!ptc_eden_target(out, size, &used, key, ptc_ui_bedtime_overlay_field_rect(m->overlay, i))) goto fail;
+    }
+    if (!ptc_eden_target(out, size, &used, "overlay_back", ptc_ui_cancel_rect(m->overlay)) ||
+        !ptc_eden_target(out, size, &used, "overlay_complete", ptc_ui_confirm_rect(m->overlay)) ||
+        !ptc_eden_target(out, size, &used, "plan_back", ptc_ui_parent_subpage_footer_rect(0))) goto fail;
     if (!ptc_eden_target(out, size, &used, "setup_primary", ptc_ui_setup_primary_rect()) ||
         !ptc_eden_target(out, size, &used, "child_code", ptc_ui_child_submit_rect()) ||
         !ptc_eden_target(out, size, &used, "pin_confirm", ptc_ui_pin_confirm_rect())) goto fail;

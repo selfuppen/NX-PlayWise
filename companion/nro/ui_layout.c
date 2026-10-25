@@ -426,9 +426,10 @@ PtcUiRect ptc_ui_bedtime_overlay_field_rect(PtcUiOverlay overlay, int index)
     if ((overlay != PTC_UI_OVERLAY_BEDTIME_WINDOW &&
          overlay != PTC_UI_OVERLAY_BEDTIME_SPECIAL) || index < 0 || index >= 3)
         return (PtcUiRect){0, 0, 0, 0};
-    if (index == 0) return (PtcUiRect){dialog.x + 44, dialog.y + 104, dialog.w - 88, 58};
+    /* Reserve two measured header lines, including the longer English guide. */
+    if (index == 0) return (PtcUiRect){dialog.x + 44, dialog.y + 130, dialog.w - 88, 58};
     return (PtcUiRect){dialog.x + 44 + (index - 1) * ((dialog.w - 100) / 2 + 12),
-        dialog.y + 176, (dialog.w - 100) / 2, 66};
+        dialog.y + 202, (dialog.w - 100) / 2, 66};
 }
 
 PtcUiRect ptc_ui_bedtime_timeline_rect(PtcUiOverlay overlay)
@@ -437,7 +438,7 @@ PtcUiRect ptc_ui_bedtime_timeline_rect(PtcUiOverlay overlay)
     if (overlay != PTC_UI_OVERLAY_BEDTIME_WINDOW &&
         overlay != PTC_UI_OVERLAY_BEDTIME_SPECIAL)
         return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 44, dialog.y + 266, dialog.w - 88, 32};
+    return (PtcUiRect){dialog.x + 44, dialog.y + 292, dialog.w - 88, 32};
 }
 
 PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
@@ -449,7 +450,7 @@ PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
          overlay != PTC_UI_OVERLAY_BEDTIME_SPECIAL) || index < 0 || index >= 5)
         return (PtcUiRect){0, 0, 0, 0};
     width = (dialog.w - 88 - gap * 4) / 5;
-    return (PtcUiRect){dialog.x + 44 + index * (width + gap), dialog.y + 352, width, 42};
+    return (PtcUiRect){dialog.x + 44 + index * (width + gap), dialog.y + 378, width, 42};
 }
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)

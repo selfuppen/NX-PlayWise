@@ -29,7 +29,13 @@ SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
-    require(suite in ("smoke", "main", "support", "web", "plans"), "unknown suite")
+    require(suite in ("smoke", "main", "support", "web", "plans", "input", "input-hold"), "unknown suite")
+    if suite == "input-hold":
+        from tools.automation.eden_input_flow import INPUT_HOLD_SCENARIOS
+        return INPUT_HOLD_SCENARIOS
+    if suite == "input":
+        from tools.automation.eden_input_flow import INPUT_SCENARIOS
+        return INPUT_SCENARIOS
     if suite == "plans":
         from tools.automation.eden_plan_flow import PLAN_SCENARIOS
         return PLAN_SCENARIOS
@@ -394,7 +400,7 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
         save(app / "calendars/catalog.json", {"entries": [entry]})
         save(app / "calendars/active.json", {"option_id": "EDEN", "entries": [entry]})
         save(output / "fixtures/calendar.json", calendar)
-    if args.suite == "plans":
+    if args.suite in ("plans", "input", "input-hold"):
         from tools.automation.eden_plan_flow import prepare_plans
         prepare_plans(app, output, rules)
     save(app / "rules.json", rules)
@@ -405,12 +411,14 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     shutil.copy2(args.manifest, artifacts / "manifest.json")
     for name in ("eden_runner.py", "eden_mcp_bridge.py"):
         shutil.copy2(Path(__file__).with_name(name), artifacts / name)
-    if args.suite in ("main", "support", "web", "plans"):
+    if args.suite in ("main", "support", "web", "plans", "input", "input-hold"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
     if args.suite == "support":
         shutil.copy2(Path(__file__).with_name("eden_support_flow.py"), artifacts / "eden_support_flow.py")
-    if args.suite == "plans":
+    if args.suite in ("plans", "input", "input-hold"):
         shutil.copy2(Path(__file__).with_name("eden_plan_flow.py"), artifacts / "eden_plan_flow.py")
+    if args.suite in ("input", "input-hold"):
+        shutil.copy2(Path(__file__).with_name("eden_input_flow.py"), artifacts / "eden_input_flow.py")
     if args.suite == "web":
         for name in ("eden_web_flow.py", "eden_web_browser.js"):
             shutil.copy2(Path(__file__).with_name(name), artifacts / name)
@@ -435,6 +443,11 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
                 "scope": "Eden simulated UI/business only; no production qualification"}
     if args.suite == 'plans':
         identity['plans_language'] = getattr(args, 'plans_language', 'system')
+    if args.suite in ('input', 'input-hold'):
+        identity['input_language'] = args.input_language
+    if args.suite == 'input':
+        identity['input_styles'] = [style for style in ('slate', 'indigo', 'teal', 'amethyst')
+                                    if args.input_styles is None or style in args.input_styles]
     save(output / "identity.json", identity)
     return runtime, identity
 
@@ -452,7 +465,7 @@ class Suite:
         self.health: list[dict] = []
 
     def bounded(self) -> None:
-        require(time.monotonic() < self.deadline and self.step < (500 if self.suite in ("main", "plans") else 180),
+        require(time.monotonic() < self.deadline and self.step < (500 if self.suite in ("main", "plans", "input") else 180),
                 "suite time/action limit reached")
 
     def observe(self) -> dict:
@@ -495,7 +508,12 @@ class Suite:
         healthy_launch(self.client.tool("eden_status"))
         value = self.wait_action_ready()
         self.step += 1
-        require(200 <= hold_ms <= 1400, "input hold exceeds bound")
+        # A slow software-rendered guest can sample too few held frames within
+        # 1400 host ms. Only an explicitly observed X05 danger-confirm A hold
+        # may use the 2500 ms ceiling; all other inputs keep their old limit.
+        x05_confirm = self.suite in ("input", "input-hold") and button == "A" and \
+            value["ui"].get("overlay") == 3 and value["ui"].get("confirm_hold_required") is True
+        require(200 <= hold_ms <= (2500 if x05_confirm else 1400), "input hold exceeds bound")
         name = "eden_press_button" if button else "eden_touch_screen"
         if button:
             arguments = {"button": button}
@@ -520,7 +538,8 @@ class Suite:
     def wait_action_ready(self) -> dict:
         # A cached neutral snapshot may precede a slow first render of a new
         # dialog. Require two progressing, presented idle frames before down.
-        deadline = min(self.deadline, time.monotonic() + 5)
+        readiness_budget = 20 if self.suite in ("input", "input-hold") else 5
+        deadline = min(self.deadline, time.monotonic() + readiness_budget)
         baseline = self.wait_input(False)
         previous = None
         ready = 0
@@ -573,7 +592,8 @@ class Suite:
         return value
 
     def wait_input(self, active: bool, after: dict | None = None) -> dict:
-        deadline = min(self.deadline, time.monotonic() + 5)
+        sampling_budget = 20 if self.suite in ("input", "input-hold") else 5
+        deadline = min(self.deadline, time.monotonic() + sampling_budget)
         while time.monotonic() < deadline:
             try:
                 value = self.observe_input()
@@ -591,7 +611,7 @@ class Suite:
             except (OSError, ValueError, ObservationPending):
                 pass
             time.sleep(0.05)
-        raise GateError("guest did not sample input/release within five seconds; no replay")
+        raise GateError(f"guest did not sample input/release within {sampling_budget} seconds; no replay")
 
     def capture(self, name: str) -> None:
         value = self.observe()
@@ -935,6 +955,10 @@ def verify(output: Path) -> dict:
             from tools.automation.eden_plan_flow import verify_plans
             verify_plans(output)
             return summary
+        if summary.get("suite") in ("input", "input-hold"):
+            from tools.automation.eden_input_flow import verify_input
+            verify_input(output, include_matrix=summary["suite"] == "input")
+            return summary
         require(read(output / "checkpoints/setup.json")["ui"]["view"] == 1 and
                 read(output / "checkpoints/reopen.json")["ui"]["view"] == 0 and
                 read(output / "checkpoints/pin_correct_parent.json")["ui"]["view"] == 1,
@@ -1109,6 +1133,12 @@ def run(args: argparse.Namespace) -> int:
             class PlanSuite(PlanFlow, Suite):
                 pass
             suite_class = PlanSuite
+        elif args.suite in ("input", "input-hold"):
+            from tools.automation.eden_input_flow import InputFlow, InputHoldFlow
+            flow = InputHoldFlow if args.suite == "input-hold" else InputFlow
+            class InputSuite(flow, Suite):
+                pass
+            suite_class = InputSuite
         suite = suite_class(client, output, runtime, identity, args.timeout, args.suite)
         suite.execute()
     except Exception as exc:
@@ -1144,7 +1174,7 @@ def run(args: argparse.Namespace) -> int:
     if (app / "auth.json").is_file():
         auth = read(app / "auth.json")
         save(output / "app-final/auth-counters.json", {key: auth[key] for key in ("failed_attempts", "cooldown_until")})
-    if args.suite == "plans":
+    if args.suite in ("plans", "input", "input-hold"):
         for name in ("calendars", "calendar-import", "inbox"):
             if (app / name).is_dir():
                 shutil.copytree(app / name, output / "app-final" / name)
@@ -1207,10 +1237,14 @@ def main() -> int:
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans"), default="smoke",
+    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans", "input", "input-hold"), default="smoke",
                       help="main covers core journeys; support covers diagnostics/disable/installation restore")
     live.add_argument('--plans-language', choices=('system', 'en'), default='system',
                       help='plans only: explicit English UI layout check through the normal language menu')
+    live.add_argument('--input-language', choices=('zh-Hans', 'zh-Hant', 'en'), default='en',
+                      help='input/input-hold: language selected through the normal menu before the selected X05 journey')
+    live.add_argument('--input-styles', nargs='+', choices=('slate', 'indigo', 'teal', 'amethyst'),
+                      help='input only: explicit subset of theme styles, canonical order; omitted means all four')
     live.add_argument("--timeout", type=int, default=300, choices=range(60, 1201), metavar="60..1200")
     live.add_argument("--trace-progress", action="store_true",
                       help="Enable isolated bounded numeric stage diagnostics; not a business assertion")
@@ -1219,6 +1253,9 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == 'run' and args.plans_language != 'system' and args.suite != 'plans':
         parser.error('--plans-language en requires --suite plans')
+    if args.command == 'run' and args.input_styles is not None:
+        if args.suite != 'input' or len(set(args.input_styles)) != len(args.input_styles):
+            parser.error('--input-styles requires --suite input and unique styles')
     try:
         if args.command == "verify":
             value = verify(args.run.resolve())

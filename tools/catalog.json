@@ -2,8 +2,13 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-25",
   "scope": "playwise/tools",
-  "script_count": 69,
+  "script_count": 70,
   "scripts": [
+    {
+      "path": "automation/eden_input_flow.py",
+      "category": "automation",
+      "purpose": "X05三语／四种配色与浅暗模式的混合触摸手柄输入、取消、长按和重开验证"
+    },
     {
       "path": "device/input_connection.py",
       "category": "device",

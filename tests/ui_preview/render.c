@@ -13,6 +13,7 @@
 #include "../../companion/nro/ui_render_internal.h"
 
 uint32_t preview_pixels[1280 * 720];
+static bool preview_all_styles;
 
 static struct {
     bool enabled;
@@ -27,10 +28,40 @@ static struct {
     UiRect title, badge;
 } support_tab_trace;
 
+static struct {
+    bool enabled;
+    PtcUiOverlay overlay;
+    int failed, hints;
+    char guide[512];
+} bedtime_trace;
+
 void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
 {
     if (!text) return;
     UiRect bounds = {x, baseline - size, measure_text(text, size), size};
+    if (bedtime_trace.enabled) {
+        PtcUiRect dialog = ptc_ui_dialog_rect(960, 560);
+        PtcUiRect mode = ptc_ui_bedtime_overlay_field_rect(bedtime_trace.overlay, 0);
+        if (size == 18 && x == dialog.x + 34 && baseline >= dialog.y + 70 && baseline <= dialog.y + 125) {
+            size_t used = strlen(bedtime_trace.guide);
+            snprintf(bedtime_trace.guide + used, sizeof(bedtime_trace.guide) - used,
+                "%s%s", used ? " " : "", text);
+            if (baseline + 8 > mode.y || x < dialog.x + 34 ||
+                x + bounds.width > dialog.x + dialog.w - 34) ++bedtime_trace.failed;
+        }
+        if (strcmp(text, ptc_ui_text(PTC_UI_T_A_FINE_ADJUSTMENT)) == 0 ||
+            strcmp(text, ptc_ui_text(PTC_UI_T_NOT_EDITABLE)) == 0) {
+            ++bedtime_trace.hints;
+            bool inside = false;
+            for (int field = 1; field < 3; ++field) {
+                PtcUiRect row = ptc_ui_bedtime_overlay_field_rect(bedtime_trace.overlay, field);
+                inside |= bounds.x >= row.x + 18 && bounds.x + bounds.width <= row.x + row.w - 18 &&
+                    bounds.y >= row.y && baseline <= row.y + row.h &&
+                    bounds.x >= row.x + 18 + measure_text("23:59", 22) + 12;
+            }
+            if (!inside) ++bedtime_trace.failed;
+        }
+    }
     if (support_tab_trace.enabled && bounds.y >= 100 && baseline <= 164) {
         if (strcmp(text, ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)) == 0) {
             support_tab_trace.title = bounds;
@@ -48,6 +79,51 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
         child_heading_trace.summary = bounds;
         ++child_heading_trace.summary_count;
     }
+}
+
+static int check_bedtime_editors(const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
+            for (int dark = 0; dark < 2; ++dark) {
+                PtcUiThemeView theme = ptc_ui_theme_make_styled_view(
+                    dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, (PtcUiThemeStyle)style,
+                    PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                for (int state = 0; state < 4; ++state) {
+                    PtcUiModel model = *baseline;
+                    model.view = PTC_UI_PARENT;
+                    model.parent_page = PTC_UI_PARENT_PLAN;
+                    model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+                    model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+                    model.overlay = state == 0 ? PTC_UI_OVERLAY_BEDTIME_WINDOW : PTC_UI_OVERLAY_BEDTIME_SPECIAL;
+                    model.rendered_overlay = model.overlay;
+                    model.bedtime_editor_day = 1;
+                    model.bedtime_special_kind = 2;
+                    model.draft_bedtime_policy.week[1] = (PtcBedtimeWindow){true, 1380, 480};
+                    model.draft_bedtime_policy.scheduled_override.rule.mode = (PtcBedtimeOverrideMode)(state - 1);
+                    model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1380, 480};
+                    snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(state == 0 ?
+                        PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT : PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
+                    memset(&bedtime_trace, 0, sizeof(bedtime_trace));
+                    bedtime_trace.enabled = true;
+                    bedtime_trace.overlay = model.overlay;
+                    ptc_ui_graphics_draw(&model, &theme);
+                    bedtime_trace.enabled = false;
+                    if (bedtime_trace.failed || bedtime_trace.hints != 2 ||
+                        strcmp(bedtime_trace.guide, model.overlay_body) != 0) {
+                        fprintf(stderr, "FAIL: bedtime lang=%d style=%d dark=%d state=%d bounds=%d hints=%d guide=%s\n",
+                            lang, style, dark, state, bedtime_trace.failed, bedtime_trace.hints, bedtime_trace.guide);
+                        ++failed;
+                    }
+                }
+            }
+        }
+    }
+    fprintf(stderr, "%s: bedtime complete guide and separated field hints (3 languages, 4 styles, 2 modes, 4 editor states)\n",
+        failed ? "FAIL" : "PASS");
+    return failed ? 1 : 0;
 }
 
 static int check_parent_tabs(const PtcUiModel *baseline)
@@ -1255,11 +1331,13 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.bedtime_editor_day = 1;
         model.overlay_selection = 1;
         snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_EDIT_WEEKLY_BEDTIME_WINDOWS));
+        snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT));
         failed |= save_preview(directory, "bedtime", "bedtime-window-input", &model, dark);
         model.overlay = PTC_UI_OVERLAY_BEDTIME_SPECIAL;
         model.bedtime_special_kind = 2;
         model.overlay_selection = 0;
         snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_EDIT_SPECIFIC_DATE_BEDTIME_RULES));
+        snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
         model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_INHERIT;
         failed |= save_preview(directory, "bedtime", "bedtime-special-inherit", &model, dark);
         model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_DISABLED;
@@ -1716,13 +1794,24 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
     PtcUiModel model = *base_model;
     localize_preview_baseline(&model);
     int failed = 0;
-    failed |= render_all_previews(target_dir, &model);
-    failed |= render_eye_care_previews(target_dir, &model);
-    failed |= render_dock_previews(target_dir, &model);
-    failed |= render_config_backup_previews(target_dir, &model);
-    failed |= render_pairing_qr_previews(target_dir, &model);
-    failed |= render_policy_previews(target_dir, &model);
-    failed |= render_parent_pin_error_previews(target_dir, &model);
+    for (int style = 0; style < (preview_all_styles ? PTC_UI_THEME_STYLE_COUNT : 1); ++style) {
+        char styled_dir[1200];
+        if (style == 0) {
+            snprintf(styled_dir, sizeof(styled_dir), "%s", target_dir);
+        } else {
+            snprintf(styled_dir, sizeof(styled_dir), "%s/style-%s", target_dir,
+                ptc_ui_theme_style_name((PtcUiThemeStyle)style));
+            ptc_mkdir(styled_dir);
+        }
+        ptc_ui_theme_set_style((PtcUiThemeStyle)style);
+        failed |= render_all_previews(styled_dir, &model);
+        failed |= render_eye_care_previews(styled_dir, &model);
+        failed |= render_dock_previews(styled_dir, &model);
+        failed |= render_config_backup_previews(styled_dir, &model);
+        failed |= render_pairing_qr_previews(styled_dir, &model);
+        failed |= render_policy_previews(styled_dir, &model);
+        failed |= render_parent_pin_error_previews(styled_dir, &model);
+    }
     return failed;
 }
 
@@ -1735,7 +1824,8 @@ int main(int argc, char **argv)
     PtcRules baseline_rules;
     int failed = 0;
     if (argc == 2 && strcmp(argv[1], "--check-primitives") == 0) return check_primitives();
-    if (argc != 3 || !(font = fopen(argv[1], "rb"))) return 1;
+    preview_all_styles = argc == 4 && strcmp(argv[3], "--all-styles") == 0;
+    if ((argc != 3 && !preview_all_styles) || !(font = fopen(argv[1], "rb"))) return 1;
     fseek(font, 0, SEEK_END); length = ftell(font); rewind(font);
     if (length <= 0 || !(bytes = malloc((size_t)length))) { fclose(font); return 1; }
     if (fread(bytes, 1, length, font) != (size_t)length) { fclose(font); free(bytes); return 1; }
@@ -1774,8 +1864,8 @@ int main(int argc, char **argv)
     snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
     snprintf(model.result_status, sizeof(model.result_status), "ok");
 
-    if (strcmp(argv[2], "--check-parent-tabs") == 0) {
-        failed = check_parent_tabs(&model);
+    if (strcmp(argv[2], "--check-parent-tabs") == 0 || strcmp(argv[2], "--check-bedtime-editors") == 0) {
+        failed = strcmp(argv[2], "--check-parent-tabs") == 0 ? check_parent_tabs(&model) : check_bedtime_editors(&model);
         FT_Done_Face(g_ui.face);
         free(bytes);
         return failed;

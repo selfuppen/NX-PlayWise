@@ -178,6 +178,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | [automation/eden_runtime_cleanup.ps1](automation/eden_runtime_cleanup.ps1) | 封存核验后解除本批链接并清理临时目录，失败保留有界现场 |
 | [automation/eden_web_flow.py](automation/eden_web_flow.py) | X02网页导入／发码→NRO兑换与重开持久化；浏览器驱动为同目录eden_web_browser.js |
 | [automation/eden_plan_flow.py](automation/eden_plan_flow.py) | X01地区日历导入／长按应用与X04就寝分区草稿、保存及重开持久化 |
+| [automation/eden_input_flow.py](automation/eden_input_flow.py) | X05三语×四种配色×浅暗模式：触摸打开、手柄编辑、触摸返回、取消／长按及重开 |
 
 准备、命令、只读UI快照与证明边界见[开发说明](../docs/开发/Eden自动化测试.md)。日常基础测试不启动此执行器；Host单元测试和默认Eden NRO构建／产物校验继续保留，均不启动模拟器。这些工具不连接真实Switch。
 
