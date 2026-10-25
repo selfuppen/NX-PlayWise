@@ -73,6 +73,32 @@ static bool result_has(Fixture *f, const char *id, const char *needle)
     return f->mem->storage.vtable->read_text(&f->mem->storage, path, text, sizeof(text)) && strstr(text, needle);
 }
 
+static void test_zero_limit_readback_never_starts_timer(void)
+{
+    Fixture f;
+    PtcPctlStatus observed;
+    init_fixture(&f);
+    request(&f, "zero-public-rejected", "set_today_limit", "{\"minutes\":0}");
+    expect(result_has(&f, "zero-public-rejected", "\"reason\":\"bad_request\""),
+        "native zero adoption does not broaden the public positive-minute request range");
+    expect(f.pctl.apply_target_calls == 0, "invalid public zero request does not write PCTL");
+    f.pctl.hide_restricted_now = true;
+    PtcPctlTarget target = {.mode = PTC_PCTL_TARGET_LIMIT, .minutes = 0,
+        .weekday = ptc_weekday_from_day_index(f.clock.snapshot.day_index)};
+    expect(f.pctl.pctl.vtable->apply_target(&f.pctl.pctl, &target) == PTC_ERR_OK,
+        "model a zero native target independently of public request parsing");
+    expect(observe_target_with_optional_activation(&f.core, &(PtcRequest){0},
+        f.clock.snapshot, "release", PTC_PCTL_TARGET_LIMIT, 0, "zero-readback", &observed) == PTC_ERR_OK,
+        "zero daily limit accepts the native BLOCKED settings readback");
+    expect(f.pctl.status.blocked_today && !f.pctl.status.limited_today,
+        "zero quota remains a real blocked target");
+    expect(f.pctl.start_timer_calls == 0,
+        "zero-limit settings confirmation never starts 1451 even when 1455 is unlatched");
+    expect(!target_settings_observed(PTC_PCTL_TARGET_LIMIT, 1, &f.pctl.status),
+        "blocked readback cannot satisfy a positive allowance");
+    free(f.mem);
+}
+
 static void test_direct_usage_projection(void)
 {
     Fixture f;
@@ -1955,6 +1981,7 @@ int ptc_test_control_safety(void)
 {
     failures = 0;
     test_snapshot_failure_stops_rule_writes();
+    test_zero_limit_readback_never_starts_timer();
     test_direct_usage_projection();
     test_eye_rest_scheduler_deadline();
     test_direct_unlimited_lifecycle();

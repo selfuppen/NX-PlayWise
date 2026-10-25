@@ -370,7 +370,11 @@ static bool target_status_observed(
     if (mode == PTC_PCTL_TARGET_UNLIMITED) {
         return status->unrestricted_today && status->restricted_now_available && !status->restricted_now;
     }
-    if (mode == PTC_PCTL_TARGET_BLOCKED) {
+    /* LIMIT/0 and a health-policy BLOCKED target have the same restricted-zero
+       0x44 representation. The adapter correctly reports that as blocked_today,
+       with no positive configured-minutes field. */
+    if (mode == PTC_PCTL_TARGET_BLOCKED ||
+        (mode == PTC_PCTL_TARGET_LIMIT && minutes == 0U)) {
         return status->blocked_today;
     }
     if (!status->limited_today || !status->configured_minutes_available ||
@@ -474,7 +478,8 @@ bool target_settings_observed(
     if (mode == PTC_PCTL_TARGET_UNLIMITED) {
         return status->unrestricted_today;
     }
-    if (mode == PTC_PCTL_TARGET_BLOCKED) {
+    if (mode == PTC_PCTL_TARGET_BLOCKED ||
+        (mode == PTC_PCTL_TARGET_LIMIT && minutes == 0U)) {
         return status->blocked_today;
     }
     return status->limited_today && status->configured_minutes_available &&
@@ -515,6 +520,7 @@ PtcErrorCode observe_target_with_optional_activation(
             settings_seen = true;
             /* Restriction targets and autonomous recovery never activate 1451. */
             if (!request || target_mode == PTC_PCTL_TARGET_BLOCKED ||
+                (target_mode == PTC_PCTL_TARGET_LIMIT && minutes == 0U) ||
                 target_runtime_ready(target_mode, minutes, observed)) {
                 append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, event_detail);
                 return PTC_ERR_OK;

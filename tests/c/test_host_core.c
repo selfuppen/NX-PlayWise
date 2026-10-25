@@ -2506,6 +2506,79 @@ static void test_setup_direct_takeover_recovers_exhausted_failed_release(void)
     check_int((int)pctl.start_timer_calls, (int)start_calls, "changed allowance refusal performs no timer start");
 }
 
+static void test_setup_direct_takeover_zero_with_temporary_unlock(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[8192];
+    char original_snapshot[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 0;
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = false;
+    pctl.status.blocked_today = true;
+    pctl.status.configured_minutes_available = false;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.play_timer_enabled = false;
+    pctl.status.restricted_now = true;
+    pctl.status.temporary_unlocked = true;
+    ptc_fake_time_init(&fake_time, 1792941922, 2489, 1405);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-zero.json",
+        "{\"version\":1,\"request_id\":\"setup-zero\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}"),
+        "queue zero-minute first setup after normal official PIN unlock");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "zero-minute setup is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-zero.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"active\""),
+        "native BLOCKED readback satisfies the preserved zero-minute daily rule");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json",
+        original_snapshot, sizeof(original_snapshot)), "zero-minute takeover saves its installation snapshot");
+    check_int((int)pctl.apply_target_calls, 0, "zero-minute takeover never rewrites native settings");
+    check_int((int)pctl.start_timer_calls, 0, "zero-minute takeover never starts 1451");
+    check_true(pctl.status.temporary_unlocked && pctl.status.blocked_today,
+        "takeover preserves both the official unlock and blocked daily policy");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"pending\",\"compatibility_status\":\"verified\","
+        "\"restriction_cleared\":false,\"snapshot_available\":false,\"activate_after\":0,"
+        "\"handover_today_pending\":true,\"handover_day_index\":2489,\"handover_unlimited\":false,"
+        "\"handover_minutes\":0,\"handover_remaining_available\":true,\"handover_remaining_minutes\":0,"
+        "\"last_error\":\"\"}"), "reproduce the field 313 pending state without erasing credentials or snapshot");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-zero-retry.json",
+        "{\"version\":1,\"request_id\":\"setup-zero-retry\",\"type\":\"complete_setup\",\"created_at\":2,\"payload\":{}}"),
+        "queue zero-minute pending retry");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "zero-minute pending retry is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-zero-retry.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"active\""),
+        "existing zero-minute pending installation can finish normally");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json", text, sizeof(text)) &&
+        strcmp(text, original_snapshot) == 0, "pending retry does not replace the original installation snapshot");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"pending\",\"compatibility_status\":\"verified\","
+        "\"restriction_cleared\":false,\"snapshot_available\":true,\"activate_after\":0,"
+        "\"handover_today_pending\":true,\"handover_day_index\":2489,\"handover_unlimited\":false,"
+        "\"handover_minutes\":0,\"handover_remaining_available\":true,\"handover_remaining_minutes\":0,"
+        "\"last_error\":\"\"}"), "seed guarded retry for snapshot drift");
+    pctl.status.play_timer_enabled = true;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-zero-drift.json",
+        "{\"version\":1,\"request_id\":\"setup-zero-drift\",\"type\":\"complete_setup\",\"created_at\":3,\"payload\":{}}"),
+        "queue zero-minute retry after native timer changed");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "zero-minute drift retry is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-zero-drift.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"handover_state_unavailable\""),
+        "zero-minute recognition still rejects a changed installation snapshot");
+    check_int((int)pctl.apply_target_calls, 0, "all zero-minute takeover paths avoid PCTL writes");
+    check_int((int)pctl.start_timer_calls, 0, "all zero-minute takeover paths avoid 1451");
+}
+
 static void test_offline_code_preview_is_non_consuming(void)
 {
     PtcMemStorage mem;
@@ -4317,6 +4390,7 @@ int main(void)
     test_daily_buffer_failure_rollbacks();
     test_activity_history_retention_and_clear_rollback();
     test_setup_direct_takeover_recovers_exhausted_failed_release();
+    test_setup_direct_takeover_zero_with_temporary_unlock();
     test_setup_refuses_unknown_handover_total();
     test_setup_takes_over_unconfigured_today_when_restriction_enabled();
     test_setup_refuses_unknown_handover_when_slot_not_unconfigured();
