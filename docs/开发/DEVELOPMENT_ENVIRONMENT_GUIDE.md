@@ -15,7 +15,7 @@ This document differentiates general project requirements, the maintainer's defa
 | Layer | Required Components | Alternative or Optional Components |
 | --- | --- | --- |
 | Host Regression | Python 3, Git, deterministic fixtures | Windows, PowerShell, Docker, and real Switch are all optional |
-| Host C Tests | C99 compiler, Make | Compiler and operating system can be substituted |
+| Host C/C++ Tests | C99 and C++17 compilers, Make | Compiler and operating system can be substituted |
 | Full Switch Build | devkitPro, devkitA64, libnx, FreeType, Make, and the repo unified packaging gate | SSH host/port, container name, and host OS can be substituted |
 | Dependency Reproduction | Vendored libtesla and QR Code Generator in repo | `../libnx`, `../libtesla`, `../Atmosphere`, `../sys-botbase` are only for optional upstream research |
 | Emulator Fast Iteration | devkitPro, and `build/eden-test/pctc-eden.nro` built via `make eden-test-nro` | Completely optional; used only for UI and business workflows, does not produce PCTL evidence |

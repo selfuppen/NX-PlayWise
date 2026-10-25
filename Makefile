@@ -172,6 +172,15 @@ $(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) FORCE_HOST_R
 $(HOST_BUILD_DIR)/overlay_preview: tests/overlay_preview/render.cpp tests/overlay_preview/renderer.hpp companion/overlay/source/render_types.hpp companion/overlay/source/render_methods.hpp companion/overlay/source/render_pages.hpp companion/overlay/layout.h $(HOST_BUILD_DIR)/overlay_preview_core.o
 	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
 
+$(HOST_BUILD_DIR)/overlay_preview_save_test: tests/overlay_preview/test_save.cpp tests/overlay_preview/renderer.hpp companion/ui_emoji.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -o $@ $< -lm
+
+.PHONY: test-overlay-preview-save
+test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test
+	$(HOST_BUILD_DIR)/overlay_preview_save_test third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf $(HOST_BUILD_DIR)/overlay-preview-save
+
+test-host: test-overlay-preview-save
+
 .PHONY: render-nro-previews render-overlay-previews convert-previews ui-previews
 render-nro-previews: $(HOST_BUILD_DIR)/ui_preview
 	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \

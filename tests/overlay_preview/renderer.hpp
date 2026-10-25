@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -18,8 +19,8 @@ using s8 = int8_t;
 using s16 = int16_t;
 using s32 = int32_t;
 using s64 = int64_t;
-static u64 armGetSystemTick() { return 1000000000000ULL; }
-static u64 armTicksToNs(u64 ticks) { return ticks; }
+static inline u64 armGetSystemTick() { return 1000000000000ULL; }
+static inline u64 armTicksToNs(u64 ticks) { return ticks; }
 namespace tsl {
 struct Color { unsigned r, g, b, a; };
 namespace style { namespace color { constexpr Color ColorTransparent{0, 0, 0, 0}; } }
@@ -205,11 +206,29 @@ public:
         return {static_cast<u32>(std::max(max_x, pen) - x), static_cast<u32>(baseline - y + size)};
     }
     void save(const std::string &path) {
+        const std::string header = "P6\n" + std::to_string(width) + " " +
+            std::to_string(height) + "\n255\n";
+        FILE *existing = std::fopen(path.c_str(), "rb");
+        if (existing) {
+            char buffer[65536];
+            bool identical = std::fread(buffer, 1, header.size(), existing) == header.size() &&
+                std::memcmp(buffer, header.data(), header.size()) == 0;
+            for (size_t offset = 0; identical && offset < pixels.size();) {
+                const size_t count = std::min(sizeof(buffer), pixels.size() - offset);
+                identical = std::fread(buffer, 1, count, existing) == count &&
+                    std::memcmp(buffer, pixels.data() + offset, count) == 0;
+                offset += count;
+            }
+            identical = identical && std::fgetc(existing) == EOF && !std::ferror(existing);
+            if (std::fclose(existing) != 0) identical = false;
+            // Preserve mtime so unchanged scenes also skip incremental PNG conversion.
+            if (identical) return;
+        }
         FILE *file = std::fopen(path.c_str(), "wb");
         if (!file) throw std::runtime_error("cannot write overlay preview");
-        std::fprintf(file, "P6\n%d %d\n255\n", width, height);
-        bool ok = std::fwrite(pixels.data(), 1, pixels.size(), file) == pixels.size();
-        std::fclose(file);
+        bool ok = std::fwrite(header.data(), 1, header.size(), file) == header.size() &&
+            std::fwrite(pixels.data(), 1, pixels.size(), file) == pixels.size();
+        if (std::fclose(file) != 0) ok = false;
         if (!ok) throw std::runtime_error("incomplete overlay preview");
     }
 };
