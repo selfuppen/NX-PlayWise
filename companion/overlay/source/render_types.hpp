@@ -229,65 +229,21 @@ inline PtcUiLanguagePreference resolve_overlay_effective_language(
     }
 }
 
-inline void draw_overlay_globe_icon(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 r, tsl::Color color)
-{
-    if (!renderer || r <= 1) return;
-    // Outer circle outline
-    renderer->drawCircle(cx, cy, static_cast<u16>(r), false, color);
-    // Equator horizontal line
-    renderer->drawRect(cx - r + 1, cy, (2 * r) - 1, 1, color);
-    // Prime meridian vertical line
-    renderer->drawRect(cx, cy - r + 1, 1, (2 * r) - 1, color);
-    // Curved side meridians (vertical ellipse)
-    const float rx = static_cast<float>(r) * 0.52f;
-    const float ry = static_cast<float>(r);
-    for (s32 dy = -r + 1; dy < r; ++dy) {
-        float fy = static_cast<float>(dy) / ry;
-        float factor = 1.0f - fy * fy;
-        if (factor > 0.0f) {
-            s32 dx = static_cast<s32>(std::round(std::sqrt(factor) * rx));
-            if (dx > 0 && dx < r) {
-                renderer->setPixelBlendDst(cx - dx, cy + dy, color);
-                renderer->setPixelBlendDst(cx + dx, cy + dy, color);
-            }
-        }
-    }
-}
-
 inline void draw_overlay_footer_hints(tsl::gfx::Renderer *renderer, tsl::Color color)
 {
     if (!renderer) return;
     const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
     const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
 
+    // Language lives in the child-overview header, so the host footer only
+    // advertises the two keys that always apply.
     s32 cur_x = 24;
     renderer->drawString(back_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
     const auto back_sz = renderer->drawString(back_lbl, false, 0, 0,
         PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
-    cur_x += static_cast<s32>(back_sz.first) + 16;
-
-    renderer->drawString("\uE0E2", false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
-    const auto x_sz = renderer->drawString("\uE0E2", false, 0, 0,
-        PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
-    cur_x += static_cast<s32>(x_sz.first) + 6;
-
-    constexpr s32 globe_r = 8;
-    draw_overlay_globe_icon(renderer, cur_x + globe_r, 683, globe_r, color);
-    cur_x += (globe_r * 2) + 6;
-
-    const char *badge = ptc_ui_text(PTC_UI_T_OVERLAY_LANG_BADGE);
-    renderer->drawString(badge, false, cur_x, 693, 22, color);
-    const auto lang_sz = renderer->drawString(badge, false, 0, 0,
-        22, tsl::style::color::ColorTransparent);
-    cur_x += static_cast<s32>(lang_sz.first) + 16;
+    cur_x += static_cast<s32>(back_sz.first) + 24;
 
     renderer->drawString(ok_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
-}
-
-inline const char *overlay_language_button_label(PtcOverlayLanguageSetting setting)
-{
-    (void)setting;
-    return "\uE0E2";
 }
 
 inline void get_overlay_current_time(char *out, size_t size)

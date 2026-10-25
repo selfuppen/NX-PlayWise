@@ -14,7 +14,8 @@ if __package__ in (None, ""):
 from tools.device.pctl_standard_evidence import raw_sample
 from tools.device.ui_receipt_observer import summarize_receipts
 
-ORIGINS = {"other", "button_y", "resume", "focus", "resume_and_focus", "overlay_ready", "touch"}
+ORIGINS = {"other", "button_y", "resume", "focus", "resume_and_focus", "overlay_ready", "touch",
+           "countdown_end"}
 STOP_REASONS = {"client_exit", "record_limit", "lease_expired", "config_removed_or_changed", "config_or_runtime_changed"}
 
 

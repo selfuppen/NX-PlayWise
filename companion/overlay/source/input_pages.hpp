@@ -265,7 +265,8 @@
                 if (requests_enabled) (void)begin_status_refresh();
                 return true;
             }
-            if (ty >= 670 && tx >= 100 && tx <= 280) {
+            if (page_hit(page_layout_.language, tx, ty)) {
+                child_overview_focus_ = 5;
                 open_language_confirm();
                 return true;
             }
@@ -332,10 +333,16 @@
             if (keysDown & HidNpadButton_Up) {
                 if (child_overview_focus_ == 2) child_overview_focus_ = 0;
             } else if (keysDown & HidNpadButton_Down) {
-                if (child_overview_focus_ == 0 || child_overview_focus_ == 3) child_overview_focus_ = 2;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 3 ||
+                    child_overview_focus_ == 5) child_overview_focus_ = 2;
             } else if (keysDown & (HidNpadButton_Left | HidNpadButton_Right)) {
-                if (child_overview_focus_ == 0 || child_overview_focus_ == 3)
-                    child_overview_focus_ = child_overview_focus_ == 0 ? 3 : 0;
+                if (child_overview_focus_ == 0 || child_overview_focus_ == 3 ||
+                    child_overview_focus_ == 5) {
+                    // Header order left to right: language, parent area, refresh.
+                    const bool forward = (keysDown & HidNpadButton_Right) != 0;
+                    child_overview_focus_ = child_overview_focus_ == 0 ? (forward ? 3 : 5) :
+                        child_overview_focus_ == 3 ? (forward ? 5 : 0) : (forward ? 0 : 3);
+                }
             }
             if (child_overview_focus_ == 2 && child_overview_focus_ != prev_focus) {
                 page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
@@ -346,11 +353,11 @@
                 if (child_overview_focus_ == 0) open_parent_pin();
                 else if (child_overview_focus_ == 2) status_expanded_ = true;
                 else if (child_overview_focus_ == 3 && requests_enabled) (void)begin_status_refresh();
+                else if (child_overview_focus_ == 5) open_language_confirm();
                 return true;
             }
             if (keysDown & HidNpadButton_B) { tsl::Overlay::get()->close(); return true; }
             if (keysDown & HidNpadButton_Minus) { status_expanded_ = true; return true; }
-            if (keysDown & HidNpadButton_X) { open_language_confirm(); return true; }
             if (keysDown & HidNpadButton_R) { open_parent_pin(); return true; }
             if (keysDown & HidNpadButton_Y) {
                 if (requests_enabled) (void)begin_status_refresh();
@@ -363,15 +370,21 @@
             if (keysDown & HidNpadButton_Up) {
                 if (child_overview_focus_ == 0 || child_overview_focus_ == 1) child_overview_focus_ = 3;
                 else if (child_overview_focus_ == 3) child_overview_focus_ = 2;
+                else if (child_overview_focus_ == 5) child_overview_focus_ = 2;
             } else if (keysDown & HidNpadButton_Down) {
                 if (child_overview_focus_ == 2 || child_overview_focus_ == 4) child_overview_focus_ = 3;
                 else if (child_overview_focus_ == 3) child_overview_focus_ = 0;
+                else if (child_overview_focus_ == 5) child_overview_focus_ = 3;
             } else if (keysDown & HidNpadButton_Left) {
                 if (child_overview_focus_ == 0) child_overview_focus_ = 1;
                 else if (child_overview_focus_ == 4) child_overview_focus_ = 2;
+                else if (child_overview_focus_ == 5) child_overview_focus_ = 4;
+                else if (child_overview_focus_ == 2) child_overview_focus_ = 5;
             } else if (keysDown & HidNpadButton_Right) {
                 if (child_overview_focus_ == 1) child_overview_focus_ = 0;
                 else if (child_overview_focus_ == 2) child_overview_focus_ = 4;
+                else if (child_overview_focus_ == 4) child_overview_focus_ = 5;
+                else if (child_overview_focus_ == 5) child_overview_focus_ = 2;
             }
             if (child_overview_focus_ == 3 && child_overview_focus_ != prev_focus) {
                 page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
@@ -391,12 +404,13 @@
                     status_expanded_ = true;
                 } else if (child_overview_focus_ == 4 && requests_enabled) {
                     (void)begin_status_refresh();
+                } else if (child_overview_focus_ == 5) {
+                    open_language_confirm();
                 }
                 return true;
             }
             if (keysDown & HidNpadButton_B) { tsl::Overlay::get()->close(); return true; }
             if (keysDown & HidNpadButton_Minus) { status_expanded_ = true; return true; }
-            if (keysDown & HidNpadButton_X) { open_language_confirm(); return true; }
             if (keysDown & HidNpadButton_R) { open_parent_pin(); return true; }
             if (keysDown & HidNpadButton_L) {
                 if (requests_enabled && displayed_summary_.valid && displayed_summary_.daily_buffer_available)

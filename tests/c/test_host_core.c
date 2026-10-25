@@ -28,6 +28,8 @@
 #include "../../companion/request_client.h"
 #include "../../companion/transport_client.h"
 #include "../../companion/result_summary.h"
+#include "../../companion/policy_status.h"
+#include "../../companion/ui_status_trace.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/overlay/input_model.h"
 #include "../../companion/overlay/layout.h"
@@ -1500,6 +1502,98 @@ static void test_overlay_eye_care_display(void)
     check_true(eye.warning && !eye.detail[0] && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
         "partial wire cycle suppresses fabricated play countdown");
     cJSON_Delete(root);
+}
+
+static void test_overlay_countdown_expiry(void)
+{
+    PtcCompanionResultSummary s = {0};
+    PtcPolicyCountdown countdown;
+    PtcOverlayCountdownWatch watch;
+
+    /* Eye-care rest is the countdown the child sees run down. */
+    s.valid = s.eye_care_available = s.eye_care_enabled = true;
+    s.day_index = 2380;
+    s.local_clock_available = true;
+    s.completed_at = 1783526400;
+    s.local_second_of_day = 720;
+    s.eye_care_break_id = 77;
+    s.eye_care_rest_minutes = 10;
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "resting");
+    s.eye_care_rest_remaining_seconds = 120;
+    ptc_policy_status_countdown(&s, true, 30, -1, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_EYE_REST, "resting eye care exposes its rest countdown");
+    check_int(countdown.seconds, 90, "rest countdown subtracts the confirmed snapshot age");
+    check_true(countdown.instance_id == 77, "rest countdown binds its break instance");
+    ptc_policy_status_countdown(&s, true, 120, -1, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_EYE_REST, "a recognized rest instance stays identified at zero");
+    check_int(countdown.seconds, 0, "an elapsed rest instance reports zero, never a negative countdown");
+    ptc_policy_status_countdown(&s, true, 500, -1, &countdown);
+    check_int(countdown.seconds, 0, "a long-past rest instance still reports zero, not a wrapped value");
+    s.eye_care_rest_remaining_seconds = -1;
+    ptc_policy_status_countdown(&s, true, 30, -1, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE, "unknown rest remaining seconds are not counted down");
+    s.eye_care_rest_remaining_seconds = 86401;
+    ptc_policy_status_countdown(&s, true, 30, -1, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE, "implausible rest remaining seconds are rejected");
+    s.eye_care_rest_remaining_seconds = 120;
+    s.eye_care_break_id = 0;
+    ptc_policy_status_countdown(&s, true, 30, -1, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE, "missing break instance cannot carry a countdown");
+    s.eye_care_break_id = 77;
+    ptc_policy_status_countdown(&s, false, 30, 30, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE, "unusable snapshot cannot carry a countdown");
+    ptc_policy_status_countdown(&s, true, -1, 0, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE, "clock rollback cannot carry a countdown");
+
+    /* Bedtime ends at a known local second and must survive status staleness. */
+    memset(&s, 0, sizeof(s));
+    s.valid = s.bedtime_available = s.bedtime_enabled = s.bedtime_active = true;
+    s.day_index = 2380;
+    s.local_clock_available = true;
+    s.completed_at = 1783526400;
+    s.local_second_of_day = 1259 * 60 + 15;
+    s.bedtime_start_day_index = 2380;
+    s.bedtime_start_minute = 1260;
+    s.bedtime_end_minute = 420;
+    s.bedtime_window_instance_id = (2380ULL << 16) | 1260;
+    ptc_policy_status_countdown(&s, true, 0, 0, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_BEDTIME_END, "running bedtime exposes its window end");
+    check_int(countdown.seconds, 10 * 3600 + 45, "bedtime countdown ends at the window end second");
+    ptc_policy_status_countdown(&s, true, 0, 45, &countdown);
+    check_int(countdown.seconds, 10 * 3600, "bedtime countdown subtracts snapshot age");
+    check_true(countdown.instance_id == s.bedtime_window_instance_id,
+        "bedtime countdown binds its window instance");
+    s.bedtime_skipped = true;
+    ptc_policy_status_countdown(&s, true, 0, 0, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE, "a skipped window ends without a countdown");
+    s.bedtime_skipped = false;
+    s.bedtime_window_instance_id = 123;
+    ptc_policy_status_countdown(&s, true, 0, 45, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE,
+        "a window whose instance does not match its bounds is not counted down");
+    s.bedtime_window_instance_id = (2380ULL << 16) | 1260;
+    s.local_clock_available = false;
+    ptc_policy_status_countdown(&s, true, 0, 45, &countdown);
+    check_int(countdown.kind, PTC_POLICY_COUNTDOWN_NONE,
+        "missing local clock cannot invent a bedtime end");
+
+    /* One refresh per countdown instance, re-armed by the next real countdown. */
+    ptc_overlay_countdown_watch_init(&watch);
+    check_true(!ptc_overlay_countdown_watch_elapsed(&watch, 0, -1), "no countdown never fires");
+    check_true(!ptc_overlay_countdown_watch_elapsed(&watch, 0, 0), "no countdown never fires at zero either");
+    check_true(!ptc_overlay_countdown_watch_elapsed(&watch, 77, 90), "a running countdown only arms");
+    check_true(ptc_overlay_countdown_watch_elapsed(&watch, 77, 0), "the same instance fires once at zero");
+    check_true(!ptc_overlay_countdown_watch_elapsed(&watch, 77, 0), "a fired instance never fires twice");
+    check_true(!ptc_overlay_countdown_watch_elapsed(&watch, 78, 0),
+        "another instance cannot borrow a fired countdown");
+    check_true(!ptc_overlay_countdown_watch_elapsed(&watch, 77, 30), "a re-observed countdown re-arms");
+    check_true(ptc_overlay_countdown_watch_elapsed(&watch, 77, 0), "the re-armed countdown fires again");
+    ptc_overlay_countdown_watch_init(&watch);
+    check_true(!ptc_overlay_countdown_watch_elapsed(&watch, 5, 0),
+        "a zero countdown never observed running cannot fire");
+
+    /* The new origin keeps its own auditable bit in the trace schema. */
+    check_int(PTC_UI_STATUS_COUNTDOWN_END, 32, "countdown origin keeps a distinct bit");
 }
 
 static void test_overlay_child_quota_and_restriction_details(void)
@@ -4217,6 +4311,7 @@ int main(void)
     test_overlay_layout_geometry();
     test_overlay_child_quota_and_restriction_details();
     test_overlay_eye_care_display();
+    test_overlay_countdown_expiry();
     test_setup_preflight_and_recovery();
     test_daily_buffer_transactions();
     test_daily_buffer_failure_rollbacks();

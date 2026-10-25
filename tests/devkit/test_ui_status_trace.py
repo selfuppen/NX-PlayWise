@@ -61,10 +61,13 @@ def main() -> None:
     original = rows()
     nro = trace.audit_trace(encoded(original), SUBJECT, RUN)
     overlay = trace.audit_trace(encoded(rows("overlay", "button_y", "2000-0001")), SUBJECT, RUN)
-    joined = trace.join_receipts([pair("1001-abcd"), pair("2000-0001")], [nro, overlay])
-    assert joined["matching_ok_count"] == joined["attributed_ok_count"] == 2
+    countdown = trace.audit_trace(encoded(rows("overlay", "countdown_end", "3000-0001")), SUBJECT, RUN)
+    joined = trace.join_receipts([pair("1001-abcd"), pair("2000-0001"), pair("3000-0001")],
+        [nro, overlay, countdown])
+    assert joined["matching_ok_count"] == joined["attributed_ok_count"] == 3
     assert joined["all_matching_ok_attributed"] and joined["records"][0]["provenance"]["origin"] == "resume_and_focus"
     assert joined["records"][1]["provenance"]["client"] == "overlay"
+    assert joined["records"][2]["provenance"]["origin"] == "countdown_end"
     assert not joined["qualified"] and not joined["input_isolation_proved"] and not joined["game_effects_proved"]
     missing = trace.join_receipts([pair("unknown")], [nro])
     assert missing["records"][0]["provenance"] is None and not missing["all_matching_ok_attributed"]

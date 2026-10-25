@@ -59,7 +59,7 @@ README 只展示孩子首页、深色时间轴、额度来源与多项限制四�
 | `overlay/overlay-code-pending.png` | 浮窗操作过程：提交后仍在核对最终结果 |
 | `overlay/overlay-code-failed.png` | 浮窗操作过程：后台已确认失败与具体错误提示 |
 | `overlay/overlay-rest-stale.png` | 浮窗操作过程：状态过期仍保留休息倒计时与刷新提醒 |
-| `overlay/overlay-rest-expired.png` | 浮窗操作过程：倒计时到零后等待后台确认，不表示已解除 |
+| `overlay/overlay-rest-expired.png` | 浮窗操作过程：倒计时到零后自动刷新一次，仍待后台确认，不表示已解除 |
 | `overlay/overlay-language-confirm.png` | 浮窗操作过程：语言选择、当前生效项与确认入口 |
 
 配置恢复中选择 PIN／配对资料的 `settings/config-backup-security-dark.png` 已在清单内，本次在备份过程示例中复用。所有图片仍由 `--with-previews`、`--previews`、`--release` 的同一流程生成与核验。

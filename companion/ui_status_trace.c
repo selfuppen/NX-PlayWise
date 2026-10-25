@@ -165,6 +165,7 @@ void ptc_ui_status_trace_record(PtcUiStatusTrace *t, const char *request_id,
     case PTC_UI_STATUS_RESUME_AND_FOCUS: reason = "resume_and_focus"; break;
     case PTC_UI_STATUS_OVERLAY_READY: reason = "overlay_ready"; break;
     case PTC_UI_STATUS_TOUCH: reason = "touch"; break;
+    case PTC_UI_STATUS_COUNTDOWN_END: reason = "countdown_end"; break;
     default: stop(t, "invalid_record", now_ns); return;
     }
     if (!atom(request_id, 80) || focus_state < -1 || focus_state > 3) { stop(t, "invalid_record", now_ns); return; }

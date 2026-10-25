@@ -504,4 +504,34 @@
         return policies;
     }
 
+    // Countdown expiry is the one transition the child watches happen, so it is
+    // the one place where reading status immediately is expected rather than an
+    // extra request. The watcher fires at most once per break/window instance.
+    void observe_child_countdown()
+    {
+        int day = -1, second = -1;
+        const bool usable = child_snapshot_usable(displayed_summary_, day, second);
+        // Eye-care rest ages from the status receipt, exactly like the countdown
+        // the child sees. The bedtime clock ages from the request start that
+        // produced local_second_of_day; previews pin their own clock.
+        const uint64_t rest_elapsed = last_refresh_tick_ != 0 &&
+            armGetSystemTick() >= last_refresh_tick_
+            ? armTicksToNs(armGetSystemTick() - last_refresh_tick_) / 1000000000ULL : UINT64_MAX;
+        const int64_t rest_age = rest_elapsed > static_cast<uint64_t>(INT64_MAX)
+            ? -1 : static_cast<int64_t>(rest_elapsed);
+        int64_t clock_age = 0;
+#ifndef PTC_OVERLAY_PREVIEW_CLOCK
+        const uint64_t clock_elapsed = usage_snapshot_tick_ != 0 &&
+            armGetSystemTick() >= usage_snapshot_tick_
+            ? armTicksToNs(armGetSystemTick() - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
+        clock_age = clock_elapsed > static_cast<uint64_t>(INT64_MAX)
+            ? -1 : static_cast<int64_t>(clock_elapsed);
+#endif
+        PtcPolicyCountdown countdown;
+        ptc_policy_status_countdown(&displayed_summary_, usable, rest_age, clock_age, &countdown);
+        if (ptc_overlay_countdown_watch_elapsed(&countdown_watch_,
+                countdown.instance_id, countdown.seconds))
+            countdown_recheck_pending_ = true;
+    }
+
 #include "render_pages.hpp"

@@ -28,6 +28,7 @@ public:
     OverlayRequestKind active_request_kind_ = OverlayRequestKind::None;
     OverlayRequestKind last_request_kind_ = OverlayRequestKind::None;
     u64 last_refresh_tick_ = armGetSystemTick();
+    u64 usage_snapshot_tick_ = 0;
     bool has_status_snapshot_ = true, status_expanded_ = false, preview_ready_ = false;
     bool preview_changed_ = false, error_ = false, success_visible_ = false;
     bool result_pending_ = false, result_failed_ = false, touch_hold_warning_ = false;
@@ -49,6 +50,8 @@ public:
     int confirm_focus_ = 1;
     int result_focus_ = 0;
     int keypad_nav_focus_ = -1;
+    PtcOverlayCountdownWatch countdown_watch_{};
+    bool countdown_recheck_pending_ = false;
 #include "../../companion/overlay/source/render_methods.hpp"
 };
 }
@@ -138,6 +141,96 @@ static void test_child_cards(tsl::gfx::Renderer &renderer)
     require(view.same_color(view.policy_color(policy), DARK_OVERLAY_PALETTE.text_secondary), "disabled rules stay neutral");
 }
 
+static void test_child_header_controls(const char *font_path)
+{
+    const int focus_slots[] = {5, 2, 4};
+    for (const int focus : focus_slots) {
+        tsl::gfx::Renderer renderer(font_path);
+        PtcOverlayBridge bridge{};
+        PtcOverlayInput input{};
+        PreviewView view;
+        view.bridge_ = &bridge;
+        view.input_ = &input;
+        auto &status = view.displayed_summary_;
+        status.valid = true;
+        status.remaining_available = true;
+        status.remaining_minutes = 25;
+        status.day_index = 2469;
+        status.bedtime_available = status.dock_policy_available = status.eye_care_available = true;
+        std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "off");
+        view.child_overview_focus_ = focus;
+        renderer.text_runs.clear();
+        view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+            PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+
+        // Language, parent area and refresh share one measured header row.
+        const PtcOverlayRect controls[] = {view.page_layout_.language, view.page_layout_.parent,
+            view.page_layout_.refresh};
+        for (const auto &rect : controls)
+            require(rect.w > 0 && rect.h == 40 && rect.x >= PTC_OVERLAY_CONTENT_X &&
+                rect.x + rect.w <= PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W &&
+                rect.y >= PTC_OVERLAY_CONTENT_Y &&
+                rect.y + rect.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_HEADER_H,
+                "every child header control is measured inside the sidebar header");
+        require(view.page_layout_.language.x + view.page_layout_.language.w <
+                view.page_layout_.parent.x &&
+            view.page_layout_.parent.x + view.page_layout_.parent.w < view.page_layout_.refresh.x,
+            "child header order is language, parent area, refresh without overlap");
+        for (int i = 0; i < 3; ++i) {
+            const auto &rect = controls[i];
+            const PtcUiTextId id = i == 0 ? PTC_UI_T_OVERLAY_LANG_BUTTON :
+                i == 1 ? PTC_UI_T_R_PARENT_AREA : PTC_UI_T_Y_REFRESH;
+            // The drawn run carries its sanitized text: the refresh label keeps an
+            // emoji that the production sanitizer strips before drawing.
+            char expected[256];
+            ptc_overlay_sanitize_utf8(ptc_ui_text(id), expected, sizeof(expected));
+            bool label_inside = false;
+            for (const auto &run : renderer.text_runs) {
+                if (run.text != expected || run.size != PTC_OVERLAY_FONT_SECONDARY) continue;
+                require(run.x >= rect.x + 12 && run.y >= rect.y &&
+                    run.y <= rect.y + rect.h &&
+                    run.x + static_cast<int>(measure_localized(&renderer, run.text.c_str(),
+                        run.size).first) <= rect.x + rect.w - 12,
+                    "child header labels stay inside their measured buttons");
+                label_inside = true;
+            }
+            if (!label_inside) {
+                std::fprintf(stderr, "missing header label %s in [%d,%d %dx%d]\n",
+                    ptc_ui_text(id), rect.x, rect.y, rect.w, rect.h);
+                for (const auto &run : renderer.text_runs)
+                    std::fprintf(stderr, "  run '%s' size=%g at %d,%d\n",
+                        run.text.c_str(), run.size, run.x, run.y);
+            }
+            require(label_inside, "every child header control keeps its label visible");
+        }
+
+        // The brand never collides with the controls that follow it.
+        for (const auto &run : renderer.text_runs) {
+            if (run.size != PTC_OVERLAY_FONT_CAPTION || run.y > 60) continue;
+            require(run.x >= PTC_OVERLAY_CONTENT_X &&
+                run.x + static_cast<int>(measure_localized(&renderer, run.text.c_str(),
+                    run.size).first) <= view.page_layout_.language.x,
+                "brand text yields the space the header controls measure");
+        }
+
+        // Only the focused control draws a focus ring, and A reaches all three.
+        const auto ring_at = [&](const PtcOverlayRect &rect) {
+            const auto &pal = DARK_OVERLAY_PALETTE;
+            const auto pixel = [&](int x, int y) {
+                const size_t i = static_cast<size_t>((y * renderer.width + x) * 3);
+                return renderer.pixels[i] == pal.accent.r * 17 &&
+                    renderer.pixels[i + 1] == pal.accent.g * 17 &&
+                    renderer.pixels[i + 2] == pal.accent.b * 17;
+            };
+            return pixel(rect.x + rect.w / 2, rect.y + 1) && pixel(rect.x + 1, rect.y + rect.h / 2);
+        };
+        const bool focused_control[] = {focus == 5, focus == 2, focus == 4};
+        for (int i = 0; i < 3; ++i)
+            require(ring_at(controls[i]) == focused_control[i],
+                "cursor focus is visible on exactly the selected header control");
+    }
+}
+
 static void test_stale_rest(const char *font_path, const std::filesystem::path &dir)
 {
     const char *names[] = {"overlay-rest-stale", "overlay-rest-refresh-failed",
@@ -154,7 +247,22 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
         s.eye_care_play_minutes = 40; s.eye_care_rest_minutes = 10;
         s.eye_care_rest_remaining_seconds = 600; s.eye_care_break_id = 123;
         std::snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "resting");
-        view.last_refresh_tick_ -= (i == 3 ? 600ULL : 121ULL) * 1000000000ULL;
+        const u64 receipt_age = [&] {
+            if (i != 3) return 121ULL;
+            // The watcher only reports the end of a countdown this same view
+            // already saw running, so draw it once while it still has time left.
+            // A separate renderer keeps this priming frame out of the saved one.
+            tsl::gfx::Renderer priming(font_path);
+            view.last_refresh_tick_ = armGetSystemTick() - 121ULL * 1000000000ULL;
+            view.usage_snapshot_tick_ = view.last_refresh_tick_;
+            view.draw_overlay(&priming, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+                PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+            require(!view.countdown_recheck_pending_,
+                "a countdown that still has time left does not re-read status");
+            return 600ULL;
+        }();
+        view.last_refresh_tick_ = armGetSystemTick() - receipt_age * 1000000000ULL;
+        view.usage_snapshot_tick_ = view.last_refresh_tick_;
         if (i == 1) { view.error_ = true; view.last_request_kind_ = OverlayRequestKind::Status; }
         if (i == 2) { bridge.waiting = true; view.active_request_kind_ = OverlayRequestKind::Status; }
         renderer.text_runs.clear();
@@ -183,6 +291,9 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
         int day, second;
         require(!view.child_status_fresh(s, day, second),
             "displaying a countdown never promotes cached status to fresh");
+        // A watched countdown that reaches zero asks for one immediate re-read.
+        require(view.countdown_recheck_pending_ == (i == 3),
+            "only the expired rest countdown schedules a status re-read");
         renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 13});
         renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
         draw_overlay_footer_hints(&renderer, {14, 14, 15, 15});
@@ -265,6 +376,7 @@ int main(int argc, char **argv) {
         test_child_cards(renderer);
         test_parent_cards(renderer);
         test_surface_outline(renderer);
+        test_child_header_controls(argv[1]);
         const PtcUiLanguagePreference languages[] = {PTC_UI_LANGUAGE_SIMPLIFIED,
             PTC_UI_LANGUAGE_ENGLISH, PTC_UI_LANGUAGE_TRADITIONAL};
         const char *folders[] = {"", "en/", "zh_hant/"};

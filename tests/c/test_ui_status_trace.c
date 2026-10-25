@@ -138,6 +138,10 @@ int main(void)
     ptc_ui_status_trace_init(&trace, &mem.storage, "app", COMMIT, RELEASE, "overlay", 1000000000);
     ptc_ui_status_trace_record(&trace, "12000-0001", PTC_UI_STATUS_OVERLAY_READY, 2000000000, -1, 0);
     check(contains("\"client\":\"overlay\"") && contains("\"focus_state\":-1"), "overlay does not invent applet focus");
+    fixture(3);
+    ptc_ui_status_trace_init(&trace, &mem.storage, "app", COMMIT, RELEASE, "overlay", 1000000000);
+    ptc_ui_status_trace_record(&trace, "13000-0001", PTC_UI_STATUS_COUNTDOWN_END, 2000000000, -1, 0);
+    check(contains("\"origin\":\"countdown_end\""), "a countdown-end refresh is not filed as other");
     if (failures) return 1;
     puts("ui status trace tests passed");
     return 0;

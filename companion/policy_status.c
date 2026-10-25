@@ -165,3 +165,41 @@ void ptc_policy_status_project(const PtcCompanionResultSummary *s,
     if (fresh || s->bedtime_enabled) bedtime_project(s, day, second, &out->bedtime);
     if (fresh) dock_project(s, out);
 }
+
+void ptc_policy_status_countdown(const PtcCompanionResultSummary *s,
+    bool snapshot_usable, int64_t rest_age_seconds, int64_t clock_age_seconds,
+    PtcPolicyCountdown *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    if (!s || !s->valid || !snapshot_usable) return;
+    /* A recognized instance keeps reporting zero after it passes, so an
+       observer that already saw it running can tell "finished" from "gone". */
+    if (s->eye_care_available && s->eye_care_enabled && s->eye_care_break_id &&
+        strcmp(s->eye_care_phase, "resting") == 0 && rest_age_seconds >= 0 &&
+        s->eye_care_rest_remaining_seconds >= 0 &&
+        s->eye_care_rest_remaining_seconds <= 24 * 60 * 60) {
+        const int64_t remaining = (int64_t)s->eye_care_rest_remaining_seconds - rest_age_seconds;
+        out->kind = PTC_POLICY_COUNTDOWN_EYE_REST;
+        out->seconds = remaining > 0 ? (int)remaining : 0;
+        out->instance_id = s->eye_care_break_id;
+        return;
+    }
+    /* Bedtime mirrors bedtime_project: only a running, unskipped window whose
+       instance matches the reported bounds can end at a known local second. */
+    if (!s->bedtime_available || !s->bedtime_enabled || !s->bedtime_active || s->bedtime_skipped) return;
+    if (clock_age_seconds < 0) return;
+    if (!valid_window(s->bedtime_start_day_index, s->bedtime_start_minute,
+        s->bedtime_end_minute, s->bedtime_window_instance_id)) return;
+    if (s->bedtime_start_day_index != s->day_index &&
+        s->bedtime_start_day_index != s->day_index - 1) return;
+    int day = -1, second = -1;
+    if (!ptc_policy_snapshot_clock(s, (uint64_t)clock_age_seconds, &day, &second)) return;
+    const long long target = ((long long)s->bedtime_start_day_index + 1 - day) * 86400 +
+        (long long)s->bedtime_end_minute * 60;
+    const long long remaining = target - second;
+    if (remaining > (long long)24 * 60 * 60) return;
+    out->kind = PTC_POLICY_COUNTDOWN_BEDTIME_END;
+    out->seconds = remaining > 0 ? (int)remaining : 0;
+    out->instance_id = s->bedtime_window_instance_id;
+}

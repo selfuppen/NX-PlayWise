@@ -270,6 +270,12 @@ public:
             poll_pending_redemption();
             expire_usage_snapshot();
         }
+        // A countdown the child is watching ends once; re-read the state right
+        // away instead of leaving "please refresh" on screen for 30 seconds.
+        if (countdown_recheck_pending_ && !bridge_->waiting) {
+            countdown_recheck_pending_ = false;
+            (void)begin_status_refresh(PTC_UI_STATUS_COUNTDOWN_END);
+        }
         if (!bridge_->waiting) return;
         const u64 elapsed_ns = armTicksToNs(armGetSystemTick() - request_started_tick_);
         const u64 elapsed_ms_u64 = elapsed_ns / 1000000ULL;
@@ -1188,6 +1194,8 @@ private:
     bool language_confirm_active_ = false;
     PtcOverlayLanguageSetting language_draft_selection_ = PtcOverlayLanguageSetting::Auto;
     int language_confirm_focus_ = 0;
+    PtcOverlayCountdownWatch countdown_watch_{};
+    bool countdown_recheck_pending_ = false;
 
     void open_language_confirm()
     {

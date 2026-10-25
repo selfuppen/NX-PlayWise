@@ -22,7 +22,7 @@ python tools/device/ui_status_trace.py prepare --manifest <冻结build.json> --r
 
 前端输出`support/ui-status-trace-<run>-<client>-<实例单调时间hex>.jsonl`，同名已存在则拒绝启用，绝不覆盖。头记录绑定实际编译commit/release、后台boot、client（nro/overlay）、开始/截止tick和条数上限。每次原status提交记录sequence、原请求ID、`origin`、设备单调纳秒、`focus_state`及`transport_status`。它是前端提交结果，不是后台ok回执，必须另配原ID/type/content及结果。
 
-`origin`允许`other/button_y/resume/focus/resume_and_focus/overlay_ready/touch`。NRO孩子页和首次设置页的直接Y有明确标签，未标记的其它入口保持other；恢复与焦点事件可合并，等待其它请求期间不丢原因。Overlay只在处理当前输入回调时使用Y/touch原因，回调返回后清除，握手后的自动status为overlay_ready，避免把先前输入归给后续自动刷新。NRO focus为已有libnx缓存状态；Overlay固定-1，不引入AM或HID查询来假造焦点证明。日志不保存完整按键、请求payload、PIN、密钥或离线码。
+`origin`允许`other/button_y/resume/focus/resume_and_focus/overlay_ready/touch/countdown_end`。NRO孩子页和首次设置页的直接Y有明确标签，未标记的其它入口保持other；恢复与焦点事件可合并，等待其它请求期间不丢原因。Overlay只在处理当前输入回调时使用Y/touch原因，回调返回后清除，握手后的自动status为overlay_ready，避免把先前输入归给后续自动刷新。`countdown_end`只在孩子眼前的护眼休息或就寝倒计时归零时使用，每个break/window实例最多一次，且必须先在同一浮窗内观察到该实例倒计时大于零；尚未确认新建档或服务重启时不得据此推断限制已解除。NRO focus为已有libnx缓存状态；Overlay固定-1，不引入AM或HID查询来假造焦点证明。日志不保存完整按键、请求payload、PIN、密钥或离线码。
 
 达到记录上限、绝对期限、配置删除/原字节变更、后台身份变更或非法时钟时锁存停止；正常客户端退出也保存stop。每次提交前重读配置和runtime，运行中改配置不能延长旧实例。启用时存在有限SD读取与追加开销。任一追加失败立即停用且不重放该行，不改变原请求结果或触发额外请求；失败日志可能没有完整stop，必须保留原字节并判为不完整。空闲前端不会为了检测期限而主动提交或轮询；配置移除后下一次原status或正常退出才产生终末记录。
 

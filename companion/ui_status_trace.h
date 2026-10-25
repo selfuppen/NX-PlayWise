@@ -15,6 +15,7 @@ typedef enum {
     PTC_UI_STATUS_RESUME_AND_FOCUS = 6,
     PTC_UI_STATUS_OVERLAY_READY = 8,
     PTC_UI_STATUS_TOUCH = 16,
+    PTC_UI_STATUS_COUNTDOWN_END = 32,
 } PtcUiStatusOrigin;
 
 typedef struct {

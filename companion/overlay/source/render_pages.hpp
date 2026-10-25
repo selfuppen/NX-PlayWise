@@ -1272,16 +1272,21 @@
         draw_dashboard_surface(renderer, banner, dashboard_soft(tone), pal.border_decorative);
         renderer->drawRect(banner.x + 8, banner.y + 1, banner.w - 16, 3, renderer->a(tone));
 
-        // Header row: brand on the left, parent area and refresh on the right.
+        // Header row: brand left; language, parent area and refresh right.
+        // Every control is measured and the brand yields the space they need,
+        // so a third entry cannot push text outside the sidebar.
         const bool refresh_busy = bridge_->waiting;
         const char *refresh_text = ptc_ui_text(refresh_busy ? PTC_UI_T_REFRESHING : PTC_UI_T_Y_REFRESH);
         const char *parent_text = ptc_ui_text(PTC_UI_T_R_PARENT_AREA);
+        const char *language_text = ptc_ui_text(PTC_UI_T_OVERLAY_LANG_BUTTON);
         const int refresh_w = std::max(text_width(renderer, ptc_ui_text(PTC_UI_T_Y_REFRESH), PTC_OVERLAY_FONT_SECONDARY),
             text_width(renderer, ptc_ui_text(PTC_UI_T_REFRESHING), PTC_OVERLAY_FONT_SECONDARY)) + 24;
         const int parent_w = text_width(renderer, parent_text, PTC_OVERLAY_FONT_SECONDARY) + 24;
+        const int language_w = text_width(renderer, language_text, PTC_OVERLAY_FONT_SECONDARY) + 24;
         page_layout_.refresh = ptc_overlay_rect(cx + cw - 8 - refresh_w, cy, refresh_w, 40);
         page_layout_.parent = ptc_overlay_rect(page_layout_.refresh.x - 6 - parent_w, cy, parent_w, 40);
-        const int brand_x = cx + pad_x, brand_w = page_layout_.parent.x - brand_x - 8;
+        page_layout_.language = ptc_overlay_rect(page_layout_.parent.x - 6 - language_w, cy, language_w, 40);
+        const int brand_x = cx + pad_x, brand_w = page_layout_.language.x - brand_x - 8;
         const char *brand = ptc_ui_text(PTC_UI_T_PLAYWISE);
         const char *dot = std::strstr(brand, "\xC2\xB7");
         const int brand_top = cy + (40 - (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5) / 2;
@@ -1293,6 +1298,8 @@
                 PTC_OVERLAY_FONT_CAPTION, pal.accent);
         } else overlay_text(renderer, brand, brand_x, brand_top, brand_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
         const bool highlight = needs_refresh() && !refresh_busy;
+        draw_button(renderer, page_layout_.language, language_text, pal.text_secondary, false,
+            PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == 5);
         draw_button(renderer, page_layout_.parent, parent_text, pal.accent, restricted,
             PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == (restricted ? 0 : 2));
         draw_button(renderer, page_layout_.refresh, refresh_text,
@@ -1451,6 +1458,10 @@
     {
         (void)ch;
         prepare_page();
+        // Only the page that shows a countdown can observe its end.
+        if (!language_confirm_active_ && !access_recovery_visible() && !success_visible_ &&
+            !preview_ready_ && !status_expanded_)
+            observe_child_countdown();
         if (language_confirm_active_) draw_language_confirm(renderer, cx, cy, cw);
         else if (access_recovery_visible()) draw_parent_page(renderer, cx, cy, cw);
         else if (success_visible_) draw_code_success(renderer, cx, cy, cw);

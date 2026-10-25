@@ -69,4 +69,16 @@ int ptc_overlay_pin_digit_from_vector(int x, int y, int deadzone);
 int ptc_overlay_pin_digit_from_direction(unsigned int buttons_down);
 bool ptc_overlay_request_action_enabled(bool waiting);
 
+/* Countdown end is observed while the child watches it run down, so the state
+   after release is read once instead of waiting for the 30s staleness window.
+   Each countdown instance re-arms only after its timer returns above zero. */
+typedef struct {
+    bool armed;
+    unsigned long long instance_id;
+} PtcOverlayCountdownWatch;
+
+void ptc_overlay_countdown_watch_init(PtcOverlayCountdownWatch *watch);
+bool ptc_overlay_countdown_watch_elapsed(PtcOverlayCountdownWatch *watch,
+    unsigned long long instance_id, int seconds);
+
 #endif

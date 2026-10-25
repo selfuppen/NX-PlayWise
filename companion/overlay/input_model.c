@@ -264,3 +264,30 @@ bool ptc_overlay_input_can_submit(const PtcOverlayInput *input)
 {
     return input && input->length == PTC_OVERLAY_CODE_SYMBOLS;
 }
+
+
+void ptc_overlay_countdown_watch_init(PtcOverlayCountdownWatch *watch)
+{
+    if (!watch) return;
+    watch->armed = false;
+    watch->instance_id = 0;
+}
+
+bool ptc_overlay_countdown_watch_elapsed(PtcOverlayCountdownWatch *watch,
+    unsigned long long instance_id, int seconds)
+{
+    if (!watch) return false;
+    if (!instance_id || seconds < 0) {
+        /* No visible countdown; nothing is armed until one is seen running. */
+        ptc_overlay_countdown_watch_init(watch);
+        return false;
+    }
+    if (seconds > 0) {
+        watch->armed = true;
+        watch->instance_id = instance_id;
+        return false;
+    }
+    if (!watch->armed || watch->instance_id != instance_id) return false;
+    watch->armed = false;
+    return true;
+}
