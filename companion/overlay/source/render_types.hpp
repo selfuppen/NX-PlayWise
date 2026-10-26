@@ -259,7 +259,9 @@ inline void get_overlay_current_time(char *out, size_t size)
         std::snprintf(out, size, "%02u:%02u", (unsigned)cal.hour, (unsigned)cal.minute);
         return;
     }
-#endif
+#else
+    // Switch libc may report uptime when the system clock is unavailable.
+    // Only host previews may fall back to the host wall clock.
     const std::time_t now = std::time(nullptr);
     struct tm tm_buf{};
 #if defined(_WIN32)
@@ -270,6 +272,7 @@ inline void get_overlay_current_time(char *out, size_t size)
         std::snprintf(out, size, "%02d:%02d", tm_buf.tm_hour, tm_buf.tm_min);
         return;
     }
+#endif
     std::snprintf(out, size, "--:--");
 }
 

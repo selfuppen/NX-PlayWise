@@ -144,8 +144,14 @@ static void test_child_cards(tsl::gfx::Renderer &renderer)
 static void test_child_header_controls(const char *font_path)
 {
     const int focus_slots[] = {5, 2, 4};
+    const auto saved_language = ptc_ui_language_get_resolved();
+    for (const float width_scale : {1.0f, 1.35f}) {
+    for (const auto language : {PTC_UI_LANGUAGE_SIMPLIFIED, PTC_UI_LANGUAGE_ENGLISH,
+             PTC_UI_LANGUAGE_TRADITIONAL}) {
+    ptc_ui_language_set_resolved(language);
     for (const int focus : focus_slots) {
         tsl::gfx::Renderer renderer(font_path);
+        renderer.horizontal_metric_scale = width_scale;
         PtcOverlayBridge bridge{};
         PtcOverlayInput input{};
         PreviewView view;
@@ -204,14 +210,19 @@ static void test_child_header_controls(const char *font_path)
             require(label_inside, "every child header control keeps its label visible");
         }
 
-        // The brand never collides with the controls that follow it.
+        // A wrapped brand can overflow below the header even if each line is
+        // individually narrow. Exercise every language, not only the default.
+        bool brand_root_visible = false;
         for (const auto &run : renderer.text_runs) {
-            if (run.size != PTC_OVERLAY_FONT_CAPTION || run.y > 60) continue;
-            require(run.x >= PTC_OVERLAY_CONTENT_X &&
+            if (run.size != PTC_OVERLAY_FONT_CAPTION || run.y > controls[0].y + 70) continue;
+            require(run.y <= controls[0].y + controls[0].h && run.x >= PTC_OVERLAY_CONTENT_X &&
                 run.x + static_cast<int>(measure_localized(&renderer, run.text.c_str(),
-                    run.size).first) <= view.page_layout_.language.x,
-                "brand text yields the space the header controls measure");
+                    run.size).first) <= view.page_layout_.language.x - 8,
+                "brand stays on the header row and never wraps under its controls");
+            if (run.text.find(ptc_ui_text(PTC_UI_T_NAV_HOME)) != std::string::npos)
+                brand_root_visible = true;
         }
+        require(brand_root_visible, "complete localized brand root is visible beside the header controls");
 
         // Only the focused control draws a focus ring, and A reaches all three.
         const auto ring_at = [&](const PtcOverlayRect &rect) {
@@ -229,6 +240,9 @@ static void test_child_header_controls(const char *font_path)
             require(ring_at(controls[i]) == focused_control[i],
                 "cursor focus is visible on exactly the selected header control");
     }
+    }
+    }
+    ptc_ui_language_set_resolved(saved_language);
 }
 
 static void test_stale_rest(const char *font_path, const std::filesystem::path &dir)
@@ -377,6 +391,10 @@ int main(int argc, char **argv) {
         test_parent_cards(renderer);
         test_surface_outline(renderer);
         test_child_header_controls(argv[1]);
+        if (std::strcmp(argv[2], "--check-header") == 0) {
+            std::puts("PASS: Overlay header brand, controls and focus in three languages");
+            return 0;
+        }
         const PtcUiLanguagePreference languages[] = {PTC_UI_LANGUAGE_SIMPLIFIED,
             PTC_UI_LANGUAGE_ENGLISH, PTC_UI_LANGUAGE_TRADITIONAL};
         const char *folders[] = {"", "en/", "zh_hant/"};

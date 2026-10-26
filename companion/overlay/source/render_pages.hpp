@@ -1288,15 +1288,23 @@
         page_layout_.language = ptc_overlay_rect(page_layout_.parent.x - 6 - language_w, cy, language_w, 40);
         const int brand_x = cx + pad_x, brand_w = page_layout_.language.x - brand_x - 8;
         const char *brand = ptc_ui_text(PTC_UI_T_PLAYWISE);
+        // Native system fonts can be wider than the host preview font. Keep
+        // the localized product name on one line instead of wrapping the
+        // longer slogan beneath the controls.
+        if (text_width(renderer, brand, PTC_OVERLAY_FONT_CAPTION) > brand_w)
+            brand = ptc_ui_text(PTC_UI_T_NAV_HOME);
         const char *dot = std::strstr(brand, "\xC2\xB7");
         const int brand_top = cy + (40 - (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5) / 2;
-        if (dot) {
+        if (dot && text_width(renderer, brand, PTC_OVERLAY_FONT_CAPTION) <= brand_w) {
             const std::string head_part(brand, dot);
             const int head_w = text_width(renderer, head_part.c_str(), PTC_OVERLAY_FONT_CAPTION);
             overlay_text(renderer, head_part.c_str(), brand_x, brand_top, brand_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
             overlay_text(renderer, dot, brand_x + head_w, brand_top, std::max(0, brand_w - head_w),
                 PTC_OVERLAY_FONT_CAPTION, pal.accent);
-        } else overlay_text(renderer, brand, brand_x, brand_top, brand_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+        } else if (text_width(renderer, brand, PTC_OVERLAY_FONT_CAPTION) <= brand_w) {
+            overlay_text(renderer, brand, brand_x, brand_top, brand_w,
+                PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+        }
         const bool highlight = needs_refresh() && !refresh_busy;
         draw_button(renderer, page_layout_.language, language_text, pal.text_secondary, false,
             PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == 5);

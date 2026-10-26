@@ -46,6 +46,8 @@ class Renderer {
 public:
     struct TextRun { std::string text; float size; int x, y; Color color; };
     std::vector<TextRun> text_runs;
+    // Optional width pressure for layout tests; normal preview metrics stay 1.
+    float horizontal_metric_scale = 1.0f;
     static constexpr int width = 448, height = 720;
     std::vector<unsigned char> pixels = std::vector<unsigned char>(width * height * 3, 17);
     void enableScissoring(int x, int y, int w, int h) {
@@ -165,7 +167,7 @@ public:
                         }
                     }
                 }
-                pen += static_cast<int>(size * 1.15f);
+                pen += static_cast<int>(static_cast<int>(size * 1.15f) * horizontal_metric_scale);
                 continue;
             }
             unsigned lookup_code = code;
@@ -187,6 +189,7 @@ public:
             int advance, bearing;
             stbtt_GetCodepointHMetrics(&font_, mono ? 'W' : lookup_code, &advance, &bearing);
             advance = static_cast<int>(advance * scale);
+            advance = static_cast<int>(advance * horizontal_metric_scale);
             // Match vendored libtesla: maxWidth truncates on the next iteration.
             if (color.a) {
                 int w, h, dx, dy;
