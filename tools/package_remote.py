@@ -1,61 +1,8 @@
 #!/usr/bin/env python3
-"""
-### 一、调整概览
+"""Test, incrementally build and verify through one devkitPro SSH session.
 
-#### 1. 默认构建目标轻量化（秒级/高频日常构建）
-* **默认构建目标**：仅构建 **标准分发包 (`playwise`)** 与 **Eden 模拟器测试包 (`eden-test-nro`)**。
-* **默认剥离的三大阶段**：
-  1. **Device Lab 组件与打包 (`device-lab-*`)**：默认不再编译 `pwtl-sysmodule`、`playwise-device-lab.nro` 与 `.ovl`，不再打包实验 Zip。
-  2. **UI 截图预览图渲染、转换与文档同步 (`ui-previews`)**：默认完全跳过 PPM 渲染、Python PNG 转码与 `docs/` 目录同步。
-  3. **完整交付包合并 (`package-complete`)**：默认不再运行单文件 Web 前端编译及合并打 Zip。
-* **默认构建机制**：保持增量复用（`--incremental` 为默认，避免每次全量 `make clean`）。
-
-#### 2. 解耦 `ui-previews` 与日常测试
-* 在 [Makefile](file:///h:/workspace/codes/switch/playwise/Makefile) 中移除 `test-host: ui-previews` 强依赖。
-* 现在无论本地还是容器内执行 `make test`，均只运行 C 逻辑单元测试（Core/UI/DeviceLab）与 `--check-primitives` 原语检查，**不再渲染数十上百张 PPM 且不再进行 Python 转码**，彻底杜绝文件锁与 `FileNotFoundError` 风险。
-* `ui-previews` 成为独立的 `.PHONY` 目标，仅在显式指定时触发。
-
----
-
-### 二、剥离构建的专用参数
-
-[tools/package_remote.py](file:///h:/workspace/codes/switch/playwise/tools/package_remote.py) 新增与整理了专用参数体系：
-
-| 参数 | 默认值 | 作用说明 |
-| :--- | :---: | :--- |
-| **（无额外参数）** | - | 默认仅构建 **标准分发包** + **Eden 模拟器包**，增量构建 |
-| `--with-device-lab` / `--device-lab`<br>`--no-device-lab` | 禁用 (`False`) | 显式启用/禁用 Device Lab 专用套件编译与打包 |
-| `--with-complete` / `--complete`<br>`--no-complete` | 禁用 (`False`) | 显式启用/禁用离线 HTML 单文件打包与完整交付 Zip 合并 |
-| `--with-previews`<br>`--no-previews` | 禁用 (`False`) | 显式启用/禁用 UI 预览图生成、PNG 转码与文档同步 |
-| `--previews` | - | 仅生成并验证 UI 预览图（不构建任何固件安装包） |
-| `--release` | - | **一键全量发布模式**：打包标准包、Eden包、完整交付包、Device Lab 包，并全量生成预览图与校验 |
-| `--only` | `default` | 可选值：`default`、`all`、`playwise`、`complete`、`device-lab`、`eden`、`previews` |
-
----
-
-### 三、常用构建命令对比
-
-1. **日常高频开发调试（默认推荐）**：
-   ```powershell
-   python tools/package_remote.py
-   ```
-   > 增量复用、快速测试、秒级产出标准 SDMC Zip 与 Eden 测试 NRO。
-
-2. **极速跳过测试直接打包（调试前端/界面布局）**：
-   ```powershell
-   python tools/package_remote.py --skip-tests
-   ```
-   > 纯增量编译 + 打包，实际挂钟耗时仅 **~25 秒**（相较原先几分钟大幅提速）。
-
-3. **仅刷新文档 UI 预览截图**：
-   ```powershell
-   python tools/package_remote.py --previews
-   ```
-
-4. **版本发布前全量门禁构建**：
-   ```powershell
-   python tools/package_remote.py --release --clean
-   ```
+Daily: standard package + Eden NRO. Optional delivery, Device Lab and full UI
+previews are explicit additions; see docs/开发/构建与测试分层.md.
 """
 from __future__ import annotations
 
@@ -607,7 +554,7 @@ def container_command(
 
     targets_str = f"make {job_flag}{' '.join(targets)}"
     test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
-    preview_cmd = f"make {job_flag}ui-previews && " if (with_previews and (only == "previews" or only == "all" or not test_cmd or with_previews)) else ""
+    preview_cmd = f"make {job_flag}ui-previews && " if with_previews else ""
     sync_cmd = "python3 tools/build/sync_doc_previews.py && " if with_previews else ""
     identity_exports = ""
     if build_image:

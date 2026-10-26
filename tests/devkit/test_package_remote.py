@@ -620,6 +620,82 @@ def test_sync_doc_previews() -> None:
                     "unchanged previews must pass the freshness check")
 
 
+def test_incremental_host_and_manifest_profiles() -> None:
+    if os.name == "nt":
+        print("Make incremental integration: deferred to the required devkitPro regression")
+        return
+    with tempfile.TemporaryDirectory(prefix="ptc-incremental-") as temporary:
+        root = Path(temporary)
+        for name in ("Makefile", "common/version.mk", "tools/build/stage_timer.py"):
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / name, path)
+        inputs = {
+            "tests/overlay_memory/test.cpp": '#include "common/nested/value.h"\nint main() { return VALUE; }\n',
+            "common/nested/value.h": '#include "value.inc"\n',
+            "common/nested/value.inc": '#define VALUE 0\n',
+            "companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp": '// fixture\n',
+        }
+        for name, content in inputs.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        env = {key: value for key, value in os.environ.items()
+               if key not in {"MAKEFLAGS", "MAKEOVERRIDES", "MFLAGS", "MAKELEVEL", "PLAYWISE_TIMING_FILE"}}
+        target = "build/host/test_overlay_memory"
+        def make(*arguments: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(["make", "-j2", *arguments], cwd=root, env=env,
+                                  capture_output=True, text=True)
+        def build(*arguments: str) -> str:
+            result = make(target, *arguments)
+            require(result.returncode == 0, result.stdout + result.stderr)
+            return result.stdout
+        def edit(name: str, content: str) -> None:
+            path = root / name
+            # Only the edited input is newer than the binary. Aging the binary
+            # alone would let unrelated prerequisites mask a missing dependency.
+            for existing in root.rglob("*"):
+                if existing.is_file():
+                    os.utime(existing, (1, 1))
+            os.utime(root / target, (2, 2))
+            path.write_text(content, encoding="utf-8")
+            os.utime(path, (3, 3))
+        require("test-compile" in build(), "first build compiles")
+        executable = root / target
+        before = executable.stat().st_mtime_ns
+        require("test-compile" not in build() and executable.stat().st_mtime_ns == before,
+                "unchanged inputs reuse the binary across Make invocations")
+        edit("common/nested/value.inc", "#define VALUE 7\n")
+        require("test-compile" in build(), "nested .inc edit invalidates cached binary")
+        require(subprocess.run([str(executable)]).returncode == 7, "new included value reaches executable")
+        require("test-compile" not in build(), "new input is reusable after rebuild")
+        require("test-compile" in build("HOST_CFLAGS=-std=c99 -DCHANGED_FLAGS"),
+                "compiler flag change invalidates the cache")
+        require("test-compile" not in build("HOST_CFLAGS=-std=c99 -DCHANGED_FLAGS"),
+                "same flags preserve the cache")
+        require("test-compile" in build(), "restoring default flags rebuilds once")
+        require("test-compile" not in build(), "restored defaults are reusable")
+        edit("tests/overlay_memory/test.cpp", "int main() { return 3; }\n")
+        require("test-compile" in build(), "source edits invalidate cached binary")
+        require(subprocess.run([str(executable)]).returncode == 3, "source edit reaches executable")
+        edit("tests/overlay_memory/test.cpp", '#include "common/nested/value.h"\nint main() { return VALUE; }\n')
+        edit("common/nested/value.inc", "#error deliberate broken include\n")
+        require(make(target).returncode != 0, "failed recompile must reject cached success")
+        edit("common/nested/value.inc", "#define VALUE 0\n")
+        build()
+        (root / "common/nested/value.inc").unlink()
+        require(make(target).returncode != 0, "removed include must reject cached success")
+        selected = make("-n", "manifest", "eden-test-manifest", "device-lab-manifest")
+        require(selected.returncode == 0, selected.stderr)
+        require(selected.stdout.count("generate_release_manifest.py") == 1,
+                "all profiles share one fresh identity collection")
+        require(all(f"--output {profile} " in selected.stdout for profile in ("release", "eden-test", "device-lab")),
+                "each selected profile retains separate outputs")
+        eden = make("-n", "eden-test-manifest")
+        require("--output eden-test " in eden.stdout and "--output release " not in eden.stdout,
+                "Eden-only builds must not generate release metadata")
+
+
 def test_parse_args_stripped_components() -> None:
     with mock.patch.object(sys, "argv", ["package_remote.py"]):
         args = package_remote.parse_args()
@@ -658,6 +734,7 @@ def test_parse_args_stripped_components() -> None:
 def main() -> int:
     test_container_command()
     test_clean_build_profiles()
+    test_incremental_host_and_manifest_profiles()
     test_build_identity_detection()
     test_ssh_command()
     test_git_newline_transport()

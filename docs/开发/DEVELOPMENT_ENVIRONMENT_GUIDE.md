@@ -53,7 +53,9 @@ Heavy and non-essential stages are decoupled from routine builds and can be trig
 - `--with-previews`: Render console UI previews, convert to PNG, and synchronize to `docs/images/usage/` and `docs/images/usage-en/`.
 - `--release`: One-step authoritative release mode, packaging standard, Eden, complete, and Device Lab zips alongside full preview sync.
 - `--previews`: Only re-render and synchronize UI preview images (without compiling packages).
-- `--skip-tests`: Skip container tests during active development for faster turnaround.
+- `--skip-tests`: Diagnostic packaging only; it does not satisfy daily or release validation.
+
+The unified entrypoint already runs the full Python regression suite, so a separate full `tools/test.py` run is not a required preceding step. Host test/preview binaries reuse valid compiled outputs while tests always execute. Selected profiles share one fresh source/toolchain discovery per Make invocation; identity is never cached across runs. Compiler-generated dependencies limit manifest-triggered recompilation to units that actually include it. See [Build and Test Layers](构建与测试分层.md) for the minimum daily gate, specialized targets and invalidation rules.
 
 Testing and manifest generation run sequentially to avoid race conditions between test artifacts, cross-platform line ending conversions, and candidate source identity. When troubleshooting toolchain upgrades or external residue, use `python tools/package_remote.py --clean`; official release workflows explicitly run this clean build. The build environment requires accessible devkitPro/devkitA64, libnx, FreeType, Make, Git, Zip, and Python. The manifest captures the container image tag/digest, devkitA64 compiler, installed libnx package version, vendored libtesla commit, git commit, and tracked dirty status; release or Device Lab builds fail immediately if libnx cannot be resolved. Build status defaults to `qualification=pending`.
 

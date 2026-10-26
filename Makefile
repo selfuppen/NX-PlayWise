@@ -84,109 +84,124 @@ UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/ui_language.
 
 STAGE_TIMER ?= python3 tools/build/stage_timer.py
 
-.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test ui-previews render-nro-previews render-overlay-previews convert-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
+.PHONY: all manifest device-lab-manifest eden-test-manifest build-manifests test-host test-python test ui-previews render-nro-previews render-overlay-previews convert-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_CONFIG
 
 all: test
 
-manifest:
-	mkdir -p build/generated
-	$(STAGE_TIMER) playwise manifest -- python3 tools/build/generate_release_manifest.py --profile release --json build/generated/release-manifest.json --header build/generated/release_manifest.h
+# A single Make invocation shares source/toolchain discovery across its profiles.
+MANIFEST_OUTPUTS :=
+ifneq ($(filter manifest sysmodule-nsp companion-nro companion-overlay package-playwise package-complete packages pctl-capture-package,$(MAKECMDGOALS)),)
+MANIFEST_OUTPUTS += --output release build/generated/release-manifest.json build/generated/release_manifest.h
+endif
+ifneq ($(filter device-lab-manifest device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package packages,$(MAKECMDGOALS)),)
+MANIFEST_OUTPUTS += --output device-lab build/device-lab/generated/release-manifest.json build/device-lab/generated/release_manifest.h
+endif
+ifneq ($(filter eden-test-manifest eden-test-nro,$(MAKECMDGOALS)),)
+MANIFEST_OUTPUTS += --output eden-test build/eden-test/generated/release-manifest.json build/eden-test/generated/release_manifest.h
+endif
 
-device-lab-manifest:
-	mkdir -p build/device-lab/generated
-	$(STAGE_TIMER) device-lab manifest -- python3 tools/build/generate_release_manifest.py --profile device-lab --json build/device-lab/generated/release-manifest.json --header build/device-lab/generated/release_manifest.h
+manifest device-lab-manifest eden-test-manifest: build-manifests
 
-eden-test-manifest:
-	mkdir -p build/eden-test/generated
-	$(STAGE_TIMER) eden-test manifest -- python3 tools/build/generate_release_manifest.py --profile eden-test --json build/eden-test/generated/release-manifest.json --header build/eden-test/generated/release_manifest.h
+build-manifests:
+	$(STAGE_TIMER) global manifest -- python3 tools/build/generate_release_manifest.py $(MANIFEST_OUTPUTS)
 
 $(HOST_BUILD_DIR):
 	mkdir -p $(HOST_BUILD_DIR)
 
-FORCE_HOST_REBUILD:
+FORCE_HOST_CONFIG:
 
-$(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
+# Conservative header/include dependencies also cover transitive and test .inc
+# inputs. The stamp catches changed flags, compiler versions and removed inputs.
+host_headers = $(foreach entry,$(wildcard $1*),$(if $(wildcard $(entry)/.),$(call host_headers,$(entry)/),$(filter %.h %.hpp %.inc,$(entry))))
+HOST_HEADERS := $(foreach dir,common companion platform sysmodule device_lab tests third_party,$(call host_headers,$(dir)/))
+HOST_CONFIG := $(HOST_BUILD_DIR)/compile-config
+$(HOST_CONFIG): FORCE_HOST_CONFIG | $(HOST_BUILD_DIR)
+	@printf '%s\n' '$(HOST_CC)' '$(HOST_CXX)' '$(HOST_CFLAGS)' '$(HOST_HEADERS)' "$$($(HOST_CC) --version)" "$$($(HOST_CXX) --version)" > $@.tmp
+	@cmp -s $@.tmp $@ || mv $@.tmp $@
+	@rm -f $@.tmp
 
-$(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_model.h companion/nro/ui_state.h companion/nro/ui_layout.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
+$(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
 
-$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c common/rules/holiday_calendar_import.c third_party/cjson/cJSON.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c sysmodule/lab_session_report.c sysmodule/lab_selfdrive.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $(filter-out FORCE_HOST_REBUILD,$^)
+$(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_model.h companion/nro/ui_state.h companion/nro/ui_layout.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
+
+$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c common/rules/holiday_calendar_import.c third_party/cjson/cJSON.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c sysmodule/lab_session_report.c sysmodule/lab_selfdrive.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $(filter %.c,$^)
 
 # Execute the real NRO orchestration with deterministic host libnx/input shims.
 SETUP_TEST_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) companion/auth.c companion/auth_clock.c companion/album_restriction.c companion/transport_client.c common/support/support_export.c common/security/credential_policy.c platform/host/mem_storage.c companion/nro/nro_runtime.c companion/nro/nro_actions.c companion/nro/nro_preferences.c companion/nro/nro_setup.c companion/nro/nro_support.c companion/nro/nro_security.c companion/nro/nro_requests.c companion/nro/nro_result_poll.c companion/nro/nro_config_backup.c platform/config_backup.c tests/nro_setup/test.c
-$(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
+$(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
 
-$(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -fno-exceptions -fno-rtti -I. -o $@ $<
+$(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -fno-exceptions -fno-rtti -I. -o $@ $<
 
-$(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -Itests/pctl_adapter -o $@ tests/c/test_pctl_adapter.c platform/switch/pctl_adapter.c platform/switch/play_timer_settings_layout.c common/time/ptc_time.c
+$(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/pctl_adapter -o $@ tests/c/test_pctl_adapter.c platform/switch/pctl_adapter.c platform/switch/play_timer_settings_layout.c common/time/ptc_time.c
 
-$(HOST_USAGE_EVIDENCE_TEST): tests/c/test_usage_evidence.c sysmodule/usage_evidence.c sysmodule/usage_evidence.h platform/usage_evidence.h third_party/cjson/cJSON.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ tests/c/test_usage_evidence.c sysmodule/usage_evidence.c third_party/cjson/cJSON.c -lm
+$(HOST_USAGE_EVIDENCE_TEST): tests/c/test_usage_evidence.c sysmodule/usage_evidence.c sysmodule/usage_evidence.h platform/usage_evidence.h third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ tests/c/test_usage_evidence.c sysmodule/usage_evidence.c third_party/cjson/cJSON.c -lm
 
-$(HOST_BUILD_DIR)/fs_storage_retry_test.o: platform/switch/fs_storage.c platform/switch/fs_storage.h tests/fs_storage/switch.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/fs_storage -Dfopen=ptc_test_fopen -Dfprintf=ptc_test_fprintf -Dfclose=ptc_test_fclose -c platform/switch/fs_storage.c -o $@
+$(HOST_BUILD_DIR)/fs_storage_retry_test.o: platform/switch/fs_storage.c platform/switch/fs_storage.h tests/fs_storage/switch.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/fs_storage -Dfopen=ptc_test_fopen -Dfprintf=ptc_test_fprintf -Dfclose=ptc_test_fclose -c platform/switch/fs_storage.c -o $@
 
-$(HOST_FS_APPEND_TEST): tests/c/test_fs_append_retry.c $(HOST_BUILD_DIR)/fs_storage_retry_test.o FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ tests/c/test_fs_append_retry.c $(HOST_BUILD_DIR)/fs_storage_retry_test.o
+$(HOST_FS_APPEND_TEST): tests/c/test_fs_append_retry.c $(HOST_BUILD_DIR)/fs_storage_retry_test.o | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ tests/c/test_fs_append_retry.c $(HOST_BUILD_DIR)/fs_storage_retry_test.o
 
-$(HOST_BUILD_DIR)/hot_reload_test.o: companion/nro/hot_reload.c companion/nro/hot_reload.h platform/switch/fs_storage.h tests/hot_reload/switch.h tests/hot_reload/release_manifest.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -Dfopen=ptc_test_fopen -Dfprintf=ptc_test_fprintf -Dfclose=ptc_test_fclose -c companion/nro/hot_reload.c -o $@
+$(HOST_BUILD_DIR)/hot_reload_test.o: companion/nro/hot_reload.c companion/nro/hot_reload.h platform/switch/fs_storage.h tests/hot_reload/switch.h tests/hot_reload/release_manifest.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -Dfopen=ptc_test_fopen -Dfprintf=ptc_test_fprintf -Dfclose=ptc_test_fclose -c companion/nro/hot_reload.c -o $@
 
-$(HOST_HOT_RELOAD_TEST): tests/hot_reload/test.c tests/hot_reload/switch.h tests/hot_reload/release_manifest.h $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/fs_storage_retry_test.o companion/hot_reload_guard.c common/crypto/sha256.c companion/ui_language.c third_party/cjson/cJSON.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -o $@ $(filter %.c,$^) $(filter %.o,$^) -lm
+$(HOST_HOT_RELOAD_TEST): tests/hot_reload/test.c tests/hot_reload/switch.h tests/hot_reload/release_manifest.h $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/fs_storage_retry_test.o companion/hot_reload_guard.c common/crypto/sha256.c companion/ui_language.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/hot_reload -o $@ $(filter %.c,$^) $(filter %.o,$^) -lm
 
-$(HOST_UI_STATUS_TRACE_TEST): companion/ui_status_trace.c common/crypto/sha256.c third_party/cjson/cJSON.c platform/host/mem_storage.c tests/c/test_ui_status_trace.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^)
+$(HOST_UI_STATUS_TRACE_TEST): companion/ui_status_trace.c common/crypto/sha256.c third_party/cjson/cJSON.c platform/host/mem_storage.c tests/c/test_ui_status_trace.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^)
 
-$(HOST_INPUT_OWNER_TEST): companion/input_owner.c third_party/cjson/cJSON.c platform/host/mem_storage.c tests/c/test_input_owner.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^)
+$(HOST_INPUT_OWNER_TEST): companion/input_owner.c third_party/cjson/cJSON.c platform/host/mem_storage.c tests/c/test_input_owner.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^)
 
-$(HOST_AUTH_CLOCK_TEST): tests/c/test_auth_clock.c tests/auth_clock/switch.h companion/auth_clock.c companion/auth_clock.h companion/auth.c platform/host/mem_storage.c common/crypto/sha256.c third_party/cjson/cJSON.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/auth_clock -o $@ $(filter %.c,$^)
+$(HOST_AUTH_CLOCK_TEST): tests/c/test_auth_clock.c tests/auth_clock/switch.h companion/auth_clock.c companion/auth_clock.h companion/auth.c platform/host/mem_storage.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/auth_clock -o $@ $(filter %.c,$^)
 
 test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST)
 	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST) && $(HOST_INPUT_OWNER_TEST) && $(HOST_AUTH_CLOCK_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
-$(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -D_POSIX_C_SOURCE=200809L -DPTC_UI_PREVIEW_ANIM_CLOCK_MS=1024000 -DPTC_UI_PREVIEW_WALL_TIME=1000 -DPTC_UI_PREVIEW_MINUTE_OF_DAY=496 -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) -lm
+$(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -D_POSIX_C_SOURCE=200809L -DPTC_UI_PREVIEW_ANIM_CLOCK_MS=1024000 -DPTC_UI_PREVIEW_WALL_TIME=1000 -DPTC_UI_PREVIEW_MINUTE_OF_DAY=496 -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) -lm
 
 .PHONY: test-ui-primitives
 test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
-	$(HOST_BUILD_DIR)/ui_preview --check-primitives
-	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-parent-tabs
-	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-bedtime-editors
-	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-dock-editor
+	$(STAGE_TIMER) global test-ui -- sh -c '$(HOST_BUILD_DIR)/ui_preview --check-primitives && $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-parent-tabs && $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-bedtime-editors && $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-dock-editor'
 
 test-host: test-ui-primitives
 
 # UI preview generation with the pinned, redistributable documentation font.
 OVERLAY_PREVIEW_C_SRCS := companion/policy_status.c companion/ui_language.c companion/overlay/input_model.c companion/overlay/bridge.c companion/transport_client.c common/time/ptc_time.c common/protocol/error_code.c companion/nro/ui_theme.c
-$(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -ffunction-sections -fdata-sections -r -o $@ $(OVERLAY_PREVIEW_C_SRCS)
+$(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -ffunction-sections -fdata-sections -r -o $@ $(OVERLAY_PREVIEW_C_SRCS)
 
 $(HOST_BUILD_DIR)/overlay_preview: tests/overlay_preview/render.cpp tests/overlay_preview/renderer.hpp companion/overlay/source/render_types.hpp companion/overlay/source/render_methods.hpp companion/overlay/source/render_pages.hpp companion/overlay/layout.h $(HOST_BUILD_DIR)/overlay_preview_core.o
-	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
 
 .PHONY: test-overlay-header
 test-overlay-header: $(HOST_BUILD_DIR)/overlay_preview
-	$(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-header
+	$(STAGE_TIMER) global test-ui -- $(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-header
 
 test-host: test-overlay-header
 
-$(HOST_BUILD_DIR)/overlay_preview_save_test: tests/overlay_preview/test_save.cpp tests/overlay_preview/renderer.hpp companion/ui_emoji.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -o $@ $< -lm
+$(HOST_BUILD_DIR)/overlay_preview_save_test: tests/overlay_preview/test_save.cpp tests/overlay_preview/renderer.hpp companion/ui_emoji.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -o $@ $< -lm
 
 .PHONY: test-overlay-preview-save
 test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test
-	$(HOST_BUILD_DIR)/overlay_preview_save_test third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf $(HOST_BUILD_DIR)/overlay-preview-save
+	$(STAGE_TIMER) global test-ui -- $(HOST_BUILD_DIR)/overlay_preview_save_test third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf $(HOST_BUILD_DIR)/overlay-preview-save
 
 test-host: test-overlay-preview-save
+
+HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
+$(HOST_CACHED_TARGETS): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 
 .PHONY: render-nro-previews render-overlay-previews convert-previews ui-previews
 render-nro-previews: $(HOST_BUILD_DIR)/ui_preview
@@ -272,7 +287,7 @@ test-usage-probe-policy: $(HOST_BUILD_DIR)/test_usage_probe_policy
 
 $(HOST_BUILD_DIR)/test_usage_probe_policy: tests/c/test_usage_probe_policy.c usage_probe/boot_policy.h
 	mkdir -p $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $<
 
 usage-probe-package: test-usage-probe-policy
 	python3 tools/legacy/package_usage_probe.py prepare

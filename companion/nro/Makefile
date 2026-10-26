@@ -460,14 +460,15 @@ $(BUILD)/token_v1.o: ../../common/token/token_v1.c ../../common/token/token_v1.h
 
 # Header dependencies are emitted beside each object. Rebuild all objects when
 # build flags or the project version included by this Makefile change.
-$(OBJS): Makefile ../../common/version.mk $(MANIFEST_HEADER)
+# Generated .d files track the units that actually embed the manifest.
+$(OBJS): Makefile ../../common/version.mk
 
 -include $(DEPENDS)
 
 $(TARGET).elf: $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(NACP): $(MAKEFILE_LIST)
+$(NACP): Makefile ../../common/version.mk
 	$(DEVKITPRO)/tools/bin/nacptool --create "$(APP_TITLE)" "$(APP_AUTHOR)" "$(APP_VERSION)" $@
 
 $(TARGET).nro: $(TARGET).elf $(NACP) $(APP_ICON)

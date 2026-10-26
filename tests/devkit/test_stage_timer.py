@@ -116,8 +116,12 @@ def test_cli_execution() -> None:
         ]
         env = dict(os.environ)
         env["PYTHONPATH"] = str(TOOLS)
+        env["PLAYWISE_TIMING_FILE"] = str(timing_file)
         res = subprocess.run(cmd, env=env, cwd=tmp_dir)
         require(res.returncode == 0, "CLI execution must succeed")
+        records = stage_timer.read_timing_records(timing_file)
+        require(len(records) == 1 and records[0]["stage"] == "test-stage",
+                "CLI test must use its isolated timing file")
 
         fail_cmd = [
             sys.executable,
@@ -129,8 +133,10 @@ def test_cli_execution() -> None:
             "-c",
             "import sys; sys.exit(42)",
         ]
-        fail_res = subprocess.run(fail_cmd, cwd=tmp_dir)
+        fail_res = subprocess.run(fail_cmd, env=env, cwd=tmp_dir)
         require(fail_res.returncode == 42, f"CLI must pass-through return code, got {fail_res.returncode}")
+        require(stage_timer.read_timing_records(timing_file) == records,
+                "failed command must not produce a success record")
 
 
 def test_format_timing_report_with_wall_clock() -> None:
@@ -150,8 +156,8 @@ def test_format_timing_report_with_wall_clock() -> None:
     require("10.00s" in report_speedup, "task sum must be 10.00s")
     require("5.00s" in report_speedup, "wall clock must be 5.00s")
     require("2.00x" in report_speedup, "speedup must be 2.00x")
-    require("耗时缩短 50.0%" in report_speedup, "must report percent saved")
-    require("节约 5.00s" in report_speedup, "must report seconds saved")
+    require("不代表实测加速比" in report_speedup, "overlap must not claim an unmeasured serial baseline")
+    require("节约" not in report_speedup, "record sums cannot prove saved wall time")
     require("[并行机制: 自动多核 (-j)]" in report_speedup, "must report parallel mode metadata")
 
     # 场景 2：基准串行场景 (10s 任务，10s 物理完成 -> 1.00x)
@@ -161,14 +167,14 @@ def test_format_timing_report_with_wall_clock() -> None:
         wall_clock_duration=10.0,
     )
     require("1.00x" in report_serial, "serial speedup must be 1.00x")
-    require("基准串行 / 均衡状态" in report_serial, "serial mode must describe baseline")
+    require("累计计时 / 挂钟" in report_serial, "must label the measured ratio")
 
     # 场景 3：并发调度与 I/O 损耗 (10s 任务，11s 物理完成 -> <0.95x)
     report_overhead = stage_timer.format_timing_report(
         records,
         wall_clock_duration=11.0,
     )
-    require("轻微并发调度与 I/O 损耗" in report_overhead, "overhead scenario must describe loss")
+    require("未计时开销" in report_overhead, "unmeasured gaps must not be attributed to concurrency")
 
     # 场景 4：边界容错 (wall_clock <= 0 时安全回退)
     report_zero = stage_timer.format_timing_report(records, wall_clock_duration=0.0)

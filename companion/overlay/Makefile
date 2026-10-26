@@ -52,7 +52,8 @@ clean:
 else
 DEPENDS := $(OFILES:.o=.d)
 all: $(OUTPUT).ovl
-$(OFILES): $(TOPDIR)/Makefile $(TOPDIR)/../../common/version.mk $(TOPDIR)/../../build/generated/release_manifest.h
+# Generated .d files track the units that actually embed the manifest.
+$(OFILES): $(TOPDIR)/Makefile $(TOPDIR)/../../common/version.mk
 $(OUTPUT).nacp: $(TOPDIR)/Makefile $(TOPDIR)/../../common/version.mk
 $(OUTPUT).ovl: $(OUTPUT).elf $(OUTPUT).nacp
 	@elf2nro $< $@ $(NROFLAGS)

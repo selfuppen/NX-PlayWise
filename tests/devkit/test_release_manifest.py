@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import sys
@@ -183,6 +184,48 @@ def test_rebuild_identity_tracks_source_and_toolchain() -> None:
                         "toolchain identity changes require a reload")
 
 
+def test_batch_outputs_share_fresh_identity_and_keep_profiles() -> None:
+    identity = {"commit": "a" * 40, "libnx": "libnx fixture", "compiler": "gcc fixture",
+                "source_hash": "c" * 64, "source_dirty": True, "libtesla": "b" * 40,
+                "image": "fixture", "image_digest": "sha256:" + "d" * 64}
+    with tempfile.TemporaryDirectory(prefix="playwise-manifest-batch-") as temporary:
+        root = Path(temporary)
+        arguments = ["generate_release_manifest.py"]
+        profiles = ("release", "device-lab", "eden-test")
+        for profile in profiles:
+            arguments.extend(["--output", profile, str(root / f"{profile}.json"), str(root / f"{profile}.h")])
+        def run(snapshot: dict) -> None:
+            with mock.patch.object(sys, "argv", arguments), \
+                    mock.patch.object(manifest, "collect_build_identity", return_value=snapshot) as collect:
+                require(manifest.main() == 0, "batch generation succeeds")
+                require(collect.call_count == 1, "source/toolchain identity is collected once per invocation")
+        run(identity)
+        first = [json.loads((root / f"{profile}.json").read_text(encoding="utf-8")) for profile in profiles]
+        require(len({data["release_id"] for data in first}) == 1,
+                "profiles have one generation while retaining distinct profile names")
+        require([data["profile"] for data in first] == list(profiles), "profiles must remain isolated")
+        require(all(data["build"]["source_dirty"] for data in first), "dirty state remains truthful")
+        paths = list(root.iterdir())
+        for path in paths:
+            os.utime(path, (1, 1))
+        run(identity)
+        require(all(path.stat().st_mtime_ns == 1_000_000_000 for path in paths),
+                "unchanged JSON and header bytes must preserve timestamps")
+        run({**identity, "source_hash": "e" * 64})
+        require(all(json.loads((root / f"{profile}.json").read_text(encoding="utf-8"))["release_id"]
+                    != first[0]["release_id"] for profile in profiles),
+                "a later invocation must collect a fresh source identity")
+        original = {path: path.read_bytes() for path in paths}
+        try:
+            run({**identity, "libnx": "unknown"})
+        except SystemExit as exc:
+            require("libnx identity is unknown" in str(exc), "unknown release toolchain is refused")
+        else:
+            raise AssertionError("batch generation must reject unknown release libnx")
+        require(all(path.read_bytes() == content for path, content in original.items()),
+                "invalid batch identity must fail before replacing outputs")
+
+
 def main() -> int:
     test_libnx_package_identity()
     test_libnx_pkgconfig_fallback()
@@ -192,6 +235,7 @@ def main() -> int:
     test_tracked_dirty_uses_content_diff()
     test_host_newline_policy_preserves_real_edits()
     test_rebuild_identity_tracks_source_and_toolchain()
+    test_batch_outputs_share_fresh_identity_and_keep_profiles()
     print("Release manifest tests passed")
     return 0
 

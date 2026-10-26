@@ -101,7 +101,8 @@ else
 DEPENDS := $(OFILES:.o=.d)
 
 all: $(OUTPUT).nsp
-$(OFILES): $(TOPDIR)/Makefile $(TOPDIR)/../common/version.mk $(TOPDIR)/$(MANIFEST_INCLUDE)/release_manifest.h
+# Generated .d files track the units that actually embed the manifest.
+$(OFILES): $(TOPDIR)/Makefile $(TOPDIR)/../common/version.mk
 
 $(OUTPUT).nsp: $(OUTPUT).nso $(OUTPUT).npdm
 

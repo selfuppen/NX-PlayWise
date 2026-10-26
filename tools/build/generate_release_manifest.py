@@ -120,13 +120,28 @@ def libtesla_commit() -> str:
     return "unknown"
 
 
-def make_manifest(profile: str) -> dict:
-    commit = git_commit()
-    libnx = libnx_identity()
-    compiler = toolchain_identity()
-    source_hash = source_fingerprint()
-    build_image = os.environ.get("PLAYWISE_BUILD_IMAGE", "unknown")
-    build_image_digest = os.environ.get("PLAYWISE_BUILD_IMAGE_DIGEST", "unknown")
+def collect_build_identity() -> dict:
+    # Shared only within this invocation; never trust a previous run's snapshot.
+    return {
+        "commit": git_commit(),
+        "libnx": libnx_identity(),
+        "compiler": toolchain_identity(),
+        "source_hash": source_fingerprint(),
+        "source_dirty": git_tracked_dirty(),
+        "libtesla": libtesla_commit(),
+        "image": os.environ.get("PLAYWISE_BUILD_IMAGE", "unknown"),
+        "image_digest": os.environ.get("PLAYWISE_BUILD_IMAGE_DIGEST", "unknown"),
+    }
+
+
+def make_manifest(profile: str, *, build_identity: dict | None = None) -> dict:
+    snapshot = collect_build_identity() if build_identity is None else build_identity
+    commit = snapshot["commit"]
+    libnx = snapshot["libnx"]
+    compiler = snapshot["compiler"]
+    source_hash = snapshot["source_hash"]
+    build_image = snapshot["image"]
+    build_image_digest = snapshot["image_digest"]
     manual_verified = profile == "release" and os.environ.get("PLAYWISE_MANUAL_DEVICE_VERIFIED") == "1"
     device_model = os.environ.get("PLAYWISE_VERIFIED_MODEL", "").strip()
     hos = os.environ.get("PLAYWISE_VERIFIED_HOS", "").strip()
@@ -145,10 +160,10 @@ def make_manifest(profile: str) -> dict:
         "build": {
             "devkitpro": compiler,
             "libnx": libnx,
-            "libtesla_commit": libtesla_commit(),
+            "libtesla_commit": snapshot["libtesla"],
             "container_image": build_image,
             "container_image_digest": build_image_digest,
-            "source_dirty": git_tracked_dirty(),
+            "source_dirty": snapshot["source_dirty"],
             "source_fingerprint": source_hash,
         },
         "qualification": {
@@ -213,15 +228,36 @@ def write_header(path: Path, data: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate PlayWise build manifest assets.")
-    parser.add_argument("--profile", choices=("release", "device-lab", "eden-test"), default="release")
-    parser.add_argument("--json", type=Path, required=True)
-    parser.add_argument("--header", type=Path, required=True)
+    profiles = ("release", "device-lab", "eden-test")
+    parser.add_argument("--profile", choices=profiles)
+    parser.add_argument("--json", type=Path)
+    parser.add_argument("--header", type=Path)
+    parser.add_argument("--output", nargs=3, action="append", metavar=("PROFILE", "JSON", "HEADER"),
+                        help="Repeat to generate selected profiles from one fresh build identity.")
     args = parser.parse_args()
-    data = make_manifest(args.profile)
-    if args.profile in ("release", "device-lab") and data["build"]["libnx"] == "unknown":
+    if args.output:
+        if args.profile or args.json or args.header:
+            parser.error("--output cannot be combined with --profile/--json/--header")
+        outputs = [(profile, Path(json_path), Path(header)) for profile, json_path, header in args.output]
+    else:
+        if not args.json or not args.header:
+            parser.error("--json and --header are required without --output")
+        outputs = [(args.profile or "release", args.json, args.header)]
+    if any(profile not in profiles for profile, _, _ in outputs):
+        parser.error("unknown output profile")
+    paths = [path.resolve() for _, json_path, header in outputs for path in (json_path, header)]
+    if len(paths) != len(set(paths)):
+        parser.error("manifest output paths must be distinct")
+    identity = collect_build_identity()
+    # Validate the entire selection before writing any candidate metadata.
+    manifests = [(make_manifest(profile, build_identity=identity), json_path, header)
+                 for profile, json_path, header in outputs]
+    if any(data["profile"] in ("release", "device-lab") and data["build"]["libnx"] == "unknown"
+           for data, _, _ in manifests):
         raise SystemExit("cannot create a release candidate: installed libnx identity is unknown")
-    write_text_if_changed(args.json, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
-    write_header(args.header, data)
+    for data, json_path, header in manifests:
+        write_text_if_changed(json_path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        write_header(header, data)
     return 0
 
 

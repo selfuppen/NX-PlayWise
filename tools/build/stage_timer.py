@@ -22,8 +22,7 @@ if hasattr(sys.stderr, "reconfigure"):
         pass
 
 ROOT = Path(__file__).resolve().parents[2]
-TIMING_FILE = ROOT / "build" / "build_timing.json"
-LOCK_FILE = ROOT / "build" / "build_timing.lock"
+TIMING_FILE = Path(os.environ.get("PLAYWISE_TIMING_FILE", ROOT / "build" / "build_timing.json"))
 
 def display_width(text: str) -> int:
     width = 0
@@ -61,8 +60,11 @@ PACKAGE_TITLES: dict[str, str] = {
 STAGE_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "global": {
         "clean": "清理旧构建产物",
+        "test-compile": "Host 测试与预览程序编译（可复用）",
+        "test-ui": "UI 原语、布局与预览存储检查",
         "test-host": "Host C 核心与 UI 状态测试",
         "test-python": "Python 协议回归测试",
+        "manifest": "一次采集身份并生成所选清单",
     },
     "playwise": {
         "manifest": "生成发布元数据清单",
@@ -228,7 +230,12 @@ def format_timing_report(
             package_keys.append(k)
 
     for pkg in package_keys:
-        items = grouped[pkg]
+        # Repeated compiler invocations are one readable stage; raw records
+        # retain every invocation for diagnosis.
+        totals: dict[str, float] = {}
+        for record in grouped[pkg]:
+            totals[record["stage"]] = totals.get(record["stage"], 0.0) + record["duration"]
+        items = [{"stage": stage, "duration": duration} for stage, duration in totals.items()]
         pkg_title = PACKAGE_TITLES.get(pkg, f"包 {pkg}")
         pkg_total = sum(item["duration"] for item in items)
         pkg_overall_pct = (pkg_total / grand_total * 100.0) if grand_total > 0 else 0.0
@@ -301,22 +308,8 @@ def format_timing_report(
         )
         lines.append(wall_row)
 
-        speedup = (grand_total / wall_clock_duration) if wall_clock_duration > 0 else 1.0
-        saved_time = grand_total - wall_clock_duration
-        if speedup >= 1.05:
-            pct_saved = (saved_time / grand_total * 100.0) if grand_total > 0 else 0.0
-            speedup_desc = f"{speedup:.2f}x (并行加速: 耗时缩短 {pct_saved:.1f}% / 节约 {saved_time:.2f}s)"
-        elif speedup >= 0.95:
-            speedup_desc = f"{speedup:.2f}x (基准串行 / 均衡状态)"
-        else:
-            speedup_desc = f"{speedup:.2f}x (轻微并发调度与 I/O 损耗)"
-
-        speedup_row = (
-            pad_display("并行加速收益与效率提升", 32)
-            + " "
-            + pad_display(speedup_desc, 62, "left")
-        )
-        lines.append(speedup_row)
+        ratio = grand_total / wall_clock_duration
+        lines.append(f"累计计时 / 挂钟: {ratio:.2f}x（含并行重叠与未计时开销，不代表实测加速比）")
     else:
         total_row = (
             pad_display("全流程总计耗时", 52)

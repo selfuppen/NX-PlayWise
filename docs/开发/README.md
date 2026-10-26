@@ -10,6 +10,7 @@
 | 配置Host／devkitPro | [开发环境指南](开发环境指南.md)／[English](DEVELOPMENT_ENVIRONMENT_GUIDE.md) |
 | 修改代码及查上游 | [开发指南](开发指南.md)／[English](DEVELOPER_GUIDE.md) |
 | 选择回归和交付门禁 | [测试指南](测试指南.md)／[English](TESTING_GUIDE.md) |
+| 日常最小构建、专项及缓存边界 | [构建与测试分层](构建与测试分层.md) |
 | 按层分工、避免重复测试 | [分层测试策略](分层测试策略.md) |
 | 发版前主流程的操作与断言 | [Eden主流程场景](Eden主流程场景.md) |
 | 发版前模拟器业务自动回归 | [Eden自动化测试](Eden自动化测试.md) |

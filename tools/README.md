@@ -8,6 +8,7 @@ Python／PowerShell脚本的当前数量与分类清单保存在[catalog.json](c
 
 - Host回归：`python tools/test.py`。
 - C／NRO／Overlay／产物门禁：`python tools/package_remote.py`，保留默认Eden；不要用若干内部打包脚本拼接旁路。
+- 日常最小步骤、专项参数和缓存边界见[构建与测试分层](../docs/开发/构建与测试分层.md)；统一构建已运行完整 Python 回归，无需固定在其之前重复执行一遍。
 - 标准真机取证：先读开发手册和`device/pctl_standard_evidence.py`的prepare／audit边界，实际更新或同候选重启使用`device/auto_update.py`，需原候选、前像、正常PIN和有限租期。
 - 自然午夜离线核验：`device/pctl_production_midnight.py`；`legacy/pctl_midnight_evidence.py`是兼容旧报告的不同接口。
 - 正式资格：单独核对完整包组和报告，不把一次标准采集、旧Lab或AI观察自动当作完整资格。
