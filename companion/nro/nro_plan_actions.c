@@ -100,8 +100,7 @@ void apply_pending_navigation(UiState *ui)
         ui->model.parent_footer_focused = false;
         submit_status(ui);
     } else if (ui->pending_leave_parent) {
-        ui->model.view = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
-            ? PTC_UI_SETUP : PTC_UI_CHILD;
+        ptc_ui_return_from_parent(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_HAS_RETURNED_TO_THE_MAIN_PAGE));
         if (ui->model.view == PTC_UI_CHILD) {
             submit_status(ui);

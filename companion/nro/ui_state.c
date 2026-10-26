@@ -46,6 +46,15 @@ void ptc_ui_setup_sync(PtcUiModel *model)
     if (model->view != PTC_UI_PARENT) model->view = PTC_UI_SETUP;
 }
 
+void ptc_ui_return_from_parent(PtcUiModel *model)
+{
+    if (!model) return;
+    /* Wizard completion and backend activation are independent.  Reuse the
+       same routing as startup instead of displaying an inert step zero. */
+    model->view = PTC_UI_CHILD;
+    ptc_ui_setup_sync(model);
+}
+
 void ptc_ui_setup_record_issue(PtcUiModel *model, PtcUiSetupIssueKind kind, int code)
 {
     if (!model || kind < 0 || kind >= PTC_UI_SETUP_ISSUE_COUNT) return;

@@ -517,6 +517,16 @@ int main(void)
     char text[8192];
     test_eden_request_release_boundary();
     init(&ui, &mem);
+    ui.model.view = PTC_UI_PARENT;
+    ui.model.setup_step = 0;
+    snprintf(ui.model.setup_phase, sizeof(ui.model.setup_phase), "pending");
+    ptc_ui_return_from_parent(&ui.model);
+    check(ui.model.view == PTC_UI_SETUP && ui.model.setup_step == PTC_UI_SETUP_PREPARE,
+          "unfinished wizard returns from support at an actionable preparation step");
+    handle_setup_input(&ui, HidNpadButton_A, 0);
+    check(ui.model.setup_step == PTC_UI_SETUP_PARENT,
+          "continue advances the returned wizard through its real input handler");
+    init(&ui, &mem);
     check(ui.language_preference == PTC_UI_LANGUAGE_SYSTEM, "new installation follows system");
     ui.model.overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
     snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "Calendar manager");
