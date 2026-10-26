@@ -2506,6 +2506,16 @@ static void test_setup_direct_takeover_recovers_exhausted_failed_release(void)
     check_int((int)pctl.start_timer_calls, (int)start_calls, "changed allowance refusal performs no timer start");
 }
 
+static const PtcPctlVTable *setup_snapshot_delegate;
+static unsigned int setup_snapshot_reads;
+
+static PtcErrorCode setup_snapshot_drift_during_confirmation(PtcPctl *pctl, PtcPctlSettingsSnapshot *out)
+{
+    PtcErrorCode err = setup_snapshot_delegate->snapshot_settings(pctl, out);
+    if (err == PTC_ERR_OK && ++setup_snapshot_reads == 2U) out->data[2] ^= 2U;
+    return err;
+}
+
 static void test_setup_direct_takeover_zero_with_temporary_unlock(void)
 {
     PtcMemStorage mem;
@@ -2578,10 +2588,11 @@ static void test_setup_direct_takeover_zero_with_temporary_unlock(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-zero-same-day-drift.json", text, sizeof(text)) &&
         strstr(text, "\"reason\":\"handover_state_unavailable\""),
         "same-day retry still refuses changed timer instead of treating it as a day rollover");
-    /* The full weekly settings are unchanged, while the next day's slot is
-       unlimited and its timer has started naturally since yesterday. */
+    /* Model a later day's valid native settings and running timer.  Keep the
+       installation image immutable even when current settings have changed. */
     pctl.raw_settings_override_enabled = true;
     memcpy(pctl.raw_settings, native_original.data, sizeof(pctl.raw_settings));
+    pctl.raw_settings[0] ^= 2U;
     pctl.status.unrestricted_today = true;
     pctl.status.blocked_today = false;
     pctl.status.restricted_now = false;
@@ -2608,14 +2619,19 @@ static void test_setup_direct_takeover_zero_with_temporary_unlock(void)
         "\"handover_today_pending\":true,\"handover_day_index\":2489,\"handover_unlimited\":false,"
         "\"handover_minutes\":0,\"handover_remaining_available\":true,\"handover_remaining_minutes\":0,"
         "\"last_error\":\"\"}"), "seed guarded next-day retry for snapshot drift");
-    pctl.raw_settings[0] ^= 2U;
+    PtcPctlVTable drifting_vtable = *pctl.pctl.vtable;
+    setup_snapshot_delegate = pctl.pctl.vtable;
+    setup_snapshot_reads = 0;
+    drifting_vtable.snapshot_settings = setup_snapshot_drift_during_confirmation;
+    pctl.pctl.vtable = &drifting_vtable;
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-zero-drift.json",
         "{\"version\":1,\"request_id\":\"setup-zero-drift\",\"type\":\"complete_setup\",\"created_at\":3,\"payload\":{}}"),
-        "queue next-day retry after native settings changed");
+        "queue next-day retry while native settings change during confirmation");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "zero-minute drift retry is processed");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-zero-drift.json", text, sizeof(text)) &&
         strstr(text, "\"reason\":\"handover_state_unavailable\""),
-        "next-day recapture still rejects a changed installation settings snapshot");
+        "next-day recapture rejects settings changing between this attempt's paired reads");
+    pctl.pctl.vtable = setup_snapshot_delegate;
     check_int((int)pctl.apply_target_calls, 0, "all zero-minute takeover paths avoid PCTL writes");
     check_int((int)pctl.start_timer_calls, 0, "all zero-minute takeover paths avoid 1451");
 }

@@ -145,15 +145,12 @@ static PtcErrorCode run_release_preflight(
         PtcPctlSettingsSnapshot installed;
         /* Yesterday's balance cannot qualify today's parent-confirmed retry.
            Re-read today's allowance, but never replace an existing recovery
-           image or accept changed native settings as the original.  The timer
-           may have started naturally today; pair it with this attempt's fresh
-           snapshot instead of comparing it with yesterday's timer state. */
+           image. Native settings and timer may differ on a later day; pair
+           this attempt's reads with its fresh snapshot instead of comparing
+           them with yesterday's installation recovery image. */
         join_path(path, sizeof(path), sysmodule->app_root, "backups/install_pctl_snapshot.json");
         if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
             if (!load_install_snapshot(sysmodule, &installed)) return PTC_ERR_RECOVERY_UNAVAILABLE;
-            if (!ptc_pctl_settings_snapshot_equal(&installed, &snapshot)) {
-                return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
-            }
         }
         *retry_baseline = snapshot;
         setup->handover_today_pending = false;
