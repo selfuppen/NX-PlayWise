@@ -1,8 +1,10 @@
 #include "sysmodule_internal.h"
 
 static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
-static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
-static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
+static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now,
+    const PtcPctlSettingsSnapshot *retry_baseline);
+static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now,
+    const PtcPctlSettingsSnapshot *retry_baseline);
 
 /* A fresh takeover must not silently replace an in-progress Nintendo allowance
    with PlayWise's weekly defaults.  PCTL targets are daily totals, so retain the
@@ -96,7 +98,8 @@ static PtcErrorCode run_release_preflight(
     const PtcRuntimeConfig *config,
     PtcSetupState *setup,
     PtcClockSnapshot now,
-    bool capture_handover)
+    bool capture_handover,
+    PtcPctlSettingsSnapshot *retry_baseline)
 {
     char path[320];
     char text[4096];
@@ -116,6 +119,7 @@ static PtcErrorCode run_release_preflight(
     PtcPctlStatus status;
     PtcRules rules;
     PtcErrorCode err;
+    memset(retry_baseline, 0, sizeof(*retry_baseline));
 
     join_path(path, sizeof(path), sysmodule->app_root, "build.json");
     if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text)) ||
@@ -137,6 +141,24 @@ static PtcErrorCode run_release_preflight(
     err = sysmodule->pctl->vtable->read_status(
         sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &status);
     if (err != PTC_ERR_OK) return err;
+    if (setup->handover_today_pending && setup->handover_day_index != now.day_index) {
+        PtcPctlSettingsSnapshot installed;
+        /* Yesterday's balance cannot qualify today's parent-confirmed retry.
+           Re-read today's allowance, but never replace an existing recovery
+           image or accept changed native settings as the original.  The timer
+           may have started naturally today; pair it with this attempt's fresh
+           snapshot instead of comparing it with yesterday's timer state. */
+        join_path(path, sizeof(path), sysmodule->app_root, "backups/install_pctl_snapshot.json");
+        if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
+            if (!load_install_snapshot(sysmodule, &installed)) return PTC_ERR_RECOVERY_UNAVAILABLE;
+            if (!ptc_pctl_settings_snapshot_equal(&installed, &snapshot)) {
+                return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+            }
+        }
+        *retry_baseline = snapshot;
+        setup->handover_today_pending = false;
+        capture_handover = true;
+    }
     if (capture_handover) {
         err = capture_handover_today(setup, &status, now);
         if (err != PTC_ERR_OK) return err;
@@ -182,6 +204,7 @@ bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *request,
     const PtcRuntimeConfig *config, bool disable_flag, PtcClockSnapshot now)
 {
     PtcSetupState setup;
+    PtcPctlSettingsSnapshot retry_baseline;
     bool resuming_disabled_setup;
     bool reconfirming_runtime_fingerprint = false;
     bool retrying_failed_release = false;
@@ -222,7 +245,8 @@ bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *request,
         bool capture_handover = !setup.handover_today_pending &&
             (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
              (strcmp(setup.phase, "protection") == 0 && !reconfirming_runtime_fingerprint));
-        PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now, capture_handover);
+        PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now,
+            capture_handover, &retry_baseline);
         if (preflight_err != PTC_ERR_OK) {
             /* A disabled active/restored installation remains retryable until a
                later parent-confirmed attempt passes the read-only preflight. */
@@ -250,7 +274,7 @@ bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *request,
                 PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
         }
         if (setup.handover_today_pending) {
-            PtcErrorCode handover_err = direct_handover_now(sysmodule, &setup, now);
+            PtcErrorCode handover_err = direct_handover_now(sysmodule, &setup, now, &retry_baseline);
             if (handover_err != PTC_ERR_OK) {
                 return finish_with_error(sysmodule, request, "release", false,
                     handover_err, now.day_index);
@@ -266,7 +290,7 @@ bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *request,
                 sysmodule, request, "release", false, now, false);
         }
         {
-            PtcErrorCode release_err = release_setup_now(sysmodule, &setup, now);
+            PtcErrorCode release_err = release_setup_now(sysmodule, &setup, now, &retry_baseline);
             if (release_err != PTC_ERR_OK) {
                 return finish_with_error(sysmodule, request, "release", false,
                     release_err, now.day_index);
@@ -297,6 +321,7 @@ bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcRequest *requ
     const PtcRuntimeConfig *config, PtcClockSnapshot now)
 {
     PtcSetupState setup;
+    PtcPctlSettingsSnapshot retry_baseline;
     char disable_path[320];
     PtcErrorCode err;
     if (!load_setup_state(sysmodule, &setup) ||
@@ -305,7 +330,8 @@ bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcRequest *requ
         return finish_with_error(sysmodule, request, "release", false,
             PTC_ERR_BAD_REQUEST, now.day_index);
     }
-    err = run_release_preflight(sysmodule, config, &setup, now, !setup.handover_today_pending);
+    err = run_release_preflight(sysmodule, config, &setup, now, !setup.handover_today_pending,
+        &retry_baseline);
     if (err != PTC_ERR_OK) {
         snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(err));
         (void)save_setup_state(sysmodule, &setup);
@@ -328,8 +354,8 @@ bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcRequest *requ
             PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     err = setup.handover_today_pending
-        ? direct_handover_now(sysmodule, &setup, now)
-        : release_setup_now(sysmodule, &setup, now);
+        ? direct_handover_now(sysmodule, &setup, now, &retry_baseline)
+        : release_setup_now(sysmodule, &setup, now, &retry_baseline);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", false,
             err, now.day_index);
@@ -446,7 +472,8 @@ static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSet
     return PTC_ERR_OK;
 }
 
-static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)
+static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now,
+    const PtcPctlSettingsSnapshot *retry_baseline)
 {
     char snapshot_path[320];
     PtcPctlSettingsSnapshot original;
@@ -488,6 +515,7 @@ static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *se
         }
     }
     setup->snapshot_available = true;
+    if (retry_baseline->size == PTC_PCTL_OPAQUE_SETTINGS_SIZE) original = *retry_baseline;
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before);
     if (err == PTC_ERR_OK && before.unrestricted_today &&
         before.restricted_now_available && !before.restricted_now) {
@@ -550,7 +578,8 @@ static bool handover_remaining_matches(const PtcSetupState *setup, const PtcPctl
 /* A fresh install already has the policy and remaining allowance that must be
    preserved.  Taking it over in place avoids a transient unlimited write and,
    importantly, avoids starting private timer command 1451 while on HOME. */
-static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)
+static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now,
+    const PtcPctlSettingsSnapshot *retry_baseline)
 {
     char snapshot_path[320];
     PtcPctlSettingsSnapshot installed;
@@ -586,12 +615,19 @@ static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *
         current.size != PTC_PCTL_OPAQUE_SETTINGS_SIZE) {
         return PTC_ERR_PCTL_BACKUP_FAILED;
     }
+    if (retry_baseline->size == PTC_PCTL_OPAQUE_SETTINGS_SIZE &&
+        (!ptc_pctl_settings_snapshot_equal(retry_baseline, &current) ||
+         retry_baseline->timer_enabled != current.timer_enabled)) {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
     if (snapshot_exists) {
         if (!load_install_snapshot(sysmodule, &installed)) {
             return PTC_ERR_RECOVERY_UNAVAILABLE;
         }
-        if (!ptc_pctl_settings_snapshot_equal(&installed, &current) ||
-            installed.timer_enabled != current.timer_enabled) {
+        const PtcPctlSettingsSnapshot *expected = retry_baseline->size == PTC_PCTL_OPAQUE_SETTINGS_SIZE
+            ? retry_baseline : &installed;
+        if (!ptc_pctl_settings_snapshot_equal(expected, &current) ||
+            expected->timer_enabled != current.timer_enabled) {
             return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
         }
     } else {
