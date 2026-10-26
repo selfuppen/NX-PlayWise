@@ -8,6 +8,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 - Installation and daily use: read the [User Guide](使用/USER_GUIDE.md), then the [calendar format](使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) when creating a region calendar.
 - Upgrading an existing installation: follow the [manual hot-update steps](使用/USER_GUIDE.md#manual-hot-update-steps) and [version/build ID checks](使用/USER_GUIDE.md#version-and-build-information-after-updating).
+- Uninstalling or wiping an installation: see [Complete Removal and Reinstallation](使用/USER_GUIDE.md#complete-removal-and-reinstallation) for a four-step fresh reinstall, or expand the full workflow for restoring original settings and keeping backups.
 - Development and validation: start with the [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md), followed by the [Developer Guide](开发/DEVELOPER_GUIDE.md) and [Testing Guide](开发/TESTING_GUIDE.md).
 - Protocol and control behavior: consult the [Protocol Specification](设计/PROTOCOL.md) and [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md). UI styling and palettes follow the [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md). Built-in calendar sources are in [Holiday Calendar Data](设计/节假日日历.md) (Chinese).
 - Exploring capabilities: consult the research records below. Findings and proposed experiments do not establish released features or hardware qualification for the current candidate.

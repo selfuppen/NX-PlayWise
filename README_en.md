@@ -67,7 +67,7 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 ## Key Features
 
 - **Configuration backup/import**: eleven selective groups, PIN/hold verification, transactional rollback, calendar restore and fresh pairing keys; available in Security & Preferences.
-- **TV mode rules**: require TV mode, a uniform 0–1440-minute daily non-TV ceiling within the total, and a PIN-authorized today waiver. Disabled by default; hardware qualification pending.
+- **TV mode rules**: require TV mode, a uniform 0–1440-minute daily non-TV ceiling within the total, and a PIN-authorized today waiver. Disabled by default; functional testing completed.
 
 - **Daily Dispatch**: Today's playtime limit, quick grant, unlimited play for today, and reset today's adjustments.
 - **Long-Term Schedules**: Weekly schedules, statutory holidays, specific date overrides, and bedtime schedules.
@@ -125,8 +125,8 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 | Multi-language internationalization (Traditional Chinese & English) | Implemented (bilingual interface & docs, language decoupling) | 2026-10-02 |
 | Destructive action long-press charge-up & safety protection | Implemented (charge-up confirmation with continuous audio feedback, instant cancel) | 2026-10-02 |
 | Configuration backup & import | Implemented; full backup, 11 selective restore groups, PIN/hold confirmation, transactional rollback, calendar restore, and pairing key rotation | 2026-10-06 |
-| TV mode rules | Implemented; force TV mode, uniform daily non-TV mode limit (0–1440 min), and PIN today exemption; disabled by default, non-TV usage counted into daily limit, hardware acceptance pending | 2026-10-06 |
-| Eye protection break | DOING; continuous play/break cycles, overlay & daily dispatch skip, pending hardware qualification | In Progress |
+| TV mode rules | Implemented and functionally tested; force TV mode, uniform daily non-TV mode limit (0–1440 min), and PIN today exemption; disabled by default, non-TV usage counted into daily limit | 2026-10-06 |
+| Eye protection break | Implemented and functionally tested; continuous play/break cycles, overlay and Today's Schedule skip | 2026-10 |
 | Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
 | Multiple restricted time slots | TODO; support configuring multiple blackout/curfew intervals per day (e.g. study & dinner hours) | TBD |
 | Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |

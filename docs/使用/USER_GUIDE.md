@@ -8,62 +8,6 @@
 
 # User Guide
 
-## Configuration backup and import
-
-Open Parent → Security & Preferences → Config backup & import. Back up all rules, preferences, PIN/pairing data and saved calendars to `sdmc:/switch/playwise/backups/config-backup.json`. Keep it private: it contains the grant key. Verify the PIN and confirm overwriting an existing backup; a failed write preserves the previous file.
-
-Preview the timestamp and source device, then choose among eleven groups. Ordinary groups start selected; PIN and pairing do not. Select all/clear are available; expired today adjustments cannot be selected. Unselected settings, played time, non-TV use, buffer eligibility and replay records stay local. Review today's merged allowance/restrictions, verify the current PIN, and hold to import immediately.
-
-Selecting PIN also requires the backup PIN and ends the parent session after success. Selecting pairing restores the device name/URL and generates a fresh grant key: pair the phone again; old codes expire. Environment qualifications, setup authorization, PCTL snapshots, external hbmenu configuration and logs do not migrate. First restriction enable requires local Nintendo-control/overlay confirmation. Invalid files change nothing; write/readback failures roll back the whole import, with recovery materials retained in protection if rollback fails.
-
-![Eleven import groups and preview](../images/usage-en/settings/config-backup-light.png)
-
-<details>
-<summary>Backup and restore: creating a backup, sensitive data and invalid files</summary>
-
-| Create a backup: check the destination and existing backup | Restore sensitive data: review PIN and pairing notices |
-| --- | --- |
-| ![Create configuration backup](../images/usage-en/settings/config-backup-create-light.png) | ![Restore preview with security groups selected](../images/usage-en/settings/config-backup-security-dark.png) |
-
-![Invalid backup warning and unavailable restore button](../images/usage-en/settings/config-backup-invalid-dark.png)
-
-</details>
-
-Time Plan's independent column contains four compact cards: bedtime, eye care, TV rules, buffer. Public modes are TV and non-TV, which includes handheld/tabletop. Eden's TV rules page adds simulation buttons; switching keeps today's usage and the mode file survives restart. Daily allowance, bedtime and eye care still apply.
-
-## TV mode rules (device validation pending)
-
-Open Parent → Time plans → TV mode to require TV mode or enable a uniform daily non-TV allowance of 0–1440 minutes. Both features default off on new installs and upgrades. Disabled means no non-TV ceiling; enabled zero means handheld is restricted. Lite cannot require TV mode but supports the allowance. First enable requires Nintendo parental-control and recovery-overlay confirmation. Saves that may restrict immediately require a hold; refreshes and failed saves retain drafts, and leaving offers discard confirmation.
-
-TV mode is the system-reported operation mode. Handheld and tabletop share the non-TV ceiling within the daily total: with 120 total and 30 non-TV minutes, docking after using 30 lets the child use the remaining daily total. Docking does not clear exhausted total, bedtime or eye-care restrictions. Child view, today details and Overlay show mode and estimated non-TV use/remaining, with docking or parent recovery guidance when restricted.
-
-Choose “Waive TV mode rules today” in Today's Schedule, the dock page or Overlay, verify the parent PIN and confirm. This waives TV-only and non-TV rules together until the next local day. It adds no total allowance and does not skip bedtime or eye care. A non-TV allowance above today's total never increases that total: with 30 total and 180 non-TV minutes, use still stops at 30 total minutes. Unlimited today, grant codes and self-buffer do not waive these rules. Stale-date requests are rejected. Today's Schedule places the waiver to the right of the buffer card; it is unavailable when rules are off, already waived or status is unknown/stale. Recovery remains available with emergency disable.
-
-Use is estimated from Nintendo console time; HOME may count, while sleep is never charged by wall time. First enable starts now. Restart, allowance edits, switches and waivers preserve today's count. Unlimited days needing accounting use the shared 1440-minute timer cap. Unknown readings restrict conservatively; confirmed TV follows the daily total, and parents can waive today. Hardware accounting, dock changes and recovery still require validation; qualification remains pending.
-
-
-| TV Mode Rules (Eyesight Protection Bento Dashboard) | Child View (Handheld Restricted) |
-| --- | --- |
-| ![TV mode policy](../images/usage-en/plan/dock-policy-light.png) | ![Handheld restricted on child screen](../images/usage-en/child/dock-restricted-light.png) |
-
-| Overlay Handheld Quota Exhausted | Overlay Parent Waiver |
-| --- | --- |
-| ![Overlay handheld quota exhausted](../images/usage-en/overlay/overlay-dock-restricted.png) | ![Dock recovery Overlay](../images/usage-en/overlay/overlay-dock-waiver.png) |
-
-## Eye care breaks (device validation pending)
-
-In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo Parental Controls is enabled and verify that the overlay is available. Status confirmation checks whether Nintendo Parental Controls is enabled.
-
-![Eye care break schedule settings preview](../images/usage-en/plan/eye-care-switch-on-light.png)
-
-Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay or Today's Schedule and choose “Skip this break”; this applies only to the current break and starts a new cycle. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
-
-An originally unlimited day temporarily uses a 1440-minute PCTL limit for counting while eye care is enabled. The UI still identifies the original rule and temporary cap; disabling restores unlimited mode. Hardware A/B checks of the 1440-minute reading, sleep behavior, and actual pause and resume remain pending. See the [Testing Guide](../开发/TESTING_GUIDE.md) before release.
-
-Ordinary idle time reaching the configured rest duration also begins a new cycle. After 30 minutes of use and a full 10-minute rest, another 10 minutes counts as only 10 minutes in the new cycle; shorter rests retain the previous cycle. Minute polling of official usage may delay recognition by about one minute. Unchanged reliable readings after wake can prove rest even without ticks during sleep; unknown readings cannot prove natural rest. Midnight preserves accumulated usage and unfinished breaks; only the daily allowance changes.
-
-During protection or deactivation, a parent may verify their PIN and skip the same unfinished eye-care break even when its countdown has reached zero. Recovery retains deactivation; resuming management still requires parental confirmation in Support & Recovery. Bedtime and genuine daily allowance restrictions take precedence. New operations awaiting an earlier setting's confirmation prompt a status refresh and retry without replacing that pending setting.
-
 This guide is intended for parents and children using **PlayWise** (Repository: `NX-PlayWise`, Chinese name: 任我玩) on a Nintendo Switch running Custom Firmware. For first-time installation, using the complete delivery bundle is recommended; when parents generate grant codes on a phone or PC, pairing via network QR code scan as described below is recommended.
 
 > [!IMPORTANT]
@@ -159,6 +103,67 @@ From Switch HOME, open System Settings → System → Date and Time. Check that 
 3. On success, close the overlay, check date, time and time zone in System Settings, then return to PlayWise, press `Y` to refresh and retry the original action. On failure, record the tool's message and check the network before retrying.
 
 For counting or expiry restriction issues, retest counting and blocking with a non-critical game after syncing and refreshing. Record the sync method, success and retry results. PlayWise does not automatically detect successful clock sync, and syncing is not a guaranteed fix. Offline code generation and redemption still require no network.
+
+## Complete Removal and Reinstallation
+
+### Simplest Reinstall Without Keeping Old Configuration
+
+For the standard release, use these four steps to discard old PINs, plans, and records and start again. No configuration backup or import is required.
+
+1. **Power off completely:** Hold POWER, choose Power Options → Turn Off, then remove the SD card and connect it to your computer. Sleep is insufficient.
+2. **Delete three paths:** Remove the entire `switch/playwise/` directory, the `switch/.overlays/playwise.ovl` file, and the entire `atmosphere/contents/4200000000BD2300/` directory from the SD card. Keep all other files.
+3. **Copy the new package:** Extract `playwise-<version>.zip` and merge its `atmosphere` and `switch` directories into the SD root. If using the complete bundle, extract the standard package inside it first.
+4. **Start and configure again:** Safely eject and reinstall the SD card, boot Atmosphère, open PlayWise, complete initial setup, and change the parent PIN. Pair the parent phone/computer again and discard old grant codes. Check that the PlayWise overlay opens.
+
+This method **does not restore pre-installation Nintendo Parental Controls settings**. Current system restrictions and today's official usage may remain. If still restricted after reinstalling, temporarily unlock with the Nintendo Parental Controls PIN before configuring allowances. Deleting the old installation snapshot means PlayWise can no longer recover the original settings saved before this deletion.
+
+Any advanced homebrew menu entry configuration remains in place. Keep `override_config.ini`, the Photo Album `package.ini`, and adjacent `.playwise.*` files. Existing fatal errors, failed recovery, or unconfirmed transactions require preserving the scene and troubleshooting before any wipe.
+
+<details>
+<summary>Full workflow for restoring pre-installation system settings or keeping plans</summary>
+
+This procedure deletes PlayWise PINs, pairing secrets, plans, claim and redemption records, activity history, and the installation snapshot. For a version update, use a [data-preserving upgrade](#upgrades). Deleting SD files does not restore Nintendo Parental Controls settings or reset official usage for today.
+
+1. **Prepare backups and the installation package:** To keep plans, create a backup under Security & Preferences → Configuration backup and import, then transfer `switch/playwise/backups/config-backup.json` to your computer before deletion. Export diagnostics first when troubleshooting. Prepare a complete standard package from one build; extract `playwise-<version>.zip` from the complete bundle first.
+2. **Restore the homebrew menu entry, if configured:** If PlayWise configured the advanced homebrew menu entry, choose “Restore the original startup mode” in its parent management page and confirm that saving succeeds. Its changes to `atmosphere/config/override_config.ini` and `switch/.packages/More Menu/Photo Album/package.ini` are outside the PlayWise data directory and require separate restoration. Do not manually delete those files or adjacent `.playwise.bak`, `.playwise.state`, or `.playwise.conflict` files. The required reboot can be combined with startup after the card is reinstalled below. “Externally configured” entries must be handled through their original configuration tool.
+3. **Restore pre-installation parental settings and disable PlayWise:** If playtime management was enabled, choose Restore pre-installation settings in Support & Recovery. When restricted, use the equivalent restore-and-disable action in the PlayWise overlay parent area. Verify the PlayWise PIN and hold to confirm when prompted. Wait for success, then refresh to confirm restoration and disabled control; the restored Nintendo rules may still restrict use. Emergency disable alone does not restore settings. If PlayWise never took control, first confirm there are no pending requests or recovery transactions. Missing snapshots, an unavailable backend, failed or unknown restoration, or a fatal error require preserving data and diagnostics and troubleshooting before deletion.
+4. **Power off completely, then remove and back up the card:** Exit the app and overlay, select Power Options → Turn Off, and confirm shutdown. Sleep from a short POWER press is insufficient. Connect the SD card to your computer, copy the entire `switch/playwise/` directory to a secure location, and check that required configuration backups and diagnostics can be read. Backups contain PIN material and grant secrets; do not share them publicly. The backend remains resident while powered on, so do not delete and reinstall through live DBI/MTP or FTP.
+5. **Delete only the standard release paths below:** All paths are relative to the **SD card root**. Confirm backups before deleting.
+
+   | Path to delete | Contents |
+   | --- | --- |
+   | Entire `switch/playwise/` directory | Console app, runtime data, backups, logs, and recovery material |
+   | `switch/.overlays/playwise.ovl` | PlayWise overlay |
+   | Entire `atmosphere/contents/4200000000BD2300/` directory | Standard backend and its startup flag |
+
+   Keep the parent `switch/`, `.overlays/`, `atmosphere/`, and `atmosphere/contents/` directories, Ultrahand/Tesla, other plugins, and Nintendo data. This list covers the standard release only. Device Lab has separate paths and a separate backend; restore any existing Lab installation through its own workflow first. To uninstall without reinstalling, safely eject and reinstall the SD card, then power on after this step.
+6. **Reinstall the complete standard package:** Keep Switch powered off. Merge the package's `atmosphere` and `switch` directories into the SD root, including the app, overlay, backend, `boot2.flag`, and default templates. Safely eject and reinstall the card, boot Atmosphère, open PlayWise from Homebrew Menu, and follow [Initial Setup](#initial-setup) to set a parent PIN and authorize control. If setup does not appear or old PINs and plans remain, check that the actual SD data directory was removed.
+7. **Pair again and verify:** Scan a fresh QR code or import newly exported pairing data on the parent webpage. A fresh installation uses a new secret, so old pairing data and grant codes no longer work. To restore plans, copy only the configuration backup to `switch/playwise/backups/config-backup.json` and select the required groups through Configuration backup and import. Do not copy the old directory back, which would restore old state and recovery transactions. Configuration import does not recover deleted usage, claim, or replay-prevention records; do not use reinstallation to reset today's allowance. Finally, check matching app/backend build IDs in Software information, open the PlayWise overlay, and verify counting and restrictions with a game that has no unsaved progress.
+
+</details>
+
+## Configuration backup and import
+
+Open Parent → Security & Preferences → Config backup & import. Back up all rules, preferences, PIN/pairing data and saved calendars to `sdmc:/switch/playwise/backups/config-backup.json`. Keep it private: it contains the grant key. Verify the PIN and confirm overwriting an existing backup; a failed write preserves the previous file.
+
+Preview the timestamp and source device, then choose among eleven groups. Ordinary groups start selected; PIN and pairing do not. Select all/clear are available; expired today adjustments cannot be selected. Unselected settings, played time, non-TV use, buffer eligibility and replay records stay local. Review today's merged allowance/restrictions, verify the current PIN, and hold to import immediately.
+
+Selecting PIN also requires the backup PIN and ends the parent session after success. Selecting pairing restores the device name/URL and generates a fresh grant key: pair the phone again; old codes expire. Environment qualifications, setup authorization, PCTL snapshots, external hbmenu configuration and logs do not migrate. First restriction enable requires local Nintendo-control/overlay confirmation. Invalid files change nothing; write/readback failures roll back the whole import, with recovery materials retained in protection if rollback fails.
+
+![Eleven import groups and preview](../images/usage-en/settings/config-backup-light.png)
+
+<details>
+<summary>Backup and restore: creating a backup, sensitive data and invalid files</summary>
+
+| Create a backup: check the destination and existing backup | Restore sensitive data: review PIN and pairing notices |
+| --- | --- |
+| ![Create configuration backup](../images/usage-en/settings/config-backup-create-light.png) | ![Restore preview with security groups selected](../images/usage-en/settings/config-backup-security-dark.png) |
+
+![Invalid backup warning and unavailable restore button](../images/usage-en/settings/config-backup-invalid-dark.png)
+
+</details>
+
+Time Plan's independent column contains four compact cards: bedtime, eye care, TV rules, buffer. Public modes are TV and non-TV, which includes handheld/tabletop. Eden's TV rules page adds simulation buttons; switching keeps today's usage and the mode file survives restart. Daily allowance, bedtime and eye care still apply.
 
 ## Daily Playtime Management
 
@@ -330,6 +335,39 @@ The "Master Bedtime Switch" controls all bedtime rules across weekly, holiday, a
 ![TV Mode policy preview](../images/usage-en/plan/dock-policy-light.png)
 
 </details>
+
+## TV mode rules
+
+Open Parent → Time plans → TV mode to require TV mode or enable a uniform daily non-TV allowance of 0–1440 minutes. Both features default off on new installs and upgrades. Disabled means no non-TV ceiling; enabled zero means handheld is restricted. Lite cannot require TV mode but supports the allowance. First enable requires Nintendo parental-control and recovery-overlay confirmation. Saves that may restrict immediately require a hold; refreshes and failed saves retain drafts, and leaving offers discard confirmation.
+
+TV mode is the system-reported operation mode. Handheld and tabletop share the non-TV ceiling within the daily total: with 120 total and 30 non-TV minutes, docking after using 30 lets the child use the remaining daily total. Docking does not clear exhausted total, bedtime or eye-care restrictions. Child view, today details and Overlay show mode and estimated non-TV use/remaining, with docking or parent recovery guidance when restricted.
+
+Choose “Waive TV mode rules today” in Today's Schedule, the dock page or Overlay, verify the parent PIN and confirm. This waives TV-only and non-TV rules together until the next local day. It adds no total allowance and does not skip bedtime or eye care. A non-TV allowance above today's total never increases that total: with 30 total and 180 non-TV minutes, use still stops at 30 total minutes. Unlimited today, grant codes and self-buffer do not waive these rules. Stale-date requests are rejected. Today's Schedule places the waiver to the right of the buffer card; it is unavailable when rules are off, already waived or status is unknown/stale. Recovery remains available with emergency disable.
+
+Use is estimated from Nintendo console time; HOME may count, while sleep is never charged by wall time. First enable starts now. Restart, allowance edits, switches and waivers preserve today's count. Unlimited days remain truly unlimited, with non-TV usage counted separately. Unknown readings restrict conservatively; confirmed TV follows the daily total, and parents can waive today.
+
+
+| TV Mode Rules (Eyesight Protection Bento Dashboard) | Child View (Handheld Restricted) |
+| --- | --- |
+| ![TV mode policy](../images/usage-en/plan/dock-policy-light.png) | ![Handheld restricted on child screen](../images/usage-en/child/dock-restricted-light.png) |
+
+| Overlay Handheld Quota Exhausted | Overlay Parent Waiver |
+| --- | --- |
+| ![Overlay handheld quota exhausted](../images/usage-en/overlay/overlay-dock-restricted.png) | ![Dock recovery Overlay](../images/usage-en/overlay/overlay-dock-waiver.png) |
+
+## Eye care breaks
+
+In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo Parental Controls is enabled and verify that the overlay is available. Status confirmation checks whether Nintendo Parental Controls is enabled.
+
+![Eye care break schedule settings preview](../images/usage-en/plan/eye-care-switch-on-light.png)
+
+Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay or Today's Schedule and choose “Skip this break”; this applies only to the current break and starts a new cycle. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
+
+An unlimited daily allowance remains truly unlimited with eye care enabled; actual usage determines the eye-care cycle. Use pauses during a break and returns to unlimited afterward when no other restriction applies. Disabling eye care does not clear daily allowance, bedtime, or TV mode restrictions.
+
+Ordinary idle time reaching the configured rest duration also begins a new cycle. After 30 minutes of use and a full 10-minute rest, another 10 minutes counts as only 10 minutes in the new cycle; shorter rests retain the previous cycle. Minute polling of official usage may delay recognition by about one minute. Unchanged reliable readings after wake can prove rest even without ticks during sleep; unknown readings cannot prove natural rest. Midnight preserves accumulated usage and unfinished breaks; only the daily allowance changes.
+
+During protection or deactivation, a parent may verify their PIN and skip the same unfinished eye-care break even when its countdown has reached zero. Recovery retains deactivation; resuming management still requires parental confirmation in Support & Recovery. Bedtime and genuine daily allowance restrictions take precedence. New operations awaiting an earlier setting's confirmation prompt a status refresh and retry without replacing that pending setting.
 
 ## Offline Grants
 
@@ -693,7 +731,7 @@ Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP
 > **If an error occurs, first check whether Nintendo system Parental Controls is enabled and the Switch clock has been synchronized.** See [Support & Recovery](#support--recovery) for checks, clock sync methods and troubleshooting record requirements. Refresh status and retry after checking; if the issue persists, record check results and error codes, and export diagnostics.
 > Steps: [Enable Nintendo Parental Controls](#enable-nintendo-parental-controls) · [Synchronize the Switch Clock](#synchronize-the-switch-clock).
 
-- **Console errors or crash after reinstalling/updating**: Verify whether files were deleted while the Switch was powered on. If files belonging to a running background process were deleted, the orphan process causes file I/O faults. To recover, copy the standard release package again directly onto the SD card, then **perform a full console reboot**.
+- **Console errors or crashes after reinstalling/updating:** Record the error and preserve existing data, diagnostics, and recovery material. Check whether files were deleted while Switch was powered on. Unknown recovery status or fatal errors require troubleshooting before further deletion. Incomplete files can be replaced from the same standard package using the [upgrade workflow](#upgrades), following recovery prompts. For a full wipe, choose the appropriate [removal and reinstallation workflow](#complete-removal-and-reinstallation) and shut down completely before deletion. Copying files and rebooting cannot guarantee recovery from every fault.
 - **Status displays "Official Parental Controls: Temporarily Unlocked" after reboot/setup**: This is standard Nintendo native Parental Controls (PCTL) behavior. Whenever the official PIN is verified in system settings, parental rules are adjusted, or initial setup completes, the OS enters a temporary unlock state (play timers pause and games are not blocked). **A second reboot is NOT required.** Official Nintendo design specifies that entering sleep mode clears the temporary unlock: simply **press the Switch Power button to put the console into sleep mode (screen off for 3–5 seconds), then press Power again to wake it up**. Parental controls will immediately restore normal supervision and countdown timers.
 - **Code displays invalid, date mismatch, or already used**: Verify console local date displayed on Switch, device configuration, and entered numbers. If explicitly reported as already used, have parents generate a fresh code; failed attempts or cancelled previews do not consume codes.
 - **Playtime limit still reflects old numbers**: Wait for background synchronization to finish, then press `Y` to refresh. Status older than 120 seconds or missing readings will display unconfirmed; never infer restriction release from outdated balances.
