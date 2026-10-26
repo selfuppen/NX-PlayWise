@@ -360,6 +360,28 @@ bool ptc_ui_dock_dirty(const PtcUiModel *model)
         model->dock_policy.undocked_daily_minutes != model->draft_dock_policy.undocked_daily_minutes);
 }
 
+void ptc_ui_project_dock_policy(const PtcUiModel *model, const PtcDockPolicy *policy,
+    int64_t now, PtcUiDockPreview *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    if (!model || !policy || !model->dock_available || model->waiting || model->quota_refresh_failed ||
+        !ptc_ui_status_is_fresh(model, now)) return;
+    out->usage_known = model->undocked_usage_available && model->undocked_used_minutes >= 0;
+    if (model->dock_waived_today) out->state = PTC_UI_DOCK_PREVIEW_WAIVED;
+    else if (!policy->force_docked && !policy->undocked_limit_enabled) out->state = PTC_UI_DOCK_PREVIEW_OFF;
+    else {
+        out->remaining_known = policy->force_docked || policy->undocked_daily_minutes == 0 || out->usage_known;
+        out->remaining_minutes = policy->force_docked ? 0 :
+            (int)policy->undocked_daily_minutes - model->undocked_used_minutes;
+        if (out->remaining_minutes < 0) out->remaining_minutes = 0;
+        if (policy->force_docked || policy->undocked_daily_minutes == 0)
+            out->state = PTC_UI_DOCK_PREVIEW_REQUIRED;
+        else if (!out->usage_known) out->state = PTC_UI_DOCK_PREVIEW_USAGE_UNKNOWN;
+        else out->state = out->remaining_minutes > 0 ? PTC_UI_DOCK_PREVIEW_ALLOWED : PTC_UI_DOCK_PREVIEW_REQUIRED;
+    }
+}
+
 bool ptc_ui_dock_save_requires_hold(const PtcUiModel *model, int64_t now)
 {
     const PtcDockPolicy *draft;

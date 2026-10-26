@@ -1464,6 +1464,48 @@ static void test_eden_grant_sampling(void)
     free(f.mem);
 }
 
+static void test_eden_legacy_dock_switch(void)
+{
+    for (int days = 1; days <= 12; days += 11) {
+        Fixture f;
+        PtcRules rules;
+        PtcRuntimeState state;
+        PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+        PtcOperationModeProvider provider = {test_operation_mode, &mode};
+        uint64_t carry = 0;
+        init_fixture(&f);
+        f.core.operation_mode_provider = &provider;
+        confirm_dock_fixture(&f);
+        expect(load_rules(&f.core, &rules) && load_state(&f.core, &state), "legacy Eden data loads");
+        rules.dock_policy = (PtcDockPolicy){true, true, 0};
+        state.dock_tracking_started = true;
+        state.dock_day_index = f.clock.snapshot.day_index - days;
+        state.undocked_used_ns = state.dock_last_used_ns = 30 * PTC_USAGE_MINUTE_NS;
+        state.dock_usage_known = state.dock_baseline_known = false;
+        state.dock_interval_unknown = state.dock_enforced = true;
+        state.last_enforced_day_index = f.clock.snapshot.day_index;
+        state.last_enforced_mode = PTC_PCTL_TARGET_BLOCKED;
+        expect(save_rules(&f.core, &rules) && save_state(&f.core, &state, f.clock.snapshot.unix_seconds),
+            "seed old unknown non-TV usage and TV-only target");
+        expect(ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry), "restore Eden 30-minute timer");
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(f.pctl.status.blocked_today, "TV-only mode restricts handheld before switch");
+        request(&f, "legacy-dock-94", "set_dock_policy",
+            "{\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":94}");
+        expect(result_has(&f, "legacy-dock-94", "\"status\":\"ok\"") &&
+            load_state(&f.core, &state) && state.dock_usage_known && !state.dock_enforced &&
+            state.dock_day_index == f.clock.snapshot.day_index &&
+            state.undocked_used_ns == 30 * PTC_USAGE_MINUTE_NS && !f.pctl.status.blocked_today,
+            "TV-only to 94-minute emergency allowance permits 30-minute legacy Eden session");
+        (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 64 * PTC_USAGE_MINUTE_NS, &carry);
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(load_state(&f.core, &state) && state.dock_enforced &&
+            state.undocked_used_ns == 94 * PTC_USAGE_MINUTE_NS && f.pctl.status.blocked_today,
+            "migrated emergency allowance still restricts at exactly 94 minutes");
+        free(f.mem);
+    }
+}
+
 static void test_eden_timer_restart(void)
 {
     Fixture f;
@@ -1738,6 +1780,50 @@ static void test_direct_dock_usage(void)
     free(f.mem);
 }
 
+static void test_legacy_dock_migration_boundaries(void)
+{
+    Fixture f;
+    PtcRuntimeState legacy = {0}, state;
+    seed_direct_grant(&f, 30 * PTC_USAGE_MINUTE_NS, 120);
+    legacy.dock_tracking_started = true;
+    legacy.dock_day_index = f.clock.snapshot.day_index - 12;
+    legacy.undocked_used_ns = 100 * PTC_USAGE_MINUTE_NS;
+    legacy.dock_interval_unknown = true;
+    state = legacy;
+    f.pctl.status.usage_available = false;
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_UNDOCKED, false);
+    expect(!state.dock_usage_known && state.dock_day_index == legacy.dock_day_index &&
+        state.undocked_used_ns == legacy.undocked_used_ns && !state.dock_usage_counter.known,
+        "failed direct read cannot migrate stale legacy non-TV usage");
+    f.pctl.status.usage_available = true;
+    state = legacy;
+    state.dock_day_index = f.clock.snapshot.day_index;
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_UNDOCKED, false);
+    expect(!state.dock_usage_known && state.dock_usage_incomplete &&
+        state.undocked_used_ns == legacy.undocked_used_ns,
+        "same-day lost legacy interval stays unknown without refund");
+    state = legacy;
+    state.dock_day_index = f.clock.snapshot.day_index + 1;
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_UNDOCKED, false);
+    expect(!state.dock_usage_known && state.undocked_used_ns == legacy.undocked_used_ns,
+        "legacy date rewind cannot recover allowance");
+    state = legacy;
+    state.dock_usage_counter = (PtcUsageCounter){PTC_USAGE_SOURCE_PCTL_1952, true,
+        legacy.dock_day_index, 100 * PTC_USAGE_MINUTE_NS, f.clock.snapshot.unix_seconds - 12 * 86400};
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_UNDOCKED, false);
+    expect(!state.dock_usage_known && state.dock_day_index == legacy.dock_day_index &&
+        state.undocked_used_ns == legacy.undocked_used_ns,
+        "existing direct epoch retains multi-day jump rejection");
+    state = legacy;
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, false);
+    expect(state.dock_usage_known && state.undocked_used_ns == 30 * PTC_USAGE_MINUTE_NS,
+        "first current-day direct migration charges all console usage even in TV mode");
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, false);
+    expect(state.undocked_used_ns == 30 * PTC_USAGE_MINUTE_NS,
+        "repeated current-day migration sampling does not double charge");
+    free(f.mem);
+}
+
 static size_t read_usage_rows(Fixture *f, PtcDailySummaryRecord *records)
 {
     char *text = calloc(1, PTC_DAILY_SUMMARY_FILE_SIZE);
@@ -1994,10 +2080,12 @@ int ptc_test_control_safety(void)
     test_usage_counter_epochs();
     test_direct_eye_usage();
     test_direct_dock_usage();
+    test_legacy_dock_migration_boundaries();
     test_usage_state_validation();
     test_direct_usage_history();
     test_dock_midnight_allowance_change();
     test_eden_timer_restart();
+    test_eden_legacy_dock_switch();
     test_eden_restored_restart();
     test_eden_grant_sampling();
     test_persisted_eden_mode();

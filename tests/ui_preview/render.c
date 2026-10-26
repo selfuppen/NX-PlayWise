@@ -16,6 +16,11 @@ uint32_t preview_pixels[1280 * 720];
 static bool preview_all_styles;
 
 static struct {
+    bool enabled, started;
+    int labels, failed;
+} dock_editor_trace;
+
+static struct {
     bool enabled;
     int title_count, summary_count;
     UiRect title, summary;
@@ -60,6 +65,18 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
                     bounds.x >= row.x + 18 + measure_text("23:59", 22) + 12;
             }
             if (!inside) ++bedtime_trace.failed;
+        }
+    }
+    if (dock_editor_trace.enabled) {
+        PtcUiRect area = ptc_ui_minute_editor_summary_rect();
+        if (strcmp(text, ptc_ui_text(PTC_UI_T_DOCK_CURRENT_POLICY)) == 0) dock_editor_trace.started = true;
+        if (dock_editor_trace.started && x >= area.x && bounds.y >= area.y && bounds.y < area.y + area.h) {
+            if (bounds.x + bounds.width > area.x + area.w || baseline > area.y + area.h)
+                ++dock_editor_trace.failed;
+            const PtcUiTextId labels[] = {PTC_UI_T_DOCK_CURRENT_POLICY, PTC_UI_T_DOCK_USED_SHORT,
+                PTC_UI_T_DOCK_AFTER_LEFT_SHORT, PTC_UI_T_DOCK_AFTER_STATUS};
+            for (int i = 0; i < 4; ++i)
+                if (strcmp(text, ptc_ui_text(labels[i])) == 0) ++dock_editor_trace.labels;
         }
     }
     if (support_tab_trace.enabled && bounds.y >= 100 && baseline <= 164) {
@@ -433,6 +450,60 @@ static int save_preview(const char *directory, const char *module, const char *n
     free(rgb);
     if (!written) { fclose(file); return 1; }
     return fclose(file) != 0;
+}
+
+static int check_dock_editor(const PtcUiModel *baseline)
+{
+    int failed = 0;
+    const char *directory = "build/ui-dock-editor";
+    (void)ptc_mkdir(directory);
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
+            ptc_ui_theme_set_style((PtcUiThemeStyle)style);
+            for (int dark = 0; dark < 2; ++dark) {
+                PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+                    PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                for (int scenario = 0; scenario < 5; ++scenario) {
+                    PtcUiModel model = *baseline;
+                    model.view = PTC_UI_PARENT;
+                    model.parent_page = PTC_UI_PARENT_PLAN;
+                    model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+                    model.status_updated_at = scenario == 3 ? 879 : 1000;
+                    model.dock_available = true;
+                    model.undocked_usage_available = scenario != 2;
+                    model.undocked_used_minutes = 30;
+                    model.dock_policy = (PtcDockPolicy){true, true, 0};
+                    model.draft_dock_policy = (PtcDockPolicy){false, true, 94};
+                    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_DOCK_MINUTES, PTC_UI_OVERLAY_NONE,
+                        ptc_ui_text(PTC_UI_T_DOCK_LIMIT), ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE),
+                        4, 5, 1440, scenario == 1 ? 30 : 94);
+                    model.last_parent_page = model.parent_page;
+                    model.rendered_overlay = model.overlay;
+                    model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+                    if (scenario == 4) model.duration_hours_text[0] = '\0';
+                    memset(&dock_editor_trace, 0, sizeof(dock_editor_trace));
+                    dock_editor_trace.enabled = true;
+                    ptc_ui_graphics_draw(&model, &theme);
+                    dock_editor_trace.enabled = false;
+                    if (dock_editor_trace.labels != 4 || dock_editor_trace.failed) {
+                        fprintf(stderr, "FAIL: dock editor lang=%d style=%d dark=%d scenario=%d labels=%d bounds=%d\n",
+                            lang, style, dark, scenario, dock_editor_trace.labels, dock_editor_trace.failed);
+                        ++failed;
+                    }
+                    if (style == 0 && (scenario == 0 ||
+                        (lang == PTC_UI_LANGUAGE_SIMPLIFIED && scenario == 2))) {
+                        char name[64];
+                        snprintf(name, sizeof(name), "dock-editor-lang-%d-%s", lang, scenario == 0 ? "94" : "unknown");
+                        failed |= save_preview(directory, "plan", name, &model, dark);
+                    }
+                }
+            }
+        }
+    }
+    fprintf(stderr, "%s: dock editor preview bounds and labels (3 languages, 4 styles, 2 themes, 5 states)\n",
+        failed ? "FAIL" : "PASS");
+    return failed ? 1 : 0;
 }
 
 static int render_visual_matrix(const char *directory, const PtcUiModel *baseline)
@@ -1864,8 +1935,10 @@ int main(int argc, char **argv)
     snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
     snprintf(model.result_status, sizeof(model.result_status), "ok");
 
-    if (strcmp(argv[2], "--check-parent-tabs") == 0 || strcmp(argv[2], "--check-bedtime-editors") == 0) {
-        failed = strcmp(argv[2], "--check-parent-tabs") == 0 ? check_parent_tabs(&model) : check_bedtime_editors(&model);
+    if (strcmp(argv[2], "--check-parent-tabs") == 0 || strcmp(argv[2], "--check-bedtime-editors") == 0 ||
+        strcmp(argv[2], "--check-dock-editor") == 0) {
+        failed = strcmp(argv[2], "--check-parent-tabs") == 0 ? check_parent_tabs(&model) :
+            strcmp(argv[2], "--check-dock-editor") == 0 ? check_dock_editor(&model) : check_bedtime_editors(&model);
         FT_Done_Face(g_ui.face);
         free(bytes);
         return failed;

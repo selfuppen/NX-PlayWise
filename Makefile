@@ -161,6 +161,7 @@ test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 	$(HOST_BUILD_DIR)/ui_preview --check-primitives
 	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-parent-tabs
 	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-bedtime-editors
+	$(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-dock-editor
 
 test-host: test-ui-primitives
 

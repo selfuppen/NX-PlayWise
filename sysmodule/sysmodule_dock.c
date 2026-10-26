@@ -21,6 +21,18 @@ void dock_sample_direct(PtcRuntimeState *state, const PtcPctlStatus *status,
         state->dock_interval_unknown = true;
         return;
     }
+    if (before.source != PTC_USAGE_SOURCE_PCTL_1952 && !before.known &&
+        state->dock_tracking_started && sample.day_index > state->dock_day_index) {
+        /* Legacy unknown usage belongs to an earlier day, with no direct
+           counter epoch to bridge. Charge ALL of today's trusted cumulative
+           use as non-TV rather than subtracting incompatible baselines or
+           carrying an old unknown interval into every future day. */
+        state->undocked_used_ns = sample.total_ns > DOCK_DAY_NS ? DOCK_DAY_NS : sample.total_ns;
+        state->dock_day_index = sample.day_index;
+        state->dock_usage_incomplete = false;
+        state->dock_usage_known = true;
+        state->dock_interval_unknown = false;
+    }
     if (state->dock_tracking_started && state->dock_day_index != now.day_index) {
         /* A policy re-enable can intentionally invalidate its baseline. The
            saved date/time must still prove an ordinary forward day, not a

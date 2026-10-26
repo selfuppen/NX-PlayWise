@@ -369,6 +369,61 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 }
 
 
+static PtcUiTextId dock_preview_label(PtcUiDockPreviewState state)
+{
+    switch (state) {
+    case PTC_UI_DOCK_PREVIEW_OFF: return PTC_UI_T_DOCK_OFF;
+    case PTC_UI_DOCK_PREVIEW_WAIVED: return PTC_UI_T_DOCK_WAIVED;
+    case PTC_UI_DOCK_PREVIEW_ALLOWED: return PTC_UI_T_DOCK_WITHIN_ALLOWANCE;
+    case PTC_UI_DOCK_PREVIEW_REQUIRED: return PTC_UI_T_DOCK_BLOCKED;
+    case PTC_UI_DOCK_PREVIEW_USAGE_UNKNOWN: return PTC_UI_T_DOCK_PREVIEW_UNKNOWN;
+    default: return PTC_UI_T_STATUS_TO_CONFIRM;
+    }
+}
+
+static uint32_t dock_preview_color(PtcUiDockPreviewState state)
+{
+    if (state == PTC_UI_DOCK_PREVIEW_REQUIRED) return UI_DANGER;
+    if (state == PTC_UI_DOCK_PREVIEW_UNKNOWN || state == PTC_UI_DOCK_PREVIEW_USAGE_UNKNOWN) return UI_WARNING;
+    return UI_SUCCESS;
+}
+
+static void draw_dock_editor_preview(uint32_t *pixels, uint32_t stride,
+    const PtcUiModel *model, UiRect summary, bool valid, uint16_t entered)
+{
+    PtcDockPolicy draft = model->draft_dock_policy;
+    PtcUiDockPreview current, after;
+    char used[48], left[48];
+    int64_t now = ptc_ui_render_now();
+    draft.force_docked = false;
+    draft.undocked_limit_enabled = true;
+    draft.undocked_daily_minutes = entered;
+    ptc_ui_project_dock_policy(model, &model->dock_policy, now, &current);
+    ptc_ui_project_dock_policy(model, &draft, now, &after);
+    format_duration(after.usage_known ? model->undocked_used_minutes : -1, used, sizeof(used));
+    if (valid && after.state == PTC_UI_DOCK_PREVIEW_WAIVED)
+        snprintf(left, sizeof(left), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+    else format_duration(valid && after.remaining_known ? after.remaining_minutes : -1, left, sizeof(left));
+    fill_round_rect(pixels, stride, summary, 14, UI_RAISED);
+    draw_text(pixels, stride, summary.x + 18, summary.y + 26,
+        ptc_ui_text(PTC_UI_T_DOCK_CURRENT_POLICY), 14, UI_MUTED);
+    draw_wrapped_text(pixels, stride, summary.x + 18, summary.y + 51,
+        ptc_ui_text(dock_preview_label(current.state)), 16, summary.width - 36, 22, 2,
+        dock_preview_color(current.state));
+    int half = (summary.width - 12) / 2;
+    draw_time_state_card(pixels, stride, (UiRect){summary.x, summary.y + 88, half, 80},
+        ptc_ui_text(PTC_UI_T_DOCK_USED_SHORT), used, after.usage_known ? UI_ACCENT : UI_WARNING);
+    draw_time_state_card(pixels, stride, (UiRect){summary.x + half + 12, summary.y + 88, half, 80},
+        ptc_ui_text(PTC_UI_T_DOCK_AFTER_LEFT_SHORT), left, valid ? dock_preview_color(after.state) : UI_WARNING);
+    draw_text(pixels, stride, summary.x + 18, summary.y + 202,
+        ptc_ui_text(PTC_UI_T_DOCK_AFTER_STATUS), 14, UI_MUTED);
+    draw_wrapped_text(pixels, stride, summary.x + 18, summary.y + 230,
+        ptc_ui_text(valid ? dock_preview_label(after.state) : PTC_UI_T_PLEASE_ENTER_THE_VALID_AMOUNT_FIRST),
+        18, summary.width - 36, 24, 2, valid ? dock_preview_color(after.state) : UI_WARNING);
+    draw_wrapped_text(pixels, stride, summary.x + 18, summary.y + 291,
+        ptc_ui_text(PTC_UI_T_DOCK_PREVIEW_SCOPE), 14, summary.width - 36, 20, 3, UI_MUTED);
+}
+
 void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const char *KEY_LABELS[] = {
@@ -555,7 +610,9 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     }
 
     UiRect summary = to_uirect(ptc_ui_minute_editor_summary_rect());
-    if (holiday) {
+    if (model->numpad_purpose == PTC_UI_NUMPAD_DOCK_MINUTES) {
+        draw_dock_editor_preview(pixels, stride, model, summary, entered_valid, entered);
+    } else if (holiday) {
         PtcUiModel preview = *model;
         if (entered_valid) {
             if (model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES) {

@@ -15,6 +15,22 @@
 #include "../../third_party/qrcodegen/qrcodegen.h"
 
 typedef enum {
+    PTC_UI_DOCK_PREVIEW_UNKNOWN = 0,
+    PTC_UI_DOCK_PREVIEW_OFF,
+    PTC_UI_DOCK_PREVIEW_WAIVED,
+    PTC_UI_DOCK_PREVIEW_ALLOWED,
+    PTC_UI_DOCK_PREVIEW_REQUIRED,
+    PTC_UI_DOCK_PREVIEW_USAGE_UNKNOWN
+} PtcUiDockPreviewState;
+
+typedef struct {
+    PtcUiDockPreviewState state;
+    bool usage_known;
+    bool remaining_known;
+    int remaining_minutes;
+} PtcUiDockPreview;
+
+typedef enum {
     PTC_UI_CHILD = 0,
     PTC_UI_PARENT = 1,
     PTC_UI_ERROR = 2,

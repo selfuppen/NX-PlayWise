@@ -3953,6 +3953,55 @@ static void test_calendar_nearest_page(void)
         "today eye care skip has the same width as its neighboring actions");
 }
 
+static void test_dock_editor_preview(void)
+{
+    PtcUiModel m = {0}, saved;
+    PtcDockPolicy draft = {false, true, 94};
+    PtcUiDockPreview p;
+    m.status_loaded = m.dock_available = m.undocked_usage_available = true;
+    m.status_updated_at = 1000;
+    m.undocked_used_minutes = 30;
+    m.dock_policy = (PtcDockPolicy){true, true, 0};
+    saved = m;
+    ptc_ui_project_dock_policy(&m, &m.dock_policy, 1000, &p);
+    check_true(p.state == PTC_UI_DOCK_PREVIEW_REQUIRED && p.remaining_known && p.remaining_minutes == 0,
+        "current TV-only policy remains distinct from emergency preview");
+    ptc_ui_project_dock_policy(&m, &draft, 1000, &p);
+    check_true(p.state == PTC_UI_DOCK_PREVIEW_ALLOWED && p.usage_known && p.remaining_minutes == 64,
+        "94-minute draft with 30-minute use previews 64 remaining");
+    draft.undocked_daily_minutes = 30;
+    ptc_ui_project_dock_policy(&m, &draft, 1000, &p);
+    check_true(p.state == PTC_UI_DOCK_PREVIEW_REQUIRED && p.remaining_minutes == 0,
+        "draft at consumed allowance requires TV");
+    draft.undocked_daily_minutes = 5;
+    ptc_ui_project_dock_policy(&m, &draft, 1000, &p);
+    check_true(p.state == PTC_UI_DOCK_PREVIEW_REQUIRED && p.remaining_minutes == 0,
+        "below-consumed draft clamps to zero");
+    check_true(memcmp(&m, &saved, sizeof(m)) == 0, "preview never changes live policy, draft or usage");
+    m.undocked_usage_available = false;
+    draft.undocked_daily_minutes = 94;
+    ptc_ui_project_dock_policy(&m, &draft, 1000, &p);
+    check_true(p.state == PTC_UI_DOCK_PREVIEW_USAGE_UNKNOWN && !p.usage_known && !p.remaining_known,
+        "unknown usage cannot promise allowance or report zero");
+    m.dock_waived_today = true;
+    ptc_ui_project_dock_policy(&m, &draft, 1000, &p);
+    check_int(p.state, PTC_UI_DOCK_PREVIEW_WAIVED, "today waiver takes priority over edited allowance");
+    m.dock_waived_today = false;
+    draft.undocked_limit_enabled = false;
+    ptc_ui_project_dock_policy(&m, &draft, 1000, &p);
+    check_int(p.state, PTC_UI_DOCK_PREVIEW_OFF, "disabled policy has no non-TV restriction");
+    for (int scenario = 0; scenario < 4; ++scenario) {
+        m = saved;
+        if (scenario == 0) m.status_updated_at = 879;
+        if (scenario == 1) m.status_updated_at = 1001;
+        if (scenario == 2) m.quota_refresh_failed = true;
+        if (scenario == 3) m.waiting = true;
+        ptc_ui_project_dock_policy(&m, &draft, 1000, &p);
+        check_true(p.state == PTC_UI_DOCK_PREVIEW_UNKNOWN && !p.usage_known && !p.remaining_known,
+            "stale, future, failed or pending status cannot predict allowance");
+    }
+}
+
 static void test_dock_ui(void)
 {
     PtcUiModel model = {0};
@@ -4531,6 +4580,7 @@ int main(void)
     test_today_settings_links();
     test_config_backup_layout();
     test_dock_ui();
+    test_dock_editor_preview();
     test_calendar_nearest_page();
     test_calendar_manager_surface();
     test_language_and_short_weekly_limits();

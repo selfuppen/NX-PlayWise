@@ -39,7 +39,7 @@ Once the daily limit is reached, Nintendo's native restriction dialog may preven
 <details open>
 <summary>View In-Game Overlay Preview</summary>
 
-| ![Historical hardware capture: Selecting PlayWise overlay in Ultrahand](docs/images/usage/overlay/ultrahand-entry.jpg) | ![Historical hardware capture: Opening PlayWise overlay on HOME to enter grant code](docs/images/usage/overlay/playwise-code-entry-legacy.jpg) |
+| ![Historical hardware capture: Selecting PlayWise overlay in Ultrahand](docs/images/usage/overlay/ultrahand-entry.jpg) | ![Historical hardware capture: Opening PlayWise overlay on HOME to enter grant code](docs/images/usage/overlay/playwise-code-entry-snapshot.jpg) |
 | :---: | :---: |
 
 </details>
