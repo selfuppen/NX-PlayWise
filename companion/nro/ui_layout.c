@@ -493,6 +493,10 @@ PtcUiRect ptc_ui_day_decision_next_rect(void)
 
 PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 72, 1200, 552}; }
 
+/* 孩子区使用详情顶部的导读条。它不是控件，只是把阅读顺序和“三条规则各自独立”
+ * 固定成一条可被预览与布局测试核对的矩形，避免绘制端再各写一套坐标。 */
+PtcUiRect ptc_ui_home_details_guide_rect(void) { return (PtcUiRect){40, 72, 1200, 32}; }
+
 PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model)
 {
     if (model && model->overlay == PTC_UI_OVERLAY_DAY_DECISION)
@@ -516,7 +520,12 @@ PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
     if (index == 1) return (PtcUiRect){276, 628, 170, 44};
     if (index == 2) return (PtcUiRect){40, 628, 220, 44};
     if (index == 0) {
-        if (model->home_details_page == 0) return (PtcUiRect){796, 498, 444, 118};
+        if (model->home_details_page == 0) {
+            /* 孩子区多看一条导读条，正文整体下移 32px；按钮同时收薄 16px 以保持
+             * 与家长区相同的底边（616）。绘制与命中都走这里，避免两侧各写一份坐标。 */
+            if (model->view == PTC_UI_CHILD) return (PtcUiRect){796, 514, 444, 102};
+            return (PtcUiRect){796, 498, 444, 118};
+        }
         if (model->home_details_page == 1) return ptc_ui_rules_independent_tip_rect(model);
     }
     return (PtcUiRect){0, 0, 0, 0};

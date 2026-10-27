@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -16,7 +17,25 @@ PREPARE_LAB_SCRIPT = ROOT / "tools" / "lab" / "prepare_device_lab_sd.ps1"
 
 
 def strip_crlf(text: str) -> str:
-    return text.replace("\r", "").replace("\n", "")
+    return (text or "").replace("\r", "").replace("\n", "")
+
+
+def run_powershell_script(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a PowerShell preview without assuming stdout/stderr decode cleanly.
+
+    tools/test.py exports PYTHONUTF8=1, and PowerShell 5.1 writes its console
+    output in the OEM code page. A failing preview can therefore emit bytes that
+    are not valid UTF-8, which leaves CompletedProcess.stderr as None instead of
+    the message these assertions need to read.
+    """
+    env = {name: value for name, value in os.environ.items() if not name.startswith("PYTHON")}
+    return subprocess.run(
+        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(script), *args],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        env=env,
+    )
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -128,58 +147,21 @@ def test_dbi_mtp_install_script_preview() -> None:
 
     with tempfile.TemporaryDirectory(prefix="ptc-test-mtp-install-script-") as tmp_dir:
         pkg = create_fake_mtp_package(Path(tmp_dir))
-        result = subprocess.run(
-            [
-                "powershell",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(MTP_INSTALL_SCRIPT),
-                "-SourceFolder",
-                str(pkg),
-            ],
-            capture_output=True,
-            text=True,
-        )
+        result = run_powershell_script(MTP_INSTALL_SCRIPT, "-SourceFolder", str(pkg))
         require(result.returncode == 0, f"DBI MTP preview failed: {result.stderr}")
         require("Destination:    DBI MTP / SD Card" in result.stdout, "DBI raw SD target missing")
         require("Preview only. No device was accessed" in result.stdout, "offline preview contract missing")
         require("preserves existing config and data" in result.stdout, "preservation warning missing")
 
-        wrong_target = subprocess.run(
-            [
-                "powershell",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(MTP_INSTALL_SCRIPT),
-                "-SourceFolder",
-                str(pkg),
-                "-StorageName",
-                "MicroSD install",
-            ],
-            capture_output=True,
-            text=True,
-        )
+        wrong_target = run_powershell_script(
+            MTP_INSTALL_SCRIPT, "-SourceFolder", str(pkg), "-StorageName", "MicroSD install")
         require(wrong_target.returncode != 0, "DBI installer endpoint must be rejected")
         require("installer endpoint, not the raw SD root" in strip_crlf(wrong_target.stderr),
                 "DBI installer endpoint failure must explain the safe target")
 
         credentials = pkg / "switch" / "playwise" / "credentials.json"
         credentials.write_text('{"grant_secret":"must-not-ship"}', encoding="utf-8")
-        unsafe_package = subprocess.run(
-            [
-                "powershell",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(MTP_INSTALL_SCRIPT),
-                "-SourceFolder",
-                str(pkg),
-            ],
-            capture_output=True,
-            text=True,
-        )
+        unsafe_package = run_powershell_script(MTP_INSTALL_SCRIPT, "-SourceFolder", str(pkg))
         require(unsafe_package.returncode != 0, "package containing credentials must be rejected")
         require("credentials.json must not be installed" in strip_crlf(unsafe_package.stderr),
                 "credential rejection must identify the unsafe seed")

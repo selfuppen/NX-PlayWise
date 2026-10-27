@@ -211,6 +211,35 @@ static int check_child_forecast_heading(bool dark)
     return fits ? 0 : 1;
 }
 
+/* The child usage-details page leads with a reading-order guide bar. It must stay
+ * on one measured line inside its own rect and above the first card row, and the
+ * three-column cards must not grow into the shared bottom button band. */
+static int check_child_details_guide(bool dark)
+{
+    UiRect guide = to_uirect(ptc_ui_home_details_guide_rect());
+    int size = 13;
+    int width = measure_text(ptc_ui_text(PTC_UI_T_DETAIL_CHILD_GUIDE), size);
+    bool fits = guide.x >= 40 && guide.x + guide.width <= 1240 &&
+        guide.y >= 72 && guide.y + guide.height <= 144 &&
+        guide.height >= size + 12 &&
+        width <= guide.width - 46;
+    PtcUiModel child = {0};
+    child.view = PTC_UI_CHILD;
+    PtcUiRect button = ptc_ui_home_details_action_rect(&child, 0);
+    fits = fits && button.y >= guide.y + guide.height + 280 &&
+        button.y + button.h <= 616;
+    /* 孩子区按钮收薄 16px 以让出导读条高度，底边仍与家长区一致。 */
+    fits = fits && button.y == 514 && button.h == 102;
+    PtcUiModel parent = {0};
+    parent.view = PTC_UI_PARENT;
+    PtcUiRect parent_button = ptc_ui_home_details_action_rect(&parent, 0);
+    fits = fits && parent_button.y == 498 && parent_button.h == 118;
+    fprintf(stderr, "%s: child details guide lang=%d dark=%d width=%d/%d button=%d..%d\n",
+        fits ? "PASS" : "FAIL", (int)ptc_ui_language_get_resolved(), dark,
+        width, guide.width - 46, button.y, button.y + button.h);
+    return fits ? 0 : 1;
+}
+
 static int check_primitives(void)
 {
     const uint32_t background = pack_rgb(0x182838), ink = pack_rgb(0xe0c0a0);
@@ -385,7 +414,13 @@ static int save_preview(const char *directory, const char *module, const char *n
     bool check_heading = child_heading_trace.enabled;
     child_heading_trace.enabled = false;
     if (check_heading && check_child_forecast_heading(dark)) return 1;
-    draw_text(preview_pixels, 1280, 540, 100, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
+    /* The details dialog is tall enough that the marker at y=100 would land on its
+       card titles (and the child guide bar), so it moves into the scrim under the
+       dialog. Shorter dialogs keep the marker in the scrim above them. */
+    if (settled.overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+        draw_text(preview_pixels, 1280, 540, 712, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
+    else
+        draw_text(preview_pixels, 1280, 540, 100, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
     n = snprintf(dir_path, sizeof(dir_path), "%s/%s", directory, module);
     if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
     ptc_mkdir(dir_path);
@@ -902,6 +937,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             failed |= save_preview(directory, "child", "child-exhausted", &exhausted, dark);
         }
         ptc_ui_open_home_details(&model);
+        failed |= check_child_details_guide(dark);
         failed |= save_preview(directory, "child", "child-details", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.view = PTC_UI_PARENT;

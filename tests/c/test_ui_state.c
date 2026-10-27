@@ -2700,6 +2700,27 @@ static void test_visual_action_boundaries(void)
     check_true(!rects_overlap(code, ptc_ui_child_buffer_rect()) &&
                !rects_overlap(ptc_ui_child_buffer_rect(), ptc_ui_home_details_rect(false)),
                "child primary, secondary and detail actions do not overlap");
+    /* 孩子区使用详情多一条导读条：正文整体下移，但底部按钮底边与家长区一致，
+     * 避免触控命中和视觉下沿出现两套坐标。 */
+    {
+        PtcUiRect guide = ptc_ui_home_details_guide_rect();
+        check_true(guide.x == 40 && guide.w == 1200 && guide.y + guide.h <= 144,
+                   "child details guide sits between the page title and the first card row");
+        PtcUiModel child_details = {0};
+        child_details.view = PTC_UI_CHILD;
+        child_details.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+        child_details.home_details_page = 0;
+        PtcUiRect child_btn = ptc_ui_home_details_action_rect(&child_details, 0);
+        PtcUiModel parent_details = child_details;
+        parent_details.view = PTC_UI_PARENT;
+        PtcUiRect parent_btn = ptc_ui_home_details_action_rect(&parent_details, 0);
+        check_true(child_btn.y >= guide.y + guide.h && child_btn.y + child_btn.h <= 616,
+                   "child details decision entry starts below the guide and stays on the page");
+        check_true(child_btn.y + child_btn.h == parent_btn.y + parent_btn.h,
+                   "child and parent details decision entries share one bottom edge");
+        check_int(child_btn.x, parent_btn.x, "child details decision entry keeps the parent column");
+        check_int(child_btn.w, parent_btn.w, "child details decision entry keeps the parent width");
+    }
     model.waiting = true;
     check_hit(hit_center(&model, code), PTC_UI_HIT_NONE, 0, "syncing primary action remains blocked");
     model.waiting = false;

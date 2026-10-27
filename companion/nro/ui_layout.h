@@ -182,6 +182,7 @@ PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
 PtcUiRect ptc_ui_home_details_body_rect(void);
+PtcUiRect ptc_ui_home_details_guide_rect(void);
 PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model);
 PtcUiRect ptc_ui_rules_dialog_rect(void);
 PtcUiRect ptc_ui_rules_dialog_close_rect(void);

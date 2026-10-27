@@ -315,27 +315,46 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     bool is_avail = detail_available(model, p);
     bool is_dark = (g_theme.resolved == PTC_UI_RESOLVED_DARK);
     bool is_docked = (strcmp(model->operation_mode, "docked") == 0);
+    /* 孩子区在标题下多一条 32px 导读条，其余卡片整体让出这段高度：
+     * 首排卡收薄 4px、今日作息卡收薄 20px、健康卡收薄 12px，
+     * 右侧“查看决策与规则”按钮同步收薄并下移，底边仍与家长区一致（616）。 */
+    bool child_view = (model->view == PTC_UI_CHILD);
+    const int cards_y = child_view ? 112 : 72;
+    const int cards_h = child_view ? 88 : 92;
+    const int left_y = child_view ? 208 : 180;
+    const int sleep_h = child_view ? 188 : 208;
+    const int health_y = child_view ? 208 : 180;
+    const int health_h = child_view ? 290 : 302;
 
-    /* 1. 顶部 3 项核心感知卡片 (y = 72, h = 92) - 职责清晰、全屏唯一无冗余 */
+    if (child_view) {
+        UiRect guide = to_uirect(ptc_ui_home_details_guide_rect());
+        fill_round_rect(pixels, stride, guide, 6, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, guide, 6, 1, UI_BORDER);
+        support_draw_info(pixels, stride, guide.x + 16, guide.y + guide.height / 2, 7, UI_ACCENT);
+        fit_text(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_CHILD_GUIDE), 13, guide.width - 46);
+        draw_text(pixels, stride, guide.x + 32, guide.y + guide.height / 2 + 5, text, 13, UI_INK);
+    }
+
+    /* 1. 顶部 3 项核心感知卡片 - 职责清晰、全屏唯一无冗余 */
     /* 1.1 卡片 0: 当前准入判定 (x = 40, w = 368) */
     {
-        UiRect c0 = {40, 72, 368, 92};
+        UiRect c0 = {40, cards_y, 368, cards_h};
         uint32_t c0_bg = is_avail ? UI_SUCCESS_SOFT : (p->active_reasons ? UI_DANGER_SOFT : UI_WARNING_SOFT);
         uint32_t c0_bd = is_avail ? UI_SUCCESS_BORDER : (p->active_reasons ? UI_DANGER_BORDER : UI_WARNING_BORDER);
         uint32_t c0_fg = is_avail ? (is_dark ? UI_RGB(0x49AA19) : UI_RGB(0x52C41A)) : (p->active_reasons ? UI_DANGER : UI_WARNING_TEXT);
         fill_round_rect(pixels, stride, c0, 10, c0_bg);
         draw_rect_outline(pixels, stride, c0, 10, 1, c0_bd);
-        support_draw_checkmark(pixels, stride, c0.x + 36, c0.y + 46, 17, c0_fg, UI_ON_ACCENT);
+        support_draw_checkmark(pixels, stride, c0.x + 36, c0.y + c0.height / 2, 17, c0_fg, UI_ON_ACCENT);
         detail_current(model, p, value, sizeof(value));
         fit_text(value, sizeof(value), value, 20, c0.width - 84);
-        draw_text_bold(pixels, stride, c0.x + 68, c0.y + 36, value, 20, UI_INK);
-        draw_text(pixels, stride, c0.x + 68, c0.y + 60,
+        draw_text_bold(pixels, stride, c0.x + 68, c0.y + c0.height / 2 - 6, value, 20, UI_INK);
+        draw_text(pixels, stride, c0.x + 68, c0.y + c0.height / 2 + 18,
                   is_avail ? ptc_ui_text(PTC_UI_T_DETAIL_ALL_LIMITS_CLEAR) : value, 12, UI_MUTED);
     }
 
     /* 1.2 卡片 1: 今日总额度走势与规则来源 (x = 428, w = 432) */
     {
-        UiRect c1 = {428, 72, 432, 92};
+        UiRect c1 = {428, cards_y, 432, cards_h};
         fill_round_rect(pixels, stride, c1, 10, UI_ACCENT_SOFT);
         draw_rect_outline(pixels, stride, c1, 10, 1, UI_BORDER);
         support_draw_clock(pixels, stride, c1.x + 24, c1.y + 26, 11, UI_ACCENT);
@@ -375,7 +394,7 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
 
     /* 1.3 卡片 2: 设备环境与游玩模式 (x = 880, w = 360) - 消除与健康管理的掌机/护眼数字重叠 */
     {
-        UiRect c2 = {880, 72, 360, 92};
+        UiRect c2 = {880, cards_y, 360, cards_h};
         fill_round_rect(pixels, stride, c2, 10, UI_PAGE);
         draw_rect_outline(pixels, stride, c2, 10, 1, UI_BORDER);
 
@@ -408,9 +427,9 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     }
 
     /* 2. 左侧主栏 (x = 40, w = 736) - 全天作息计划与未来推演 */
-    /* 2.1 卡片 A: 今日作息 (y = 180, h = 208) */
+    /* 2.1 卡片 A: 今日作息 */
     {
-        UiRect sleep = {40, 180, 736, 208};
+        UiRect sleep = {40, left_y, 736, sleep_h};
         detail_panel(pixels, stride, sleep);
         support_draw_calendar(pixels, stride, sleep.x + 24, sleep.y + 24, 10, UI_ACCENT);
         const char *sleep_title = ptc_ui_text(PTC_UI_T_DETAIL_SLEEP);
@@ -473,14 +492,14 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         draw_text_center(pixels, stride, (UiRect){nx - 22, track.y - 19, 44, 16}, text, 10, UI_ON_ACCENT);
 
         /* 底部信息提示栏 */
-        UiRect tip_rect = {sleep.x + 24, sleep.y + 154, sleep.width - 48, 36};
+        UiRect tip_rect = {sleep.x + 24, sleep.y + sleep_h - 54, sleep.width - 48, 36};
         fill_round_rect(pixels, stride, tip_rect, 6, UI_ACCENT_SOFT);
         support_draw_info(pixels, stride, tip_rect.x + 14, tip_rect.y + 18, 7, UI_ACCENT);
         fit_text(text, sizeof(text), status->policies.bedtime.detail, 12, tip_rect.width - 40);
         draw_text(pixels, stride, tip_rect.x + 28, tip_rect.y + 22, text, 12, UI_INK);
     }
 
-    /* 2.2 卡片 B: 按当前模式持续使用时预计 (y = 404, h = 212) */
+    /* 2.2 卡片 B: 按当前模式持续使用时预计 */
     {
         UiRect prediction = {40, 404, 736, 212};
         detail_panel(pixels, stride, prediction);
@@ -566,7 +585,7 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     /* 3. 右侧侧栏 (x = 796, w = 444, 占 38%) - 三大守护策略执行细则 + 规则决策总览 */
     /* 3.1 卡片 C: 健康与安全守护策略看板 (y = 180, h = 302) */
     {
-        UiRect c_health = {796, 180, 444, 302};
+        UiRect c_health = {796, health_y, 444, health_h};
         detail_panel(pixels, stride, c_health);
         support_draw_heart(pixels, stride, c_health.x + 20, c_health.y + 20, 6, UI_ACCENT);
         draw_text_bold(pixels, stride, c_health.x + 36, c_health.y + 25, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH), 15, UI_INK);
@@ -583,8 +602,11 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
             status->policies.bedtime.state, status->policies.dock.state};
         const char *details[] = {status->eye, status->policies.bedtime.detail,
             status->policies.dock.compact};
+        /* 孩子区健康卡矮 12px，行距与行高同步收 4px，末行仍与底部提示栏留 8px。 */
+        const int health_row_pitch = child_view ? 70 : 74;
+        const int health_row_h = child_view ? 62 : 66;
         for (int i = 0; i < 3; ++i) {
-            UiRect card = {c_health.x + 14, c_health.y + 36 + i * 74, c_health.width - 28, 66};
+            UiRect card = {c_health.x + 14, c_health.y + 36 + i * health_row_pitch, c_health.width - 28, health_row_h};
             uint32_t fg = states[i] == PTC_POLICY_UNKNOWN ? UI_WARNING : policy_display_color(states[i]);
             uint32_t bg = fg == UI_WARNING ? UI_WARNING_SOFT :
                 fg == UI_DANGER ? UI_DANGER_SOFT : fg == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_RAISED;
@@ -605,7 +627,7 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         }
 
         /* 底部规则说明提示栏 */
-        UiRect tip3 = {c_health.x + 14, c_health.y + 258, c_health.width - 28, 30};
+        UiRect tip3 = {c_health.x + 14, c_health.y + health_h - 44, c_health.width - 28, 30};
         fill_round_rect(pixels, stride, tip3, 5, UI_ACCENT_SOFT);
         support_draw_info(pixels, stride, tip3.x + 14, tip3.y + 15, 6, UI_ACCENT);
         fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE_BAR), 11, tip3.width - 34);
@@ -629,8 +651,9 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         support_fill_circle_mini(pixels, stride, (float)(btn_r.x + 36), (float)(btn_r.y + btn_r.height / 2), 16.0f, badge_bg);
         draw_text_center(pixels, stride, (UiRect){btn_r.x + 22, btn_r.y + btn_r.height / 2 - 12, 28, 24}, "X", 17, badge_fg);
 
-        /* 主标题 */
-        draw_text_bold(pixels, stride, btn_r.x + 68, btn_r.y + 32, ptc_ui_text(PTC_UI_T_DETAIL_VIEW_RULES_BTN), 18, UI_ON_ACCENT);
+        /* 主标题（孩子区按钮更薄，三行文字整体上收，保持行距与底边留白） */
+        const int btn_text_y = btn_r.height >= 110 ? 32 : 26;
+        draw_text_bold(pixels, stride, btn_r.x + 68, btn_r.y + btn_text_y, ptc_ui_text(PTC_UI_T_DETAIL_VIEW_RULES_BTN), 18, UI_ON_ACCENT);
 
         /* 副标题：当前规则溯源判定 */
         char hit_buf[128];
@@ -638,13 +661,13 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
             ptc_ui_effective_rule_label(decision->effective.source), status->quota);
         else snprintf(hit_buf, sizeof(hit_buf), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
         fit_text(fitted, sizeof(fitted), hit_buf, 12, btn_r.width - 68 - 36);
-        draw_text(pixels, stride, btn_r.x + 68, btn_r.y + 60, fitted, 12, UI_ON_ACCENT);
+        draw_text(pixels, stride, btn_r.x + 68, btn_r.y + btn_text_y + 28, fitted, 12, UI_ON_ACCENT);
 
         /* 底部流水线与规则优先级说明 */
         char prio_buf[192];
         snprintf(prio_buf, sizeof(prio_buf), "%s", ptc_ui_text(PTC_UI_T_DETAIL_RULES_PRIORITY_NOTE));
         fit_text(fitted, sizeof(fitted), prio_buf, 10, btn_r.width - 68 - 36);
-        draw_text(pixels, stride, btn_r.x + 68, btn_r.y + 82, fitted, 10, UI_ON_ACCENT);
+        draw_text(pixels, stride, btn_r.x + 68, btn_r.y + btn_text_y + 50, fitted, 10, UI_ON_ACCENT);
 
         /* 向右箭头 */
         support_draw_chevron_right(pixels, stride, btn_r.x + btn_r.width - 24, btn_r.y + btn_r.height / 2, 7, UI_ON_ACCENT);

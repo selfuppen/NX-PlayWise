@@ -175,6 +175,12 @@ Parent Zone consists of five top-level tabs: **Today's Schedule, Time Plans, Off
 - **Security & Preferences**: Modify PIN, theme, Parent Zone shortcut, and view on-device family activity history;
 - **Support & Recovery**: Independent top-level tab offering playtime management activation, retry repair, emergency disable, restore pre-installation settings, and diagnostic log export.
 
+#### Child Zone Home and Usage Details
+
+The task board on the Child Zone home leads with the conclusion: the large number on the left is today's remaining playtime, and under the progress gauge "Played ~X min" and "Y min left" share one 16px size while the remaining minutes are bold, so a child can read at a glance how much is gone and how much is left. The three guard cards on the right cover Eye Care, Bedtime and TV mode rules; the TV rules card is taller because it carries the state, the mode with estimated usage, and the rule summary in three lines.
+
+The "+ Usage details" entry on the right of the Child Zone opens a read-only details page whose header now carries a short guide bar: it states the reading order (today's total first, then played and left) and that Bedtime, Eye Care and TV rules are judged separately, so a blocked one has to be handled first. The parent-side Today's Schedule Details keeps its previous layout and does not show this child guide. Every figure on the details page still comes only from fresh status; after 120 seconds or a failed refresh the page shows unconfirmed instead of reusing old readings.
+
 ### Core Time Control Logic
 
 PlayWise employs a robust **two-stage adjudication** pipeline paired with **four independent gates**, seamlessly harmonizing long-term plans, single-day flexibility, healthy habits, and screen modes. Before diving into specific tabs, parents can review the full-screen "Today's Schedule Details" dialog to quickly understand how the system manages playtime:
