@@ -735,6 +735,8 @@ int main(void)
         check(json && cJSON_GetObjectItemCaseSensitive(json, "pin_length")->valueint == 6,
               "Eden observation exposes length for bounded input assertions");
         check(!strstr(text, "987654") && !strstr(text, "87654321"), "Eden observation excludes sensitive text");
+        check(cJSON_GetObjectItemCaseSensitive(json, "dock_editor_minutes")->valueint == -1,
+              "non-TV observer never exports another numeric entry buffer");
         check(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "overlay_animating")),
               "new PIN dialog remains animating until its opening frames complete");
         cJSON_Delete(json);

@@ -29,7 +29,10 @@ SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
-    require(suite in ("smoke", "main", "support", "web", "plans", "input", "input-hold"), "unknown suite")
+    require(suite in ("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock"), "unknown suite")
+    if suite == "dock":
+        from tools.automation.eden_dock_flow import DOCK_SCENARIOS
+        return DOCK_SCENARIOS
     if suite == "input-hold":
         from tools.automation.eden_input_flow import INPUT_HOLD_SCENARIOS
         return INPUT_HOLD_SCENARIOS
@@ -411,8 +414,10 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     shutil.copy2(args.manifest, artifacts / "manifest.json")
     for name in ("eden_runner.py", "eden_mcp_bridge.py"):
         shutil.copy2(Path(__file__).with_name(name), artifacts / name)
-    if args.suite in ("main", "support", "web", "plans", "input", "input-hold"):
+    if args.suite in ("main", "support", "web", "plans", "input", "input-hold", "dock"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
+    if args.suite == "dock":
+        shutil.copy2(Path(__file__).with_name("eden_dock_flow.py"), artifacts / "eden_dock_flow.py")
     if args.suite == "support":
         shutil.copy2(Path(__file__).with_name("eden_support_flow.py"), artifacts / "eden_support_flow.py")
     if args.suite in ("plans", "input", "input-hold"):
@@ -909,7 +914,7 @@ def verify(output: Path) -> dict:
     require(summary.get("schema_version") == 1 and set(summary["scenarios"]) == set(names), "invalid summary schema")
     if summary["overall"] == "pass":
         require(all(row["status"] == "pass" for row in summary["scenarios"].values()) and not summary["errors"] and
-                len(summary["health"]) == (3 if summary.get("suite") == "main" else 2), "incomplete suite cannot pass")
+                len(summary["health"]) == (3 if summary.get("suite") in ("main", "dock") else 2), "incomplete suite cannot pass")
         for row in summary["health"]:
             healthy_exit(row["pid"], row["reply"], row["events"])
         if summary.get("input_sampling_version") in (1, 2):
@@ -943,6 +948,10 @@ def verify(output: Path) -> dict:
             verify_progress_streams(output)
         if (output / "app-final/support/automation-ui.jsonl").is_file():
             verify_observation_streams(output)
+        if summary.get("suite") == "dock":
+            from tools.automation.eden_dock_flow import verify_dock
+            verify_dock(output)
+            return summary
         if summary.get("suite") == "support":
             from tools.automation.eden_support_flow import verify_support
             verify_support(output)
@@ -1128,6 +1137,11 @@ def run(args: argparse.Namespace) -> int:
             class WebSuite(WebFlow, Suite):
                 pass
             suite_class = WebSuite
+        elif args.suite == "dock":
+            from tools.automation.eden_dock_flow import DockFlow
+            class DockSuite(DockFlow, Suite):
+                pass
+            suite_class = DockSuite
         elif args.suite == "plans":
             from tools.automation.eden_plan_flow import PlanFlow
             class PlanSuite(PlanFlow, Suite):
@@ -1237,7 +1251,7 @@ def main() -> int:
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans", "input", "input-hold"), default="smoke",
+    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock"), default="smoke",
                       help="main covers core journeys; support covers diagnostics/disable/installation restore")
     live.add_argument('--plans-language', choices=('system', 'en'), default='system',
                       help='plans only: explicit English UI layout check through the normal language menu')

@@ -4,7 +4,9 @@
 #ifdef PLAYWISE_EDEN
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "ui_model.h"
+#include "ui_state.h"
 #include "ui_layout.h"
 #include "../../common/protocol/request_type.h"
 
@@ -132,6 +134,28 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         (int)m->diagnostic_status);
     if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
     used = (size_t)n;
+    /* Only this non-secret editor value is observable; other numeric entry
+       buffers can contain a PIN or an offline code and stay private. */
+    uint16_t minutes = 0;
+    bool editor_valid = m->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
+        m->numpad_purpose == PTC_UI_NUMPAD_DOCK_MINUTES && ptc_ui_duration_value(m, &minutes);
+    PtcDockPolicy edited = m->draft_dock_policy;
+    edited.force_docked = false;
+    edited.undocked_limit_enabled = true;
+    edited.undocked_daily_minutes = minutes;
+    PtcUiDockPreview current, after;
+    ptc_ui_project_dock_policy(m, &m->dock_policy, (int64_t)time(NULL), &current);
+    ptc_ui_project_dock_policy(m, &edited, (int64_t)time(NULL), &after);
+    n = snprintf(out + used, size - used,
+        "\"dock_dirty\":%s,\"dock_used\":%d,\"dock_usage_known\":%s,"
+        "\"dock_editor_minutes\":%d,\"dock_current_preview\":%d,\"dock_after_preview\":%d,"
+        "\"dock_after_remaining\":%d,",
+        m->dock_dirty ? "true" : "false", m->undocked_used_minutes,
+        m->undocked_usage_available ? "true" : "false", editor_valid ? (int)minutes : -1,
+        (int)current.state, editor_valid ? (int)after.state : -1,
+        editor_valid && after.remaining_known ? after.remaining_minutes : -1);
+    if (n < 0 || (size_t)n >= size - used) goto fail;
+    used += (size_t)n;
     /* Insert read-only plan state before geometry. Policy values contain no
      * authentication material and are also checked against saved receipts. */
     n = snprintf(out + used, size - used,

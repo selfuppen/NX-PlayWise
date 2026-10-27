@@ -86,7 +86,17 @@ class MainFlow:
 
     def plan(self, card: int, page: int | None = None, overlay: int = 0) -> dict:
         self.page(1)
-        self.action(target=f"card_{card}")
+        if card == 5:
+            # Use the normal controller focus path for this journey. A sampled
+            # root-card touch previously left the page unchanged; its outcome
+            # stays unknown rather than replaying that touch in the same run.
+            self.wait_ui(plan_page=0, selected_index=0)
+            for button, selected in (("Right", 3), ("Down", 4), ("Down", 5)):
+                self.action(button=button)
+                self.wait_ui(selected_index=selected)
+            self.action(button="A")
+        else:
+            self.action(target=f"card_{card}")
         expected = {"overlay": overlay, "waiting": False}
         if page is not None:
             expected["plan_page"] = page

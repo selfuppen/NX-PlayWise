@@ -2,8 +2,13 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-25",
   "scope": "playwise/tools",
-  "script_count": 70,
+  "script_count": 71,
   "scripts": [
+    {
+      "path": "automation/eden_dock_flow.py",
+      "category": "automation",
+      "purpose": "非电视额度预览、旧数据迁移、取消保存及重开专项"
+    },
     {
       "path": "automation/eden_input_flow.py",
       "category": "automation",

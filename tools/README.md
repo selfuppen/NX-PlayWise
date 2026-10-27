@@ -173,6 +173,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | --- | --- |
 | [automation/eden_runner.py](automation/eden_runner.py) | 发版前隔离首次设置、PIN、加时码业务烟测，关联Windows事件并离线核验证据 |
 | [automation/eden_main_flow.py](automation/eden_main_flow.py) | 发版前中文业务旅程串行编排与离线断言复核 |
+| [automation/eden_dock_flow.py](automation/eden_dock_flow.py) | 非电视额度预览、旧数据迁移、取消保存及重开专项 |
 | [automation/eden_support_flow.py](automation/eden_support_flow.py) | 支持恢复专项：诊断、停用、安装恢复与重开，保留正常业务痕迹 |
 | [automation/eden_mcp_bridge.py](automation/eden_mcp_bridge.py) | 在显式指定的外部Python/MCP环境启动定制Eden，记录自建PID |
 | [automation/eden_runtime.py](automation/eden_runtime.py) | 共用程序硬链接与固件缓存，每批独立profile、容量和所有权门禁 |
