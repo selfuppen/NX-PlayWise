@@ -140,6 +140,7 @@ typedef struct {
 PtcUiRect ptc_ui_child_submit_rect(void);
 PtcUiRect ptc_ui_child_refresh_rect(void);
 PtcUiRect ptc_ui_child_buffer_rect(void);
+PtcUiRect ptc_ui_child_status_rect(void);
 PtcUiRect ptc_ui_child_footer_rect(int index);
 PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
@@ -180,6 +181,8 @@ PtcUiRect ptc_ui_plan_card_rect(int index);
 PtcUiRect ptc_ui_forecast_day_row_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
+PtcUiRect ptc_ui_child_hero_rect(void);
+PtcUiRect ptc_ui_child_forecast_rect(void);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
 PtcUiRect ptc_ui_home_details_body_rect(void);
 PtcUiRect ptc_ui_home_details_guide_rect(void);

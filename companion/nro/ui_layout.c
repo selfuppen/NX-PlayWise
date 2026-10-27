@@ -32,7 +32,7 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {964, 120, 268, 112};
+    PtcUiRect rect = {964, 120, 268, 118};
     return rect;
 }
 
@@ -44,7 +44,14 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {964, 246, 268, 106};
+    PtcUiRect rect = {964, 252, 268, 112};
+    return rect;
+}
+
+PtcUiRect ptc_ui_child_status_rect(void)
+{
+    /* 状态卡是右列最后一项，底边与左侧七日预测、孩子首页内容底边（644）齐平。 */
+    PtcUiRect rect = {964, 504, 268, 140};
     return rect;
 }
 
@@ -303,7 +310,21 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 896, 496};
+    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 896, 524};
+}
+
+/* 孩子首页左列：上方调度态势看板 + 14px 间隔 + 下方七日预测，三者共用同一底边 644。
+ * 放大守护卡字号需要的高度从七日预测让出，预测整体下移并利用底栏上方的空闲带。 */
+PtcUiRect ptc_ui_child_hero_rect(void)
+{
+    PtcUiRect box = ptc_ui_home_summary_rect(false);
+    return (PtcUiRect){box.x, box.y, box.w, 300};
+}
+
+PtcUiRect ptc_ui_child_forecast_rect(void)
+{
+    PtcUiRect box = ptc_ui_home_summary_rect(false);
+    return (PtcUiRect){box.x, box.y + 314, box.w, 210};
 }
 
 PtcUiRect ptc_ui_today_card_rect(int index)
@@ -455,7 +476,7 @@ PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){368, 186, 152, 32} : (PtcUiRect){964, 366, 268, 106};
+    return parent ? (PtcUiRect){368, 186, 152, 32} : (PtcUiRect){964, 378, 268, 112};
 }
 
 PtcUiRect ptc_ui_home_rules_rect(void)

@@ -198,16 +198,47 @@ static int check_parent_tabs(const PtcUiModel *baseline)
 
 static int check_child_forecast_heading(bool dark)
 {
-    PtcUiRect box = ptc_ui_home_summary_rect(false);
+    PtcUiRect forecast = ptc_ui_child_forecast_rect();
     UiRect title = child_heading_trace.title, summary = child_heading_trace.summary;
     bool fits = child_heading_trace.title_count == 1 && child_heading_trace.summary_count == 1 &&
-        title.x >= box.x + 16 && title.x + title.width + 12 <= summary.x &&
-        summary.x + summary.width <= box.x + box.w - 16 &&
-        title.y >= box.y + 274 && summary.y >= box.y + 274 &&
-        title.y + title.height <= box.y + 314 && summary.y + summary.height <= box.y + 314;
+        title.x >= forecast.x + 16 && title.x + title.width + 12 <= summary.x &&
+        summary.x + summary.width <= forecast.x + forecast.w - 16 &&
+        title.y >= forecast.y + 8 && summary.y >= forecast.y + 8 &&
+        title.y + title.height <= forecast.y + 56 && summary.y + summary.height <= forecast.y + 56;
     fprintf(stderr, "%s: child forecast heading lang=%d dark=%d title=[%d,%d) summary=[%d,%d)\n",
         fits ? "PASS" : "FAIL", (int)ptc_ui_language_get_resolved(), dark,
         title.x, title.x + title.width, summary.x, summary.x + summary.width);
+    return fits ? 0 : 1;
+}
+
+/* Child home grid: hero, seven-day forecast and the right action column must share one
+ * bottom edge (644) above the footer, keep the 14px gap, and the details entry must
+ * carry a hint that still fits inside its own button. */
+static int check_child_home_grid(bool dark)
+{
+    PtcUiRect hero = ptc_ui_child_hero_rect();
+    PtcUiRect forecast = ptc_ui_child_forecast_rect();
+    PtcUiRect submit = ptc_ui_child_submit_rect();
+    PtcUiRect buffer = ptc_ui_child_buffer_rect();
+    PtcUiRect details = ptc_ui_home_details_rect(false);
+    PtcUiRect status = ptc_ui_child_status_rect();
+    int bottom = hero.y + hero.h + 14 + forecast.h;
+    int hint_max = details.w - 60;
+    int hint_lines = count_wrapped_lines(ptc_ui_text(PTC_UI_T_USAGE_DETAILS_HINT), 13, hint_max, 99);
+    bool fits = hero.x == forecast.x && hero.w == forecast.w &&
+        hero.y + hero.h + 14 == forecast.y &&
+        forecast.y + forecast.h == bottom && status.y + status.h == bottom &&
+        bottom < ptc_ui_child_footer_rect(1).y &&
+        submit.x == buffer.x && buffer.x == details.x && details.x == status.x &&
+        submit.w == buffer.w && buffer.w == details.w && details.w == status.w &&
+        submit.y == hero.y &&
+        buffer.y - (submit.y + submit.h) == 14 &&
+        details.y - (buffer.y + buffer.h) == 14 &&
+        status.y - (details.y + details.h) == 14 &&
+        hint_max > 0 && hint_lines >= 1 && hint_lines <= 3;
+    fprintf(stderr, "%s: child home grid dark=%d hero=%d..%d forecast=%d..%d right=%d..%d hint_lines=%d\n",
+        fits ? "PASS" : "FAIL", dark, hero.y, hero.y + hero.h, forecast.y,
+        forecast.y + forecast.h, status.y, status.y + status.h, hint_lines);
     return fits ? 0 : 1;
 }
 
@@ -917,6 +948,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
     for (int dark = 0; dark <= 1; ++dark) {
         model = baseline;
         model.view = PTC_UI_CHILD;
+        failed |= check_child_home_grid(dark);
         failed |= save_preview(directory, "child", "child", &model, dark);
         {
             PtcUiModel claimed = model;

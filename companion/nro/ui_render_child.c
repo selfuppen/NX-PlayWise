@@ -55,7 +55,8 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
     const int card_w = 114;
     const int gap = 11;
     const int card_y = container.y + 40;
-    const int card_h = 168;
+    /* 预测框高度由布局给出：面板让出的高度直接收在卡片上，40px 标题栏和 14px 内边距不变。 */
+    const int card_h = container.height - 54;
 
     for (int i = 0; i < 7; ++i) {
         UiRect card = {start_x + i * (card_w + gap), card_y, card_w, card_h};
@@ -151,9 +152,8 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
 
 static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect box = to_uirect(ptc_ui_home_summary_rect(false)); /* {48, 120, 896, 496} */
-    UiRect top_box = {box.x, box.y, box.width, 260};
-    UiRect bottom_box = {box.x, box.y + 274, box.width, 222};
+    UiRect top_box = to_uirect(ptc_ui_child_hero_rect());
+    UiRect bottom_box = to_uirect(ptc_ui_child_forecast_rect());
 
     char remaining[64];
     char today[64];
@@ -189,7 +189,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     }
 
     /* 左列 (宽度 330)：剩余时间、主数值、额度进度槽、状态说明 */
-    draw_text(pixels, stride, top_box.x + 28, top_box.y + 36,
+    draw_text(pixels, stride, top_box.x + 28, top_box.y + 42,
               bedtime_enforcing ? ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY_BEDTIME_ACTIVE) :
               (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY)),
               20, UI_RGB(UI_BLENDED(hero_secondary)));
@@ -198,28 +198,28 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     if (ptc_ui_home_remaining_minutes(model, ptc_ui_render_now(), &numeric_minutes)) {
         snprintf(remaining, sizeof(remaining), "%d", numeric_minutes);
         int number_width = measure_text(remaining, 64);
-        draw_text_bold(pixels, stride, top_box.x + 28, top_box.y + 104, remaining, 64,
+        draw_text_bold(pixels, stride, top_box.x + 28, top_box.y + 120, remaining, 64,
                        UI_RGB(UI_BLENDED(on_hero)));
-        draw_text(pixels, stride, top_box.x + 36 + number_width, top_box.y + 100, ptc_ui_text(PTC_UI_T_MIN), 20,
+        draw_text(pixels, stride, top_box.x + 36 + number_width, top_box.y + 116, ptc_ui_text(PTC_UI_T_MIN), 20,
                   UI_RGB(UI_BLENDED(hero_secondary)));
     } else {
         if (eye_resting) {
             char cycle[128], fitted_cycle[128];
             ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
             fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 22, 280);
-            draw_text_bold(pixels, stride, top_box.x + 28, top_box.y + 100, fitted_cycle, 22,
+            draw_text_bold(pixels, stride, top_box.x + 28, top_box.y + 116, fitted_cycle, 22,
                            UI_RGB(UI_BLENDED(on_hero)));
         } else {
-            draw_wrapped_text(pixels, stride, top_box.x + 28, top_box.y + 98, remaining, 28,
+            draw_wrapped_text(pixels, stride, top_box.x + 28, top_box.y + 114, remaining, 28,
                               280, 36, 2, UI_RGB(UI_BLENDED(on_hero)));
         }
     }
 
     /* 今日额度进度槽 (Time Progress Gauge)
-     * “已玩/还剩”是孩子最先要读懂的两个数字，因此加高进度槽并把标签从 12px 提到 16px、
-     * 右侧剩余时间加粗；让出的纵向空间来自下方规则行与右列守护卡的内边距压缩。 */
+     * “已玩/还剩”是孩子最先要读懂的两个数字，因此加高进度槽、把标签提到 16px，
+     * 并让右侧剩余时间加粗。 */
     const int gauge_label_size = 16;
-    UiRect slot = {top_box.x + 28, top_box.y + 130, 296, 10};
+    UiRect slot = {top_box.x + 28, top_box.y + 150, 296, 10};
     fill_round_rect(pixels, stride, slot, 5, UI_GAUGE_SLOT);
     draw_rect_outline(pixels, stride, slot, 5, 1, UI_GAUGE_SLOT_BORDER);
     char gauge_left[64] = "";
@@ -271,34 +271,37 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TODAY_S_S), today,
                  model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
     }
-    draw_text(pixels, stride, top_box.x + 28, top_box.y + 196, line, 14, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, top_box.x + 28, top_box.y + 222, line, 14, UI_RGB(UI_BLENDED(hero_secondary)));
 
     format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, top_box.x + 28, top_box.y + 232, age, 11, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, top_box.x + 28, top_box.y + 274, age, 11, UI_RGB(UI_BLENDED(hero_secondary)));
 
     /* 右列 (x: 408, w: 508)：三大守护策略卡片（护眼周期、就寝计划、电视限制）
-     * 电视规则卡要放下「状态 + 模式与已用 + 规则摘要」三行，因此独占更高的 84px；
-     * 护眼与就寝各 64px，纵向间距由 10px 收到 8px，总高与原来一致。 */
+     * 守护卡说明行是孩子判断“为什么现在不能玩”的主要依据，因此标题 16px、说明 15px；
+     * 电视规则卡要放下「状态 + 模式与已用 + 规则摘要」三行，独占 96px。 */
     const int c_x = top_box.x + 360;
     const int c_w = top_box.width - 388;
-    const int c_h = 64;
-    const int dock_card_h = 84;
+    const int c_h = 72;
+    const int dock_card_h = 96;
+    const int card_title_size = 16;
+    const int card_detail_size = 15;
+    const int card_badge_size = 13;
 
     /* 守护卡 1：护眼休息周期 */
     UiRect card1 = {c_x, top_box.y + 16, c_w, c_h};
     fill_round_rect(pixels, stride, card1, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
     draw_rect_outline(pixels, stride, card1, 10, 1, eye_resting ? UI_DANGER : UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
-    draw_text(pixels, stride, card1.x + 14, card1.y + 22, ptc_ui_text(PTC_UI_T_EYE_CARE), 14, UI_RGB(UI_BLENDED(on_hero)));
+    draw_text(pixels, stride, card1.x + 16, card1.y + 26, ptc_ui_text(PTC_UI_T_EYE_CARE), card_title_size, UI_RGB(UI_BLENDED(on_hero)));
 
     const char *eye_b_label = !model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_ENABLED));
     uint32_t eye_b_col = !model->eye_care_policy.enabled ? UI_MUTED : (eye_resting ? UI_DANGER : UI_SUCCESS);
-    int eb_w = measure_text(eye_b_label, 12) + 14;
-    UiRect eb_rect = {card1.x + card1.width - eb_w - 14, card1.y + 8, eb_w, 20};
+    int eb_w = measure_text(eye_b_label, card_badge_size) + 16;
+    UiRect eb_rect = {card1.x + card1.width - eb_w - 16, card1.y + 7, eb_w, 22};
     uint32_t eb_bd = eye_b_col == UI_DANGER ? UI_DANGER_BORDER : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_BORDER : UI_BORDER);
     fill_round_rect(pixels, stride, eb_rect, 4, eye_b_col == UI_DANGER ? UI_DANGER_SOFT : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
     draw_rect_outline(pixels, stride, eb_rect, 4, 1, eb_bd);
-    draw_text_center(pixels, stride, eb_rect, eye_b_label, 12, eye_b_col);
+    draw_text_center(pixels, stride, eb_rect, eye_b_label, card_badge_size, eye_b_col);
 
     char eye_str[128], fitted_eye[128];
     if (model->eye_care_policy.enabled) {
@@ -306,8 +309,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     } else {
         snprintf(eye_str, sizeof(eye_str), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_OFF));
     }
-    fit_text(fitted_eye, sizeof(fitted_eye), eye_str, 13, card1.width - 28);
-    draw_text(pixels, stride, card1.x + 14, card1.y + 44, fitted_eye, 13, eye_resting ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+    fit_text(fitted_eye, sizeof(fitted_eye), eye_str, card_detail_size, card1.width - 32);
+    draw_text(pixels, stride, card1.x + 16, card1.y + 58, fitted_eye, card_detail_size,
+              eye_resting ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
 
     PtcPolicyStatus policies;
     ptc_ui_render_policy_status(model, &policies);
@@ -321,17 +325,17 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         bed_policy->state == PTC_POLICY_EXHAUSTED ? UI_WARNING_SOFT : UI_ACCENT_SOFT;
     fill_round_rect(pixels, stride, card2, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
     draw_rect_outline(pixels, stride, card2, 10, 1, bed_fg);
-    draw_text(pixels, stride, card2.x + 14, card2.y + 22, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_RGB(UI_BLENDED(on_hero)));
+    draw_text(pixels, stride, card2.x + 16, card2.y + 26, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), card_title_size, UI_RGB(UI_BLENDED(on_hero)));
 
     const char *bed_badge = ptc_ui_text(bed_policy->badge);
-    int bed_badge_w = measure_text(bed_badge, 12) + 14;
-    UiRect bed_pill = {card2.x + card2.width - bed_badge_w - 14, card2.y + 8, bed_badge_w, 20};
+    int bed_badge_w = measure_text(bed_badge, card_badge_size) + 16;
+    UiRect bed_pill = {card2.x + card2.width - bed_badge_w - 16, card2.y + 7, bed_badge_w, 22};
     fill_round_rect(pixels, stride, bed_pill, 4, bed_bg);
-    draw_text_center(pixels, stride, bed_pill, bed_badge, 12, bed_fg);
+    draw_text_center(pixels, stride, bed_pill, bed_badge, card_badge_size, bed_fg);
 
     char fitted_bed[256];
-    fit_text(fitted_bed, sizeof(fitted_bed), bed_policy->detail, 13, card2.width - 28);
-    draw_text(pixels, stride, card2.x + 14, card2.y + 44, fitted_bed, 13,
+    fit_text(fitted_bed, sizeof(fitted_bed), bed_policy->detail, card_detail_size, card2.width - 32);
+    draw_text(pixels, stride, card2.x + 16, card2.y + 58, fitted_bed, card_detail_size,
         bed_policy->state == PTC_POLICY_ACTIVE ? UI_NIGHT : UI_RGB(UI_BLENDED(on_hero)));
 
     /* 守护卡 3：电视/底座限制（更高，末行单独承载规则摘要说明） */
@@ -345,28 +349,29 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     draw_rect_outline(pixels, stride, card3, 10, 1, dock_fg);
 
     const char *dock_title = ptc_ui_text(PTC_UI_T_DOCK_TITLE);
-    draw_text(pixels, stride, card3.x + 14, card3.y + 22, dock_title, 14, UI_RGB(UI_BLENDED(on_hero)));
+    draw_text(pixels, stride, card3.x + 16, card3.y + 26, dock_title, card_title_size, UI_RGB(UI_BLENDED(on_hero)));
 
-    int mode_x = card3.x + 14 + measure_text(dock_title, 14) + 10;
+    int mode_x = card3.x + 16 + measure_text(dock_title, card_title_size) + 10;
     char mode[96];
     const char *dock_badge = ptc_ui_text(dock_policy->badge);
-    int dock_badge_w = measure_text(dock_badge, 11) + 14;
-    UiRect dock_pill = {card3.x + card3.width - dock_badge_w - 14, card3.y + 8, dock_badge_w, 20};
+    int dock_badge_w = measure_text(dock_badge, card_badge_size) + 16;
+    UiRect dock_pill = {card3.x + card3.width - dock_badge_w - 16, card3.y + 7, dock_badge_w, 22};
     fill_round_rect(pixels, stride, dock_pill, 4, dock_bg);
-    draw_text_center(pixels, stride, dock_pill, dock_badge, 11, dock_fg);
+    draw_text_center(pixels, stride, dock_pill, dock_badge, card_badge_size, dock_fg);
 
-    fit_text(mode, sizeof(mode), ptc_ui_text(policies.mode), 12, dock_pill.x - mode_x - 8);
-    draw_text(pixels, stride, mode_x, card3.y + 22, mode, 12, UI_RGB(UI_BLENDED(hero_secondary)));
+    fit_text(mode, sizeof(mode), ptc_ui_text(policies.mode), 13, dock_pill.x - mode_x - 8);
+    draw_text(pixels, stride, mode_x, card3.y + 26, mode, 13, UI_RGB(UI_BLENDED(hero_secondary)));
 
-    /* 与护眼、就寝两张卡的说明行统一为 13px；电视规则是孩子最常看的一行，不再缩到 12px。 */
+    /* 电视规则是孩子最常看的一行，说明与规则摘要都使用和护眼、就寝一致的 15px。 */
     char fitted_dock[256];
-    fit_text(fitted_dock, sizeof(fitted_dock), dock_policy->detail, 13, card3.width - 28);
-    draw_text(pixels, stride, card3.x + 14, card3.y + 44, fitted_dock, 13,
+    fit_text(fitted_dock, sizeof(fitted_dock), dock_policy->detail, card_detail_size, card3.width - 32);
+    draw_text(pixels, stride, card3.x + 16, card3.y + 58, fitted_dock, card_detail_size,
         dock_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER : UI_RGB(UI_BLENDED(on_hero)));
 
-    fit_text(fitted_dock, sizeof(fitted_dock), policies.dock_rule, 13, card3.width - 28);
-    draw_text(pixels, stride, card3.x + 14, card3.y + 66, fitted_dock, 13, UI_RGB(UI_BLENDED(hero_secondary)));
-    /* --- 下半部：未来本周每天额度周历预报 (896x222) --- */
+    fit_text(fitted_dock, sizeof(fitted_dock), policies.dock_rule, card_detail_size, card3.width - 32);
+    draw_text(pixels, stride, card3.x + 16, card3.y + 82, fitted_dock, card_detail_size,
+              UI_RGB(UI_BLENDED(hero_secondary)));
+    /* --- 下半部：未来本周每天额度周历预报 --- */
     draw_child_forecast_columns(pixels, stride, model, bottom_box);
 }
 
@@ -400,7 +405,7 @@ static void draw_child_action_icon(uint32_t *pixels, uint32_t stride, PtcUiRect 
 }
 
 static void draw_child_action_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
-                                    const char *label, int kind, bool primary,
+                                    const char *label, const char *hint, int kind, bool primary,
                                     bool selected, bool disabled)
 {
     UiRect box = to_uirect(target);
@@ -411,13 +416,30 @@ static void draw_child_action_button(uint32_t *pixels, uint32_t stride, PtcUiRec
 
     /* Text content area to the right of the action icon */
     UiRect label_box = {box.x + 48, box.y, box.width - 54, box.height};
-    draw_button_label(pixels, stride, label_box, label, target.h <= 48 ? 18 : 20,
-                      disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT));
+    uint32_t title_color = disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT);
+    if (!hint || !hint[0]) {
+        draw_button_label(pixels, stride, label_box, label, target.h <= 48 ? 18 : 20, title_color);
+        return;
+    }
+    /* “使用详情”用一行标题加说明：让孩子在点进去之前就知道里面能看什么。
+     * 行数按当前语言实测，整块垂直居中，避免中文两行、英文三行时上重下空。 */
+    const int hint_size = 13;
+    const int line_height = 17;
+    int hint_width = label_box.width - 6;
+    int lines = count_wrapped_lines(hint, hint_size, hint_width, 3);
+    if (lines < 1) lines = 1;
+    int block = 20 + 12 + (lines - 1) * line_height + 8;
+    int title_baseline = label_box.y + (label_box.height - block) / 2 + 20;
+    draw_text_center(pixels, stride, (UiRect){label_box.x, title_baseline - 20, label_box.width, 26},
+                     label, 20, title_color);
+    draw_wrapped_text_centered(pixels, stride, label_box.x + label_box.width / 2,
+                               title_baseline + 24, hint, hint_size, hint_width,
+                               line_height, 3, disabled ? UI_DISABLED : UI_MUTED);
 }
 
 static void draw_child_status_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect card = {964, 486, 268, 130};
+    UiRect card = to_uirect(ptc_ui_child_status_rect());
     const char *runtime = ptc_ui_runtime_notice_summary(model);
     bool feedback = ptc_ui_operation_feedback_visible(model);
     bool error = strcmp(model->result_status, "error") == 0;
@@ -467,7 +489,7 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     draw_child_action_button(pixels, stride, ptc_ui_child_submit_rect(),
         dock_blocked ? ptc_ui_text(PTC_UI_T_DOCK_BLOCKED) : model->disable_flag_present ? ptc_ui_text(PTC_UI_T_REDEMPTION_IS_CURRENTLY_UNAVAILABLE) :
         (code_unavailable ? ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE) : ptc_ui_text(PTC_UI_T_A_ENTER_CODE)),
-        0, true, false, disabled || code_unavailable);
+        NULL, 0, true, false, disabled || code_unavailable);
 
     if (model->daily_buffer_available) {
         snprintf(buffer, sizeof(buffer), ptc_ui_text(PTC_UI_T_X_CLAIM_SELF_BUFFER_U_MIN), (unsigned int)model->daily_buffer_minutes);
@@ -477,11 +499,12 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     }
 
     draw_child_action_button(pixels, stride, ptc_ui_child_buffer_rect(), buffer,
-        model->daily_buffer_claimed ? 3 : 1, false, false,
+        NULL, model->daily_buffer_claimed ? 3 : 1, false, false,
         disabled || !model->daily_buffer_available);
 
     draw_child_action_button(pixels, stride, ptc_ui_home_details_rect(false),
-        ptc_ui_text(PTC_UI_T_USAGE_DETAILS_2), 2, false, false, model->waiting);
+        ptc_ui_text(PTC_UI_T_USAGE_DETAILS_2), ptc_ui_text(PTC_UI_T_USAGE_DETAILS_HINT),
+        2, false, false, model->waiting);
 
     draw_child_status_card(pixels, stride, model);
 

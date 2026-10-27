@@ -649,6 +649,37 @@ int draw_wrapped_text(
     return baseline + line * line_height;
 }
 
+int draw_wrapped_text_centered(
+    uint32_t *pixels,
+    uint32_t stride,
+    int center_x,
+    int baseline,
+    const char *text,
+    int size,
+    int max_width,
+    int line_height,
+    int max_lines,
+    uint32_t color)
+{
+    char localized[4096];
+    const char *cursor = ptc_ui_localize(text ? text : "", localized, sizeof(localized));
+    int line = 0;
+    while (*cursor && line < max_lines) {
+        const char *end = NULL;
+        const char *next = next_wrapped_line(cursor, size, max_width, &end);
+        char buffer[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
+        size_t bytes = (size_t)(end - cursor);
+        if (bytes >= sizeof(buffer)) bytes = sizeof(buffer) - 1;
+        memcpy(buffer, cursor, bytes);
+        buffer[bytes] = '\0';
+        int width = measure_text(buffer, size);
+        draw_text(pixels, stride, center_x - width / 2, baseline + line * line_height, buffer, size, color);
+        cursor = next;
+        ++line;
+    }
+    return baseline + line * line_height;
+}
+
 int count_wrapped_lines(const char *text, int size, int max_width, int max_lines)
 {
     char localized[4096];

@@ -2700,6 +2700,27 @@ static void test_visual_action_boundaries(void)
     check_true(!rects_overlap(code, ptc_ui_child_buffer_rect()) &&
                !rects_overlap(ptc_ui_child_buffer_rect(), ptc_ui_home_details_rect(false)),
                "child primary, secondary and detail actions do not overlap");
+    /* 孩子首页共用一条内容底边：守护卡放大后，看板、七日预测和右侧动作栏
+     * 都收在 644，避免某一列忽然比其它列短。 */
+    {
+        PtcUiRect hero = ptc_ui_child_hero_rect();
+        PtcUiRect forecast = ptc_ui_child_forecast_rect();
+        PtcUiRect status = ptc_ui_child_status_rect();
+        PtcUiRect buffer = ptc_ui_child_buffer_rect();
+        PtcUiRect details = ptc_ui_home_details_rect(false);
+        int bottom = status.y + status.h;
+        check_true(hero.x == forecast.x && hero.w == forecast.w &&
+                   hero.y + hero.h + 14 == forecast.y,
+                   "child hero and forecast share the column and keep a 14px gap");
+        check_true(forecast.y + forecast.h == bottom && bottom < ptc_ui_child_footer_rect(1).y,
+                   "child forecast, status card and action column share one bottom edge above the footer");
+        check_true(code.y == hero.y && buffer.y - (code.y + code.h) == 14 &&
+                   details.y - (buffer.y + buffer.h) == 14 &&
+                   status.y - (details.y + details.h) == 14,
+                   "child right action column keeps 14px gaps and ends on the shared bottom edge");
+        check_true(status.w == code.w && status.x == code.x,
+                   "child status card stays in the action column");
+    }
     /* 孩子区使用详情多一条导读条：正文整体下移，但底部按钮底边与家长区一致，
      * 避免触控命中和视觉下沿出现两套坐标。 */
     {
