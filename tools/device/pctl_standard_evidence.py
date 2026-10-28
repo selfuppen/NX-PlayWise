@@ -188,7 +188,95 @@ def audit(data: bytes, config: dict) -> dict:
             "note": "Raw audit only; phases, business policy, restoration and actual observations remain separate."}
 
 
-def collect(device: object, out: Path, plan: dict) -> list[Path]:
+class AppendOnlyFtpReader:
+    """Optional in-memory mirror; a terminal stream is always reread in full.
+
+    This reduces repeated transfers of an active append-only recorder. It does
+    not repair missing samples or make active snapshots qualification evidence.
+    A changed prefix outside the overlap is detected by the final full read.
+    """
+
+    def __init__(self, device: object, diagnostics: Path, *, overlap: int = 256,
+                 max_bytes: int = 16 * 1024 * 1024) -> None:
+        usage.require(type(max_bytes) is int and max_bytes > 0 and
+                      type(overlap) is int and 1 <= overlap <= max_bytes,
+                      "invalid incremental overlap")
+        self.device = device
+        self.diagnostics = diagnostics
+        self.overlap = overlap
+        self.max_bytes = max_bytes
+        self._previous: dict[str, bytes] = {}
+
+    def _preserve(self, remote: str, offset: int, data: bytes, reason: str) -> None:
+        self.diagnostics.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(data).hexdigest()
+        path = self.diagnostics / ("fragment-" + digest + ".bin")
+        if path.exists():
+            usage.require(path.read_bytes() == data, "diagnostic hash collision")
+        else:
+            with path.open("xb") as stream:
+                stream.write(data)
+        save_new(self.diagnostics / ("read-" + uuid.uuid4().hex + ".json"), {
+            "schema_version": 1, "qualified": False, "remote_path": remote,
+            "offset": offset, "fragment": path.name, "sha256": digest,
+            "reason": reason,
+        })
+
+    def read(self, remote: str) -> bytes:
+        previous = self._previous.get(remote)
+        offset = max(0, len(previous) - self.overlap) if previous is not None else 0
+        fragment = bytearray()
+        full = bytearray()
+        try:
+            with self.device.ftp() as ftp:
+                ftp.voidcmd("TYPE I")
+                size = ftp.size(remote)
+                usage.require(type(size) is int and 0 <= size <= self.max_bytes,
+                              "incremental source size unavailable or excessive")
+                usage.require(previous is None or size >= len(previous),
+                              "append-only source shrank; preserve previous snapshots")
+                def receive(chunk: bytes) -> None:
+                    fragment.extend(chunk)
+                    usage.require(offset + len(fragment) <= self.max_bytes,
+                                  "incremental source exceeds size limit")
+                # Unsupported REST fails explicitly; never silently transfer the
+                # whole source as if it were the requested tail.
+                ftp.retrbinary("RETR " + remote, receive,
+                               rest=offset if previous is not None else None)
+                if previous is None:
+                    data = bytes(fragment)
+                else:
+                    shared = previous[offset:]
+                    usage.require(bytes(fragment[:len(shared)]) == shared,
+                                  "append-only overlap changed or REST ignored")
+                    data = previous + bytes(fragment[len(shared):])
+                usage.require(len(data) >= size, "source read shorter than advertised size")
+                lines = data.splitlines()
+                terminal = False
+                if data.endswith(b"\n") and lines:
+                    try:
+                        terminal = json.loads(lines[-1]).get("kind") == "usage_evidence_stop"
+                    except (ValueError, AttributeError):
+                        pass  # collect() preserves and strictly audits malformed raw.
+                if terminal and previous is not None:
+                    def receive_full(chunk: bytes) -> None:
+                        full.extend(chunk)
+                        usage.require(len(full) <= self.max_bytes,
+                                      "terminal source exceeds size limit")
+                    ftp.retrbinary("RETR " + remote, receive_full, rest=0)
+                    usage.require(bytes(full) == data,
+                                  "terminal full read differs from incremental mirror")
+        except Exception as exc:
+            self._preserve(remote, offset, bytes(fragment), type(exc).__name__)
+            if full:
+                self._preserve(remote, 0, bytes(full), "terminal_full_read")
+            raise
+        self._previous[remote] = data
+        return data
+
+
+def collect(device: object, out: Path, plan: dict, *,
+            reader: AppendOnlyFtpReader | None = None) -> list[Path]:
     """One read-only pull. Hash-named immutable snapshots never overwrite older raw."""
     with device.ftp() as ftp:
         names = ftp.nlst(REMOTE)
@@ -199,7 +287,8 @@ def collect(device: object, out: Path, plan: dict) -> list[Path]:
         filename = name.rsplit("/", 1)[-1]
         if not re.fullmatch(r"usage-evidence-" + run_id + r"-[0-9a-f]{16}\.jsonl", filename):
             continue
-        data = device.read(REMOTE + "/" + filename)
+        remote_path = REMOTE + "/" + filename
+        data = reader.read(remote_path) if reader is not None else device.read(remote_path)
         digest = hashlib.sha256(data).hexdigest()
         path = out / "raw" / (filename[:-6] + "-" + digest + ".jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)

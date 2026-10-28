@@ -231,6 +231,92 @@ def test_prepare_and_collect() -> None:
         assert usage.read_json(second[0].with_suffix(".audit.json"))["partial_tail_lines"] == [4]
 
 
+def test_append_only_reader() -> None:
+    remote = evidence.REMOTE + "/usage-evidence-" + CONFIG["run_id"] + "-" + "1" * 16 + ".jsonl"
+
+    class Device:
+        def __init__(self, data: bytes):
+            self.data = data
+            self.calls: list[int | None] = []
+            self.fault = ""
+
+        def ftp(self):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def nlst(self, path):
+            return [remote]
+
+        def voidcmd(self, command):
+            assert command == "TYPE I"
+
+        def size(self, path):
+            assert path == remote
+            return len(self.data)
+
+        def retrbinary(self, command, callback, rest=None):
+            assert command == "RETR " + remote
+            self.calls.append(rest)
+            if self.fault == "unsupported" and rest is not None:
+                raise ftplib.error_perm("502 REST unsupported")
+            offset = 0 if rest is None or self.fault == "ignored" else rest
+            data = self.data[offset:]
+            if self.fault == "network":
+                callback(data[:3])
+                raise OSError("interrupted read")
+            callback(data)
+
+        def read(self, path):
+            raise AssertionError("unexpected whole-file fallback")
+
+    active = encode(raw_rows()[:2])
+    terminal = encode(raw_rows())
+    with tempfile.TemporaryDirectory() as directory:
+        out = Path(directory)
+        device = Device(active)
+        reader = evidence.AppendOnlyFtpReader(device, out / "diagnostics", overlap=16)
+        first = evidence.collect(device, out, {"config": CONFIG}, reader=reader)
+        device.data = terminal
+        final = evidence.collect(device, out, {"config": CONFIG}, reader=reader)
+        assert first != final and final[0].read_bytes() == terminal
+        assert device.calls == [None, len(active) - 16, 0]
+        assert first[0].read_bytes() == active
+        assert evidence.audit(final[0].read_bytes(), CONFIG)["stop_record_present"]
+
+    for fault in ("shrink", "overlap", "unsupported", "ignored", "network", "earlier_prefix"):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            device = Device(active)
+            reader = evidence.AppendOnlyFtpReader(device, out / "diagnostics", overlap=16)
+            assert reader.read(remote) == active
+            if fault == "shrink":
+                device.data = active[:-1]
+            elif fault == "overlap":
+                device.data = active[:-1] + b"X"
+            elif fault == "earlier_prefix":
+                device.data = b"X" + terminal[1:]
+            else:
+                device.data = terminal
+                device.fault = fault
+            try:
+                reader.read(remote)
+            except (usage.UsageQualificationError, ftplib.Error, OSError):
+                pass
+            else:
+                raise AssertionError("unsafe incremental transfer accepted: " + fault)
+            assert reader._previous[remote] == active
+            assert list((out / "diagnostics").glob("read-*.json"))
+            assert list((out / "diagnostics").glob("fragment-*.bin"))
+            assert device.calls.count(None) == 1
+            if fault == "earlier_prefix":
+                assert device.calls[-1] == 0
+
+
 def test_inactive_stage() -> None:
     class Device:
         def __init__(self, components: dict, mode: str = "ok"):
@@ -410,6 +496,7 @@ if __name__ == "__main__":
     test_standard_candidate_scope()
     test_audit()
     test_prepare_and_collect()
+    test_append_only_reader()
     test_inactive_stage()
     test_rejected_capture_preserves_raw()
     print("PASS production evidence plan, raw identity/errors, signed precision and immutable read-only pulls")
