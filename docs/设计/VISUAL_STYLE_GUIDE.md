@@ -210,10 +210,10 @@ The view moves beyond rigid and cramped layouts, adopting conversational, parent
 ![Decision and rules restriction active preview](../images/usage-en/parent/parent-details-rules-restricted-light.png)
 
 ### 4.5 Tesla Overlay Current Design & Dark Baseline Contract
-* **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
+* **Tesla Host Dark Background & Own Panel Base**: The Tesla host layer is a translucent dark background (`ColorFrameBackground = 0x000D` / RGBA(0, 0, 0, 0.85)), but PlayWise never renders text directly on it. The full 448×720 panel is filled with the palette `panel_bg` (black, alpha `0xE`, ~93%), so bare areas such as the top path bar, rule-chain and group labels, explanation rows and footer gaps leak only ~7% of the game and stay readable over bright scenes. Do not draw an extra page-level `panel_bg` rectangle: libtesla adds alpha, so `0xE` over the `0xE` fill saturates to fully opaque. To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
   * Child and parent cards, code slots, keypad keys and buttons share closed rounded outlines (radius r=4 for cards/buttons, full half-height for pills). CPU span calculations render smooth rounded fills and outer borders; both normal 1px and emphasized 2px borders remain continuous without jagged seams.
-  * Card Surface: `#222222` with high `0xE6` opacity, effectively shielding background game graphics.
+  * Card Surface: `#222222` at alpha `0xF` (opaque), forming a stable layer above the `0xE` panel base and shielding background game graphics.
   * Decorative Border: `#444444` with subtle `0xB0` opacity, providing restrained, clean edges.
   * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm brown warning `#332211`, deep moss success `#113322`).
 * **Font, Glyph & Handheld Legibility Contract**:
@@ -272,7 +272,7 @@ The parent today page is named “今日安排” in both Chinese locales and `T
 When authoring or updating Companion NRO pages or overlays:
 
 - [ ] **Dual-Theme Compatible (NRO)**: All colors resolve through `palette->xxx`, `UI_xxx`, or dark/light ternaries; no hardcoded single-mode colors.
-- [ ] **Overlay Dark Baseline**: Overlay strictly locks to the dark palette, with surfaces tuned to Tesla's translucent black background.
+- [ ] **Overlay Dark Baseline**: Overlay strictly locks to the dark palette, fills its own panel with `panel_bg` (black alpha `0xE`) and keeps card surfaces opaque instead of drawing text on the bare `0xD` host background.
 - [ ] **Overlay Zero-Emoji Contract**: Overlay strings contain no 4-byte emojis; controller prompts strictly use official Switch font glyphs (`\uE0E0`, etc.).
 - [ ] **Contrast & Luminance**: Text passes legibility standards on handheld screens (Light mode primary text $\ge$ `#171A20`, Dark mode primary text $\ge$ `#EEEEEE`).
 - [ ] **Semantic Color Harmony**: Active/success uses calm green (`#2C7A4B` / `#EAF5EE`), rest/warning uses deep amber (`#9A6114` / `#FBF2E1`), limits use red (`#B53A45` / `#FAEBEC`). Avoid muddy yellow/brown tones.

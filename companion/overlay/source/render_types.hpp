@@ -36,9 +36,14 @@ struct OverlayPalette {
     tsl::Color night_border;
 };
 
+// The overlay paints its own full-screen panel with panel_bg instead of relying on
+// libtesla's ColorFrameBackground (0xD). 0xE (~93%) keeps a hint of the game visible
+// while halving the bright-scene bleed that made text on bare page areas unreadable.
+// Do not draw an extra page-level panel_bg rect: libtesla adds alpha, so 0xE over the
+// 0xE fill would saturate to 0xF and silently become fully opaque.
 // 0: 纸墨 (Paper & Ink) - 默认暗色基线
 constexpr OverlayPalette DARK_OVERLAY_PALETTE = {
-    .panel_bg = { 0x0, 0x0, 0x0, 0xD },
+    .panel_bg = { 0x0, 0x0, 0x0, 0xE },
     .card_bg = { 0x2, 0x1, 0x1, 0xF },
     .card_raised = { 0x3, 0x2, 0x2, 0xF },
     .border_decorative = { 0x4, 0x3, 0x3, 0xF },
@@ -64,7 +69,7 @@ constexpr OverlayPalette DARK_OVERLAY_PALETTE = {
 
 // 1: 雾青 (Mist Teal)
 constexpr OverlayPalette DARK_OVERLAY_TEAL_PALETTE = {
-    .panel_bg = { 0x0, 0x0, 0x0, 0xD },
+    .panel_bg = { 0x0, 0x0, 0x0, 0xE },
     .card_bg = { 0x1, 0x2, 0x2, 0xF },
     .card_raised = { 0x2, 0x3, 0x3, 0xF },
     .border_decorative = { 0x3, 0x4, 0x4, 0xF },
@@ -90,7 +95,7 @@ constexpr OverlayPalette DARK_OVERLAY_TEAL_PALETTE = {
 
 // 2: 暮霭 (Dusk)
 constexpr OverlayPalette DARK_OVERLAY_AMETHYST_PALETTE = {
-    .panel_bg = { 0x0, 0x0, 0x0, 0xD },
+    .panel_bg = { 0x0, 0x0, 0x0, 0xE },
     .card_bg = { 0x2, 0x1, 0x2, 0xF },
     .card_raised = { 0x3, 0x2, 0x3, 0xF },
     .border_decorative = { 0x4, 0x3, 0x4, 0xF },
@@ -116,7 +121,7 @@ constexpr OverlayPalette DARK_OVERLAY_AMETHYST_PALETTE = {
 
 // 3: 石墨 (Graphite)
 constexpr OverlayPalette DARK_OVERLAY_SLATE_PALETTE = {
-    .panel_bg = { 0x0, 0x0, 0x0, 0xD },
+    .panel_bg = { 0x0, 0x0, 0x0, 0xE },
     .card_bg = { 0x2, 0x2, 0x2, 0xF },
     .card_raised = { 0x3, 0x3, 0x3, 0xF },
     .border_decorative = { 0x4, 0x4, 0x4, 0xF },

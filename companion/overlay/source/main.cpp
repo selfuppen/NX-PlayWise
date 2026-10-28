@@ -113,7 +113,8 @@ static void load_overlay_config(PtcStorage *storage)
     ptc_ui_language_set_resolved(resolve_overlay_effective_language(
         ovl_lang_setting, lang_preference, system_language));
 
-    // The Tesla overlay environment is universally a dark sidebar overlay (ColorFrameBackground = 0x000D).
+    // The Tesla host layer is a translucent dark backdrop (ColorFrameBackground = 0x000D), but PlayWise
+    // covers it with its own palette panel_bg instead of drawing on the bare host fill.
     // The overlay UI must always adhere to the dark baseline palette for optimal contrast and seamless aesthetics.
     s_overlay_theme = PTC_UI_RESOLVED_DARK;
 }
@@ -173,7 +174,9 @@ public:
     {
         // PlayWise renders its own compact brand & status bar directly inside draw_overlay.
         // We bypass drawing the default 90px title/subtitle banner in all views to maximize vertical space.
-        renderer->fillScreen(a(tsl::style::color::ColorFrameBackground));
+        // Fill with the palette panel color (~93% opaque) instead of libtesla's 0xD frame
+        // background so game highlights cannot wash out text drawn outside the opaque cards.
+        renderer->fillScreen(renderer->a(get_overlay_palette().panel_bg));
         renderer->drawRect(tsl::cfg::FramebufferWidth - 1, 0, 1, tsl::cfg::FramebufferHeight, a(0xF222));
         renderer->drawRect(15, tsl::cfg::FramebufferHeight - 73, tsl::cfg::FramebufferWidth - 30, 1,
             a(tsl::style::color::ColorText));

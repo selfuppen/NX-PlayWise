@@ -42,12 +42,13 @@ def parse_palette(c_code: str, name: str) -> dict[str, int]:
     return result
 
 
-def parse_overlay_palette(hpp_code: str, name: str) -> dict[str, int]:
+def parse_overlay_palette(hpp_code: str, name: str) -> tuple[dict[str, int], dict[str, int]]:
     pattern = rf"constexpr\s+OverlayPalette\s+{name}\s*=\s*\{{(.*?)\}};"
     match = re.search(pattern, hpp_code, re.DOTALL)
     assert match, f"Could not find {name} in render_types.hpp"
     body = match.group(1)
     overlay_colors = {}
+    overlay_alphas = {}
     for line in body.splitlines():
         line = line.strip()
         m = re.match(
@@ -59,13 +60,16 @@ def parse_overlay_palette(hpp_code: str, name: str) -> dict[str, int]:
             r = int(m.group(2), 16) if m.group(2).startswith("0x") else int(m.group(2))
             g = int(m.group(3), 16) if m.group(3).startswith("0x") else int(m.group(3))
             b = int(m.group(4), 16) if m.group(4).startswith("0x") else int(m.group(4))
+            a = int(m.group(5), 16) if m.group(5).startswith("0x") else int(m.group(5))
             overlay_colors[field] = (r * 17) << 16 | (g * 17) << 8 | (b * 17)
-    return overlay_colors
+            overlay_alphas[field] = a
+    return overlay_colors, overlay_alphas
 
 
 def main() -> None:
     theme_c = (ROOT / "companion" / "nro" / "ui_theme.c").read_text(encoding="utf-8")
     overlay_hpp = (ROOT / "companion" / "overlay" / "source" / "render_types.hpp").read_text(encoding="utf-8")
+    overlay_main = (ROOT / "companion" / "overlay" / "source" / "main.cpp").read_text(encoding="utf-8")
 
     styles = [
         ("slate", "LIGHT_SLATE_PALETTE", "DARK_SLATE_PALETTE", "DARK_OVERLAY_SLATE_PALETTE"),
@@ -112,7 +116,7 @@ def main() -> None:
     for style_name, light_name, dark_name, ov_name in styles:
         light = parse_palette(theme_c, light_name)
         dark = parse_palette(theme_c, dark_name)
-        ov_colors = parse_overlay_palette(overlay_hpp, ov_name)
+        ov_colors, ov_alphas = parse_overlay_palette(overlay_hpp, ov_name)
 
         # 1. 验证必须包含的关键字段
         for k in required_keys:
@@ -160,6 +164,27 @@ def main() -> None:
             assert ov_val == nro_val, (
                 f"Color mismatch in style '{style_name}': Overlay {ov_name}.{ov_k} (0x{ov_val:06X}) vs NRO {dark_name}.{nro_k} (0x{nro_val:06X})"
             )
+
+        # 5. Overlay 面板底色契约：黑色 + alpha 0xE（约 93%）。
+        # 低于 0xE 时非卡片区域会透出游戏高光，正文/次要文字难以阅读；
+        # 高于 0xE 则不满足“保留轻微透光”的设计选择。
+        assert "panel_bg" in ov_alphas, f"Missing panel_bg in {ov_name}"
+        assert ov_colors["panel_bg"] == 0x000000, (
+            f"{ov_name}.panel_bg must stay black, got 0x{ov_colors['panel_bg']:06X}"
+        )
+        assert ov_alphas["panel_bg"] == 0xE, (
+            f"{ov_name}.panel_bg alpha must be 0xE (~93%), got 0x{ov_alphas['panel_bg']:X}"
+        )
+
+    # 6. 接线断言：整屏填充必须使用调色板 panel_bg，而不是 libtesla 的 0xD 宿主底色。
+    # 只改调色板不改填充时，面板透明度不会变化。
+    normalized_main = re.sub(r"\s+", "", overlay_main)
+    assert "fillScreen(renderer->a(get_overlay_palette().panel_bg))" in normalized_main, (
+        "overlay frame must fill with get_overlay_palette().panel_bg"
+    )
+    assert "fillScreen(a(tsl::style::color::ColorFrameBackground))" not in normalized_main, (
+        "overlay frame must not fill with libtesla ColorFrameBackground (0xD)"
+    )
 
     print("PASS: ui palette contract verified successfully across all 4 theme styles (Graphite, Paper & Ink, Mist Teal, Dusk)")
 
