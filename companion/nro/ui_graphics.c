@@ -200,6 +200,7 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
     } else {
         draw_child(pixels, stride, model);
     }
+    draw_update_badge(pixels, stride, model);
     if (model->rendered_overlay != PTC_UI_OVERLAY_NONE) {
         /* 关闭动画期间渲染上一个弹层：输入已切回下层页面，仅视觉保留数帧。 */
         PtcUiModel visual = *model;

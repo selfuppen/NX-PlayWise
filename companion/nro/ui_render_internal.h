@@ -185,6 +185,7 @@ void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const cha
 void draw_globe_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color);
 void draw_language_switcher_badge(uint32_t *pixels, uint32_t stride, UiRect rect, bool focused);
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+void draw_update_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_subpage_nav(uint32_t *pixels, uint32_t stride, const char *back_label, const char *path);
 /* Full-page shell for the safety & preferences secondary pages. Repaints the
    whole screen (the parent settings page is already drawn underneath), then the

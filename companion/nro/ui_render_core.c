@@ -83,6 +83,22 @@ void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const cha
     draw_text(pixels, stride, 124, 77, fitted_sub, 18, UI_MUTED);
 }
 
+void draw_update_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    if (!ptc_ui_update_badge_visible(model)) return;
+    UiRect update = to_uirect(ptc_ui_update_badge_rect(model));
+    char label[64];
+    fill_round_rect(pixels, stride, update, 6, UI_SURFACE);
+    fit_text(label, sizeof(label), ptc_ui_text(PTC_UI_T_UPDATE_BADGE), 12, update.width - 32);
+    int label_x = update.x + update.width - 8 - measure_text(label, 12);
+    int icon_x = label_x - 13;
+    draw_line(pixels, stride, icon_x, update.y + 5, icon_x, update.y + 11, 1, UI_ACCENT);
+    draw_line(pixels, stride, icon_x - 3, update.y + 8, icon_x, update.y + 11, 1, UI_ACCENT);
+    draw_line(pixels, stride, icon_x, update.y + 11, icon_x + 3, update.y + 8, 1, UI_ACCENT);
+    draw_line(pixels, stride, icon_x - 4, update.y + 14, icon_x + 4, update.y + 14, 1, UI_ACCENT);
+    draw_text(pixels, stride, label_x, update.y + 14, label, 12, UI_MUTED);
+}
+
 uint32_t time_projection_color(PtcUiTimeState state)
 {
     switch (state) {
@@ -169,7 +185,12 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     fill_round_rect(pixels, stride, box, 14, UI_SURFACE);
     draw_rect_outline(pixels, stride, box, 14, 1, UI_BORDER);
 
-    /* --- 第一层：时钟、日期星期、生效规则胶囊徽章、更新时效 --- */
+    /* Reserve the measured data age independently of the software update entry. */
+    fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
+    int fresh_w = measure_text(fitted_fresh, 12);
+    int fresh_x = box.x + box.width - 14 - fresh_w;
+
+    /* --- 第一层：时钟、日期星期、生效规则胶囊徽章、数据时效 --- */
     /* 1. 时钟显示 (突出粗体) */
     draw_text_bold(pixels, stride, box.x + 14, box.y + 21, status.clock_text, 16, UI_INK);
     int clock_w = measure_text(status.clock_text, 16);
@@ -188,7 +209,7 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     int pill_w = badge_text_w + 22;
     if (pill_w < 64) pill_w = 64;
     UiRect pill = {date_x + date_w + 10, box.y + 7, pill_w, 19};
-    int right_limit = box.x + box.width - 14 - 110;
+    int right_limit = fresh_x - 8;
     if (pill.x + pill.width > right_limit && pill.width > 50) {
         pill.width = right_limit - pill.x;
     }
@@ -223,9 +244,7 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     }
 
     /* 5. 数据更新时效 (右对齐) */
-    fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
-    int fresh_w = measure_text(fitted_fresh, 12);
-    draw_text(pixels, stride, box.x + box.width - 14 - fresh_w, box.y + 21, fitted_fresh, 12, UI_MUTED);
+    draw_text(pixels, stride, fresh_x, box.y + 21, fitted_fresh, 12, UI_MUTED);
 
     /* --- 第二层：核心游玩额度状态 (前缀次级色与数值高亮加粗) 与 演示模式徽章 --- */
     const char *pfx_zh = ptc_ui_text(PTC_UI_T_ALSO_AVAILABLE_TO_PLAY_TODAY);
@@ -233,8 +252,6 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool is_pfx_zh = strncmp(status.remaining_text, pfx_zh, strlen(pfx_zh)) == 0;
     bool is_pfx_en = strncmp(status.remaining_text, pfx_en, strlen(pfx_en)) == 0;
     int rem_max_w = box.width - 28 - (model->demo_secret_enabled ? 48 : 0);
-    bool update_badge = ptc_ui_update_badge_visible(model);
-    if (update_badge) rem_max_w -= ptc_ui_update_badge_rect(model).w + 8;
     if (is_pfx_zh || is_pfx_en) {
         const char *pfx = is_pfx_zh ? pfx_zh : pfx_en;
         size_t pfx_len = strlen(pfx);
@@ -254,14 +271,6 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         UiRect dbadge = {box.x + box.width - 14 - 38, box.y + 30, 38, 18};
         fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
         draw_text_center(pixels, stride, dbadge, ptc_ui_text(PTC_UI_T_DEMO), 11, UI_DANGER);
-    }
-    if (update_badge) {
-        UiRect update = to_uirect(ptc_ui_update_badge_rect(model));
-        char label[64];
-        fill_round_rect(pixels, stride, update, 6, UI_PAGE);
-        fill_round_rect(pixels, stride, (UiRect){update.x + 8, update.y + 8, 4, 4}, 2, UI_ACCENT);
-        fit_text(label, sizeof(label), ptc_ui_text(PTC_UI_T_UPDATE_BADGE), 12, update.width - 26);
-        draw_text(pixels, stride, update.x + update.width - 8 - measure_text(label, 12), update.y + 14, label, 12, UI_MUTED);
     }
 
     /* --- 第三层：全宽精致圆角额度进度槽 (置于卡片下沿基线) --- */

@@ -674,12 +674,12 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
             else snprintf(out->freshness_text, sizeof(out->freshness_text),
                           ptc_ui_text(PTC_UI_T_CONFIRMED_LLDH_AGO), (long long)(age / 3600));
         }
-    } else if (age <= 0) {
-        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_JUST_UPDATED));
+    } else if (age < 60) {
+        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
     } else {
-        snprintf(out->freshness_text, sizeof(out->freshness_text),
-                 ptc_ui_text(PTC_UI_T_UPDATED_LLDS_AGO),
-                 (long long)age);
+        PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("minutes", age / 60)};
+        (void)ptc_ui_text_format(PTC_UI_T_STATUS_REFRESHED_MINUTES_AGO,
+            out->freshness_text, sizeof(out->freshness_text), args, 1);
     }
 
     if (model->status_loaded && !ptc_ui_status_is_fresh(model, now)) {

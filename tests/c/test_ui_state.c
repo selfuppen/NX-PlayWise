@@ -4612,6 +4612,50 @@ static void test_direct_usage_freshness(void)
         "invalid signed wire range cannot fall back to old estimate");
 }
 
+static void test_data_freshness_and_software_update(void)
+{
+    const char *now_text[] = {"刚刚刷新", "剛剛重新整理", "Just refreshed"};
+    const char *minute_text[] = {"1 分钟前刷新", "1 分鐘前重新整理", "Refreshed 1m ago"};
+    const char *age_text[] = {"2 分钟前刷新", "2 分鐘前重新整理", "Refreshed 2m ago"};
+    const char *app_text[] = {"软件有新版本", "軟體有新版本", "New app version"};
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        PtcUiModel model = {0};
+        PtcUiTimeProjection status;
+        int index = lang - PTC_UI_LANGUAGE_SIMPLIFIED;
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        model.view = PTC_UI_CHILD;
+        model.status_loaded = true;
+        model.status_updated_at = 1000;
+        model.update_status = 3;
+        strcpy(model.update_version, "2.0.0");
+        ptc_ui_project_time_status(&model, 1000, &status);
+        check_true(strcmp(status.freshness_text, now_text[index]) == 0,
+            "fresh data uses natural refresh wording rather than software update wording");
+        check_true(strcmp(ptc_ui_text(PTC_UI_T_UPDATE_BADGE), app_text[index]) == 0,
+            "software hint explicitly identifies the app in all languages");
+        ptc_ui_project_time_status(&model, 1059, &status);
+        check_true(strcmp(status.freshness_text, now_text[index]) == 0,
+            "sub-minute freshness avoids a noisy seconds counter");
+        ptc_ui_project_time_status(&model, 1060, &status);
+        check_true(strcmp(status.freshness_text, minute_text[index]) == 0,
+            "one minute switches to a natural minute-based refresh label");
+        ptc_ui_project_time_status(&model, 1120, &status);
+        check_true(strcmp(status.freshness_text, age_text[index]) == 0 && ptc_ui_update_badge_visible(&model),
+            "data age and an available app update remain independent");
+        ptc_ui_project_time_status(&model, 1121, &status);
+        check_true(strcmp(status.freshness_text, age_text[index]) != 0 && ptc_ui_update_badge_visible(&model),
+            "available software never hides stale data");
+        strcpy(model.result_status, "error");
+        ptc_ui_project_time_status(&model, 1001, &status);
+        check_true(strcmp(status.freshness_text, ptc_ui_text(PTC_UI_T_REFRESH_FAILED)) == 0,
+            "available software never hides a failed data refresh");
+        PtcUiRect bar = ptc_ui_time_status_bar_for_model(&model);
+        check_hit(ptc_ui_hit_test_at(&model, bar.x + bar.w - 24, bar.y + 16, 1001), PTC_UI_HIT_NONE, 0,
+            "read-only data age cannot trigger software update navigation");
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+}
+
 static void test_online_update_layout(void)
 {
     PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
@@ -4655,8 +4699,8 @@ static void test_online_update_layout(void)
         model.eye_care_policy.enabled = model.draft_eye_care_policy.enabled = dense != 0;
         model.bedtime_policy.enabled = dense != 0; model.demo_secret_enabled = demo != 0;
         PtcUiRect bar = ptc_ui_time_status_bar_for_model(&model), badge = ptc_ui_update_badge_rect(&model);
-        check_true(badge.x >= bar.x && badge.y >= bar.y && badge.x + badge.w <= bar.x + bar.w && badge.y + badge.h <= bar.y + bar.h,
-            "update badge stays inside dense global status bar");
+        check_true(!rects_overlap(badge, bar) && badge.x + badge.w < bar.x && badge.y >= 80 && badge.y + badge.h <= 104,
+            "software update stays under the app heading and outside the data status card");
         check_true(!rects_overlap(badge, ptc_ui_header_language_rect()), "update badge leaves language controls unobstructed");
         check_hit(hit_center(&model, badge), PTC_UI_HIT_UPDATE_BADGE, 0, "update badge shares measured touch anchor");
     }
@@ -4678,6 +4722,7 @@ int main(void)
     test_today_details_navigation();
     test_today_settings_links();
     test_config_backup_layout();
+    test_data_freshness_and_software_update();
     test_online_update_layout();
     test_dock_ui();
     test_dock_editor_preview();

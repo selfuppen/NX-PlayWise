@@ -17,8 +17,8 @@ PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){974, 378, 228, 30}
 
 PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model)
 {
-    PtcUiRect bar = ptc_ui_time_status_bar_for_model(model);
-    return (PtcUiRect){bar.x + bar.w - 14 - 92 - (model && model->demo_secret_enabled ? 46 : 0), bar.y + 30, 92, 20};
+    (void)model;
+    return (PtcUiRect){124, 80, 128, 20};
 }
 #include "ui_layout_internal.h"
 #include "../ui_language.h"

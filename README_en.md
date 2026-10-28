@@ -127,6 +127,7 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 | Configuration backup & import | Implemented; full backup, 11 selective restore groups, PIN/hold confirmation, transactional rollback, calendar restore, and pairing key rotation | 2026-10-06 |
 | TV mode rules | Implemented and functionally tested; force TV mode, uniform daily non-TV mode limit (0–1440 min), and PIN today exemption; disabled by default, non-TV usage counted into daily limit | 2026-10-06 |
 | Eye protection break | Implemented and functionally tested; continuous play/break cycles, overlay and Today's Schedule skip | 2026-10 |
+| [In-app online updates](docs/使用/USER_GUIDE.md#in-app-online-updates) | Implemented; automatic/manual checks, version channels, PIN/hold installation, independent pre-update backups and failure rollback; new-version hints displayed separately from data refresh status | 2026-10-28 |
 | Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
 | Multiple restricted time slots | TODO; support configuring multiple blackout/curfew intervals per day (e.g. study & dinner hours) | TBD |
 | Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |

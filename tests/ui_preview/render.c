@@ -35,6 +35,13 @@ static struct {
 
 static struct {
     bool enabled;
+    int label_count, freshness_count, failed;
+    PtcUiRect bar, badge;
+    char freshness[48];
+} update_header_trace;
+
+static struct {
+    bool enabled;
     PtcUiOverlay overlay;
     int failed, hints;
     char guide[512];
@@ -44,6 +51,21 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
 {
     if (!text) return;
     UiRect bounds = {x, baseline - size, measure_text(text, size), size};
+    if (update_header_trace.enabled) {
+        PtcUiRect badge = update_header_trace.badge, bar = update_header_trace.bar;
+        bool overlaps = bounds.x < badge.x + badge.w && bounds.x + bounds.width > badge.x &&
+            bounds.y < badge.y + badge.h && baseline > badge.y;
+        if (strcmp(text, ptc_ui_text(PTC_UI_T_UPDATE_BADGE)) == 0) {
+            ++update_header_trace.label_count;
+            if (bounds.x < badge.x + 24 || bounds.x + bounds.width > badge.x + badge.w - 8 ||
+                bounds.y < badge.y || baseline > badge.y + badge.h) ++update_header_trace.failed;
+        } else if (overlaps) ++update_header_trace.failed;
+        if (strcmp(text, update_header_trace.freshness) == 0) {
+            ++update_header_trace.freshness_count;
+            if (bounds.x < bar.x || bounds.x + bounds.width > bar.x + bar.w - 14 ||
+                baseline > badge.y - 4) ++update_header_trace.failed;
+        }
+    }
     if (bedtime_trace.enabled) {
         PtcUiRect dialog = ptc_ui_dialog_rect(960, 560);
         PtcUiRect mode = ptc_ui_bedtime_overlay_field_rect(bedtime_trace.overlay, 0);
@@ -441,7 +463,24 @@ static int save_preview(const char *directory, const char *module, const char *n
     settled.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
     memset(&child_heading_trace, 0, sizeof(child_heading_trace));
     child_heading_trace.enabled = strcmp(module, "child") == 0 && strcmp(name, "child") == 0;
+    memset(&update_header_trace, 0, sizeof(update_header_trace));
+    update_header_trace.enabled = strstr(name, "update-available") != NULL;
+    if (update_header_trace.enabled) {
+        PtcUiTimeProjection status;
+        ptc_ui_project_time_status(&settled, ptc_ui_render_now(), &status);
+        update_header_trace.bar = ptc_ui_time_status_bar_for_model(&settled);
+        update_header_trace.badge = ptc_ui_update_badge_rect(&settled);
+        snprintf(update_header_trace.freshness, sizeof(update_header_trace.freshness), "%s", status.freshness_text);
+    }
     ptc_ui_graphics_draw(&settled, &theme);
+    bool check_update = update_header_trace.enabled;
+    update_header_trace.enabled = false;
+    if (check_update && (update_header_trace.failed || update_header_trace.label_count != 1 ||
+        update_header_trace.freshness_count != 1)) {
+        fprintf(stderr, "FAIL: %s dark=%d update label=%d data age=%d bounds=%d\n", name, dark,
+            update_header_trace.label_count, update_header_trace.freshness_count, update_header_trace.failed);
+        return 1;
+    }
     bool check_heading = child_heading_trace.enabled;
     child_heading_trace.enabled = false;
     if (check_heading && check_child_forecast_heading(dark)) return 1;
@@ -1610,15 +1649,6 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.update_status = 3;
             snprintf(settings_dlg.update_installed_version, sizeof(settings_dlg.update_installed_version), "3.1.2-alpha");
             snprintf(settings_dlg.update_version, sizeof(settings_dlg.update_version), "3.2.0-beta.10");
-            {
-                PtcUiModel badge = baseline;
-                badge.view = PTC_UI_CHILD; badge.overlay = PTC_UI_OVERLAY_NONE; badge.update_status = 3;
-                strcpy(badge.update_version, "3.2.0-beta.10");
-                badge.draft_eye_care_policy = badge.eye_care_policy;
-                failed |= save_preview(directory, "child", "child-update-available", &badge, dark);
-                badge.view = PTC_UI_PARENT; badge.parent_page = PTC_UI_PARENT_TODAY;
-                failed |= save_preview(directory, "parent", "parent-update-available", &badge, dark);
-            }
             snprintf(settings_dlg.update_notes, sizeof(settings_dlg.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
             failed |= save_preview(directory, "settings", "settings-online-update", &settings_dlg, dark);
             settings_dlg.update_notes_open = true;
@@ -1958,6 +1988,24 @@ static int render_parent_pin_error_previews(const char *directory, const PtcUiMo
     return failed;
 }
 
+static int render_update_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiModel badge = *baseline;
+        badge.view = PTC_UI_CHILD;
+        badge.overlay = PTC_UI_OVERLAY_NONE;
+        badge.update_status = 3;
+        strcpy(badge.update_version, "3.2.0-beta.10");
+        badge.draft_eye_care_policy = badge.eye_care_policy;
+        failed |= save_preview(directory, "child", "child-update-available", &badge, dark);
+        badge.view = PTC_UI_PARENT;
+        badge.parent_page = PTC_UI_PARENT_TODAY;
+        failed |= save_preview(directory, "parent", "parent-update-available", &badge, dark);
+    }
+    return failed;
+}
+
 static int render_language_pass(const char *root_dir, const char *subdir, PtcUiLanguagePreference lang, const PtcUiModel *base_model)
 {
     char target_dir[1024];
@@ -1983,6 +2031,7 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
             ptc_mkdir(styled_dir);
         }
         ptc_ui_theme_set_style((PtcUiThemeStyle)style);
+        failed |= render_update_previews(styled_dir, &model);
         failed |= render_all_previews(styled_dir, &model);
         failed |= render_eye_care_previews(styled_dir, &model);
         failed |= render_dock_previews(styled_dir, &model);
