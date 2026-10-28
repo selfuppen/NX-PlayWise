@@ -143,6 +143,13 @@ def test_container_command() -> None:
     require("eden-test-nro" not in only_lab, "only=device-lab must omit Eden")
 
     only_previews = package_remote.container_command(only="previews")
+    require("PREVIEW_SCOPE=docs-zh PREVIEW_JOBS=8" in only_previews,
+            "default previews select only Chinese documentation with bounded parallelism")
+    require("--scope docs-zh" in only_previews, "Chinese-only preview must not synchronize English")
+    require("PREVIEW_SCOPE=all" in release and "--scope all" in release,
+            "release preserves the full visual matrix")
+    require("PREVIEW_SCOPE=docs PREVIEW_JOBS=1" in package_remote.container_command(
+        only="previews", preview_scope="docs", jobs=1), "scope and serial budget propagate")
     require("ui-previews" in only_previews, "only=previews must target ui-previews")
     require("python3 tools/build/sync_doc_previews.py" in only_previews,
             "only=previews must synchronize selected documentation scenes")
@@ -703,6 +710,7 @@ def test_parse_args_stripped_components() -> None:
         require(args.with_device_lab is False, "device lab must be disabled by default")
         require(args.with_complete is False, "complete package must be disabled by default")
         require(args.with_previews is False, "previews must be disabled by default")
+        require(args.preview_scope == "docs-zh", "preview scope defaults to Chinese documentation")
         require(args.with_eden is True, "Eden test app must be enabled by default")
         require(args.clean is False, "incremental build must be enabled by default")
 

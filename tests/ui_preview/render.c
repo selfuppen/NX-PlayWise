@@ -11,6 +11,7 @@
 #define ptc_mkdir(dir) mkdir(dir, 0777)
 #endif
 #include "../../companion/nro/ui_render_internal.h"
+#include "selection.h"
 
 uint32_t preview_pixels[1280 * 720];
 static bool preview_all_styles;
@@ -452,6 +453,19 @@ static int save_preview(const char *directory, const char *module, const char *n
     FILE *file;
     unsigned char *rgb;
     int n;
+    n = snprintf(dir_path, sizeof(dir_path), "%s/%s", directory, module);
+    if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
+    n = snprintf(path, sizeof(path), "%s/%s-%s.ppm", dir_path, name, dark ? "dark" : "light");
+    if (n < 0 || (size_t)n >= sizeof(path)) return 1;
+    bool selected = ptc_preview_selected(path, false);
+    /* These callers sample the framebuffer after this function returns. Keep
+       their assertions independent of whether a documentation file is needed. */
+    bool sampled = (strcmp(module, "child") == 0 &&
+        (strcmp(name, "child") == 0 || strcmp(name, "child-details") == 0)) ||
+        (strcmp(module, "parent") == 0 && (strcmp(name, "today-rules") == 0 ||
+        strcmp(name, "today-rules-stale") == 0 || strcmp(name, "today-rules-control-off") == 0 ||
+        strcmp(name, "parent-details-rules-restricted") == 0));
+    if (!selected && !sampled) return 0;
     PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
     /* Previews skip update_animations, so render the tweened values at rest. */
     PtcUiModel settled = *model;
@@ -484,6 +498,7 @@ static int save_preview(const char *directory, const char *module, const char *n
     bool check_heading = child_heading_trace.enabled;
     child_heading_trace.enabled = false;
     if (check_heading && check_child_forecast_heading(dark)) return 1;
+    if (!selected) return 0;
     /* The details dialog is tall enough that the marker at y=100 would land on its
        card titles (and the child guide bar), so it moves into the scrim under the
        dialog. Shorter dialogs keep the marker in the scrim above them. */
@@ -2016,6 +2031,7 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
         int n = snprintf(target_dir, sizeof(target_dir), "%s", root_dir);
         if (n < 0 || (size_t)n >= sizeof(target_dir)) return 1;
     }
+    if (!ptc_preview_selected(target_dir, true)) return 0;
     ptc_mkdir(target_dir);
     ptc_ui_language_set_resolved(lang);
     PtcUiModel model = *base_model;
@@ -2116,7 +2132,14 @@ int main(int argc, char **argv)
         { "zh_hant", PTC_UI_LANGUAGE_TRADITIONAL }
     };
     pid_t pids[3] = {0, 0, 0};
+    int workers = ptc_preview_workers();
     for (int i = 0; i < 3; ++i) {
+        int slot = i % workers;
+        if (pids[slot] > 0) {
+            int status = 0;
+            if (waitpid(pids[slot], &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) failed = 1;
+            pids[slot] = 0;
+        }
         pid_t pid = fork();
         if (pid < 0) {
             /* Fallback to synchronous execution on fork failure */
@@ -2127,7 +2150,7 @@ int main(int argc, char **argv)
             free(bytes);
             _exit(res ? 1 : 0);
         } else {
-            pids[i] = pid;
+            pids[slot] = pid;
         }
     }
     for (int i = 0; i < 3; ++i) {

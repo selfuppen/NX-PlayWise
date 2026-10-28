@@ -97,6 +97,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_eden_dock_flow.py",
         "tests/devkit/test_eden_input_flow.py",
         "tests/devkit/test_convert_ui_previews.py",
+        "tests/devkit/test_render_ui_previews.py",
         "tests/devkit/test_stage_timer.py",
         "tests/devkit/test_device_roundtrip.py",
         "tests/devkit/test_assert_device_evidence.py",

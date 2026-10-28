@@ -4,6 +4,7 @@
 #include <cstring>
 #include <filesystem>
 #include <initializer_list>
+#include "../ui_preview/selection.h"
 #ifndef _WIN32
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -250,6 +251,7 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
     const char *names[] = {"overlay-rest-stale", "overlay-rest-refresh-failed",
         "overlay-rest-refreshing", "overlay-rest-expired"};
     for (int i = 0; i < 4; ++i) {
+        if (!ptc_preview_selected((dir / (std::string(names[i]) + ".ppm")).generic_string().c_str(), false)) continue;
         tsl::gfx::Renderer renderer(font_path);
         PtcOverlayBridge bridge{};
         PtcOverlayInput input{};
@@ -422,9 +424,11 @@ int main(int argc, char **argv) {
             ptc_ui_language_set_resolved(languages[language]);
             test_text_layout(renderer);
             auto dir = std::filesystem::path(argv[2]) / folders[language] / "overlay";
+            if (!ptc_preview_selected(dir.generic_string().c_str(), true)) return 0;
             std::filesystem::create_directories(dir);
             test_stale_rest(argv[1], dir);
             for (int scene = 0; scene < static_cast<int>(sizeof(scenes) / sizeof(scenes[0])); ++scene) {
+                if (!ptc_preview_selected((dir / (std::string(scenes[scene]) + ".ppm")).generic_string().c_str(), false)) continue;
                 PtcOverlayBridge bridge{};
                 PtcOverlayInput input{};
                 ptc_overlay_input_init(&input);
@@ -907,7 +911,15 @@ int main(int argc, char **argv) {
         }
 #else
         pid_t pids[3] = {0, 0, 0};
+        const int workers = ptc_preview_workers();
+        bool failed = false;
         for (int language = 0; language < 3; ++language) {
+            const int slot = language % workers;
+            if (pids[slot] > 0) {
+                int status = 0;
+                if (waitpid(pids[slot], &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) failed = true;
+                pids[slot] = 0;
+            }
             pid_t pid = fork();
             if (pid < 0) {
                 run_language_pass(language);
@@ -920,10 +932,9 @@ int main(int argc, char **argv) {
                     _exit(1);
                 }
             } else {
-                pids[language] = pid;
+                pids[slot] = pid;
             }
         }
-        bool failed = false;
         for (int language = 0; language < 3; ++language) {
             if (pids[language] > 0) {
                 int status = 0;
@@ -938,8 +949,7 @@ int main(int argc, char **argv) {
         }
         if (failed) return 1;
 #endif
-        std::printf("PASS: %zu production Overlay previews (3 languages, %zu sample states)\n",
-            3 * (sizeof(scenes) / sizeof(scenes[0]) + 4), sizeof(scenes) / sizeof(scenes[0]) + 4);
+        std::puts("PASS: selected production Overlay scenes rendered and checked");
         return 0;
     } catch (const std::exception &error) {
         std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;

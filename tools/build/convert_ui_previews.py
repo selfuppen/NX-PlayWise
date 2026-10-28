@@ -65,6 +65,7 @@ def convert_all(
     *,
     jobs: int | None = None,
     force: bool = False,
+    sources: list[Path] | None = None,
 ) -> tuple[int, int, int]:
     """Convert all PPM files in preview_dir to PNG.
 
@@ -73,7 +74,7 @@ def convert_all(
     if not preview_dir.is_dir():
         return 0, 0, 0
 
-    sources = sorted(preview_dir.rglob("*.ppm"))
+    sources = sorted(preview_dir.rglob("*.ppm")) if sources is None else sources
     tasks: list[Path] = []
     skipped = 0
 

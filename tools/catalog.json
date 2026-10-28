@@ -2,7 +2,7 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-25",
   "scope": "playwise/tools",
-  "script_count": 71,
+  "script_count": 72,
   "scripts": [
     {
       "path": "automation/eden_dock_flow.py",
@@ -112,6 +112,11 @@
       "category": "build",
       "purpose": "离线家长网页生成",
       "legacy_path": "build_ptc_standalone.py"
+    },
+    {
+      "path": "build/render_ui_previews.py",
+      "category": "build",
+      "purpose": "按文档引用筛选UI预览，缓存渲染并限制并行数"
     },
     {
       "path": "build/convert_ui_previews.py",

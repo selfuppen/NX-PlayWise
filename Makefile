@@ -230,13 +230,17 @@ HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETU
 $(HOST_CACHED_TARGETS): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 
 .PHONY: render-nro-previews render-overlay-previews convert-previews ui-previews
+# Documentation snapshots are optional; full visual coverage is explicit.
+PREVIEW_SCOPE ?= docs-zh
+PREVIEW_JOBS ?= 8
+PREVIEW_FORCE ?=
 render-nro-previews: $(HOST_BUILD_DIR)/ui_preview
 	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \
 		echo "ERROR: missing pinned preview font" >&2; \
 		exit 1; \
 	fi
 	mkdir -p build/ui-previews
-	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews --all-styles
+	$(STAGE_TIMER) playwise ui-previews -- python3 tools/build/render_ui_previews.py nro --scope $(PREVIEW_SCOPE) --jobs $(PREVIEW_JOBS) $(PREVIEW_FORCE)
 
 render-overlay-previews: $(HOST_BUILD_DIR)/overlay_preview
 	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \
@@ -244,10 +248,10 @@ render-overlay-previews: $(HOST_BUILD_DIR)/overlay_preview
 		exit 1; \
 	fi
 	mkdir -p build/ui-previews
-	$(STAGE_TIMER) playwise overlay-previews -- $(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
+	$(STAGE_TIMER) playwise overlay-previews -- python3 tools/build/render_ui_previews.py overlay --scope $(PREVIEW_SCOPE) --jobs $(PREVIEW_JOBS) $(PREVIEW_FORCE)
 
 convert-previews: render-nro-previews render-overlay-previews
-	$(STAGE_TIMER) playwise convert-previews -- python3 tools/build/convert_ui_previews.py
+	$(STAGE_TIMER) playwise convert-previews -- python3 tools/build/render_ui_previews.py convert --scope $(PREVIEW_SCOPE) --jobs $(PREVIEW_JOBS) $(PREVIEW_FORCE)
 
 ui-previews: convert-previews
 
