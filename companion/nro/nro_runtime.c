@@ -53,6 +53,7 @@ void open_hot_reload_confirmation(UiState *ui)
 {
     char body[320];
     if (!ui || ui->model.view != PTC_UI_PARENT || ui->model.parent_support_only ||
+        ui->updater.worker_live || ui->updater.status == PTC_UPDATE_RECOVERY_REQUIRED ||
         ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting || ui->recovering_redemption) return;
     if (ui->model.hot_reload_capture_restart) {
         snprintf(body, sizeof(body), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_BODY));
@@ -342,6 +343,7 @@ void close_auth_error(UiState *ui, bool cancelled)
     ui->model.auth_error_message[0] = '\0';
     if (cancelled) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
+        ui->update_open_after_parent_auth = false;
         snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_CANCELED));
         ui->model.result_status[0] = '\0';
     }

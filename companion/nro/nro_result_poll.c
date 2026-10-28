@@ -240,6 +240,7 @@ void poll_result(UiState *ui, bool force)
         }
         config_backup_result(ui);
         refresh_disable_flag(ui);
+        online_update_status_result(ui);
         if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER)
             calendar_manager_refresh(ui);
         if (strcmp(ui->model.result_type, "clear_redemption_history") == 0) {

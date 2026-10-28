@@ -233,6 +233,8 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool is_pfx_zh = strncmp(status.remaining_text, pfx_zh, strlen(pfx_zh)) == 0;
     bool is_pfx_en = strncmp(status.remaining_text, pfx_en, strlen(pfx_en)) == 0;
     int rem_max_w = box.width - 28 - (model->demo_secret_enabled ? 48 : 0);
+    bool update_badge = ptc_ui_update_badge_visible(model);
+    if (update_badge) rem_max_w -= ptc_ui_update_badge_rect(model).w + 8;
     if (is_pfx_zh || is_pfx_en) {
         const char *pfx = is_pfx_zh ? pfx_zh : pfx_en;
         size_t pfx_len = strlen(pfx);
@@ -252,6 +254,14 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         UiRect dbadge = {box.x + box.width - 14 - 38, box.y + 30, 38, 18};
         fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
         draw_text_center(pixels, stride, dbadge, ptc_ui_text(PTC_UI_T_DEMO), 11, UI_DANGER);
+    }
+    if (update_badge) {
+        UiRect update = to_uirect(ptc_ui_update_badge_rect(model));
+        char label[64];
+        fill_round_rect(pixels, stride, update, 6, UI_PAGE);
+        fill_round_rect(pixels, stride, (UiRect){update.x + 8, update.y + 8, 4, 4}, 2, UI_ACCENT);
+        fit_text(label, sizeof(label), ptc_ui_text(PTC_UI_T_UPDATE_BADGE), 12, update.width - 26);
+        draw_text(pixels, stride, update.x + update.width - 8 - measure_text(label, 12), update.y + 14, label, 12, UI_MUTED);
     }
 
     /* --- 第三层：全宽精致圆角额度进度槽 (置于卡片下沿基线) --- */

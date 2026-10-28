@@ -38,10 +38,25 @@ static void test_config_backup(void)
     char stage[256], digest[65], original[6144], text[32768], pin[1024];
     check_true(mem && core, "allocate backup tests"); if (!mem || !core) goto done;
     backup_fixture(mem, &pctl, &clock, core);
+    cJSON *preferences = ptc_config_read_json(&mem->storage, "app", "config.json", 8192);
+    check_true(preferences != NULL, "read update preferences fixture");
+    cJSON_AddStringToObject(preferences, "theme_style", "teal");
+    cJSON_AddBoolToObject(preferences, "update_check_on_startup", false);
+    cJSON_AddBoolToObject(preferences, "update_stable_only", true);
+    check_true(ptc_config_write_json(&mem->storage, "app", "config.json", preferences), "save update preferences fixture");
+    cJSON *invalid_preferences = cJSON_Duplicate(preferences, true);
+    cJSON_ReplaceItemInObjectCaseSensitive(invalid_preferences, "update_stable_only", cJSON_CreateString("true"));
+    check_true(!ptc_config_preferences_valid(invalid_preferences), "wrong update preference type refused");
+    cJSON_Delete(invalid_preferences); cJSON_Delete(preferences);
     check_true(ptc_config_stage_path(stage, sizeof(stage), "app", "backup-stage"), "request-owned stage");
     process_request_text(core,
         "{\"version\":1,\"request_id\":\"backup-stage\",\"type\":\"create_config_backup\",\"created_at\":1,\"payload\":{}}", "backup-stage");
     check_true(ptc_config_stage_validate(&mem->storage, stage, NULL), "backend complete consistent snapshot");
+    preferences = ptc_config_read_json(&mem->storage, stage, "config.json", 8192);
+    check_true(preferences && !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(preferences, "theme_style")), "teal") &&
+        cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(preferences, "update_check_on_startup")) &&
+        cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(preferences, "update_stable_only")), "update preferences and theme style survive archive projection");
+    cJSON_Delete(preferences);
     check_true(ptc_config_archive_save(&mem->storage, stage, "app/backups/config-backup.json"), "archive all config");
     check_true(mem->storage.vtable->read_text(&mem->storage, "app/backups/config-backup.json", text, sizeof(text)) &&
         strstr(text, "grant_secret") && strstr(text, "pin_salt") && !strstr(text, "used_nonces"), "archive scope includes secrets, excludes ledger");

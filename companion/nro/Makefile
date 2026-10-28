@@ -1,3 +1,4 @@
+.DEFAULT_GOAL := all
 ifeq ($(strip $(DEVKITPRO)),)
 $(error DEVKITPRO is not set. Source devkitPro environment before building the Companion NRO)
 endif
@@ -29,6 +30,12 @@ CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections -MMD -MP $
 CFLAGS += -D__SWITCH__ -DPTC_IPC_CLIENT_NRO $(DEFINES) -I../.. -I$(MANIFEST_INCLUDE) -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
 LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
+ifneq ($(EDEN_BUILD),1)
+UPDATE_CFLAGS := $(shell $(PKG_CONFIG) --cflags libcurl minizip mbedcrypto)
+UPDATE_LIBS := $(shell $(PKG_CONFIG) --static --libs libcurl minizip mbedcrypto)
+CFLAGS += $(UPDATE_CFLAGS)
+LIBS += $(UPDATE_LIBS)
+endif
 
 OBJS := \
 	$(BUILD)/main.o \
@@ -119,6 +126,24 @@ OBJS := \
 	$(BUILD)/config_backup.o
 
 DEPENDS := $(OBJS:.o=.d)
+OBJS += $(BUILD)/update.o $(BUILD)/update_install.o $(BUILD)/update_fs.o $(BUILD)/nro_online_update.o
+ifneq ($(EDEN_BUILD),1)
+OBJS += $(BUILD)/online_update.o $(BUILD)/online_update_package.o
+endif
+DEPENDS += $(BUILD)/update.d $(BUILD)/update_install.d $(BUILD)/update_fs.d $(BUILD)/nro_online_update.d $(BUILD)/online_update.d $(BUILD)/online_update_package.d
+
+$(BUILD)/update.o: ../../common/update/update.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/update_install.o: ../update_install.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/update_fs.o: ../../platform/update_fs.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/nro_online_update.o: nro_online_update.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/online_update.o: online_update.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/online_update_package.o: online_update_package.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Emulator-only build: run the control core in-process against the simulated
 # PCTL adapter, and drop the pctc:u client the emulator cannot reach.

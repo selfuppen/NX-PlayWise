@@ -619,7 +619,7 @@ static const char *next_wrapped_line(const char *cursor, int size, int max_width
     return *end == '\n' ? end + 1 : (*end == ' ' ? end + 1 : end);
 }
 
-int draw_wrapped_text(
+int draw_wrapped_text_from_line(
     uint32_t *pixels,
     uint32_t stride,
     int x,
@@ -629,10 +629,15 @@ int draw_wrapped_text(
     int max_width,
     int line_height,
     int max_lines,
+    int first_line,
     uint32_t color)
 {
     char localized[4096];
     const char *cursor = ptc_ui_localize(text ? text : "", localized, sizeof(localized));
+    for (int i = 0; *cursor && i < first_line; ++i) {
+        const char *end = NULL;
+        cursor = next_wrapped_line(cursor, size, max_width, &end);
+    }
     int line = 0;
     while (*cursor && line < max_lines) {
         const char *end = NULL;
@@ -647,6 +652,13 @@ int draw_wrapped_text(
         ++line;
     }
     return baseline + line * line_height;
+}
+
+int draw_wrapped_text(uint32_t *pixels, uint32_t stride, int x, int baseline,
+    const char *text, int size, int max_width, int line_height, int max_lines, uint32_t color)
+{
+    return draw_wrapped_text_from_line(pixels, stride, x, baseline, text, size,
+        max_width, line_height, max_lines, 0, color);
 }
 
 int draw_wrapped_text_centered(

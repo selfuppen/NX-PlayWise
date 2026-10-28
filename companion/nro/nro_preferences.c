@@ -115,6 +115,8 @@ void refresh_shortcut_draft_label(UiState *ui)
 
 void load_ui_preferences(UiState *ui)
 {
+    ui->model.update_check_on_startup = true;
+    ui->model.update_stable_only = false;
     char text[RESULT_TEXT_SIZE];
     u64 mask;
     cJSON *root;
@@ -192,6 +194,10 @@ void load_ui_preferences(UiState *ui)
             ui->language_preference = preference;
     }
     ui->model.language_preference = ui->language_preference;
+    item = cJSON_GetObjectItemCaseSensitive(root, "update_check_on_startup");
+    if (cJSON_IsBool(item)) ui->model.update_check_on_startup = cJSON_IsTrue(item);
+    item = cJSON_GetObjectItemCaseSensitive(root, "update_stable_only");
+    if (cJSON_IsBool(item)) ui->model.update_stable_only = cJSON_IsTrue(item);
     item = cJSON_GetObjectItemCaseSensitive(root, "sound_effects_enabled");
     if (cJSON_IsBool(item)) {
         ptc_audio_set_enabled(cJSON_IsTrue(item));
@@ -268,6 +274,10 @@ bool save_ui_preferences(UiState *ui)
     cJSON_DeleteItemFromObject(root, "ui_language");
     cJSON_AddStringToObject(root, "ui_language",
         ptc_ui_language_preference_name(ui->language_preference));
+    cJSON_DeleteItemFromObject(root, "update_check_on_startup");
+    cJSON_AddBoolToObject(root, "update_check_on_startup", ui->model.update_check_on_startup);
+    cJSON_DeleteItemFromObject(root, "update_stable_only");
+    cJSON_AddBoolToObject(root, "update_stable_only", ui->model.update_stable_only);
     cJSON_DeleteItemFromObject(root, "sound_effects_enabled");
     cJSON_AddBoolToObject(root, "sound_effects_enabled", ptc_audio_is_enabled());
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");

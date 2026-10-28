@@ -124,11 +124,13 @@ typedef enum {
     PTC_UI_HIT_SETUP_PCTL_HELP,
     PTC_UI_HIT_SUPPORT_GUIDE,
     PTC_UI_HIT_CONFIG_BACKUP_FIELD,
+    PTC_UI_HIT_UPDATE_ACTION,
     PTC_UI_HIT_DOCK_FIELD,
     PTC_UI_HIT_DAY_DECISION_REFRESH,
     PTC_UI_HIT_DAY_DECISION_PREV,
     PTC_UI_HIT_DAY_DECISION_NEXT,
-    PTC_UI_HIT_LANGUAGE_SWITCH
+    PTC_UI_HIT_LANGUAGE_SWITCH,
+    PTC_UI_HIT_UPDATE_BADGE
 } PtcUiHitKind;
 
 typedef struct {
@@ -298,6 +300,10 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now);
 
 
 PtcUiRect ptc_ui_config_backup_field_rect(int index);
+PtcUiRect ptc_ui_update_action_rect(int index);
+PtcUiRect ptc_ui_update_backup_rect(int index);
+PtcUiRect ptc_ui_update_notes_rect(void);
+PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model);
 PtcUiRect ptc_ui_dock_field_rect(int index);
 PtcUiRect ptc_ui_today_status_rect(int index);
 PtcUiRect ptc_ui_config_backup_group_rect(int group);

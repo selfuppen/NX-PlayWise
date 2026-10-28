@@ -1605,6 +1605,46 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
             failed |= save_preview(directory, "settings", "settings-software-info", &settings_dlg, dark);
+            settings_dlg.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+            settings_dlg.update_check_on_startup = true;
+            settings_dlg.update_status = 3;
+            snprintf(settings_dlg.update_installed_version, sizeof(settings_dlg.update_installed_version), "3.1.2-alpha");
+            snprintf(settings_dlg.update_version, sizeof(settings_dlg.update_version), "3.2.0-beta.10");
+            {
+                PtcUiModel badge = baseline;
+                badge.view = PTC_UI_CHILD; badge.overlay = PTC_UI_OVERLAY_NONE; badge.update_status = 3;
+                strcpy(badge.update_version, "3.2.0-beta.10");
+                badge.draft_eye_care_policy = badge.eye_care_policy;
+                failed |= save_preview(directory, "child", "child-update-available", &badge, dark);
+                badge.view = PTC_UI_PARENT; badge.parent_page = PTC_UI_PARENT_TODAY;
+                failed |= save_preview(directory, "parent", "parent-update-available", &badge, dark);
+            }
+            snprintf(settings_dlg.update_notes, sizeof(settings_dlg.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
+            failed |= save_preview(directory, "settings", "settings-online-update", &settings_dlg, dark);
+            settings_dlg.update_notes_open = true;
+            settings_dlg.update_notes[0] = '\0';
+            for (int note = 0; note < 28; ++note) {
+                const char *line = ptc_ui_text(PTC_UI_T_UPDATE_TRUST);
+                size_t n = strlen(settings_dlg.update_notes), length = strlen(line);
+                if (n + length + 2 >= sizeof(settings_dlg.update_notes)) break;
+                memcpy(settings_dlg.update_notes + n, line, length);
+                settings_dlg.update_notes[n + length] = '\n'; settings_dlg.update_notes[n + length + 1] = '\0';
+            }
+            failed |= save_preview(directory, "settings", "settings-online-update-notes", &settings_dlg, dark);
+            settings_dlg.update_notes_page = 1;
+            failed |= save_preview(directory, "settings", "settings-online-update-notes-next", &settings_dlg, dark);
+            settings_dlg.update_notes_open = false;
+            snprintf(settings_dlg.update_notes, sizeof(settings_dlg.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
+            settings_dlg.update_busy = true; settings_dlg.update_status = 6; settings_dlg.update_received_kib = 2048;
+            failed |= save_preview(directory, "settings", "settings-online-update-downloading", &settings_dlg, dark);
+            settings_dlg.update_busy = false; settings_dlg.update_status = 14;
+            failed |= save_preview(directory, "settings", "settings-online-update-recovery", &settings_dlg, dark);
+            settings_dlg.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
+            settings_dlg.update_backup_count = 2;
+            snprintf(settings_dlg.update_backup_labels[0], sizeof(settings_dlg.update_backup_labels[0]), "2026-10-28 12:00 / %s\nplaywise-3.1.2-alpha+0123456789ab", ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_VERIFIED));
+            snprintf(settings_dlg.update_backup_labels[1], sizeof(settings_dlg.update_backup_labels[1]), "2026-10-27 12:00 / %s\nplaywise-3.1.1-beta.1+abcdef012345", ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_VERIFIED));
+            failed |= save_preview(directory, "settings", "settings-update-backups", &settings_dlg, dark);
+            settings_dlg.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
             settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_PENDING;
             settings_dlg.hot_reload_capture_restart = true;
             snprintf(settings_dlg.backend_release_id, sizeof(settings_dlg.backend_release_id), "%s", settings_dlg.app_release_id);

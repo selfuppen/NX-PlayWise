@@ -433,7 +433,7 @@ void handle_parent_action(UiState *ui)
                      new_state ? ptc_ui_text(PTC_UI_T_BUTTON_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN) : ptc_ui_text(PTC_UI_T_KEYSTROKES_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN));
             break;
         }
-        case 7: open_config_backup(ui); break;
+        case 7: ui->config_backup_selected_path[0] = '\0'; open_config_backup(ui); break;
         case 6:
             open_activity_history(ui);
             break;
@@ -629,13 +629,19 @@ void confirm_operation(UiState *ui)
     bool held_danger_confirmation = ui->model.confirm_hold_required;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
+    case PTC_UI_OPERATION_ONLINE_UPDATE:
+    case PTC_UI_OPERATION_UPDATE_RECOVER:
+    case PTC_UI_OPERATION_UPDATE_CLEANUP:
+        confirm_online_update(ui, operation);
+        break;
     case PTC_UI_OPERATION_IMPORT_CALENDAR:
     case PTC_UI_OPERATION_ACTIVATE_CALENDAR:
         submit_calendar_operation(ui, operation);
         break;
 #ifndef PLAYWISE_EDEN
     case PTC_UI_OPERATION_HOT_RELOAD:
-        if (ui->waiting || ui->recovering_redemption || ui->model.recovery_active) {
+        if (ui->waiting || ui->recovering_redemption || ui->model.recovery_active ||
+            ui->updater.worker_live || ui->updater.status == PTC_UPDATE_RECOVERY_REQUIRED) {
             snprintf(ui->model.message, sizeof(ui->model.message),
                 ptc_ui_text(PTC_UI_T_THE_CURRENT_OPERATION_OR_RECOVERY_HAS_NOT));
         } else if (ptc_hot_reload_begin(&ui->hot_reload)) {

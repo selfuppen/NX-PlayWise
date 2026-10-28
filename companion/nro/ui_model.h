@@ -130,7 +130,9 @@ typedef enum {
     PTC_UI_OVERLAY_SETUP_PCTL_HELP = 42,
     PTC_UI_OVERLAY_SUPPORT_GUIDE = 43,
     PTC_UI_OVERLAY_CONFIG_BACKUP = 44,
-    PTC_UI_OVERLAY_DOCK_RULES = 45
+    PTC_UI_OVERLAY_DOCK_RULES = 45,
+    PTC_UI_OVERLAY_ONLINE_UPDATE = 46,
+    PTC_UI_OVERLAY_UPDATE_BACKUPS = 47
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -295,7 +297,10 @@ typedef enum {
     PTC_UI_OPERATION_CONFIRM_DOCK = 34,
     PTC_UI_OPERATION_CREATE_CONFIG_BACKUP = 35,
     PTC_UI_OPERATION_RESTORE_CONFIG_BACKUP = 36,
-    PTC_UI_OPERATION_CONFIG_REQUIREMENTS = 37
+    PTC_UI_OPERATION_CONFIG_REQUIREMENTS = 37,
+    PTC_UI_OPERATION_ONLINE_UPDATE = 38,
+    PTC_UI_OPERATION_UPDATE_RECOVER = 39,
+    PTC_UI_OPERATION_UPDATE_CLEANUP = 40
 } PtcUiOperation;
 
 typedef struct {
@@ -717,6 +722,22 @@ typedef struct {
     char grant_code[9];
     char grant_notice[192];
     char software_version[32];
+    int update_status;
+    int update_error;
+    bool update_check_on_startup;
+    bool update_stable_only;
+    bool update_busy;
+    unsigned update_received_kib;
+    unsigned update_size_kib;
+    char update_version[64];
+    char update_installed_version[64];
+    char update_notes[2048];
+    bool update_notes_open;
+    int update_notes_page;
+    int update_backup_count;
+    int update_backup_index;
+    bool update_cleanup_failed;
+    char update_backup_labels[16][192];
     char app_release_id[96];
     char backend_release_id[96];
     char hot_reload_detail[192];

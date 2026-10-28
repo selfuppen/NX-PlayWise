@@ -92,6 +92,15 @@ def test_install_script_preview() -> None:
     with tempfile.TemporaryDirectory(prefix="ptc-test-install-script-") as tmp_dir:
         pkg = create_fake_package(Path(tmp_dir))
 
+        # A managed worktree may share the system temporary drive. Preview must
+        # still exercise a different real destination without weakening the
+        # installer's same-drive source protection.
+        destinations = [letter for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ"
+                        if letter != pkg.drive[0].upper() and Path(letter + ":/").is_dir()]
+        if not destinations:
+            print("Skipping cross-drive preview: no second filesystem drive")
+            return
+
         # 1. Incremental mode preview
         cmd_inc = [
             "powershell",
@@ -102,7 +111,7 @@ def test_install_script_preview() -> None:
             "-SourceFolder",
             str(pkg),
             "-Drive",
-            ROOT.drive[0],
+            destinations[0],
         ]
         res_inc = subprocess.run(cmd_inc, capture_output=True, text=True)
         require(res_inc.returncode == 0, f"Incremental preview failed: {res_inc.stderr}")

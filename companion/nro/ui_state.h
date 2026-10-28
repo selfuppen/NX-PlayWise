@@ -229,4 +229,7 @@ bool ptc_ui_open_home_details(PtcUiModel *model);
 bool ptc_ui_open_notice_details(PtcUiModel *model);
 bool ptc_ui_home_notice_expanded(const PtcUiModel *model);
 
+bool ptc_ui_update_action_enabled(const PtcUiModel *model, int action);
+bool ptc_ui_update_can_resume_backup(const PtcUiModel *model);
+bool ptc_ui_update_badge_visible(const PtcUiModel *model);
 #endif

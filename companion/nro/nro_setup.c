@@ -31,8 +31,15 @@ static void enter_parent_area_unlocked(UiState *ui)
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PARENTAL_AREA_UNLOCKED_TO_ENTER_THE_KIDS));
 #ifndef PLAYWISE_EDEN
+    if (ui->updater.status == PTC_UPDATE_RECOVERY_REQUIRED) { ui->update_open_after_parent_auth = false; open_online_update(ui); return; }
     ptc_hot_reload_inspect(&ui->hot_reload);
     sync_hot_reload_model(ui);
+#endif
+    if (ui->update_open_after_parent_auth) {
+        ui->update_open_after_parent_auth = false;
+        open_online_update(ui); return;
+    }
+#ifndef PLAYWISE_EDEN
     if (ui->hot_reload.status == PTC_HOT_RELOAD_PENDING && !ui->hot_reload_prompted) {
         ui->hot_reload_prompted = true;
         open_hot_reload_confirmation(ui);
@@ -55,6 +62,7 @@ void enter_parent_area(UiState *ui)
             !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR), pin_confirm, sizeof(pin_confirm))) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
             snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_SETUP_CANCELED));
+            ui->update_open_after_parent_auth = false;
             return;
         }
         if (strcmp(pin, pin_confirm) != 0) {
@@ -73,6 +81,7 @@ void enter_parent_area(UiState *ui)
     if (!pin_input(ui, ptc_ui_text(PTC_UI_T_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_JOYSTICK_DIRECTION_INPUT_X_0_Y_9_2), pin, sizeof(pin))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_ACCESS_TO_THE_PARENT_AREA_HAS_BEEN));
+        ui->update_open_after_parent_auth = false;
         return;
     }
     {
@@ -250,6 +259,7 @@ bool ensure_default_setup_pin(UiState *ui)
 void enter_support_area(UiState *ui)
 {
     if (!ui) return;
+    ui->update_open_after_parent_auth = false;
     ui->model.view = PTC_UI_PARENT;
     ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
     ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;

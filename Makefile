@@ -1,3 +1,4 @@
+.DEFAULT_GOAL := all
 HOST_CC ?= gcc
 HOST_CXX ?= g++
 HOST_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -I.
@@ -15,9 +16,31 @@ HOST_HOT_RELOAD_TEST := $(HOST_BUILD_DIR)/test_hot_reload
 HOST_UI_STATUS_TRACE_TEST := $(HOST_BUILD_DIR)/test_ui_status_trace
 HOST_INPUT_OWNER_TEST := $(HOST_BUILD_DIR)/test_input_owner
 HOST_AUTH_CLOCK_TEST := $(HOST_BUILD_DIR)/test_auth_clock
+HOST_ONLINE_UPDATE_TEST := $(HOST_BUILD_DIR)/test_online_update
+HOST_ONLINE_PACKAGE_TEST := $(HOST_BUILD_DIR)/test_online_package
+HOST_ONLINE_NETWORK_TEST := $(HOST_BUILD_DIR)/test_online_network
+
+$(HOST_ONLINE_UPDATE_TEST): tests/c/test_online_update.c common/update/update.c common/crypto/sha256.c companion/update_install.c platform/host/mem_storage.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^) -lm
+
+$(HOST_ONLINE_PACKAGE_TEST): tests/online_update/package_test.c companion/nro/online_update_package.c platform/update_fs.c companion/update_install.c common/update/update.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/online_update -o $@ $(filter %.c,$^) -lm
+
+.PHONY: test-online-package
+test-online-package: $(HOST_ONLINE_PACKAGE_TEST)
+	$(STAGE_TIMER) global test-host -- python3 tests/online_update/run_package.py $(HOST_ONLINE_PACKAGE_TEST)
+test-host: test-online-package
+
+$(HOST_ONLINE_NETWORK_TEST): tests/online_update/network_test.c companion/nro/online_update.c platform/update_fs.c companion/update_install.c companion/hot_reload_guard.c common/update/update.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/online_update -o $@ $(filter %.c,$^) -lm
+.PHONY: test-online-network
+test-online-network: $(HOST_ONLINE_NETWORK_TEST)
+	$(STAGE_TIMER) global test-host -- python3 tests/online_update/run_package.py $(HOST_ONLINE_NETWORK_TEST)
+test-host: test-online-network
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
+	common/update/update.c \
 	common/crypto/sha256.c \
 	common/protocol/error_code.c \
 	common/protocol/activity_history.c \
@@ -39,6 +62,7 @@ THIRD_PARTY_SRCS := \
 	third_party/qrcodegen/qrcodegen.c
 
 PLATFORM_HOST_SRCS := \
+	platform/update_fs.c \
 	platform/install_defaults.c \
 	platform/calendar_store.c \
 	platform/config_backup.c \
@@ -51,6 +75,7 @@ PLATFORM_HOST_SRCS := \
 	platform/switch/play_timer_settings_layout.c
 
 ORCH_SRCS := \
+	companion/update_install.c \
     companion/ui_language.c \
 	companion/album_restriction.c \
 	companion/hot_reload_guard.c \
@@ -131,6 +156,7 @@ $(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c co
 
 # Execute the real NRO orchestration with deterministic host libnx/input shims.
 SETUP_TEST_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) companion/auth.c companion/auth_clock.c companion/album_restriction.c companion/transport_client.c common/support/support_export.c common/security/credential_policy.c platform/host/mem_storage.c companion/nro/nro_runtime.c companion/nro/nro_actions.c companion/nro/nro_preferences.c companion/nro/nro_setup.c companion/nro/nro_support.c companion/nro/nro_security.c companion/nro/nro_requests.c companion/nro/nro_result_poll.c companion/nro/nro_config_backup.c platform/config_backup.c tests/nro_setup/test.c
+SETUP_TEST_SRCS += companion/nro/nro_online_update.c
 $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
 
@@ -164,8 +190,8 @@ $(HOST_INPUT_OWNER_TEST): companion/input_owner.c third_party/cjson/cJSON.c plat
 $(HOST_AUTH_CLOCK_TEST): tests/c/test_auth_clock.c tests/auth_clock/switch.h companion/auth_clock.c companion/auth_clock.h companion/auth.c platform/host/mem_storage.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/auth_clock -o $@ $(filter %.c,$^)
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST)
-	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST) && $(HOST_INPUT_OWNER_TEST) && $(HOST_AUTH_CLOCK_TEST)'
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_ONLINE_UPDATE_TEST)
+	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST) && $(HOST_INPUT_OWNER_TEST) && $(HOST_AUTH_CLOCK_TEST) && $(HOST_ONLINE_UPDATE_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) | $(HOST_BUILD_DIR)
@@ -200,7 +226,7 @@ test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test
 
 test-host: test-overlay-preview-save
 
-HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
+HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_ONLINE_UPDATE_TEST) $(HOST_ONLINE_PACKAGE_TEST) $(HOST_ONLINE_NETWORK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
 $(HOST_CACHED_TARGETS): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 
 .PHONY: render-nro-previews render-overlay-previews convert-previews ui-previews

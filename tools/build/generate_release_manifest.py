@@ -120,6 +120,21 @@ def libtesla_commit() -> str:
     return "unknown"
 
 
+def update_library_identity() -> dict[str, str]:
+    directory = Path(os.environ.get("DEVKITPRO", "")) / "portlibs/switch/lib/pkgconfig"
+    versions = {}
+    for name in ("libcurl", "minizip", "mbedcrypto"):
+        pc = directory / f"{name}.pc"
+        version = "unknown"
+        if pc.is_file():
+            for line in pc.read_text(encoding="utf-8").splitlines():
+                if line.startswith("Version:"):
+                    version = line.partition(":")[2].strip()
+                    break
+        versions[name] = version
+    return versions
+
+
 def collect_build_identity() -> dict:
     # Shared only within this invocation; never trust a previous run's snapshot.
     return {
@@ -127,6 +142,7 @@ def collect_build_identity() -> dict:
         "libnx": libnx_identity(),
         "compiler": toolchain_identity(),
         "source_hash": source_fingerprint(),
+        "update_libraries": update_library_identity(),
         "source_dirty": git_tracked_dirty(),
         "libtesla": libtesla_commit(),
         "image": os.environ.get("PLAYWISE_BUILD_IMAGE", "unknown"),
@@ -165,6 +181,7 @@ def make_manifest(profile: str, *, build_identity: dict | None = None) -> dict:
             "container_image_digest": build_image_digest,
             "source_dirty": snapshot["source_dirty"],
             "source_fingerprint": source_hash,
+            "update_libraries": snapshot.get("update_libraries", {}),
         },
         "qualification": {
             "status": "manual_verified" if manual_verified else "pending",
@@ -180,7 +197,8 @@ def make_manifest(profile: str, *, build_identity: dict | None = None) -> dict:
     # Keep all profiles in the same source/toolchain generation. Exact installed
     # bytes are still bound separately by package-artifacts.json and Zip SHA-256.
     identity = {"source": source_hash, "compiler": compiler, "libnx": libnx,
-                "libtesla": data["build"]["libtesla_commit"], "image": build_image_digest}
+                "libtesla": data["build"]["libtesla_commit"], "image": build_image_digest,
+                "update_libraries": data["build"]["update_libraries"]}
     generation = hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     data["release_id"] += "." + generation
     if manual_verified:
@@ -188,6 +206,7 @@ def make_manifest(profile: str, *, build_identity: dict | None = None) -> dict:
     if "PLAYWISE_GIT_AUTOCRLF" in os.environ:
         data["build"]["git_autocrlf"] = os.environ["PLAYWISE_GIT_AUTOCRLF"]
     if profile == "release":
+        data["online_update_version"] = 1
         data["hot_reload_events_version"] = 1
         data["capture_restart_version"] = 1
         from tools.qualification.pctl_usage_qualification import CURRENT_CONTRACT

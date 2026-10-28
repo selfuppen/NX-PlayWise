@@ -4612,6 +4612,63 @@ static void test_direct_usage_freshness(void)
         "invalid signed wire range cannot fall back to old estimate");
 }
 
+static void test_online_update_layout(void)
+{
+    PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+    for (int i = 0; i < 8; ++i) {
+        PtcUiRect rect = ptc_ui_update_action_rect(i);
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_UPDATE_ACTION, i, "update action shares touch geometry");
+        check_true(rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= 1280 && rect.y + rect.h <= 676, "update action fits app viewport");
+        for (int k = i + 1; k < 8; ++k) check_true(!rects_overlap(rect, ptc_ui_update_action_rect(k)), "update actions do not overlap");
+    }
+    model.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
+    for (int i = 0; i < 4; ++i) check_hit(hit_center(&model, ptc_ui_update_backup_rect(i)), PTC_UI_HIT_UPDATE_ACTION, i, "backup selection shares touch geometry");
+    check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(1)), PTC_UI_HIT_UPDATE_ACTION, 11, "backup cleanup is touch accessible");
+    check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(2)), PTC_UI_HIT_UPDATE_ACTION, 9, "backup previous page is touch accessible");
+    check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()), PTC_UI_HIT_UPDATE_ACTION, 10, "backup next page is touch accessible");
+    model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+    check_hit(hit_center(&model, ptc_ui_update_notes_rect()), PTC_UI_HIT_UPDATE_ACTION, 8, "long notes have a touch reading entry");
+    check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()), PTC_UI_HIT_UPDATE_ACTION, 12, "update back is touch accessible");
+    model.update_notes_open = true;
+    check_hit(hit_center(&model, ptc_ui_update_action_rect(1)), PTC_UI_HIT_NONE, 0, "notes reading cannot fall through to installation");
+    check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()), PTC_UI_HIT_UPDATE_ACTION, 10, "notes next page is touch accessible");
+    model.update_status = 3;
+    check_true(ptc_ui_update_action_enabled(&model, 1), "available update permits parent download");
+    model.parent_support_only = true;
+    check_true(!ptc_ui_update_action_enabled(&model, 1) && !ptc_ui_update_action_enabled(&model, 2), "read-only support cannot install or change preferences");
+    check_true(ptc_ui_update_action_enabled(&model, 0), "read-only support may check metadata");
+    model.parent_support_only = false; model.update_busy = true; model.update_status = 6;
+    check_true(ptc_ui_update_action_enabled(&model, 6) && !ptc_ui_update_action_enabled(&model, 1), "download permits cancellation only");
+    model.update_status = 9;
+    check_true(!ptc_ui_update_action_enabled(&model, 6), "installation cannot be canceled halfway");
+    model.update_busy = false; model.update_status = 3;
+    check_true(ptc_ui_update_can_resume_backup(&model), "normal parent can resume the original backup transaction");
+    model.parent_support_only = true;
+    check_true(!ptc_ui_update_can_resume_backup(&model), "read-only support cannot resume into installation");
+    model.parent_support_only = false; model.view = PTC_UI_CHILD;
+    check_true(!ptc_ui_update_can_resume_backup(&model), "reopening on child page does not resume installation");
+    for (int i = 0; i < 8; ++i) check_true(!ptc_ui_update_action_enabled(&model, i), "child has no update actions");
+    model.overlay = PTC_UI_OVERLAY_NONE; model.update_notes_open = false;
+    strcpy(model.update_version, "2.0.0");
+    check_true(ptc_ui_update_badge_visible(&model), "verified available version has a quiet child header entry");
+    for (int dense = 0; dense < 2; ++dense) for (int demo = 0; demo < 2; ++demo) {
+        model.eye_care_policy.enabled = model.draft_eye_care_policy.enabled = dense != 0;
+        model.bedtime_policy.enabled = dense != 0; model.demo_secret_enabled = demo != 0;
+        PtcUiRect bar = ptc_ui_time_status_bar_for_model(&model), badge = ptc_ui_update_badge_rect(&model);
+        check_true(badge.x >= bar.x && badge.y >= bar.y && badge.x + badge.w <= bar.x + bar.w && badge.y + badge.h <= bar.y + bar.h,
+            "update badge stays inside dense global status bar");
+        check_true(!rects_overlap(badge, ptc_ui_header_language_rect()), "update badge leaves language controls unobstructed");
+        check_hit(hit_center(&model, badge), PTC_UI_HIT_UPDATE_BADGE, 0, "update badge shares measured touch anchor");
+    }
+    model.waiting = true; check_true(!ptc_ui_update_badge_visible(&model), "update badge cannot navigate away from pending work");
+    model.waiting = false; model.weekly_dirty = true; check_true(!ptc_ui_update_badge_visible(&model), "update badge preserves unsaved rule edits");
+    model.weekly_dirty = false;
+    for (int state = 0; state <= 18; ++state) {
+        model.update_status = state;
+        check_true(ptc_ui_update_badge_visible(&model) == (state == 3), "offline, failed, excluded and equal versions never advertise an update");
+    }
+}
+
 int main(void)
 {
     test_direct_usage_freshness();
@@ -4621,6 +4678,7 @@ int main(void)
     test_today_details_navigation();
     test_today_settings_links();
     test_config_backup_layout();
+    test_online_update_layout();
     test_dock_ui();
     test_dock_editor_preview();
     test_calendar_nearest_page();

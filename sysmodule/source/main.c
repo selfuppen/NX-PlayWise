@@ -10,6 +10,7 @@
 #include "../../platform/switch/operation_mode.h"
 #include "../../platform/switch/usage_stats_adapter.h"
 #include "../../platform/install_defaults.h"
+#include "../../platform/update_fs.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/protocol/atmosphere_version.h"
 #include "../../common/version.h"
@@ -307,6 +308,14 @@ int main(int argc, char **argv)
     ptc_switch_time_provider_init(&time_provider);
     ptc_switch_usage_stats_init(&usage_stats);
     storage = ptc_fs_storage_as_storage(&fs);
+#ifndef PLAYWISE_DEVICE_LAB
+    /* A partial multi-file update must not bootstrap defaults or write PCTL. */
+    if (ptc_update_fs_busy(storage, PTC_APP_ROOT, true)) {
+        (void)storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/updates/startup-blocked.json",
+            "{\"version\":1,\"reason\":\"incomplete_online_update\"}\n");
+        return 0;
+    }
+#endif
 #ifndef PLAYWISE_DEVICE_LAB
     /* Package defaults live outside mutable paths so an archive overlay cannot
        replace user data. Do not start the control loop until missing live data

@@ -10,6 +10,8 @@ import shutil
 ROOT = Path(__file__).resolve().parents[2]
 PREVIEW_FILES = (
     "child/child-light.png",
+    "child/child-update-available-light.png",
+    "parent/parent-update-available-dark.png",
     "child/child-exhausted-light.png",
     "child/child-details-light.png",
     "child/child-buffer-claimed-light.png",
@@ -78,6 +80,11 @@ PREVIEW_FILES = (
     "settings/settings-redemption-dark.png",
     "grant/grant-manager-dark.png",
     "settings/settings-software-info-dark.png",
+    "settings/settings-online-update-light.png",
+    "settings/settings-online-update-notes-light.png",
+    "settings/settings-online-update-downloading-dark.png",
+    "settings/settings-online-update-recovery-light.png",
+    "settings/settings-update-backups-dark.png",
     "overlay/overlay-code-entry.png",
     "overlay/overlay-code-confirm.png",
     "overlay/overlay-code-danger.png",

@@ -3,6 +3,10 @@
 void handle_overlay_input(UiState *ui, u64 down)
 {
     if (handle_parent_auth_error_input(ui, down)) return;
+    if (ui->model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE || ui->model.overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS) {
+        handle_online_update_input(ui, down);
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
         handle_config_backup_input(ui, down);
         return;

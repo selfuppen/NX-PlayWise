@@ -20,6 +20,22 @@ void handle_touch(UiState *ui, int x, int y)
         return;
     }
     switch (hit.kind) {
+    case PTC_UI_HIT_UPDATE_BADGE:
+        ptc_audio_play(PTC_SE_CONFIRM);
+        open_online_update_badge(ui);
+        break;
+    case PTC_UI_HIT_UPDATE_ACTION:
+        if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) open_online_update(ui);
+        else if (hit.index == 8) online_update_action(ui, 8);
+        else if (hit.index >= 9) {
+            u64 buttons[] = {HidNpadButton_L, HidNpadButton_R, HidNpadButton_X, HidNpadButton_B};
+            if (hit.index <= 12) handle_online_update_input(ui, buttons[hit.index - 9]);
+        }
+        else {
+            ui->model.overlay_selection = hit.index;
+            handle_online_update_input(ui, HidNpadButton_A);
+        }
+        break;
     case PTC_UI_HIT_CONFIG_BACKUP_FIELD:
         ui->model.overlay_selection = hit.index;
         if (hit.index == 15) ptc_audio_play(PTC_SE_CANCEL);
