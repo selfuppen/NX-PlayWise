@@ -30,6 +30,9 @@ void export_diagnostics(UiState *ui)
     if (runtime) {
         cJSON_AddNumberToObject(runtime, "captured_at", (double)exported_at);
         cJSON_AddBoolToObject(runtime, "status_loaded", ui->model.status_loaded);
+        cJSON_AddStringToObject(runtime, "setup_phase", ui->model.setup_phase);
+        cJSON_AddStringToObject(runtime, "setup_last_error", ui->model.setup_last_error);
+        cJSON_AddStringToObject(runtime, "disable_reason", ui->model.disable_reason);
         cJSON_AddNumberToObject(runtime, "status_updated_at", (double)ui->model.status_updated_at);
         cJSON_AddNumberToObject(runtime, "status_age_seconds",
             ui->model.status_loaded && ui->model.status_updated_at > 0 && exported_at >= ui->model.status_updated_at

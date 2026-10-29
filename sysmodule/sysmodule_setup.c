@@ -1,10 +1,19 @@
 #include "sysmodule_internal.h"
+#include "../platform/switch/play_timer_settings_layout.h"
 
 static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now,
     const PtcPctlSettingsSnapshot *retry_baseline);
 static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now,
     const PtcPctlSettingsSnapshot *retry_baseline);
+
+static bool snapshot_layout_valid(const PtcPctlSettingsSnapshot *snapshot)
+{
+    uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
+    if (snapshot->size != sizeof(words)) return false;
+    memcpy(words, snapshot->data, sizeof(words));
+    return ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS);
+}
 
 /* A fresh takeover must not silently replace an in-progress Nintendo allowance
    with PlayWise's weekly defaults.  PCTL targets are daily totals, so retain the
@@ -93,6 +102,31 @@ static PtcErrorCode persist_handover_today_rule(
     return save_rules(sysmodule, &rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
 }
 
+static PtcErrorCode save_compatible_environment(
+    PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now,
+    const char *release_id, bool read_ok, const char *hos, const char *firmware_hash,
+    const char *model, bool atmosphere, const char *atmosphere_version)
+{
+    char path[320];
+    char compatibility[768];
+    const char *status = read_ok && strcmp(hos, "22.5.0") == 0 &&
+        strcmp(model, "mariko-oled") == 0 && atmosphere &&
+        strcmp(atmosphere_version, "1.11.2") == 0 ? "verified" : "accepted_unknown";
+    snprintf(compatibility, sizeof(compatibility),
+        "{\"version\":1,\"status\":\"%s\",\"environment\":{"
+        "\"hos\":\"%s\",\"firmware_hash\":\"%s\",\"model\":\"%s\","
+        "\"atmosphere\":%s,\"atmosphere_version\":\"%s\",\"pctl_profile\":\"layout-v1\"},"
+        "\"release_id\":\"%s\",\"accepted_at\":%lld}\n",
+        status, hos, firmware_hash, model, atmosphere ? "true" : "false",
+        atmosphere_version, release_id, (long long)now.unix_seconds);
+    join_path(path, sizeof(path), sysmodule->app_root, "compatibility.json");
+    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, compatibility)) {
+        return PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    snprintf(setup->compatibility_status, sizeof(setup->compatibility_status), "%s", status);
+    return PTC_ERR_OK;
+}
+
 static PtcErrorCode run_release_preflight(
     PtcSysmodule *sysmodule,
     const PtcRuntimeConfig *config,
@@ -113,8 +147,6 @@ static PtcErrorCode run_release_preflight(
     char atmosphere_version[24] = "unknown";
     bool atmosphere = false;
     bool environment_read_ok = false;
-    const char *compatibility_status;
-    char compatibility[768];
     PtcPctlSettingsSnapshot snapshot;
     PtcPctlStatus status;
     PtcRules rules;
@@ -137,7 +169,7 @@ static PtcErrorCode run_release_preflight(
     memset(&snapshot, 0, sizeof(snapshot));
     err = sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot);
     if (err != PTC_ERR_OK) return PTC_ERR_PCTL_BACKUP_FAILED;
-    if (snapshot.size != PTC_PCTL_OPAQUE_SETTINGS_SIZE) return PTC_ERR_PCTL_LAYOUT_MISMATCH;
+    if (!snapshot_layout_valid(&snapshot)) return PTC_ERR_PCTL_LAYOUT_MISMATCH;
     err = sysmodule->pctl->vtable->read_status(
         sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &status);
     if (err != PTC_ERR_OK) return err;
@@ -170,31 +202,8 @@ static PtcErrorCode run_release_preflight(
         (void)json_bool_value(text, "atmosphere", &atmosphere);
         (void)json_string(text, "atmosphere_version", atmosphere_version, sizeof(atmosphere_version));
     }
-    compatibility_status = environment_read_ok && strcmp(hos, "22.5.0") == 0 &&
-        strcmp(model, "mariko-oled") == 0 && atmosphere &&
-        strcmp(atmosphere_version, "1.11.2") == 0 ? "verified" : "accepted_unknown";
-
-    snprintf(
-        compatibility,
-        sizeof(compatibility),
-        "{\"version\":1,\"status\":\"%s\",\"environment\":{"
-        "\"hos\":\"%s\",\"firmware_hash\":\"%s\",\"model\":\"%s\","
-        "\"atmosphere\":%s,\"atmosphere_version\":\"%s\",\"pctl_profile\":\"layout-v1\"},"
-        "\"release_id\":\"%s\",\"accepted_at\":%lld}\n",
-        compatibility_status,
-        hos,
-        firmware_hash,
-        model,
-        atmosphere ? "true" : "false",
-        atmosphere_version,
-        release_id,
-        (long long)now.unix_seconds);
-    join_path(path, sizeof(path), sysmodule->app_root, "compatibility.json");
-    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, compatibility)) {
-        return PTC_ERR_STORAGE_WRITE_FAILED;
-    }
-    snprintf(setup->compatibility_status, sizeof(setup->compatibility_status), "%s", compatibility_status);
-    return PTC_ERR_OK;
+    return save_compatible_environment(sysmodule, setup, now, release_id,
+        environment_read_ok, hos, firmware_hash, model, atmosphere, atmosphere_version);
 }
 
 bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *request,
@@ -743,7 +752,8 @@ restore_original:
 }
 
 #if !defined(PLAYWISE_DEVICE_LAB) && !defined(PLAYWISE_EDEN)
-static PtcErrorCode validate_runtime_fingerprint(PtcSysmodule *sysmodule)
+static PtcErrorCode validate_runtime_fingerprint(
+    PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now, bool first_boot_check)
 {
     char path[320];
     char build[4096];
@@ -753,14 +763,14 @@ static PtcErrorCode validate_runtime_fingerprint(PtcSysmodule *sysmodule)
     char build_version[24];
     char build_release_id[96];
     char accepted_release_id[96];
-    char accepted_hos[32];
-    char current_hos[32];
-    char accepted_model[32];
-    char current_model[32];
-    char accepted_hash[96];
-    char current_hash[96];
-    char accepted_atmosphere_version[24];
-    char current_atmosphere_version[24];
+    char accepted_hos[32] = "unknown";
+    char current_hos[32] = "unknown";
+    char accepted_model[32] = "unknown";
+    char current_model[32] = "unknown";
+    char accepted_hash[96] = "unknown";
+    char current_hash[96] = "unknown";
+    char accepted_atmosphere_version[24] = "unknown";
+    char current_atmosphere_version[24] = "unknown";
     bool accepted_atmosphere = false;
     bool current_atmosphere = false;
     bool current_read_ok = false;
@@ -779,27 +789,44 @@ static PtcErrorCode validate_runtime_fingerprint(PtcSysmodule *sysmodule)
         return PTC_ERR_RELEASE_MANIFEST_INVALID;
     }
     join_path(path, sizeof(path), sysmodule->app_root, "environment.json");
-    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, environment, sizeof(environment))) {
-        return PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED;
-    }
+    /* Environment metadata is advisory, including old records with read_ok=false,
+       missing files and null AMS versions. Actual PCTL and build checks remain
+       mandatory; never turn an optional set:sys failure into a version ban. */
+    environment[0] = '\0';
+    (void)sysmodule->storage->vtable->read_text(sysmodule->storage, path, environment, sizeof(environment));
     (void)json_bool_value(environment, "read_ok", &current_read_ok);
-    if (!current_read_ok) return PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED;
-    if (!json_string(compatibility, "hos", accepted_hos, sizeof(accepted_hos)) ||
-        !json_string(environment, "hos", current_hos, sizeof(current_hos)) ||
-        !json_string(compatibility, "model", accepted_model, sizeof(accepted_model)) ||
-        !json_string(environment, "model", current_model, sizeof(current_model)) ||
-        !json_string(compatibility, "firmware_hash", accepted_hash, sizeof(accepted_hash)) ||
-        !json_string(environment, "firmware_hash", current_hash, sizeof(current_hash)) ||
-        !json_string(compatibility, "atmosphere_version", accepted_atmosphere_version, sizeof(accepted_atmosphere_version)) ||
-        !json_string(environment, "atmosphere_version", current_atmosphere_version, sizeof(current_atmosphere_version)) ||
-        !json_bool_value(compatibility, "atmosphere", &accepted_atmosphere) ||
-        !json_bool_value(environment, "atmosphere", &current_atmosphere)) {
-        return PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED;
-    }
-    if (strcmp(accepted_hos, current_hos) != 0 || strcmp(accepted_model, current_model) != 0 ||
-        strcmp(accepted_hash, current_hash) != 0 || accepted_atmosphere != current_atmosphere ||
+    (void)json_string(compatibility, "hos", accepted_hos, sizeof(accepted_hos));
+    (void)json_string(environment, "hos", current_hos, sizeof(current_hos));
+    (void)json_string(compatibility, "model", accepted_model, sizeof(accepted_model));
+    (void)json_string(environment, "model", current_model, sizeof(current_model));
+    (void)json_string(compatibility, "firmware_hash", accepted_hash, sizeof(accepted_hash));
+    (void)json_string(environment, "firmware_hash", current_hash, sizeof(current_hash));
+    (void)json_string(compatibility, "atmosphere_version", accepted_atmosphere_version, sizeof(accepted_atmosphere_version));
+    (void)json_string(environment, "atmosphere_version", current_atmosphere_version, sizeof(current_atmosphere_version));
+    (void)json_bool_value(compatibility, "atmosphere", &accepted_atmosphere);
+    (void)json_bool_value(environment, "atmosphere", &current_atmosphere);
+    if ((!current_read_ok && first_boot_check) || strcmp(accepted_model, current_model) != 0 ||
+        accepted_atmosphere != current_atmosphere ||
+        strcmp(accepted_hos, current_hos) != 0 || strcmp(accepted_hash, current_hash) != 0 ||
         strcmp(accepted_atmosphere_version, current_atmosphere_version) != 0) {
-        return PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED;
+        PtcPctlSettingsSnapshot snapshot;
+        PtcPctlStatus status;
+        PtcErrorCode err;
+        /* Version strings do not prove a private protocol change. Recheck the
+           actual settings layout, timer and status without writing PCTL or
+           replacing the original installation snapshot or today's allowance. */
+        memset(&snapshot, 0, sizeof(snapshot));
+        err = sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot);
+        if (err != PTC_ERR_OK) return PTC_ERR_PCTL_BACKUP_FAILED;
+        if (!snapshot_layout_valid(&snapshot)) return PTC_ERR_PCTL_LAYOUT_MISMATCH;
+        err = sysmodule->pctl->vtable->read_status(
+            sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &status);
+        if (err != PTC_ERR_OK) return err;
+        err = save_compatible_environment(sysmodule, setup, now, build_release_id,
+            current_read_ok, current_hos, current_hash, current_model,
+            current_atmosphere, current_atmosphere_version);
+        if (err != PTC_ERR_OK) return err;
+        if (!save_setup_state(sysmodule, setup)) return PTC_ERR_STORAGE_WRITE_FAILED;
     }
     return PTC_ERR_OK;
 }
@@ -856,7 +883,7 @@ int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
            gate out of the simulated build instead of letting it park every boot
            in protection with disable.flag. */
 #if !defined(PLAYWISE_DEVICE_LAB) && !defined(PLAYWISE_EDEN)
-        PtcErrorCode gate_err = validate_runtime_fingerprint(sysmodule);
+        PtcErrorCode gate_err = validate_runtime_fingerprint(sysmodule, &setup, now, check_startup_recovery);
         if (gate_err != PTC_ERR_OK) {
             snprintf(setup.phase, sizeof(setup.phase), "protection");
             snprintf(setup.compatibility_status, sizeof(setup.compatibility_status), "pending");

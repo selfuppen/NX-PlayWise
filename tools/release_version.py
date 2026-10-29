@@ -91,8 +91,11 @@ def next_alpha_version(version: str) -> str:
 
 
 def release(version: str, *, root: Path = ROOT, verify: bool = True,
-            manual_device_verified: bool = False) -> str:
+            manual_device_verified: bool = False, port: int | None = None,
+            container_path: str | None = None, full_package: bool = False) -> str:
     version = validate_playwise_version(version)
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("SSH port must be between 1 and 65535")
     tag = f"v{version}"
     require_clean_worktree(root)
     require_missing_tag(tag, root)
@@ -101,6 +104,12 @@ def release(version: str, *, root: Path = ROOT, verify: bool = True,
 
     if verify:
         command = [sys.executable, "tools/package_remote.py", "--clean"]
+        if port is not None:
+            command.extend(("--port", str(port)))
+        if container_path is not None:
+            command.extend(("--container-path", container_path))
+        if full_package:
+            command.append("--release")
         if manual_device_verified:
             command.append("--manual-device-verified")
         subprocess.run(command, cwd=root, check=True)
@@ -122,6 +131,9 @@ def release(version: str, *, root: Path = ROOT, verify: bool = True,
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Update the PlayWise version, verify, commit, and create an annotated tag.")
     parser.add_argument("version", help="Release version without the v prefix, for example 1.0.0")
+    parser.add_argument("--port", type=int, help="Override the authoritative package builder's SSH port.")
+    parser.add_argument("--container-path", help="Override the package builder's mounted repository path.")
+    parser.add_argument("--full-package", action="store_true", help="Run the full release package suite, including complete, Lab, Eden and previews.")
     parser.add_argument(
         "--manual-device-verified", action="store_true",
         help="Record manual verification with the package tool's default Switch model, HOS and Atmosphère versions.",
@@ -136,7 +148,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     tag = release(args.version, verify=not args.no_verify,
-                  manual_device_verified=args.manual_device_verified)
+                  manual_device_verified=args.manual_device_verified, port=args.port,
+                  container_path=args.container_path, full_package=args.full_package)
     print(f"released {tag}; development version is now {read_playwise_version()}")
     return 0
 

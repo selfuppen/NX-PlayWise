@@ -119,12 +119,50 @@ def test_manual_verification_reaches_clean_package_build() -> None:
                 "manual release must forward the flag to the authoritative clean package build")
 
 
+def test_custom_full_package_profile_and_failed_build() -> None:
+    with mock.patch.object(sys, "argv", ["release_version.py", "1.0.0-beta.1", "--port", "31888",
+                                        "--container-path", "/ws/checkout", "--full-package"]):
+        args = release_version.parse_args()
+        require(args.port == 31888 and args.container_path == "/ws/checkout" and args.full_package,
+                "release CLI must accept the real build profile")
+    for fail in (False, True):
+        with tempfile.TemporaryDirectory(prefix="playwise-release-") as tmp_dir:
+            root = Path(tmp_dir)
+            make_repository(root)
+            real_run = subprocess.run
+            commands: list[list[str]] = []
+
+            def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                if len(command) > 1 and command[1] == "tools/package_remote.py":
+                    commands.append(command)
+                    if fail:
+                        raise subprocess.CalledProcessError(7, command)
+                    return subprocess.CompletedProcess(command, 0)
+                return real_run(command, **kwargs)
+
+            try:
+                with mock.patch.object(release_version.subprocess, "run", side_effect=run):
+                    release("1.0.0-beta.1", root=root, port=31888,
+                            container_path="/ws/checkout", full_package=True)
+            except subprocess.CalledProcessError:
+                require(fail, "successful package build must not fail release")
+            else:
+                require(not fail, "failed package build must stop release")
+            require(commands == [[sys.executable, "tools/package_remote.py", "--clean", "--port", "31888",
+                                  "--container-path", "/ws/checkout", "--release"]],
+                    "forward the profile without bypassing clean, tests or release gates")
+            require(bool(git(root, "tag", "--list")) == (not fail), "failed builds must never create a tag")
+            require(read_playwise_version(root) == ("1.0.0-beta.1" if fail else "1.0.1-alpha"),
+                    "only verified releases advance the development version")
+
+
 def main() -> int:
     test_next_alpha_version()
     test_release_creates_commit_and_annotated_tag()
     test_current_version_tags_head_without_empty_release_commit()
     test_existing_tag_is_not_moved()
     test_manual_verification_reaches_clean_package_build()
+    test_custom_full_package_profile_and_failed_build()
     print("Release version script tests passed")
     return 0
 

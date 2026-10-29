@@ -616,12 +616,22 @@ int main(void)
     ptc_ui_setup_sync(&ui.model);
     check(ui.model.view == PTC_UI_PARENT, "status sync cannot reopen completed guide");
     mem.fail_writes = false;
+    snprintf(ui.model.setup_phase, sizeof(ui.model.setup_phase), "pending");
+    snprintf(ui.model.setup_last_error, sizeof(ui.model.setup_last_error), "pctl_read_failed");
+    snprintf(ui.model.disable_reason, sizeof(ui.model.disable_reason), "startup_transaction_restored");
     export_diagnostics(&ui);
     check(ui.model.diagnostic_status == PTC_UI_DIAGNOSTIC_SUCCESS, "diagnostic export works without backend or PIN");
     check(mem.storage.vtable->read_text(&mem.storage, ui.model.diagnostic_path, text, sizeof(text)) &&
           strstr(text, "onboarding") && strstr(text, "language_save") && strstr(text, "progress_save") &&
           strstr(text, "pin_setup") && strstr(text, "\"status_loaded\":false") && !strstr(text, "pin_hash"),
           "export captures safe setup failures and missing status");
+    cJSON *diagnostic = cJSON_Parse(text);
+    cJSON *runtime = cJSON_GetObjectItemCaseSensitive(diagnostic, "runtime_snapshot");
+    check(runtime && !strcmp(cJSON_GetObjectItemCaseSensitive(runtime, "setup_phase")->valuestring, "pending") &&
+          !strcmp(cJSON_GetObjectItemCaseSensitive(runtime, "setup_last_error")->valuestring, "pctl_read_failed") &&
+          !strcmp(cJSON_GetObjectItemCaseSensitive(runtime, "disable_reason")->valuestring, "startup_transaction_restored"),
+          "diagnostic round trip retains actual cached disable reason and setup failure");
+    cJSON_Delete(diagnostic);
     check(save_ui_preferences(&ui), "completion marker eventually saves");
     memset(&reopened, 0, sizeof(reopened));
     reopened.client = ui.client;

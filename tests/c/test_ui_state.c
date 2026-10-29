@@ -1863,7 +1863,7 @@ static void test_user_state_mapping(void)
         "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,"
         "\"rule_source\":\"statutory_holiday\",\"calendar_covered\":true,\"calendar_update_warning\":false},"
         "\"setup\":{\"phase\":\"active\",\"restriction_cleared\":true,\"snapshot_available\":true,"
-        "\"activate_after\":0,\"compatibility_status\":\"verified\"},"
+        "\"activate_after\":0,\"compatibility_status\":\"verified\",\"last_error\":\"pctl_read_failed\"},"
         "\"environment\":{\"available\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
         "\"recent_events\":[{\"ts\":4294967296,\"request_id\":\"weekly-1\",\"type\":\"set_weekly_template\","
         "\"event\":\"result_ok\",\"error\":\"\",\"detail\":\"rules\"}],\"completed_at\":106}";
@@ -1950,6 +1950,7 @@ static void test_user_state_mapping(void)
         "effective holiday source and coverage map to the UI model");
     check_true(strcmp(model.compatibility_status, "verified") == 0,
         "compatibility status maps to the UI model");
+    check_true(!strcmp(model.setup_last_error, "pctl_read_failed"), "setup failure is retained for diagnostics");
     check_true(model.environment_available && strcmp(model.environment_hos, "22.5.0") == 0 &&
                strcmp(model.environment_model, "mariko-oled") == 0 && model.environment_atmosphere,
                "support environment fields map independently for multiline display");

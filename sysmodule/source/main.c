@@ -14,6 +14,7 @@
 #include "../../common/time/ptc_time.h"
 #include "../../common/protocol/atmosphere_version.h"
 #include "../../common/version.h"
+#include "environment.h"
 #include "../sysmodule_core.h"
 #include "../ipc_server.h"
 #include "../../common/protocol/ipc_protocol.h"
@@ -112,83 +113,6 @@ static void ensure_credentials(PtcStorage *storage)
     secret_hex[64] = '\0';
     snprintf(json, sizeof(json), "{\"version\":1,\"grant_secret\":\"%s\"}\n", secret_hex);
     (void)storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/credentials.json", json);
-}
-
-static const char *product_model_name(SetSysProductModel model)
-{
-    switch (model) {
-    case SetSysProductModel_Nx: return "erista";
-    case SetSysProductModel_Copper: return "erista-simulation";
-    case SetSysProductModel_Iowa: return "mariko";
-    case SetSysProductModel_Hoag: return "mariko-lite";
-    case SetSysProductModel_Calcio: return "mariko-simulation";
-    case SetSysProductModel_Aula: return "mariko-oled";
-    default: return "unknown";
-    }
-}
-
-static void write_environment_fingerprint(PtcStorage *storage)
-{
-    SetSysFirmwareVersion firmware;
-    SetSysFirmwareVersionDigest digest;
-    SetSysProductModel model = SetSysProductModel_Invalid;
-    PtcAtmosphereVersion atmosphere_version;
-    uint64_t atmosphere_raw = 0;
-    Result atmosphere_result = MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
-    char json[896];
-    char atmosphere_version_json[32];
-    bool read_ok = false;
-    bool firmware_read_ok = false;
-    bool atmosphere = false;
-    memset(&firmware, 0, sizeof(firmware));
-    memset(&digest, 0, sizeof(digest));
-    if (R_SUCCEEDED(setsysInitialize())) {
-        firmware_read_ok = R_SUCCEEDED(setsysGetFirmwareVersion(&firmware));
-        read_ok = firmware_read_ok && R_SUCCEEDED(setsysGetFirmwareVersionDigest(&digest)) &&
-            R_SUCCEEDED(setsysGetProductModel(&model));
-        setsysExit();
-    }
-    /* Sysmodules provide their own __appInit, so libnx's normal application
-       startup may not populate hosversion. Public wrappers such as command
-       1458 gate on this value even though the raw service is callable. */
-    if (firmware_read_ok && hosversionGet() == 0)
-        hosversionSet(MAKEHOSVERSION(firmware.major, firmware.minor, firmware.micro));
-    memset(&atmosphere_version, 0, sizeof(atmosphere_version));
-    if (R_SUCCEEDED(splInitialize())) {
-        atmosphere_result = splGetConfig((SplConfigItem)65000, &atmosphere_raw);
-        splExit();
-        atmosphere = R_SUCCEEDED(atmosphere_result) &&
-            ptc_atmosphere_version_decode(atmosphere_raw, &atmosphere_version);
-    }
-    if (atmosphere) {
-        snprintf(atmosphere_version_json, sizeof(atmosphere_version_json), "\"%u.%u.%u\"",
-            (unsigned int)atmosphere_version.major,
-            (unsigned int)atmosphere_version.minor,
-            (unsigned int)atmosphere_version.micro);
-    } else {
-        snprintf(atmosphere_version_json, sizeof(atmosphere_version_json), "null");
-    }
-    snprintf(
-        json,
-        sizeof(json),
-        "{\"version\":1,\"read_ok\":%s,\"hos\":\"%u.%u.%u\",\"firmware_hash\":\"%.64s\","
-        "\"firmware_digest\":\"%.64s\",\"model\":\"%s\",\"atmosphere\":%s,"
-        "\"atmosphere_version\":%s,\"atmosphere_detection_source\":\"spl:ExosphereApiVersion\","
-        "\"atmosphere_detection\":{\"source\":\"spl:ExosphereApiVersion\","
-        "\"result\":%u,\"raw\":\"0x%016llx\",\"version\":%s}}\n",
-        read_ok ? "true" : "false",
-        (unsigned int)firmware.major,
-        (unsigned int)firmware.minor,
-        (unsigned int)firmware.micro,
-        firmware.version_hash,
-        digest.digest,
-        product_model_name(model),
-        atmosphere ? "true" : "false",
-        atmosphere_version_json,
-        (unsigned int)atmosphere_result,
-        (unsigned long long)atmosphere_raw,
-        atmosphere_version_json);
-    (void)storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/environment.json", json);
 }
 
 static bool handoff_json_string(const char *text, const char *key, char *out, size_t out_size)
@@ -325,7 +249,7 @@ int main(int argc, char **argv)
     }
 #endif
     ensure_credentials(storage);
-    write_environment_fingerprint(storage);
+    (void)ptc_switch_write_environment(storage, PTC_APP_ROOT "/environment.json");
     ptc_sysmodule_init(
         &sysmodule,
         PTC_APP_ROOT,

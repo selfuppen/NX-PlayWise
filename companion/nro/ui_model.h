@@ -423,6 +423,7 @@ typedef struct {
     char compatibility_status[32];
     char apply_status[48];
     char disable_reason[48];
+    char setup_last_error[64];
     char environment_hos[32];
     char environment_atmosphere_version[32];
     char environment_model[32];

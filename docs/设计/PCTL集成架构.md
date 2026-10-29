@@ -36,8 +36,8 @@ Horizon PCTL
 首次启动在任何 setup 写入前执行只读检查：
 
 1. release manifest 与编译版本一致；
-2. `set:sys` 可读取 HOS、firmware digest 和产品型号；
-3. 能确认是否运行于 Atmosphère；
+2. 尽力通过 `set:sys` 分别读取 HOS、firmware digest 和产品型号，记录独立 Result；缺失仅提示，digest 为可选；
+3. 尽力确认 Atmosphère 版本，未知仅提示，不作为版本白名单；
 4. PCTL service 可初始化并读取状态；
 5. settings snapshot 长度、hash 和 layout 符合当前协议；
 6. 没有无法恢复的启动遗留事务。

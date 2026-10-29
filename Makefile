@@ -19,6 +19,16 @@ HOST_AUTH_CLOCK_TEST := $(HOST_BUILD_DIR)/test_auth_clock
 HOST_ONLINE_UPDATE_TEST := $(HOST_BUILD_DIR)/test_online_update
 HOST_ONLINE_PACKAGE_TEST := $(HOST_BUILD_DIR)/test_online_package
 HOST_ONLINE_NETWORK_TEST := $(HOST_BUILD_DIR)/test_online_network
+HOST_ENVIRONMENT_TEST := $(HOST_BUILD_DIR)/test_environment
+
+$(HOST_ENVIRONMENT_TEST): tests/environment/test.c tests/environment/switch.h sysmodule/source/environment.c sysmodule/source/environment.h platform/host/mem_storage.c common/protocol/atmosphere_version.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/environment -o $@ $(filter %.c,$^)
+
+.PHONY: test-environment
+test-environment: $(HOST_ENVIRONMENT_TEST)
+	$(STAGE_TIMER) global test-host -- $(HOST_ENVIRONMENT_TEST)
+
+test-host: test-environment
 
 $(HOST_ONLINE_UPDATE_TEST): tests/c/test_online_update.c common/update/update.c common/crypto/sha256.c companion/update_install.c platform/host/mem_storage.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^) -lm
@@ -228,6 +238,7 @@ test-host: test-overlay-preview-save
 
 HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_ONLINE_UPDATE_TEST) $(HOST_ONLINE_PACKAGE_TEST) $(HOST_ONLINE_NETWORK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
 $(HOST_CACHED_TARGETS): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
+$(HOST_ENVIRONMENT_TEST): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 
 .PHONY: render-nro-previews render-overlay-previews convert-previews ui-previews
 # Documentation snapshots are optional; full visual coverage is explicit.

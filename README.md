@@ -104,6 +104,8 @@
 
 ## 推荐环境与验证状态
 
+参考环境不是版本白名单。较低或较高的 HOS / Atmosphère 版本（包括 23.0.1 / 1.12.1）均可试用；版本不同、机型或固件摘要缺失只作兼容性提示，非参考或信息不完整的环境仍标为未认证。实际 PCTL、布局和恢复检查通过后才接管，不因环境详情不可用而禁止。旧版若已停用，先刷新状态，再按支持页提示选择“重新检测并接管”或“重试修复”，不要手工删除恢复材料；试用后可导出诊断反馈版本与运行结果。
+
 当前候选的资格目标为 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2。2026-08-10 的记录是早于当前 PCTL 改动的历史证据。候选默认是 `pending`；维护者已用真机验证主要功能时，可在打包命令中指定机型、HOS 和 Atmosphère，令包内 `build.json` 记录 `manual_verified`。它表示人工验机声明；只有发布 Zip 的 SHA-256 与同目录 `qualification.json` 完全匹配，才表示该原包在记录环境通过完整资格验证。打包命令见[开发环境指南](docs/开发/开发环境指南.md#switch-完整构建)。
 
 推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise 游戏内浮窗。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境；相关交流群为“switch大气层超频折腾群”（QQ群 `1051287661`）。这些外部项目与社群不包含在 PlayWise 安装包中，也不代表 PlayWise 对其背书。
