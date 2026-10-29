@@ -405,6 +405,15 @@ def test_eden_nro_verification() -> None:
         ))
         package_remote.verify_eden_nro(good, manifest)
 
+        stale = root / "stale-identity.nro"
+        stale.write_bytes(good.read_bytes() + b"playwise-3.1.2-beta.1+111111111111.2222222222222222\0")
+        try:
+            package_remote.verify_eden_nro(stale, manifest)
+        except package_remote.PackageError as exc:
+            require("stale compiled release identity" in str(exc), "old observation constants must be rejected even with a fresh manifest")
+        else:
+            raise AssertionError("mixed compiled Eden identities must not pass packaging")
+
         try:
             package_remote.verify_eden_nro(good, dict(manifest, profile="release"))
         except package_remote.PackageError as exc:
@@ -739,6 +748,30 @@ def test_parse_args_stripped_components() -> None:
         require(args.with_previews is True, "parse_args must accept --with-previews")
 
 
+def test_eden_dependency_inventory() -> None:
+    if os.name == "nt":
+        print("Eden Make dependency inventory: deferred to devkitPro regression")
+        return
+    with tempfile.TemporaryDirectory(prefix="ptc-eden-dependencies-") as temporary:
+        sdk = Path(temporary)
+        pkg = sdk / "portlibs/switch/bin/aarch64-none-elf-pkg-config"
+        pkg.parent.mkdir(parents=True)
+        pkg.write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
+        pkg.chmod(0o755)
+        for eden in (0, 1):
+            command = ["make", "--no-print-directory", "-sf", "Makefile", "-f", "-", "dependency_inventory",
+                       f"DEVKITPRO={sdk}", f"DEVKITA64={sdk}", f"EDEN_BUILD={eden}", "BUILD=__dependency_inventory__"]
+            result = subprocess.run(command, cwd=ROOT / "companion/nro", text=True, capture_output=True, check=True,
+                                    input="dependency_inventory:\n\t@printf '%s\\n' '$(DEPENDS)'\n")
+            dependencies = set(result.stdout.split())
+            require(("__dependency_inventory__/eden_runtime.d" in dependencies) == bool(eden),
+                    "actual Make evaluation must include appended Eden observation dependencies")
+            require(("__dependency_inventory__/sysmodule_setup.d" in dependencies) == bool(eden),
+                    "Eden control-core header dependencies must follow the final object list")
+            require("__dependency_inventory__/nro_online_update.d" in dependencies,
+                    "later update objects retain dependency tracking")
+
+
 def main() -> int:
     test_container_command()
     test_clean_build_profiles()
@@ -749,6 +782,7 @@ def main() -> int:
     test_container_ssh_key_persistence()
     test_zip_verification()
     test_eden_nro_verification()
+    test_eden_dependency_inventory()
     test_device_lab_zip_verification()
     test_clean_package_safety()
     test_public_package_selection()

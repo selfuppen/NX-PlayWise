@@ -125,12 +125,11 @@ OBJS := \
 	$(BUILD)/calendar_store.o \
 	$(BUILD)/config_backup.o
 
-DEPENDS := $(OBJS:.o=.d)
+DEPENDS = $(OBJS:.o=.d)
 OBJS += $(BUILD)/update.o $(BUILD)/update_install.o $(BUILD)/update_fs.o $(BUILD)/nro_online_update.o
 ifneq ($(EDEN_BUILD),1)
 OBJS += $(BUILD)/online_update.o $(BUILD)/online_update_package.o
 endif
-DEPENDS += $(BUILD)/update.d $(BUILD)/update_install.d $(BUILD)/update_fs.d $(BUILD)/nro_online_update.d $(BUILD)/online_update.d $(BUILD)/online_update_package.d
 
 $(BUILD)/update.o: ../../common/update/update.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@

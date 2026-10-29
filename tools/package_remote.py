@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shlex
 import shutil
@@ -252,6 +253,9 @@ def verify_eden_nro(path: Path, manifest: dict) -> None:
     embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
     if embedded not in data:
         raise PackageError(f"{path.name}: does not embed the Eden manifest")
+    release_ids = re.findall(rb"playwise-[0-9A-Za-z.-]+\+[0-9a-f]{12}\.[0-9a-f]{16}", data)
+    if any(value.decode("ascii") != manifest.get("release_id") for value in release_ids):
+        raise PackageError(f"{path.name}: contains a stale compiled release identity")
     for marker in (b"EDEN TEST", b"playwise-eden", b"playwise-eden-test-secret-00000001"):
         if marker not in data:
             raise PackageError(f"{path.name}: missing Eden marker {marker.decode('ascii')}")
