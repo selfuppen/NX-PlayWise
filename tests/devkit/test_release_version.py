@@ -121,9 +121,9 @@ def test_manual_verification_reaches_clean_package_build() -> None:
 
 def test_custom_full_package_profile_and_failed_build() -> None:
     with mock.patch.object(sys, "argv", ["release_version.py", "1.0.0-beta.1", "--port", "31888",
-                                        "--container-path", "/ws/checkout", "--full-package"]):
+                                        "--container-path", "/ws/checkout", "--full-package", "--incremental"]):
         args = release_version.parse_args()
-        require(args.port == 31888 and args.container_path == "/ws/checkout" and args.full_package,
+        require(args.port == 31888 and args.container_path == "/ws/checkout" and args.full_package and args.incremental,
                 "release CLI must accept the real build profile")
     for fail in (False, True):
         with tempfile.TemporaryDirectory(prefix="playwise-release-") as tmp_dir:
@@ -143,14 +143,14 @@ def test_custom_full_package_profile_and_failed_build() -> None:
             try:
                 with mock.patch.object(release_version.subprocess, "run", side_effect=run):
                     release("1.0.0-beta.1", root=root, port=31888,
-                            container_path="/ws/checkout", full_package=True)
+                            container_path="/ws/checkout", full_package=True, clean=False)
             except subprocess.CalledProcessError:
                 require(fail, "successful package build must not fail release")
             else:
                 require(not fail, "failed package build must stop release")
-            require(commands == [[sys.executable, "tools/package_remote.py", "--clean", "--port", "31888",
+            require(commands == [[sys.executable, "tools/package_remote.py", "--port", "31888",
                                   "--container-path", "/ws/checkout", "--release"]],
-                    "forward the profile without bypassing clean, tests or release gates")
+                    "explicit cache reuse must preserve the full release profile and verification")
             require(bool(git(root, "tag", "--list")) == (not fail), "failed builds must never create a tag")
             require(read_playwise_version(root) == ("1.0.0-beta.1" if fail else "1.0.1-alpha"),
                     "only verified releases advance the development version")

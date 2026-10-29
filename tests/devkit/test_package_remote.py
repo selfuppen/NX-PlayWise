@@ -457,12 +457,12 @@ def test_device_lab_zip_verification() -> None:
             package.writestr("switch/playwise-device-lab/playwise-device-lab.nro",
                 valid_nro(with_icon=False, embedded_manifest=embedded + package_remote.DEVICE_LAB_NRO_UI_MARKER,
                     title=package_remote.DEVICE_LAB_NRO_TITLE,
-                    display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
+                    display_version=package_remote.device_lab_nacp_version(package_remote.PLAYWISE_VERSION)))
             package.writestr("switch/.overlays/playwise-device-lab.ovl",
                 valid_nro(with_icon=False, embedded_manifest=embedded +
                     package_remote.DEVICE_LAB_OVERLAY_UI_MARKER + package_remote.DEVICE_LAB_ACTIVATION_AB_MARKER,
                     title=package_remote.DEVICE_LAB_OVERLAY_TITLE,
-                    display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
+                    display_version=package_remote.device_lab_nacp_version(package_remote.PLAYWISE_VERSION)))
             package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/exefs.nsp", embedded)
             package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/flags/", b"")
             package.writestr("DEVICE-LAB.txt", "任我玩 DEVICE LAB - 内部取证工具")

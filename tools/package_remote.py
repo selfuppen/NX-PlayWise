@@ -35,7 +35,7 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-from tools.build.playwise_version import read_playwise_version
+from tools.build.playwise_version import read_playwise_version, device_lab_nacp_version
 import tools.build.stage_timer as stage_timer
 from tools.build.sync_doc_previews import PREVIEW_FILES, synchronize
 from tools.build.render_ui_previews import SCOPES, selected_files
@@ -388,7 +388,7 @@ def verify_device_lab_zip(path: Path) -> None:
             raise PackageError(f"{path.name}: {overlay_path} does not contain the timer activation A/B UI")
         if DEVICE_LAB_WARNING_MARKER not in package.read("DEVICE-LAB.txt"):
             raise PackageError(f"{path.name}: DEVICE-LAB.txt is not localized")
-        lab_version = f"{PLAYWISE_VERSION}-lab"
+        lab_version = device_lab_nacp_version(PLAYWISE_VERSION)
         verify_nro_asset(package.read(nro_path), f"{path.name}: playwise-device-lab.nro", require_icon=False,
             expected_title=DEVICE_LAB_NRO_TITLE, expected_version=lab_version)
         verify_nro_asset(package.read(overlay_path), f"{path.name}: playwise-device-lab.ovl", require_icon=False,

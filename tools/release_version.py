@@ -92,7 +92,7 @@ def next_alpha_version(version: str) -> str:
 
 def release(version: str, *, root: Path = ROOT, verify: bool = True,
             manual_device_verified: bool = False, port: int | None = None,
-            container_path: str | None = None, full_package: bool = False) -> str:
+            container_path: str | None = None, full_package: bool = False, clean: bool = True) -> str:
     version = validate_playwise_version(version)
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("SSH port must be between 1 and 65535")
@@ -103,7 +103,9 @@ def release(version: str, *, root: Path = ROOT, verify: bool = True,
         write_playwise_version(version, root)
 
     if verify:
-        command = [sys.executable, "tools/package_remote.py", "--clean"]
+        command = [sys.executable, "tools/package_remote.py"]
+        if clean:
+            command.append("--clean")
         if port is not None:
             command.extend(("--port", str(port)))
         if container_path is not None:
@@ -134,6 +136,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, help="Override the authoritative package builder's SSH port.")
     parser.add_argument("--container-path", help="Override the package builder's mounted repository path.")
     parser.add_argument("--full-package", action="store_true", help="Run the full release package suite, including complete, Lab, Eden and previews.")
+    parser.add_argument("--incremental", action="store_true", help="Reuse valid build and preview caches; all selected tests and package checks still run.")
     parser.add_argument(
         "--manual-device-verified", action="store_true",
         help="Record manual verification with the package tool's default Switch model, HOS and Atmosphère versions.",
@@ -149,7 +152,7 @@ def main() -> int:
     args = parse_args()
     tag = release(args.version, verify=not args.no_verify,
                   manual_device_verified=args.manual_device_verified, port=args.port,
-                  container_path=args.container_path, full_package=args.full_package)
+                  container_path=args.container_path, full_package=args.full_package, clean=not args.incremental)
     print(f"released {tag}; development version is now {read_playwise_version()}")
     return 0
 

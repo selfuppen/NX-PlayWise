@@ -16,7 +16,7 @@ SOURCES := source .. ../../companion ../../common/protocol ../../common/time ../
 INCLUDES := ../../companion/overlay/vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch ../../build/device-lab/generated
 APP_TITLE := PlayWise Device Lab
 APP_AUTHOR := PlayWise internal
-APP_VERSION := $(PLAYWISE_VERSION)-lab
+APP_VERSION := $(shell python3 $(TOPDIR)/../../tools/build/playwise_version.py --device-lab-nacp)
 NO_ICON := 1
 
 export NROFLAGS += --nacp=$(TOPDIR)/$(TARGET).nacp
@@ -53,7 +53,7 @@ else
 DEPENDS := $(OFILES:.o=.d)
 all: $(OUTPUT).ovl
 $(OFILES): $(TOPDIR)/Makefile $(TOPDIR)/../../common/version.mk $(TOPDIR)/../../build/device-lab/generated/release_manifest.h
-$(OUTPUT).nacp: $(TOPDIR)/Makefile $(TOPDIR)/../../common/version.mk
+$(OUTPUT).nacp: $(TOPDIR)/Makefile $(TOPDIR)/../../common/version.mk $(TOPDIR)/../../tools/build/playwise_version.py
 $(OUTPUT).ovl: $(OUTPUT).elf $(OUTPUT).nacp
 	@elf2nro $< $@ $(NROFLAGS)
 $(OUTPUT).elf: $(OFILES)

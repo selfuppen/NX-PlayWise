@@ -14,6 +14,7 @@ from tools.build.playwise_version import (  # noqa: E402
     read_playwise_version,
     validate_playwise_version,
     write_playwise_version,
+    device_lab_nacp_version,
 )
 
 
@@ -75,6 +76,15 @@ def main() -> int:
     test_mismatch_fails()
     test_write_version_pair()
     test_invalid_version_fails()
+    require(device_lab_nacp_version("3.1.2") == "3.1.2-lab", "short Lab labels keep their original format")
+    require(device_lab_nacp_version("3.1.2-beta.1") == "3.1.2-beta.1-L", "prereleases retain full version with a compact Lab suffix")
+    require(len(device_lab_nacp_version("3.1.2-beta.12")) <= 15, "Lab labels reserve the NACP terminator")
+    try:
+        device_lab_nacp_version("3.1.2-beta.1234")
+    except ValueError as exc:
+        require("15 bytes" in str(exc), "overlong labels must fail explicitly")
+    else:
+        raise AssertionError("Lab metadata must never silently truncate a version")
     print("PlayWise version source tests passed")
     return 0
 
