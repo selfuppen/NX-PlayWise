@@ -39,7 +39,7 @@ PlayWise supports real-time runtime switching across 4 calibrated UI styles with
 | **0. Graphite (Default)** | `#2F5FD0` | `#E6ECFB` | `#88AAEE` | `#223344` | Cool graphite, clear blue, product-like near-black layers |
 | **1. Paper & Ink** | `#2C4A6E` | `#E7EDF4` | `#99BBDD` | `#223344` | Warm paper, ink-blue, low glare, warm-charcoal night |
 | **2. Mist Teal** | `#1F6B5C` | `#E2F0EB` | `#77CCBB` | `#113333` | Mist green, porcelain teal, breathing room |
-| **3. Dusk** | `#7A4670` | `#F3E8F1` | `#DD99CC` | `#332233` | Mauve-grey, plum accent, gentle and night-friendly |
+| **3. Dusk** | `#54469E` | `#EEEBFA` | `#9988EE` | `#222244` | Modern lavender, iris accent, cool-toned night-friendly |
 
 #### Global Surface & Structural Colors
 
