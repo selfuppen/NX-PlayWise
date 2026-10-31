@@ -48,10 +48,26 @@ static struct {
     char guide[512];
 } bedtime_trace;
 
+static struct {
+    bool enabled;
+    const char *hint_text;
+    int reference_count, hint_count;
+    UiRect reference, hint;
+} setup_reference_trace;
+
 void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
 {
     if (!text) return;
     UiRect bounds = {x, baseline - size, measure_text(text, size), size};
+    if (setup_reference_trace.enabled) {
+        if (strcmp(text, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE)) == 0) {
+            setup_reference_trace.reference = bounds;
+            ++setup_reference_trace.reference_count;
+        } else if (strcmp(text, setup_reference_trace.hint_text) == 0) {
+            setup_reference_trace.hint = bounds;
+            ++setup_reference_trace.hint_count;
+        }
+    }
     if (update_header_trace.enabled) {
         PtcUiRect badge = update_header_trace.badge, bar = update_header_trace.bar;
         bool overlaps = bounds.x < badge.x + badge.w && bounds.x + bounds.width > badge.x &&
@@ -119,6 +135,56 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
         child_heading_trace.summary = bounds;
         ++child_heading_trace.summary_count;
     }
+}
+
+static int check_setup_reference(const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
+            for (int dark = 0; dark < 2; ++dark) {
+                PtcUiThemeView theme = ptc_ui_theme_make_styled_view(
+                    dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, (PtcUiThemeStyle)style,
+                    PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                for (int state = 0; state < 3; ++state) {
+                    PtcUiModel model = *baseline;
+                    model.view = PTC_UI_SETUP;
+                    model.setup_step = PTC_UI_SETUP_PREPARE;
+                    model.environment_available = state != 2;
+                    model.environment_atmosphere = true;
+                    snprintf(model.environment_hos, sizeof(model.environment_hos), "%s", state ? "23.0.1" : "22.5.0");
+                    snprintf(model.environment_model, sizeof(model.environment_model), "mariko-oled");
+                    snprintf(model.environment_atmosphere_version, sizeof(model.environment_atmosphere_version), "%s",
+                        state ? "1.12.1" : "1.11.2");
+                    memset(&setup_reference_trace, 0, sizeof(setup_reference_trace));
+                    setup_reference_trace.enabled = true;
+                    setup_reference_trace.hint_text = ptc_ui_text(state ?
+                        PTC_UI_T_SETUP_REFERENCE_UNKNOWN : PTC_UI_T_SETUP_REFERENCE_MATCH);
+                    ptc_ui_graphics_draw(&model, &theme);
+                    setup_reference_trace.enabled = false;
+                    UiRect reference = setup_reference_trace.reference, hint = setup_reference_trace.hint;
+                    bool separated = reference.y == hint.y ? reference.x + reference.width + 24 <= hint.x :
+                        reference.y + reference.height + 6 <= hint.y;
+                    bool fits = setup_reference_trace.reference_count == 1 && setup_reference_trace.hint_count == 1 &&
+                        reference.x >= 94 && reference.x + reference.width <= 1186 &&
+                        hint.x >= 94 && hint.x + hint.width <= 1186 &&
+                        reference.y >= 387 && hint.y >= 387 &&
+                        reference.y + reference.height <= 424 && hint.y + hint.height <= 424 && separated;
+                    if (!fits) {
+                        fprintf(stderr, "FAIL: setup reference lang=%d style=%d dark=%d state=%d reference=%d [%d,%d,%d,%d] hint=%d [%d,%d,%d,%d]\n",
+                            lang, style, dark, state, setup_reference_trace.reference_count,
+                            reference.x, reference.y, reference.width, reference.height, setup_reference_trace.hint_count,
+                            hint.x, hint.y, hint.width, hint.height);
+                        ++failed;
+                    }
+                }
+            }
+        }
+    }
+    fprintf(stderr, "%s: setup complete reference and separated advisory (3 languages, 4 styles, 2 modes, 3 environments)\n",
+        failed ? "FAIL" : "PASS");
+    return failed ? 1 : 0;
 }
 
 static int check_bedtime_editors(const PtcUiModel *baseline)
@@ -2109,9 +2175,10 @@ int main(int argc, char **argv)
     snprintf(model.result_status, sizeof(model.result_status), "ok");
 
     if (strcmp(argv[2], "--check-parent-tabs") == 0 || strcmp(argv[2], "--check-bedtime-editors") == 0 ||
-        strcmp(argv[2], "--check-dock-editor") == 0) {
+        strcmp(argv[2], "--check-dock-editor") == 0 || strcmp(argv[2], "--check-setup-reference") == 0) {
         failed = strcmp(argv[2], "--check-parent-tabs") == 0 ? check_parent_tabs(&model) :
-            strcmp(argv[2], "--check-dock-editor") == 0 ? check_dock_editor(&model) : check_bedtime_editors(&model);
+            strcmp(argv[2], "--check-dock-editor") == 0 ? check_dock_editor(&model) :
+            strcmp(argv[2], "--check-setup-reference") == 0 ? check_setup_reference(&model) : check_bedtime_editors(&model);
         FT_Done_Face(g_ui.face);
         free(bytes);
         return failed;
