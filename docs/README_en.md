@@ -43,6 +43,7 @@ Consult these only for the relevant task; they are not global development or tes
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
 | [Protocol Specification](设计/PROTOCOL.md) | Threat model and trust boundaries, files, requests, results, errors and recovery contracts | [协议](设计/协议.md) |
+| In-app Online Update (Chinese only) | Store source, channels, independent backups, installation journal and recovery boundaries | [在线更新](设计/在线更新.md) |
 | [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md) | Handover, write transactions, private-command evidence and Device Lab boundaries | [PCTL集成架构](设计/PCTL集成架构.md) |
 | [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md) | Palette, semantic colors, edge-to-edge layout and software rendering rules | [视觉风格与设计指南](设计/视觉风格与设计指南.md) |
 | Holiday Calendar Data (Chinese only) | Built-in data versions, dates, official sources and fallback behavior | [节假日日历数据](设计/节假日日历.md) |
@@ -60,6 +61,7 @@ Use the [research index](调研/README.md) (Chinese) to separate reusable refere
 | [Overlay memory and freeze risk audit](调研/Overlay内存与死机风险自查.md) | Bounded glyph ownership, resource teardown, thread races and hardware evidence limits | 2026-10-13 |
 | [Eden and Tesla overlay loading capabilities](调研/Eden与Tesla浮窗加载能力调研.md) | Missing CFW/sysmodule support, VI and HID measurements, emulator-only limits | 2026-10-24 |
 | [PCTL1952 feature impact analysis](调研/专题分析/PCTL1952功能影响分析.md) | Cross-feature analysis bound to its original source baseline, not the current backlog | 2026-10-14 |
+| [In-app online update proposal](调研/专题分析/应用内在线更新方案.md) | Store source inspection, version checks, signed installation, configuration backup and recovery gaps | 2026-10-28 |
 | [Historical investigations](调研/历史调查/README.md) | Five diagnostic, capability-probe and handoff records with original version and evidence boundaries | 2026-10 |
 
 ## Maintenance

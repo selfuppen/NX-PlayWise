@@ -124,7 +124,29 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_DAY_DECISION_NEXT, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
+    if (model->overlay == PTC_UI_OVERLAY_ONLINE_UPDATE) {
+        if (ptc_ui_rect_contains(ptc_ui_settings_page_back_rect(), x, y)) return make_hit(PTC_UI_HIT_UPDATE_ACTION, 12);
+        if (model->update_notes_open) {
+            if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y)) return make_hit(PTC_UI_HIT_UPDATE_ACTION, 9);
+            if (ptc_ui_rect_contains(ptc_ui_settings_page_primary_rect(), x, y)) return make_hit(PTC_UI_HIT_UPDATE_ACTION, 10);
+            return make_hit(PTC_UI_HIT_NONE, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_update_notes_rect(), x, y)) return make_hit(PTC_UI_HIT_UPDATE_ACTION, 8);
+        for (int i = 0; i < 8; ++i) if (ptc_ui_rect_contains(ptc_ui_update_action_rect(i), x, y))
+            return make_hit(PTC_UI_HIT_UPDATE_ACTION, i);
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS) {
+        if (ptc_ui_rect_contains(ptc_ui_settings_page_back_rect(), x, y)) return make_hit(PTC_UI_HIT_UPDATE_ACTION, 12);
+        for (int i = 1; i < 4; ++i) if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(i), x, y))
+            return make_hit(PTC_UI_HIT_UPDATE_ACTION, i == 1 ? 11 : (i == 2 ? 9 : 10));
+        for (int i = 0; i < 4; ++i) if (ptc_ui_rect_contains(ptc_ui_update_backup_rect(i), x, y))
+            return make_hit(PTC_UI_HIT_UPDATE_ACTION, i);
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
     if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
+        if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y))
+            return make_hit(PTC_UI_HIT_UPDATE_ACTION, 8);
         if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
         if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&
@@ -451,6 +473,8 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
     if (!model) {
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
+    if (ptc_ui_update_badge_visible(model) && rect_contains_with_padding(ptc_ui_update_badge_rect(model), 4, x, y))
+        return make_hit(PTC_UI_HIT_UPDATE_BADGE, 0);
     if (model->overlay != PTC_UI_OVERLAY_NONE) {
         return hit_test_overlay(model, x, y);
     }

@@ -1,4 +1,32 @@
 #include "ui_state.h"
+#include "../../common/update/update.h"
+
+bool ptc_ui_update_action_enabled(const PtcUiModel *m, int action)
+{
+    if (!m || m->view != PTC_UI_PARENT || action < 0 || action >= 8) return false;
+    if (m->update_busy) return action == 6 && (m->update_status == PTC_UPDATE_CHECKING || m->update_status == PTC_UPDATE_DOWNLOADING || m->update_status == PTC_UPDATE_VERIFYING);
+    if (action == 7 || action == 4) return true;
+    if (action == 0) return m->update_status != PTC_UPDATE_RECOVERY_REQUIRED && m->update_status != PTC_UPDATE_AWAITING_REOPEN &&
+        m->update_status != PTC_UPDATE_BACKEND_PENDING && m->update_status != PTC_UPDATE_RECONFIRM;
+    if (m->parent_support_only) return false;
+    if (action == 1) return m->update_status == PTC_UPDATE_AVAILABLE;
+    if (action == 5) return m->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING || m->update_status == PTC_UPDATE_RECONFIRM;
+    if (action == 6) return m->update_status == PTC_UPDATE_RECOVERY_REQUIRED;
+    return true;
+}
+
+bool ptc_ui_update_can_resume_backup(const PtcUiModel *m)
+{
+    return m && m->view == PTC_UI_PARENT && !m->parent_support_only;
+}
+
+bool ptc_ui_update_badge_visible(const PtcUiModel *m)
+{
+    return m && (m->view == PTC_UI_CHILD || m->view == PTC_UI_PARENT) &&
+        m->overlay == PTC_UI_OVERLAY_NONE && m->update_status == PTC_UPDATE_AVAILABLE && m->update_version[0] &&
+        !m->update_busy && !m->waiting && !m->recovery_active && !m->weekly_dirty && !m->holiday_dirty &&
+        !m->bedtime_dirty && !m->dock_dirty && !ptc_ui_eye_care_dirty(m);
+}
 #include "ui_layout.h"
 
 #include <limits.h>

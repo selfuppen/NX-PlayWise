@@ -142,6 +142,42 @@ static void init_parent_entry(UiState *ui, PtcMemStorage *mem)
     enter_parent_area(ui);
 }
 
+static void test_update_badge_entry(void)
+{
+    static PtcMemStorage mem; UiState ui;
+    for (int action = 0; action < 4; ++action) {
+        init(&ui, &mem);
+        check(ptc_companion_auth_set_pin(&ui.auth, "1234", fixed_time, switch_random, NULL) == PTC_AUTH_OK, "badge PIN fixture");
+        ui.model.view = PTC_UI_CHILD; ui.model.update_status = 3;
+        strcpy(ui.model.update_version, "2.0.0");
+        pin_values[0] = action == 0 ? "1234" : (action == 1 ? NULL : "9999");
+        open_online_update_badge(&ui);
+        if (action == 0) check(ui.model.view == PTC_UI_PARENT && ui.model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE &&
+            !ui.update_open_after_parent_auth && !ui.waiting, "badge opens update details only after successful parent authentication");
+        else if (action == 1) check(ui.model.view == PTC_UI_CHILD && !ui.update_open_after_parent_auth && !ui.waiting,
+            "canceling badge authentication stays on child page without starting requests");
+        else {
+            check(ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && ui.update_open_after_parent_auth,
+                "incorrect badge PIN retains only the authenticated destination");
+            if (action == 2) {
+                pin_cursor = 0; pin_values[0] = "1234";
+                parent_error_action(&ui, false, HidNpadButton_A);
+                check(ui.model.view == PTC_UI_PARENT && ui.model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE && !ui.update_open_after_parent_auth,
+                    "retrying the badge PIN reaches update details after success");
+            } else {
+                parent_error_action(&ui, true, HidNpadButton_B);
+                check(ui.model.view == PTC_UI_CHILD && !ui.update_open_after_parent_auth,
+                    "canceling the badge PIN error clears its destination");
+            }
+        }
+    }
+    init(&ui, &mem); ui.model.view = PTC_UI_PARENT; ui.model.parent_support_only = true;
+    ui.model.update_status = 3; strcpy(ui.model.update_version, "2.0.0");
+    open_online_update_badge(&ui);
+    check(ui.model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE && ui.model.parent_support_only && !ui.waiting,
+        "read-only support badge preserves read-only authorization");
+}
+
 static void test_parent_pin_error(void)
 {
     static PtcMemStorage mem; UiState ui;
@@ -516,6 +552,7 @@ int main(void)
     UiState ui, reopened;
     char text[8192];
     test_eden_request_release_boundary();
+    test_update_badge_entry();
     init(&ui, &mem);
     ui.model.view = PTC_UI_PARENT;
     ui.model.setup_step = 0;
@@ -579,12 +616,22 @@ int main(void)
     ptc_ui_setup_sync(&ui.model);
     check(ui.model.view == PTC_UI_PARENT, "status sync cannot reopen completed guide");
     mem.fail_writes = false;
+    snprintf(ui.model.setup_phase, sizeof(ui.model.setup_phase), "pending");
+    snprintf(ui.model.setup_last_error, sizeof(ui.model.setup_last_error), "pctl_read_failed");
+    snprintf(ui.model.disable_reason, sizeof(ui.model.disable_reason), "startup_transaction_restored");
     export_diagnostics(&ui);
     check(ui.model.diagnostic_status == PTC_UI_DIAGNOSTIC_SUCCESS, "diagnostic export works without backend or PIN");
     check(mem.storage.vtable->read_text(&mem.storage, ui.model.diagnostic_path, text, sizeof(text)) &&
           strstr(text, "onboarding") && strstr(text, "language_save") && strstr(text, "progress_save") &&
           strstr(text, "pin_setup") && strstr(text, "\"status_loaded\":false") && !strstr(text, "pin_hash"),
           "export captures safe setup failures and missing status");
+    cJSON *diagnostic = cJSON_Parse(text);
+    cJSON *runtime = cJSON_GetObjectItemCaseSensitive(diagnostic, "runtime_snapshot");
+    check(runtime && !strcmp(cJSON_GetObjectItemCaseSensitive(runtime, "setup_phase")->valuestring, "pending") &&
+          !strcmp(cJSON_GetObjectItemCaseSensitive(runtime, "setup_last_error")->valuestring, "pctl_read_failed") &&
+          !strcmp(cJSON_GetObjectItemCaseSensitive(runtime, "disable_reason")->valuestring, "startup_transaction_restored"),
+          "diagnostic round trip retains actual cached disable reason and setup failure");
+    cJSON_Delete(diagnostic);
     check(save_ui_preferences(&ui), "completion marker eventually saves");
     memset(&reopened, 0, sizeof(reopened));
     reopened.client = ui.client;
@@ -855,6 +902,30 @@ int main(void)
         check(!ptc_eden_format_ui(&model, small, sizeof(small)) && small[0] == '\0',
               "Eden observation never publishes truncated JSON");
         check(!ptc_eden_format_ui(NULL, text, sizeof(text)), "Eden observation rejects missing model");
+    }
+    {
+        UiState *notes = calloc(1, sizeof(*notes));
+        check(notes != NULL, "update reading fixture allocation");
+        if (notes) {
+            notes->model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+            notes->model.view = PTC_UI_PARENT;
+            notes->model.parent_support_only = true;
+            strcpy(notes->model.update_notes, "Read-only release notes");
+            online_update_action(notes, 8);
+            check(notes->model.update_notes_open, "read-only parent may read complete update notes");
+            handle_online_update_input(notes, HidNpadButton_R);
+            check(notes->model.update_notes_page == 1 && !notes->exit_requested, "reading next page does not execute an install action");
+            handle_online_update_input(notes, HidNpadButton_B);
+            check(!notes->model.update_notes_open && notes->model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE, "reading back returns to update details");
+            notes->model.update_busy = true;
+            online_update_action(notes, 8);
+            check(!notes->model.update_notes_open, "worker completion owns notes until join");
+            notes->model.view = PTC_UI_CHILD; notes->model.update_busy = false;
+            open_online_update(notes);
+            online_update_action(notes, 8);
+            check(!notes->model.update_notes_open, "child cannot enter update reading or actions");
+            free(notes);
+        }
     }
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;

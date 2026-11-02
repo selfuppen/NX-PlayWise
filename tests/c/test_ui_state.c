@@ -1863,7 +1863,7 @@ static void test_user_state_mapping(void)
         "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,"
         "\"rule_source\":\"statutory_holiday\",\"calendar_covered\":true,\"calendar_update_warning\":false},"
         "\"setup\":{\"phase\":\"active\",\"restriction_cleared\":true,\"snapshot_available\":true,"
-        "\"activate_after\":0,\"compatibility_status\":\"verified\"},"
+        "\"activate_after\":0,\"compatibility_status\":\"verified\",\"last_error\":\"pctl_read_failed\"},"
         "\"environment\":{\"available\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
         "\"recent_events\":[{\"ts\":4294967296,\"request_id\":\"weekly-1\",\"type\":\"set_weekly_template\","
         "\"event\":\"result_ok\",\"error\":\"\",\"detail\":\"rules\"}],\"completed_at\":106}";
@@ -1950,6 +1950,7 @@ static void test_user_state_mapping(void)
         "effective holiday source and coverage map to the UI model");
     check_true(strcmp(model.compatibility_status, "verified") == 0,
         "compatibility status maps to the UI model");
+    check_true(!strcmp(model.setup_last_error, "pctl_read_failed"), "setup failure is retained for diagnostics");
     check_true(model.environment_available && strcmp(model.environment_hos, "22.5.0") == 0 &&
                strcmp(model.environment_model, "mariko-oled") == 0 && model.environment_atmosphere,
                "support environment fields map independently for multiline display");
@@ -2700,6 +2701,48 @@ static void test_visual_action_boundaries(void)
     check_true(!rects_overlap(code, ptc_ui_child_buffer_rect()) &&
                !rects_overlap(ptc_ui_child_buffer_rect(), ptc_ui_home_details_rect(false)),
                "child primary, secondary and detail actions do not overlap");
+    /* 孩子首页共用一条内容底边：守护卡放大后，看板、七日预测和右侧动作栏
+     * 都收在 644，避免某一列忽然比其它列短。 */
+    {
+        PtcUiRect hero = ptc_ui_child_hero_rect();
+        PtcUiRect forecast = ptc_ui_child_forecast_rect();
+        PtcUiRect status = ptc_ui_child_status_rect();
+        PtcUiRect buffer = ptc_ui_child_buffer_rect();
+        PtcUiRect details = ptc_ui_home_details_rect(false);
+        int bottom = status.y + status.h;
+        check_true(hero.x == forecast.x && hero.w == forecast.w &&
+                   hero.y + hero.h + 14 == forecast.y,
+                   "child hero and forecast share the column and keep a 14px gap");
+        check_true(forecast.y + forecast.h == bottom && bottom < ptc_ui_child_footer_rect(1).y,
+                   "child forecast, status card and action column share one bottom edge above the footer");
+        check_true(code.y == hero.y && buffer.y - (code.y + code.h) == 14 &&
+                   details.y - (buffer.y + buffer.h) == 14 &&
+                   status.y - (details.y + details.h) == 14,
+                   "child right action column keeps 14px gaps and ends on the shared bottom edge");
+        check_true(status.w == code.w && status.x == code.x,
+                   "child status card stays in the action column");
+    }
+    /* 孩子区使用详情多一条导读条：正文整体下移，但底部按钮底边与家长区一致，
+     * 避免触控命中和视觉下沿出现两套坐标。 */
+    {
+        PtcUiRect guide = ptc_ui_home_details_guide_rect();
+        check_true(guide.x == 40 && guide.w == 1200 && guide.y + guide.h <= 144,
+                   "child details guide sits between the page title and the first card row");
+        PtcUiModel child_details = {0};
+        child_details.view = PTC_UI_CHILD;
+        child_details.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+        child_details.home_details_page = 0;
+        PtcUiRect child_btn = ptc_ui_home_details_action_rect(&child_details, 0);
+        PtcUiModel parent_details = child_details;
+        parent_details.view = PTC_UI_PARENT;
+        PtcUiRect parent_btn = ptc_ui_home_details_action_rect(&parent_details, 0);
+        check_true(child_btn.y >= guide.y + guide.h && child_btn.y + child_btn.h <= 616,
+                   "child details decision entry starts below the guide and stays on the page");
+        check_true(child_btn.y + child_btn.h == parent_btn.y + parent_btn.h,
+                   "child and parent details decision entries share one bottom edge");
+        check_int(child_btn.x, parent_btn.x, "child details decision entry keeps the parent column");
+        check_int(child_btn.w, parent_btn.w, "child details decision entry keeps the parent width");
+    }
     model.waiting = true;
     check_hit(hit_center(&model, code), PTC_UI_HIT_NONE, 0, "syncing primary action remains blocked");
     model.waiting = false;
@@ -4570,6 +4613,107 @@ static void test_direct_usage_freshness(void)
         "invalid signed wire range cannot fall back to old estimate");
 }
 
+static void test_data_freshness_and_software_update(void)
+{
+    const char *now_text[] = {"刚刚刷新", "剛剛重新整理", "Just refreshed"};
+    const char *minute_text[] = {"1 分钟前刷新", "1 分鐘前重新整理", "Refreshed 1m ago"};
+    const char *age_text[] = {"2 分钟前刷新", "2 分鐘前重新整理", "Refreshed 2m ago"};
+    const char *app_text[] = {"软件有新版本", "軟體有新版本", "New app version"};
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        PtcUiModel model = {0};
+        PtcUiTimeProjection status;
+        int index = lang - PTC_UI_LANGUAGE_SIMPLIFIED;
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        model.view = PTC_UI_CHILD;
+        model.status_loaded = true;
+        model.status_updated_at = 1000;
+        model.update_status = 3;
+        strcpy(model.update_version, "2.0.0");
+        ptc_ui_project_time_status(&model, 1000, &status);
+        check_true(strcmp(status.freshness_text, now_text[index]) == 0,
+            "fresh data uses natural refresh wording rather than software update wording");
+        check_true(strcmp(ptc_ui_text(PTC_UI_T_UPDATE_BADGE), app_text[index]) == 0,
+            "software hint explicitly identifies the app in all languages");
+        ptc_ui_project_time_status(&model, 1059, &status);
+        check_true(strcmp(status.freshness_text, now_text[index]) == 0,
+            "sub-minute freshness avoids a noisy seconds counter");
+        ptc_ui_project_time_status(&model, 1060, &status);
+        check_true(strcmp(status.freshness_text, minute_text[index]) == 0,
+            "one minute switches to a natural minute-based refresh label");
+        ptc_ui_project_time_status(&model, 1120, &status);
+        check_true(strcmp(status.freshness_text, age_text[index]) == 0 && ptc_ui_update_badge_visible(&model),
+            "data age and an available app update remain independent");
+        ptc_ui_project_time_status(&model, 1121, &status);
+        check_true(strcmp(status.freshness_text, age_text[index]) != 0 && ptc_ui_update_badge_visible(&model),
+            "available software never hides stale data");
+        strcpy(model.result_status, "error");
+        ptc_ui_project_time_status(&model, 1001, &status);
+        check_true(strcmp(status.freshness_text, ptc_ui_text(PTC_UI_T_REFRESH_FAILED)) == 0,
+            "available software never hides a failed data refresh");
+        PtcUiRect bar = ptc_ui_time_status_bar_for_model(&model);
+        check_hit(ptc_ui_hit_test_at(&model, bar.x + bar.w - 24, bar.y + 16, 1001), PTC_UI_HIT_NONE, 0,
+            "read-only data age cannot trigger software update navigation");
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+}
+
+static void test_online_update_layout(void)
+{
+    PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+    for (int i = 0; i < 8; ++i) {
+        PtcUiRect rect = ptc_ui_update_action_rect(i);
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_UPDATE_ACTION, i, "update action shares touch geometry");
+        check_true(rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= 1280 && rect.y + rect.h <= 676, "update action fits app viewport");
+        for (int k = i + 1; k < 8; ++k) check_true(!rects_overlap(rect, ptc_ui_update_action_rect(k)), "update actions do not overlap");
+    }
+    model.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
+    for (int i = 0; i < 4; ++i) check_hit(hit_center(&model, ptc_ui_update_backup_rect(i)), PTC_UI_HIT_UPDATE_ACTION, i, "backup selection shares touch geometry");
+    check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(1)), PTC_UI_HIT_UPDATE_ACTION, 11, "backup cleanup is touch accessible");
+    check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(2)), PTC_UI_HIT_UPDATE_ACTION, 9, "backup previous page is touch accessible");
+    check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()), PTC_UI_HIT_UPDATE_ACTION, 10, "backup next page is touch accessible");
+    model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+    check_hit(hit_center(&model, ptc_ui_update_notes_rect()), PTC_UI_HIT_UPDATE_ACTION, 8, "long notes have a touch reading entry");
+    check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()), PTC_UI_HIT_UPDATE_ACTION, 12, "update back is touch accessible");
+    model.update_notes_open = true;
+    check_hit(hit_center(&model, ptc_ui_update_action_rect(1)), PTC_UI_HIT_NONE, 0, "notes reading cannot fall through to installation");
+    check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()), PTC_UI_HIT_UPDATE_ACTION, 10, "notes next page is touch accessible");
+    model.update_status = 3;
+    check_true(ptc_ui_update_action_enabled(&model, 1), "available update permits parent download");
+    model.parent_support_only = true;
+    check_true(!ptc_ui_update_action_enabled(&model, 1) && !ptc_ui_update_action_enabled(&model, 2), "read-only support cannot install or change preferences");
+    check_true(ptc_ui_update_action_enabled(&model, 0), "read-only support may check metadata");
+    model.parent_support_only = false; model.update_busy = true; model.update_status = 6;
+    check_true(ptc_ui_update_action_enabled(&model, 6) && !ptc_ui_update_action_enabled(&model, 1), "download permits cancellation only");
+    model.update_status = 9;
+    check_true(!ptc_ui_update_action_enabled(&model, 6), "installation cannot be canceled halfway");
+    model.update_busy = false; model.update_status = 3;
+    check_true(ptc_ui_update_can_resume_backup(&model), "normal parent can resume the original backup transaction");
+    model.parent_support_only = true;
+    check_true(!ptc_ui_update_can_resume_backup(&model), "read-only support cannot resume into installation");
+    model.parent_support_only = false; model.view = PTC_UI_CHILD;
+    check_true(!ptc_ui_update_can_resume_backup(&model), "reopening on child page does not resume installation");
+    for (int i = 0; i < 8; ++i) check_true(!ptc_ui_update_action_enabled(&model, i), "child has no update actions");
+    model.overlay = PTC_UI_OVERLAY_NONE; model.update_notes_open = false;
+    strcpy(model.update_version, "2.0.0");
+    check_true(ptc_ui_update_badge_visible(&model), "verified available version has a quiet child header entry");
+    for (int dense = 0; dense < 2; ++dense) for (int demo = 0; demo < 2; ++demo) {
+        model.eye_care_policy.enabled = model.draft_eye_care_policy.enabled = dense != 0;
+        model.bedtime_policy.enabled = dense != 0; model.demo_secret_enabled = demo != 0;
+        PtcUiRect bar = ptc_ui_time_status_bar_for_model(&model), badge = ptc_ui_update_badge_rect(&model);
+        check_true(!rects_overlap(badge, bar) && badge.x + badge.w < bar.x && badge.y >= 80 && badge.y + badge.h <= 104,
+            "software update stays under the app heading and outside the data status card");
+        check_true(!rects_overlap(badge, ptc_ui_header_language_rect()), "update badge leaves language controls unobstructed");
+        check_hit(hit_center(&model, badge), PTC_UI_HIT_UPDATE_BADGE, 0, "update badge shares measured touch anchor");
+    }
+    model.waiting = true; check_true(!ptc_ui_update_badge_visible(&model), "update badge cannot navigate away from pending work");
+    model.waiting = false; model.weekly_dirty = true; check_true(!ptc_ui_update_badge_visible(&model), "update badge preserves unsaved rule edits");
+    model.weekly_dirty = false;
+    for (int state = 0; state <= 18; ++state) {
+        model.update_status = state;
+        check_true(ptc_ui_update_badge_visible(&model) == (state == 3), "offline, failed, excluded and equal versions never advertise an update");
+    }
+}
+
 int main(void)
 {
     test_direct_usage_freshness();
@@ -4579,6 +4723,8 @@ int main(void)
     test_today_details_navigation();
     test_today_settings_links();
     test_config_backup_layout();
+    test_data_freshness_and_software_update();
+    test_online_update_layout();
     test_dock_ui();
     test_dock_editor_preview();
     test_calendar_nearest_page();

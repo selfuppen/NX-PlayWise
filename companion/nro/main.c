@@ -107,8 +107,9 @@ int main(int argc, char **argv)
     snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS));
     ptc_fs_storage_init(&fs);
 #ifndef PLAYWISE_EDEN
+    ptc_online_update_init(&ui.updater, ptc_fs_storage_as_storage(&fs));
     ptc_hot_reload_init(&ui.hot_reload);
-    ptc_hot_reload_recover_startup(&ui.hot_reload);
+    if (ui.updater.status != PTC_UPDATE_RECOVERY_REQUIRED) ptc_hot_reload_recover_startup(&ui.hot_reload);
 #endif
 #ifdef PLAYWISE_EDEN
     /* Seeds the live root files, so the materialization below finds them all
@@ -117,7 +118,11 @@ int main(int argc, char **argv)
     ui.model.eden_mode_controls = true;
     eden_runtime_ready = ptc_eden_runtime_init(&eden_runtime, ptc_fs_storage_as_storage(&fs));
 #endif
-    install_defaults_ready = ptc_install_materialize_defaults(ptc_fs_storage_as_storage(&fs), APP_ROOT);
+    install_defaults_ready =
+#ifndef PLAYWISE_EDEN
+        ui.updater.status != PTC_UPDATE_RECOVERY_REQUIRED &&
+#endif
+        ptc_install_materialize_defaults(ptc_fs_storage_as_storage(&fs), APP_ROOT);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
 #ifndef PLAYWISE_EDEN
     ptc_ui_status_trace_init(&ui.status_trace, ptc_fs_storage_as_storage(&fs), APP_ROOT,
@@ -142,14 +147,14 @@ int main(int argc, char **argv)
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
         ptc_eden_runtime_ipc_backend(), &eden_runtime);
 #else
-    backend_expected = standard_backend_expected() && ui.hot_reload.phase != PTC_HOT_RELOAD_PHASE_FAILED &&
+    backend_expected = standard_backend_expected() && ui.updater.status != PTC_UPDATE_RECOVERY_REQUIRED && ui.hot_reload.phase != PTC_HOT_RELOAD_PHASE_FAILED &&
         ui.hot_reload.status != PTC_HOT_RELOAD_RUNNING;
     if (backend_expected) ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
         (backend_expected || ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING) ? ptc_switch_ipc_backend() : NULL, &ui.ipc);
     if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED || ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING)
         ptc_companion_transport_set_suspended(&ui.transport, true);
-    if (ui.hot_reload.status == PTC_HOT_RELOAD_UNKNOWN) ptc_hot_reload_inspect(&ui.hot_reload);
+    if (ui.hot_reload.status == PTC_HOT_RELOAD_UNKNOWN && ui.updater.status != PTC_UPDATE_RECOVERY_REQUIRED) ptc_hot_reload_inspect(&ui.hot_reload);
     sync_hot_reload_model(&ui);
 #endif
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
@@ -418,6 +423,7 @@ int main(int argc, char **argv)
             ptc_eden_trace_stage(PTC_EDEN_TRACE_TICK_END, 0);
 #else
             poll_hot_reload(&ui);
+            poll_online_update(&ui);
 #endif
             poll_pending_redemption(&ui);
 #ifdef PLAYWISE_EDEN
@@ -446,6 +452,9 @@ int main(int argc, char **argv)
         svcSleepThread(ui.animating ? INPUT_LOOP_SLEEP_FAST_NS : INPUT_LOOP_SLEEP_NS);
     }
 
+#ifndef PLAYWISE_EDEN
+    ptc_online_update_exit(&ui.updater);
+#endif
     if (!ui.waiting && ui.config_stage_id[0]) config_backup_action(&ui, 15);
     appletUnhook(&hook_cookie);
     ptc_audio_exit();

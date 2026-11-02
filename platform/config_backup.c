@@ -238,6 +238,9 @@ bool ptc_config_preferences_valid(const cJSON *o)
         if (*p < 33 || *p > 126 || *p == '"' || *p == '\\') return false;
     const char *theme = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(o, "theme"));
     const char *lang = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(o, "ui_language"));
+    const cJSON *style_item = cJSON_GetObjectItemCaseSensitive(o, "theme_style");
+    const char *style = cJSON_GetStringValue(style_item);
+    if (style_item && (!style || (strcmp(style, "indigo") && strcmp(style, "teal") && strcmp(style, "amethyst") && strcmp(style, "slate")))) return false;
     if ((theme && strcmp(theme, "system") && strcmp(theme, "light") && strcmp(theme, "dark")) ||
         (lang && strcmp(lang, "system") && strcmp(lang, "zh-Hans") && strcmp(lang, "zh-Hant") && strcmp(lang, "en"))) return false;
     if ((cJSON_HasObjectItem(o, "theme") && !theme) || (cJSON_HasObjectItem(o, "ui_language") && !lang)) return false;
@@ -252,7 +255,8 @@ bool ptc_config_preferences_valid(const cJSON *o)
         if (*end || !value || (value & ~0xffccULL)) return false;
     }
     return boolean(o, "custom_shortcut_enabled") && boolean(o, "show_parent_shortcut_hint") &&
-        boolean(o, "sound_effects_enabled") && number(o, "max_add_minutes", 1, 1440, true) &&
+        boolean(o, "sound_effects_enabled") && boolean(o, "update_check_on_startup") && boolean(o, "update_stable_only") &&
+        number(o, "max_add_minutes", 1, 1440, true) &&
         number(o, "default_request_timeout_ms", 1, 2147483647, true);
 }
 
@@ -314,7 +318,7 @@ static bool add_file(PtcStorage *s, const char *root, const char *stage, cJSON *
             bool keep = true;
             if (!strcmp(relative, "config.json")) {
                 static const char *keys[] = {"version", "device_id", "max_add_minutes", "default_request_timeout_ms", "pairing_base_url",
-                    "theme", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint"};
+                    "theme", "theme_style", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint", "update_check_on_startup", "update_stable_only"};
                 keep = false;
                 for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) if (!strcmp(v->string, keys[i])) keep = true;
             } else if (!strcmp(relative, "rules.json")) keep = !confirmation(v->string);
@@ -516,13 +520,13 @@ cJSON *ptc_config_merge_rules(const cJSON *current, const cJSON *source, unsigne
 
 cJSON *ptc_config_merge_preferences(const cJSON *current, const cJSON *source, unsigned groups)
 {
-    static const char *prefs[] = {"theme", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint"};
+    static const char *prefs[] = {"theme", "theme_style", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint", "update_check_on_startup", "update_stable_only"};
     static const char *pairing[] = {"device_id", "pairing_base_url", "max_add_minutes", "default_request_timeout_ms"};
     if (!ptc_config_preferences_valid(current) || !ptc_config_preferences_valid(source)) return NULL;
     cJSON *out = cJSON_Duplicate(current, true);
     for (unsigned group = 0; out && group < 2; ++group) {
         const char **keys = group ? pairing : prefs;
-        size_t count = group ? 4 : 6;
+        size_t count = group ? 4 : sizeof(prefs) / sizeof(prefs[0]);
         if (!(groups & (group ? PTC_CONFIG_PAIRING : PTC_CONFIG_PREFS))) continue;
         for (size_t i = 0; i < count; ++i) {
             const cJSON *v = cJSON_GetObjectItemCaseSensitive(source, keys[i]);

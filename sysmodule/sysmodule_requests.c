@@ -1,4 +1,5 @@
 #include "sysmodule_internal.h"
+#include "../platform/update_fs.h"
 
 static bool process_clear_redemption_history(
     PtcSysmodule *sysmodule,
@@ -328,6 +329,14 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
         }
         (void)json_string(request_text, "type", request.type_text, sizeof(request.type_text));
         (void)finish_with_error(sysmodule, &request, "release", true, parse_err, now.day_index);
+        return;
+    }
+    if (ptc_update_fs_busy(sysmodule->storage, sysmodule->app_root, false) &&
+        request.type != PTC_REQUEST_STATUS && request.type != PTC_REQUEST_OVERLAY_READY &&
+        request.type != PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT && request.type != PTC_REQUEST_SKIP_BEDTIME &&
+        request.type != PTC_REQUEST_DISABLE_BEDTIME && request.type != PTC_REQUEST_SKIP_EYE_CARE_BREAK &&
+        request.type != PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY) {
+        (void)finish_with_error(sysmodule, &request, "release", true, PTC_ERR_CONTROL_BUSY, now.day_index);
         return;
     }
     if (recovery_path_exists(sysmodule) && !recovery_owned_by(sysmodule, &request) &&

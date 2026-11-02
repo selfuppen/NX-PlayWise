@@ -518,6 +518,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->apply_pending_confirmation = json_bool(setup, "apply_pending_confirmation", false);
         model->recovery_active = json_bool(setup, "recovery_active", false);
         snprintf(model->disable_reason, sizeof(model->disable_reason), "%s", json_string(setup, "disable_reason"));
+        snprintf(model->setup_last_error, sizeof(model->setup_last_error), "%s", json_string(setup, "last_error"));
         if (cJSON_HasObjectItem(setup, "disable_flag_present"))
             model->disable_flag_present = json_bool(setup, "disable_flag_present", false);
         model->setup_restriction_cleared = json_bool(setup, "restriction_cleared", false);

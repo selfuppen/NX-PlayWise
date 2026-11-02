@@ -39,7 +39,7 @@ PlayWise supports real-time runtime switching across 4 calibrated UI styles with
 | **0. Graphite (Default)** | `#2F5FD0` | `#E6ECFB` | `#88AAEE` | `#223344` | Cool graphite, clear blue, product-like near-black layers |
 | **1. Paper & Ink** | `#2C4A6E` | `#E7EDF4` | `#99BBDD` | `#223344` | Warm paper, ink-blue, low glare, warm-charcoal night |
 | **2. Mist Teal** | `#1F6B5C` | `#E2F0EB` | `#77CCBB` | `#113333` | Mist green, porcelain teal, breathing room |
-| **3. Dusk** | `#7A4670` | `#F3E8F1` | `#DD99CC` | `#332233` | Mauve-grey, plum accent, gentle and night-friendly |
+| **3. Dusk** | `#54469E` | `#EEEBFA` | `#9988EE` | `#222244` | Modern lavender, iris accent, cool-toned night-friendly |
 
 #### Global Surface & Structural Colors
 
@@ -210,10 +210,10 @@ The view moves beyond rigid and cramped layouts, adopting conversational, parent
 ![Decision and rules restriction active preview](../images/usage-en/parent/parent-details-rules-restricted-light.png)
 
 ### 4.5 Tesla Overlay Current Design & Dark Baseline Contract
-* **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
+* **Tesla Host Dark Background & Own Panel Base**: The Tesla host layer is a translucent dark background (`ColorFrameBackground = 0x000D` / RGBA(0, 0, 0, 0.85)), but PlayWise never renders text directly on it. The full 448×720 panel is filled with the palette `panel_bg` (black, alpha `0xE`, ~93%), so bare areas such as the top path bar, rule-chain and group labels, explanation rows and footer gaps leak only ~7% of the game and stay readable over bright scenes. Do not draw an extra page-level `panel_bg` rectangle: libtesla adds alpha, so `0xE` over the `0xE` fill saturates to fully opaque. To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
   * Child and parent cards, code slots, keypad keys and buttons share closed rounded outlines (radius r=4 for cards/buttons, full half-height for pills). CPU span calculations render smooth rounded fills and outer borders; both normal 1px and emphasized 2px borders remain continuous without jagged seams.
-  * Card Surface: `#222222` with high `0xE6` opacity, effectively shielding background game graphics.
+  * Card Surface: `#222222` at alpha `0xF` (opaque), forming a stable layer above the `0xE` panel base and shielding background game graphics.
   * Decorative Border: `#444444` with subtle `0xB0` opacity, providing restrained, clean edges.
   * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm brown warning `#332211`, deep moss success `#113322`).
 * **Font, Glyph & Handheld Legibility Contract**:
@@ -272,7 +272,7 @@ The parent today page is named “今日安排” in both Chinese locales and `T
 When authoring or updating Companion NRO pages or overlays:
 
 - [ ] **Dual-Theme Compatible (NRO)**: All colors resolve through `palette->xxx`, `UI_xxx`, or dark/light ternaries; no hardcoded single-mode colors.
-- [ ] **Overlay Dark Baseline**: Overlay strictly locks to the dark palette, with surfaces tuned to Tesla's translucent black background.
+- [ ] **Overlay Dark Baseline**: Overlay strictly locks to the dark palette, fills its own panel with `panel_bg` (black alpha `0xE`) and keeps card surfaces opaque instead of drawing text on the bare `0xD` host background.
 - [ ] **Overlay Zero-Emoji Contract**: Overlay strings contain no 4-byte emojis; controller prompts strictly use official Switch font glyphs (`\uE0E0`, etc.).
 - [ ] **Contrast & Luminance**: Text passes legibility standards on handheld screens (Light mode primary text $\ge$ `#171A20`, Dark mode primary text $\ge$ `#EEEEEE`).
 - [ ] **Semantic Color Harmony**: Active/success uses calm green (`#2C7A4B` / `#EAF5EE`), rest/warning uses deep amber (`#9A6114` / `#FBF2E1`), limits use red (`#B53A45` / `#FAEBEC`). Avoid muddy yellow/brown tones.
@@ -286,3 +286,15 @@ When authoring or updating Companion NRO pages or overlays:
 The child hero uses four compact 56px cards for quota, eye care, bedtime and TV, preserving the primary allowance and weekly forecast. Bedtime retains its clock and countdown. TV prioritizes the remaining usage and end-of-allowance guidance, followed by mode, allowance and estimated use. The parent's TV card is 70px high and retains existing touch and focus-return behavior.
 
 The global status bar adapts to eye-care and policy rows, with its bottom no lower than y=104. Bedtime and TV summaries share two columns when both are enabled. The Overlay displays policies in individual large overview cards and complete scrollable status details. Input, submit, parent access and the Tesla footer must remain unobstructed. Boundary confirmation uses warning colors; active backend restrictions use danger colors. An empty non-TV balance on TV uses warning colors. Existing measured multilingual layouts, overflow handling, NRO themes and the Overlay dark baseline remain mandatory.
+
+### Online updates and pre-update backups
+
+Software information exposes an X shortcut and a separate touch button while preserving load, defer and close. The update page distinguishes the running app, installed files and store version. Checking, downloading, backing up, installing, reopening, loading the backend, safety confirmation, an unknown receipt and verified completion are separate states. Success requires runtime identity and receipt verification; failures use danger semantics and ordinary progress uses the existing accent palette.
+
+Eight actions share measured geometry, focus and touch handling. Disabled actions are rejected by the same projection used by the renderer. Checking and downloading permit cancellation; installation does not. Versions, approximate store size, release summaries and errors must fit their measured bounds without covering health indicators or the footer. Backups use a scrolling four-row list and existing selective restore, PIN and hold confirmation. History deletion also requires PIN and hold; active or unknown material is retained.
+
+Multilingual light/dark previews: `settings/settings-online-update`, `settings/settings-online-update-downloading`, `settings/settings-online-update-recovery` and `settings/settings-update-backups`. Host previews do not establish network, SD, backend, Overlay or hardware acceptance.
+
+The update card also shows the running backend identity. Y or touch opens full release notes; pagination and rendering share measured line breaks. Backup rows show verification, date and source; footer touch controls share L/R paging and PIN/hold deletion. Failed deletion retains material and explains the conflict. Reading and backup pages return to update details. Additional multilingual light/dark scenes: `settings/settings-online-update-notes[-next]`.
+
+A quiet `New app version` hint sits independently below the upper-left page heading: secondary text, a soft surface and a CPU-rendered accent download icon, without blinking. It stays outside the upper-right data status card and does not reduce allowance text space. Read-only freshness says `Just refreshed` for less than a minute, then `Refreshed Nm ago`, without a ticking seconds counter; stale, failed and health states retain their own messages. Measured freshness reserves space from the rule badges. The software entry sits below the subtitle and above the header divider; its icon follows the measured label. A shared 128×20 anchor and bounded touch padding serve all three languages. Only eligible available versions show it; child taps use parent authentication. Pending work, recovery, modal pages and unsaved edits suppress navigation. The multilingual light/dark scenes `child/child-update-available` and `parent/parent-update-available` verify complete labels without overlap with the heading or data card.

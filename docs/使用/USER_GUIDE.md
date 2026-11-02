@@ -175,6 +175,12 @@ Parent Zone consists of five top-level tabs: **Today's Schedule, Time Plans, Off
 - **Security & Preferences**: Modify PIN, theme, Parent Zone shortcut, and view on-device family activity history;
 - **Support & Recovery**: Independent top-level tab offering playtime management activation, retry repair, emergency disable, restore pre-installation settings, and diagnostic log export.
 
+#### Child Zone Home and Usage Details
+
+The task board on the Child Zone home leads with the conclusion: the large number on the left is today's remaining playtime, and under the progress gauge "Played ~X min" and "Y min left" share one 16px size while the remaining minutes are bold, so a child can read at a glance how much is gone and how much is left. The three guard cards on the right cover Eye Care, Bedtime and TV mode rules with larger titles and body text; the TV rules card is taller because it carries the state, the mode with estimated usage, and the rule summary in three lines. To make room for the larger text the seven-day forecast moves down and becomes slightly shorter, so it and the right-hand code, buffer, usage-details and status cards all end on one bottom edge. The "Usage details" button now says what is inside: today's total, played and left, and why each rule applies.
+
+The "+ Usage details" entry on the right of the Child Zone opens a read-only details page whose header now carries a short guide bar: it states the reading order (today's total first, then played and left) and that Bedtime, Eye Care and TV rules are judged separately, so a blocked one has to be handled first. The parent-side Today's Schedule Details keeps its previous layout and does not show this child guide. Every figure on the details page still comes only from fresh status; after 120 seconds or a failed refresh the page shows unconfirmed instead of reusing old readings.
+
 ### Core Time Control Logic
 
 PlayWise employs a robust **two-stage adjudication** pipeline paired with **four independent gates**, seamlessly harmonizing long-term plans, single-day flexibility, healthy habits, and screen modes. Before diving into specific tabs, parents can review the full-screen "Today's Schedule Details" dialog to quickly understand how the system manages playtime:
@@ -753,3 +759,15 @@ Documentation images fall into two categories, with paths relative to repository
 Automated previews are generated from production C/C++ rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](../开发/TESTING_GUIDE.md) for details.
 
 See also [Development Environment Guide](../开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md), [Development Guide](../开发/DEVELOPER_GUIDE.md), [Protocol Specification](../设计/PROTOCOL.md), and [PCTL Integration Architecture](../设计/PCTL_ARCHITECTURE.md).
+
+## In-app online updates
+
+After manually installing a version with online-update support, open Parent area → Support and recovery → Software information, then press X or touch Update. Startup checks are asynchronous and optional; installation always requires the parent's PIN and hold confirmation. Stable installations follow stable releases, while prerelease installations also accept newer prereleases. Equal and older versions are not installed.
+
+The app checks the complete package, independently backs up settings and old program files, and installs only program assets. Existing settings, PIN, pairing keys, usage and ledgers remain intact. Exit and reopen the app after file installation, then use the existing backend-loading flow and any required safety confirmation. An unsupported older package requires manual installation. The current source uses HTTPS and integrity checks without an independent publisher signature.
+
+Pre-update backups reuse selective restoration. Restoring pairing information rotates its key and requires pairing the phone again; restoration does not refund usage. If a backup receipt is unknown, wait for the original receipt rather than submitting again. Preserve the update directory after interrupted installation and follow Support and recovery. Restored files and a restored running process are separate outcomes. [Implementation and recovery contract (Chinese)](../设计/在线更新.md).
+
+Press Y or tap release notes to read the complete bounded description; use L/R or footer controls to page and B to return. Pre-update backups show verification, date and source, with touch paging and deletion controls.
+
+When an eligible newer version is found, a quiet Update hint appears in the upper-right status card. Tap it to open update details; children must pass the existing parent PIN first. Offline checks and failures show no update hint. Pending work and unsaved edits keep their current page.

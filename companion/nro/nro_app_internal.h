@@ -39,6 +39,7 @@
 #include "ptc_audio.h"
 #ifndef PLAYWISE_EDEN
 #include "hot_reload.h"
+#include "online_update.h"
 #endif
 #ifdef PLAYWISE_EDEN
 #include "eden_runtime.h"
@@ -147,6 +148,7 @@ typedef struct {
     bool pending_config_restore;
     char config_stage_id[80];
     char config_digest[65];
+    char config_backup_selected_path[512];
     uint16_t config_submitted_groups;
     bool code_preview_recheck;
     bool code_previous_after_available;
@@ -165,8 +167,14 @@ typedef struct {
     PtcUiOverlay auth_return_overlay;
     PtcUiOverlay export_return_overlay;
     int64_t auth_cooldown_until;
+    bool update_open_after_parent_auth;
 #ifndef PLAYWISE_EDEN
     PtcHotReloadController hot_reload;
+    PtcOnlineUpdater updater;
+    bool update_backup_pending;
+    bool update_child_notice_shown;
+    char update_backup_ids[16][33];
+    char update_cleanup_id[33];
     bool hot_reload_prompted;
     bool hot_reload_ipc_closed;
     bool hot_reload_terminal_handled;
@@ -181,6 +189,15 @@ void current_environment_fingerprint(UiState *ui, char out[65]);
 void sync_hot_reload_model(UiState *ui);
 void open_hot_reload_confirmation(UiState *ui);
 void poll_hot_reload(UiState *ui);
+void open_online_update(UiState *ui);
+void open_online_update_badge(UiState *ui);
+void poll_online_update(UiState *ui);
+void handle_online_update_input(UiState *ui, u64 down);
+void online_update_action(UiState *ui, int action);
+void confirm_online_update(UiState *ui, PtcUiOperation operation);
+bool online_update_backup_result(UiState *ui);
+bool online_update_backup_before_submit(UiState *ui);
+void online_update_status_result(UiState *ui);
 bool update_animations(PtcUiModel *model);
 void make_next_request_id(char *out, size_t out_size);
 const char *auth_status_zh(PtcAuthStatus status);

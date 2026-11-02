@@ -103,9 +103,23 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             model->environment_available && model->environment_model[0] ?
                 (strcmp(model->environment_model, "mariko-oled") == 0 ? "OLED" : model->environment_model) : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
         draw_text(pixels, stride, 94, 379, text, 17, UI_INK);
-        draw_text(pixels, stride, 94, 403, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE), 14, UI_MUTED);
-        draw_text(pixels, stride, 460, 403, ptc_ui_text(ptc_ui_setup_reference_matches(model)
-            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 14, UI_MUTED);
+        const char *reference = ptc_ui_text(PTC_UI_T_SETUP_REFERENCE);
+        const char *compatibility = ptc_ui_text(ptc_ui_setup_reference_matches(model)
+            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN);
+        int reference_x = env_card.x + 20;
+        int reference_right = env_card.x + env_card.width - 20;
+        int compatibility_width = measure_text(compatibility, 14);
+        int compatibility_x = reference_right - compatibility_width;
+        int compatibility_baseline = 403;
+        /* Keep complete advisory text apart from the measured reference. A
+           longer translation uses the spare line above the section divider. */
+        if (compatibility_x < reference_x + measure_text(reference, 14) + 24) {
+            compatibility_x = reference_x;
+            compatibility_baseline += setup_line_height(14);
+        }
+        draw_text(pixels, stride, reference_x, 403, reference, 14, UI_MUTED);
+        draw_text(pixels, stride, compatibility_x, compatibility_baseline,
+            compatibility, 14, UI_MUTED);
 
         /* Separator line 1 */
         fill_round_rect(pixels, stride, (UiRect){94, 432, 1092, 1}, 0, UI_BORDER);

@@ -11,6 +11,7 @@
 #define ptc_mkdir(dir) mkdir(dir, 0777)
 #endif
 #include "../../companion/nro/ui_render_internal.h"
+#include "selection.h"
 
 uint32_t preview_pixels[1280 * 720];
 static bool preview_all_styles;
@@ -35,15 +36,53 @@ static struct {
 
 static struct {
     bool enabled;
+    int label_count, freshness_count, failed;
+    PtcUiRect bar, badge;
+    char freshness[48];
+} update_header_trace;
+
+static struct {
+    bool enabled;
     PtcUiOverlay overlay;
     int failed, hints;
     char guide[512];
 } bedtime_trace;
 
+static struct {
+    bool enabled;
+    const char *hint_text;
+    int reference_count, hint_count;
+    UiRect reference, hint;
+} setup_reference_trace;
+
 void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
 {
     if (!text) return;
     UiRect bounds = {x, baseline - size, measure_text(text, size), size};
+    if (setup_reference_trace.enabled) {
+        if (strcmp(text, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE)) == 0) {
+            setup_reference_trace.reference = bounds;
+            ++setup_reference_trace.reference_count;
+        } else if (strcmp(text, setup_reference_trace.hint_text) == 0) {
+            setup_reference_trace.hint = bounds;
+            ++setup_reference_trace.hint_count;
+        }
+    }
+    if (update_header_trace.enabled) {
+        PtcUiRect badge = update_header_trace.badge, bar = update_header_trace.bar;
+        bool overlaps = bounds.x < badge.x + badge.w && bounds.x + bounds.width > badge.x &&
+            bounds.y < badge.y + badge.h && baseline > badge.y;
+        if (strcmp(text, ptc_ui_text(PTC_UI_T_UPDATE_BADGE)) == 0) {
+            ++update_header_trace.label_count;
+            if (bounds.x < badge.x + 24 || bounds.x + bounds.width > badge.x + badge.w - 8 ||
+                bounds.y < badge.y || baseline > badge.y + badge.h) ++update_header_trace.failed;
+        } else if (overlaps) ++update_header_trace.failed;
+        if (strcmp(text, update_header_trace.freshness) == 0) {
+            ++update_header_trace.freshness_count;
+            if (bounds.x < bar.x || bounds.x + bounds.width > bar.x + bar.w - 14 ||
+                baseline > badge.y - 4) ++update_header_trace.failed;
+        }
+    }
     if (bedtime_trace.enabled) {
         PtcUiRect dialog = ptc_ui_dialog_rect(960, 560);
         PtcUiRect mode = ptc_ui_bedtime_overlay_field_rect(bedtime_trace.overlay, 0);
@@ -96,6 +135,56 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
         child_heading_trace.summary = bounds;
         ++child_heading_trace.summary_count;
     }
+}
+
+static int check_setup_reference(const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
+            for (int dark = 0; dark < 2; ++dark) {
+                PtcUiThemeView theme = ptc_ui_theme_make_styled_view(
+                    dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, (PtcUiThemeStyle)style,
+                    PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                for (int state = 0; state < 3; ++state) {
+                    PtcUiModel model = *baseline;
+                    model.view = PTC_UI_SETUP;
+                    model.setup_step = PTC_UI_SETUP_PREPARE;
+                    model.environment_available = state != 2;
+                    model.environment_atmosphere = true;
+                    snprintf(model.environment_hos, sizeof(model.environment_hos), "%s", state ? "23.0.1" : "22.5.0");
+                    snprintf(model.environment_model, sizeof(model.environment_model), "mariko-oled");
+                    snprintf(model.environment_atmosphere_version, sizeof(model.environment_atmosphere_version), "%s",
+                        state ? "1.12.1" : "1.11.2");
+                    memset(&setup_reference_trace, 0, sizeof(setup_reference_trace));
+                    setup_reference_trace.enabled = true;
+                    setup_reference_trace.hint_text = ptc_ui_text(state ?
+                        PTC_UI_T_SETUP_REFERENCE_UNKNOWN : PTC_UI_T_SETUP_REFERENCE_MATCH);
+                    ptc_ui_graphics_draw(&model, &theme);
+                    setup_reference_trace.enabled = false;
+                    UiRect reference = setup_reference_trace.reference, hint = setup_reference_trace.hint;
+                    bool separated = reference.y == hint.y ? reference.x + reference.width + 24 <= hint.x :
+                        reference.y + reference.height + 6 <= hint.y;
+                    bool fits = setup_reference_trace.reference_count == 1 && setup_reference_trace.hint_count == 1 &&
+                        reference.x >= 94 && reference.x + reference.width <= 1186 &&
+                        hint.x >= 94 && hint.x + hint.width <= 1186 &&
+                        reference.y >= 387 && hint.y >= 387 &&
+                        reference.y + reference.height <= 424 && hint.y + hint.height <= 424 && separated;
+                    if (!fits) {
+                        fprintf(stderr, "FAIL: setup reference lang=%d style=%d dark=%d state=%d reference=%d [%d,%d,%d,%d] hint=%d [%d,%d,%d,%d]\n",
+                            lang, style, dark, state, setup_reference_trace.reference_count,
+                            reference.x, reference.y, reference.width, reference.height, setup_reference_trace.hint_count,
+                            hint.x, hint.y, hint.width, hint.height);
+                        ++failed;
+                    }
+                }
+            }
+        }
+    }
+    fprintf(stderr, "%s: setup complete reference and separated advisory (3 languages, 4 styles, 2 modes, 3 environments)\n",
+        failed ? "FAIL" : "PASS");
+    return failed ? 1 : 0;
 }
 
 static int check_bedtime_editors(const PtcUiModel *baseline)
@@ -198,16 +287,76 @@ static int check_parent_tabs(const PtcUiModel *baseline)
 
 static int check_child_forecast_heading(bool dark)
 {
-    PtcUiRect box = ptc_ui_home_summary_rect(false);
+    PtcUiRect forecast = ptc_ui_child_forecast_rect();
     UiRect title = child_heading_trace.title, summary = child_heading_trace.summary;
     bool fits = child_heading_trace.title_count == 1 && child_heading_trace.summary_count == 1 &&
-        title.x >= box.x + 16 && title.x + title.width + 12 <= summary.x &&
-        summary.x + summary.width <= box.x + box.w - 16 &&
-        title.y >= box.y + 274 && summary.y >= box.y + 274 &&
-        title.y + title.height <= box.y + 314 && summary.y + summary.height <= box.y + 314;
+        title.x >= forecast.x + 16 && title.x + title.width + 12 <= summary.x &&
+        summary.x + summary.width <= forecast.x + forecast.w - 16 &&
+        title.y >= forecast.y + 8 && summary.y >= forecast.y + 8 &&
+        title.y + title.height <= forecast.y + 56 && summary.y + summary.height <= forecast.y + 56;
     fprintf(stderr, "%s: child forecast heading lang=%d dark=%d title=[%d,%d) summary=[%d,%d)\n",
         fits ? "PASS" : "FAIL", (int)ptc_ui_language_get_resolved(), dark,
         title.x, title.x + title.width, summary.x, summary.x + summary.width);
+    return fits ? 0 : 1;
+}
+
+/* Child home grid: hero, seven-day forecast and the right action column must share one
+ * bottom edge (644) above the footer, keep the 14px gap, and the details entry must
+ * carry a hint that still fits inside its own button. */
+static int check_child_home_grid(bool dark)
+{
+    PtcUiRect hero = ptc_ui_child_hero_rect();
+    PtcUiRect forecast = ptc_ui_child_forecast_rect();
+    PtcUiRect submit = ptc_ui_child_submit_rect();
+    PtcUiRect buffer = ptc_ui_child_buffer_rect();
+    PtcUiRect details = ptc_ui_home_details_rect(false);
+    PtcUiRect status = ptc_ui_child_status_rect();
+    int bottom = hero.y + hero.h + 14 + forecast.h;
+    int hint_max = details.w - 60;
+    int hint_lines = count_wrapped_lines(ptc_ui_text(PTC_UI_T_USAGE_DETAILS_HINT), 13, hint_max, 99);
+    bool fits = hero.x == forecast.x && hero.w == forecast.w &&
+        hero.y + hero.h + 14 == forecast.y &&
+        forecast.y + forecast.h == bottom && status.y + status.h == bottom &&
+        bottom < ptc_ui_child_footer_rect(1).y &&
+        submit.x == buffer.x && buffer.x == details.x && details.x == status.x &&
+        submit.w == buffer.w && buffer.w == details.w && details.w == status.w &&
+        submit.y == hero.y &&
+        buffer.y - (submit.y + submit.h) == 14 &&
+        details.y - (buffer.y + buffer.h) == 14 &&
+        status.y - (details.y + details.h) == 14 &&
+        hint_max > 0 && hint_lines >= 1 && hint_lines <= 3;
+    fprintf(stderr, "%s: child home grid dark=%d hero=%d..%d forecast=%d..%d right=%d..%d hint_lines=%d\n",
+        fits ? "PASS" : "FAIL", dark, hero.y, hero.y + hero.h, forecast.y,
+        forecast.y + forecast.h, status.y, status.y + status.h, hint_lines);
+    return fits ? 0 : 1;
+}
+
+/* The child usage-details page leads with a reading-order guide bar. It must stay
+ * on one measured line inside its own rect and above the first card row, and the
+ * three-column cards must not grow into the shared bottom button band. */
+static int check_child_details_guide(bool dark)
+{
+    UiRect guide = to_uirect(ptc_ui_home_details_guide_rect());
+    int size = 13;
+    int width = measure_text(ptc_ui_text(PTC_UI_T_DETAIL_CHILD_GUIDE), size);
+    bool fits = guide.x >= 40 && guide.x + guide.width <= 1240 &&
+        guide.y >= 72 && guide.y + guide.height <= 144 &&
+        guide.height >= size + 12 &&
+        width <= guide.width - 46;
+    PtcUiModel child = {0};
+    child.view = PTC_UI_CHILD;
+    PtcUiRect button = ptc_ui_home_details_action_rect(&child, 0);
+    fits = fits && button.y >= guide.y + guide.height + 280 &&
+        button.y + button.h <= 616;
+    /* 孩子区按钮收薄 16px 以让出导读条高度，底边仍与家长区一致。 */
+    fits = fits && button.y == 514 && button.h == 102;
+    PtcUiModel parent = {0};
+    parent.view = PTC_UI_PARENT;
+    PtcUiRect parent_button = ptc_ui_home_details_action_rect(&parent, 0);
+    fits = fits && parent_button.y == 498 && parent_button.h == 118;
+    fprintf(stderr, "%s: child details guide lang=%d dark=%d width=%d/%d button=%d..%d\n",
+        fits ? "PASS" : "FAIL", (int)ptc_ui_language_get_resolved(), dark,
+        width, guide.width - 46, button.y, button.y + button.h);
     return fits ? 0 : 1;
 }
 
@@ -370,6 +519,19 @@ static int save_preview(const char *directory, const char *module, const char *n
     FILE *file;
     unsigned char *rgb;
     int n;
+    n = snprintf(dir_path, sizeof(dir_path), "%s/%s", directory, module);
+    if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
+    n = snprintf(path, sizeof(path), "%s/%s-%s.ppm", dir_path, name, dark ? "dark" : "light");
+    if (n < 0 || (size_t)n >= sizeof(path)) return 1;
+    bool selected = ptc_preview_selected(path, false);
+    /* These callers sample the framebuffer after this function returns. Keep
+       their assertions independent of whether a documentation file is needed. */
+    bool sampled = (strcmp(module, "child") == 0 &&
+        (strcmp(name, "child") == 0 || strcmp(name, "child-details") == 0)) ||
+        (strcmp(module, "parent") == 0 && (strcmp(name, "today-rules") == 0 ||
+        strcmp(name, "today-rules-stale") == 0 || strcmp(name, "today-rules-control-off") == 0 ||
+        strcmp(name, "parent-details-rules-restricted") == 0));
+    if (!selected && !sampled) return 0;
     PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
     /* Previews skip update_animations, so render the tweened values at rest. */
     PtcUiModel settled = *model;
@@ -381,11 +543,35 @@ static int save_preview(const char *directory, const char *module, const char *n
     settled.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
     memset(&child_heading_trace, 0, sizeof(child_heading_trace));
     child_heading_trace.enabled = strcmp(module, "child") == 0 && strcmp(name, "child") == 0;
+    memset(&update_header_trace, 0, sizeof(update_header_trace));
+    update_header_trace.enabled = strstr(name, "update-available") != NULL;
+    if (update_header_trace.enabled) {
+        PtcUiTimeProjection status;
+        ptc_ui_project_time_status(&settled, ptc_ui_render_now(), &status);
+        update_header_trace.bar = ptc_ui_time_status_bar_for_model(&settled);
+        update_header_trace.badge = ptc_ui_update_badge_rect(&settled);
+        snprintf(update_header_trace.freshness, sizeof(update_header_trace.freshness), "%s", status.freshness_text);
+    }
     ptc_ui_graphics_draw(&settled, &theme);
+    bool check_update = update_header_trace.enabled;
+    update_header_trace.enabled = false;
+    if (check_update && (update_header_trace.failed || update_header_trace.label_count != 1 ||
+        update_header_trace.freshness_count != 1)) {
+        fprintf(stderr, "FAIL: %s dark=%d update label=%d data age=%d bounds=%d\n", name, dark,
+            update_header_trace.label_count, update_header_trace.freshness_count, update_header_trace.failed);
+        return 1;
+    }
     bool check_heading = child_heading_trace.enabled;
     child_heading_trace.enabled = false;
     if (check_heading && check_child_forecast_heading(dark)) return 1;
-    draw_text(preview_pixels, 1280, 540, 100, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
+    if (!selected) return 0;
+    /* The details dialog is tall enough that the marker at y=100 would land on its
+       card titles (and the child guide bar), so it moves into the scrim under the
+       dialog. Shorter dialogs keep the marker in the scrim above them. */
+    if (settled.overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+        draw_text(preview_pixels, 1280, 540, 712, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
+    else
+        draw_text(preview_pixels, 1280, 540, 100, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
     n = snprintf(dir_path, sizeof(dir_path), "%s/%s", directory, module);
     if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
     ptc_mkdir(dir_path);
@@ -882,6 +1068,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
     for (int dark = 0; dark <= 1; ++dark) {
         model = baseline;
         model.view = PTC_UI_CHILD;
+        failed |= check_child_home_grid(dark);
         failed |= save_preview(directory, "child", "child", &model, dark);
         {
             PtcUiModel claimed = model;
@@ -902,6 +1089,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             failed |= save_preview(directory, "child", "child-exhausted", &exhausted, dark);
         }
         ptc_ui_open_home_details(&model);
+        failed |= check_child_details_guide(dark);
         failed |= save_preview(directory, "child", "child-details", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.view = PTC_UI_PARENT;
@@ -1537,6 +1725,37 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
             failed |= save_preview(directory, "settings", "settings-software-info", &settings_dlg, dark);
+            settings_dlg.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+            settings_dlg.update_check_on_startup = true;
+            settings_dlg.update_status = 3;
+            snprintf(settings_dlg.update_installed_version, sizeof(settings_dlg.update_installed_version), "3.1.2-alpha");
+            snprintf(settings_dlg.update_version, sizeof(settings_dlg.update_version), "3.2.0-beta.10");
+            snprintf(settings_dlg.update_notes, sizeof(settings_dlg.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
+            failed |= save_preview(directory, "settings", "settings-online-update", &settings_dlg, dark);
+            settings_dlg.update_notes_open = true;
+            settings_dlg.update_notes[0] = '\0';
+            for (int note = 0; note < 28; ++note) {
+                const char *line = ptc_ui_text(PTC_UI_T_UPDATE_TRUST);
+                size_t n = strlen(settings_dlg.update_notes), length = strlen(line);
+                if (n + length + 2 >= sizeof(settings_dlg.update_notes)) break;
+                memcpy(settings_dlg.update_notes + n, line, length);
+                settings_dlg.update_notes[n + length] = '\n'; settings_dlg.update_notes[n + length + 1] = '\0';
+            }
+            failed |= save_preview(directory, "settings", "settings-online-update-notes", &settings_dlg, dark);
+            settings_dlg.update_notes_page = 1;
+            failed |= save_preview(directory, "settings", "settings-online-update-notes-next", &settings_dlg, dark);
+            settings_dlg.update_notes_open = false;
+            snprintf(settings_dlg.update_notes, sizeof(settings_dlg.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
+            settings_dlg.update_busy = true; settings_dlg.update_status = 6; settings_dlg.update_received_kib = 2048;
+            failed |= save_preview(directory, "settings", "settings-online-update-downloading", &settings_dlg, dark);
+            settings_dlg.update_busy = false; settings_dlg.update_status = 14;
+            failed |= save_preview(directory, "settings", "settings-online-update-recovery", &settings_dlg, dark);
+            settings_dlg.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
+            settings_dlg.update_backup_count = 2;
+            snprintf(settings_dlg.update_backup_labels[0], sizeof(settings_dlg.update_backup_labels[0]), "2026-10-28 12:00 / %s\nplaywise-3.1.2-alpha+0123456789ab", ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_VERIFIED));
+            snprintf(settings_dlg.update_backup_labels[1], sizeof(settings_dlg.update_backup_labels[1]), "2026-10-27 12:00 / %s\nplaywise-3.1.1-beta.1+abcdef012345", ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_VERIFIED));
+            failed |= save_preview(directory, "settings", "settings-update-backups", &settings_dlg, dark);
+            settings_dlg.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
             settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_PENDING;
             settings_dlg.hot_reload_capture_restart = true;
             snprintf(settings_dlg.backend_release_id, sizeof(settings_dlg.backend_release_id), "%s", settings_dlg.app_release_id);
@@ -1850,6 +2069,24 @@ static int render_parent_pin_error_previews(const char *directory, const PtcUiMo
     return failed;
 }
 
+static int render_update_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiModel badge = *baseline;
+        badge.view = PTC_UI_CHILD;
+        badge.overlay = PTC_UI_OVERLAY_NONE;
+        badge.update_status = 3;
+        strcpy(badge.update_version, "3.2.0-beta.10");
+        badge.draft_eye_care_policy = badge.eye_care_policy;
+        failed |= save_preview(directory, "child", "child-update-available", &badge, dark);
+        badge.view = PTC_UI_PARENT;
+        badge.parent_page = PTC_UI_PARENT_TODAY;
+        failed |= save_preview(directory, "parent", "parent-update-available", &badge, dark);
+    }
+    return failed;
+}
+
 static int render_language_pass(const char *root_dir, const char *subdir, PtcUiLanguagePreference lang, const PtcUiModel *base_model)
 {
     char target_dir[1024];
@@ -1860,6 +2097,7 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
         int n = snprintf(target_dir, sizeof(target_dir), "%s", root_dir);
         if (n < 0 || (size_t)n >= sizeof(target_dir)) return 1;
     }
+    if (!ptc_preview_selected(target_dir, true)) return 0;
     ptc_mkdir(target_dir);
     ptc_ui_language_set_resolved(lang);
     PtcUiModel model = *base_model;
@@ -1875,6 +2113,7 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
             ptc_mkdir(styled_dir);
         }
         ptc_ui_theme_set_style((PtcUiThemeStyle)style);
+        failed |= render_update_previews(styled_dir, &model);
         failed |= render_all_previews(styled_dir, &model);
         failed |= render_eye_care_previews(styled_dir, &model);
         failed |= render_dock_previews(styled_dir, &model);
@@ -1936,9 +2175,10 @@ int main(int argc, char **argv)
     snprintf(model.result_status, sizeof(model.result_status), "ok");
 
     if (strcmp(argv[2], "--check-parent-tabs") == 0 || strcmp(argv[2], "--check-bedtime-editors") == 0 ||
-        strcmp(argv[2], "--check-dock-editor") == 0) {
+        strcmp(argv[2], "--check-dock-editor") == 0 || strcmp(argv[2], "--check-setup-reference") == 0) {
         failed = strcmp(argv[2], "--check-parent-tabs") == 0 ? check_parent_tabs(&model) :
-            strcmp(argv[2], "--check-dock-editor") == 0 ? check_dock_editor(&model) : check_bedtime_editors(&model);
+            strcmp(argv[2], "--check-dock-editor") == 0 ? check_dock_editor(&model) :
+            strcmp(argv[2], "--check-setup-reference") == 0 ? check_setup_reference(&model) : check_bedtime_editors(&model);
         FT_Done_Face(g_ui.face);
         free(bytes);
         return failed;
@@ -1959,7 +2199,14 @@ int main(int argc, char **argv)
         { "zh_hant", PTC_UI_LANGUAGE_TRADITIONAL }
     };
     pid_t pids[3] = {0, 0, 0};
+    int workers = ptc_preview_workers();
     for (int i = 0; i < 3; ++i) {
+        int slot = i % workers;
+        if (pids[slot] > 0) {
+            int status = 0;
+            if (waitpid(pids[slot], &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) failed = 1;
+            pids[slot] = 0;
+        }
         pid_t pid = fork();
         if (pid < 0) {
             /* Fallback to synchronous execution on fork failure */
@@ -1970,7 +2217,7 @@ int main(int argc, char **argv)
             free(bytes);
             _exit(res ? 1 : 0);
         } else {
-            pids[i] = pid;
+            pids[slot] = pid;
         }
     }
     for (int i = 0; i < 3; ++i) {

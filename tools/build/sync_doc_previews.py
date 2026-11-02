@@ -10,6 +10,8 @@ import shutil
 ROOT = Path(__file__).resolve().parents[2]
 PREVIEW_FILES = (
     "child/child-light.png",
+    "child/child-update-available-light.png",
+    "parent/parent-update-available-dark.png",
     "child/child-exhausted-light.png",
     "child/child-details-light.png",
     "child/child-buffer-claimed-light.png",
@@ -78,6 +80,11 @@ PREVIEW_FILES = (
     "settings/settings-redemption-dark.png",
     "grant/grant-manager-dark.png",
     "settings/settings-software-info-dark.png",
+    "settings/settings-online-update-light.png",
+    "settings/settings-online-update-notes-light.png",
+    "settings/settings-online-update-downloading-dark.png",
+    "settings/settings-online-update-recovery-light.png",
+    "settings/settings-update-backups-dark.png",
     "overlay/overlay-code-entry.png",
     "overlay/overlay-code-confirm.png",
     "overlay/overlay-code-danger.png",
@@ -140,12 +147,17 @@ def synchronize(preview_dir: Path, docs_dir: Path, *, check: bool = False) -> in
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--scope", choices=("docs-zh", "docs", "all"), default="docs-zh")
     parser.add_argument("--check", action="store_true", help="Fail when documented screenshots differ from generated scenes")
     args = parser.parse_args()
     changed_zh = synchronize(ROOT / "build" / "ui-previews", ROOT / "docs" / "images" / "usage", check=args.check)
-    changed_en = synchronize(ROOT / "build" / "ui-previews" / "en", ROOT / "docs" / "images" / "usage-en", check=args.check)
+    changed_en = 0
+    languages = 1
+    if args.scope != "docs-zh":
+        changed_en = synchronize(ROOT / "build" / "ui-previews" / "en", ROOT / "docs" / "images" / "usage-en", check=args.check)
+        languages = 2
     changed = changed_zh + changed_en
-    print(f"PASS: {len(PREVIEW_FILES) * 2} documented UI previews checked ({len(PREVIEW_FILES)} zh + {len(PREVIEW_FILES)} en); {changed} updated")
+    print(f"PASS: {len(PREVIEW_FILES) * languages} documented UI previews checked ({args.scope}); {changed} updated")
     return 0
 
 

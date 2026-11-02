@@ -143,6 +143,13 @@ def test_container_command() -> None:
     require("eden-test-nro" not in only_lab, "only=device-lab must omit Eden")
 
     only_previews = package_remote.container_command(only="previews")
+    require("PREVIEW_SCOPE=docs-zh PREVIEW_JOBS=8" in only_previews,
+            "default previews select only Chinese documentation with bounded parallelism")
+    require("--scope docs-zh" in only_previews, "Chinese-only preview must not synchronize English")
+    require("PREVIEW_SCOPE=all" in release and "--scope all" in release,
+            "release preserves the full visual matrix")
+    require("PREVIEW_SCOPE=docs PREVIEW_JOBS=1" in package_remote.container_command(
+        only="previews", preview_scope="docs", jobs=1), "scope and serial budget propagate")
     require("ui-previews" in only_previews, "only=previews must target ui-previews")
     require("python3 tools/build/sync_doc_previews.py" in only_previews,
             "only=previews must synchronize selected documentation scenes")
@@ -398,6 +405,15 @@ def test_eden_nro_verification() -> None:
         ))
         package_remote.verify_eden_nro(good, manifest)
 
+        stale = root / "stale-identity.nro"
+        stale.write_bytes(good.read_bytes() + b"playwise-3.1.2-beta.1+111111111111.2222222222222222\0")
+        try:
+            package_remote.verify_eden_nro(stale, manifest)
+        except package_remote.PackageError as exc:
+            require("stale compiled release identity" in str(exc), "old observation constants must be rejected even with a fresh manifest")
+        else:
+            raise AssertionError("mixed compiled Eden identities must not pass packaging")
+
         try:
             package_remote.verify_eden_nro(good, dict(manifest, profile="release"))
         except package_remote.PackageError as exc:
@@ -450,12 +466,12 @@ def test_device_lab_zip_verification() -> None:
             package.writestr("switch/playwise-device-lab/playwise-device-lab.nro",
                 valid_nro(with_icon=False, embedded_manifest=embedded + package_remote.DEVICE_LAB_NRO_UI_MARKER,
                     title=package_remote.DEVICE_LAB_NRO_TITLE,
-                    display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
+                    display_version=package_remote.device_lab_nacp_version(package_remote.PLAYWISE_VERSION)))
             package.writestr("switch/.overlays/playwise-device-lab.ovl",
                 valid_nro(with_icon=False, embedded_manifest=embedded +
                     package_remote.DEVICE_LAB_OVERLAY_UI_MARKER + package_remote.DEVICE_LAB_ACTIVATION_AB_MARKER,
                     title=package_remote.DEVICE_LAB_OVERLAY_TITLE,
-                    display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
+                    display_version=package_remote.device_lab_nacp_version(package_remote.PLAYWISE_VERSION)))
             package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/exefs.nsp", embedded)
             package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/flags/", b"")
             package.writestr("DEVICE-LAB.txt", "任我玩 DEVICE LAB - 内部取证工具")
@@ -703,6 +719,7 @@ def test_parse_args_stripped_components() -> None:
         require(args.with_device_lab is False, "device lab must be disabled by default")
         require(args.with_complete is False, "complete package must be disabled by default")
         require(args.with_previews is False, "previews must be disabled by default")
+        require(args.preview_scope == "docs-zh", "preview scope defaults to Chinese documentation")
         require(args.with_eden is True, "Eden test app must be enabled by default")
         require(args.clean is False, "incremental build must be enabled by default")
 
@@ -731,6 +748,30 @@ def test_parse_args_stripped_components() -> None:
         require(args.with_previews is True, "parse_args must accept --with-previews")
 
 
+def test_eden_dependency_inventory() -> None:
+    if os.name == "nt":
+        print("Eden Make dependency inventory: deferred to devkitPro regression")
+        return
+    with tempfile.TemporaryDirectory(prefix="ptc-eden-dependencies-") as temporary:
+        sdk = Path(temporary)
+        pkg = sdk / "portlibs/switch/bin/aarch64-none-elf-pkg-config"
+        pkg.parent.mkdir(parents=True)
+        pkg.write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
+        pkg.chmod(0o755)
+        for eden in (0, 1):
+            command = ["make", "--no-print-directory", "-sf", "Makefile", "-f", "-", "dependency_inventory",
+                       f"DEVKITPRO={sdk}", f"DEVKITA64={sdk}", f"EDEN_BUILD={eden}", "BUILD=__dependency_inventory__"]
+            result = subprocess.run(command, cwd=ROOT / "companion/nro", text=True, capture_output=True, check=True,
+                                    input="dependency_inventory:\n\t@printf '%s\\n' '$(DEPENDS)'\n")
+            dependencies = set(result.stdout.split())
+            require(("__dependency_inventory__/eden_runtime.d" in dependencies) == bool(eden),
+                    "actual Make evaluation must include appended Eden observation dependencies")
+            require(("__dependency_inventory__/sysmodule_setup.d" in dependencies) == bool(eden),
+                    "Eden control-core header dependencies must follow the final object list")
+            require("__dependency_inventory__/nro_online_update.d" in dependencies,
+                    "later update objects retain dependency tracking")
+
+
 def main() -> int:
     test_container_command()
     test_clean_build_profiles()
@@ -741,6 +782,7 @@ def main() -> int:
     test_container_ssh_key_persistence()
     test_zip_verification()
     test_eden_nro_verification()
+    test_eden_dependency_inventory()
     test_device_lab_zip_verification()
     test_clean_package_safety()
     test_public_package_selection()

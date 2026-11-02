@@ -1,5 +1,25 @@
 #include "ui_state.h"
 #include "ui_layout.h"
+
+PtcUiRect ptc_ui_update_action_rect(int index)
+{
+    if (index < 0 || index >= 8) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + (index % 2) * 592, 430 + (index / 2) * 49, 580, 43};
+}
+
+PtcUiRect ptc_ui_update_backup_rect(int index)
+{
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54, 200 + index * 96, 1172, 84};
+}
+
+PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){974, 378, 228, 30}; }
+
+PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model)
+{
+    (void)model;
+    return (PtcUiRect){124, 80, 128, 20};
+}
 #include "ui_layout_internal.h"
 #include "../ui_language.h"
 
@@ -32,7 +52,7 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {964, 120, 268, 112};
+    PtcUiRect rect = {964, 120, 268, 118};
     return rect;
 }
 
@@ -44,7 +64,14 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {964, 246, 268, 106};
+    PtcUiRect rect = {964, 252, 268, 112};
+    return rect;
+}
+
+PtcUiRect ptc_ui_child_status_rect(void)
+{
+    /* 状态卡是右列最后一项，底边与左侧七日预测、孩子首页内容底边（644）齐平。 */
+    PtcUiRect rect = {964, 504, 268, 140};
     return rect;
 }
 
@@ -303,7 +330,21 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 896, 496};
+    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 896, 524};
+}
+
+/* 孩子首页左列：上方调度态势看板 + 14px 间隔 + 下方七日预测，三者共用同一底边 644。
+ * 放大守护卡字号需要的高度从七日预测让出，预测整体下移并利用底栏上方的空闲带。 */
+PtcUiRect ptc_ui_child_hero_rect(void)
+{
+    PtcUiRect box = ptc_ui_home_summary_rect(false);
+    return (PtcUiRect){box.x, box.y, box.w, 300};
+}
+
+PtcUiRect ptc_ui_child_forecast_rect(void)
+{
+    PtcUiRect box = ptc_ui_home_summary_rect(false);
+    return (PtcUiRect){box.x, box.y + 314, box.w, 210};
 }
 
 PtcUiRect ptc_ui_today_card_rect(int index)
@@ -455,7 +496,7 @@ PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){368, 186, 152, 32} : (PtcUiRect){964, 366, 268, 106};
+    return parent ? (PtcUiRect){368, 186, 152, 32} : (PtcUiRect){964, 378, 268, 112};
 }
 
 PtcUiRect ptc_ui_home_rules_rect(void)
@@ -493,6 +534,10 @@ PtcUiRect ptc_ui_day_decision_next_rect(void)
 
 PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 72, 1200, 552}; }
 
+/* 孩子区使用详情顶部的导读条。它不是控件，只是把阅读顺序和“三条规则各自独立”
+ * 固定成一条可被预览与布局测试核对的矩形，避免绘制端再各写一套坐标。 */
+PtcUiRect ptc_ui_home_details_guide_rect(void) { return (PtcUiRect){40, 72, 1200, 32}; }
+
 PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model)
 {
     if (model && model->overlay == PTC_UI_OVERLAY_DAY_DECISION)
@@ -516,7 +561,12 @@ PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
     if (index == 1) return (PtcUiRect){276, 628, 170, 44};
     if (index == 2) return (PtcUiRect){40, 628, 220, 44};
     if (index == 0) {
-        if (model->home_details_page == 0) return (PtcUiRect){796, 498, 444, 118};
+        if (model->home_details_page == 0) {
+            /* 孩子区多看一条导读条，正文整体下移 32px；按钮同时收薄 16px 以保持
+             * 与家长区相同的底边（616）。绘制与命中都走这里，避免两侧各写一份坐标。 */
+            if (model->view == PTC_UI_CHILD) return (PtcUiRect){796, 514, 444, 102};
+            return (PtcUiRect){796, 498, 444, 118};
+        }
         if (model->home_details_page == 1) return ptc_ui_rules_independent_tip_rect(model);
     }
     return (PtcUiRect){0, 0, 0, 0};

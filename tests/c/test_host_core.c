@@ -3898,7 +3898,7 @@ static void test_pctl_stub_unrestricted_snapshot_round_trip(void)
         "exact bedtime recovery preserves unlimited flags and the enabled timer");
 }
 
-static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
+static void test_runtime_preflight_failure_can_be_reconfirmed(void)
 {
     PtcMemStorage mem;
     PtcPctlStub pctl;
@@ -3919,11 +3919,13 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
         "seed active setup before runtime change");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/compatibility.json",
         "{\"version\":1,\"status\":\"accepted_unknown\",\"environment\":{\"hos\":\"20.5.0\","
-        "\"firmware_hash\":\"old-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.10.0\"},"
+        "\"firmware_hash\":\"old-hash\",\"model\":\"mariko\",\"atmosphere\":true,\"atmosphere_version\":\"1.10.0\"},"
         "\"release_id\":\"playwise-" PLAYWISE_VERSION "+test\",\"accepted_at\":1}"),
         "seed old accepted runtime fingerprint");
 
-    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), -1, "runtime change enters protection");
+    pctl.snapshot_error = PTC_ERR_PCTL_READ_FAILED;
+    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), -1, "actual PCTL preflight failure enters protection");
+    pctl.snapshot_error = PTC_ERR_OK;
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/flags/disable.flag", text, sizeof(text)) &&
         strstr(text, "runtime_fingerprint_changed"), "runtime change records a specific disable reason");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
@@ -4382,6 +4384,7 @@ done:
 
  #include "test_config_backup.inc"
  #include "test_result_capacity.inc"
+ #include "test_firmware_compatibility.inc"
 
 static void test_quiescing_scheduler(void)
 {
@@ -4451,7 +4454,8 @@ int main(void)
     test_setup_refuses_unknown_handover_total();
     test_setup_takes_over_unconfigured_today_when_restriction_enabled();
     test_setup_refuses_unknown_handover_when_slot_not_unconfigured();
-    test_runtime_fingerprint_change_can_be_reconfirmed();
+    test_runtime_preflight_failure_can_be_reconfirmed();
+    test_firmware_compatibility();
     test_eye_care_cycle_and_stale_skip();
     test_daily_enforce_does_not_start_play_timer();
     test_overlay_handshake_large_manifest();

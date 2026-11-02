@@ -185,6 +185,7 @@ void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const cha
 void draw_globe_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color);
 void draw_language_switcher_badge(uint32_t *pixels, uint32_t stride, UiRect rect, bool focused);
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+void draw_update_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_subpage_nav(uint32_t *pixels, uint32_t stride, const char *back_label, const char *path);
 /* Full-page shell for the safety & preferences secondary pages. Repaints the
    whole screen (the parent settings page is already drawn underneath), then the
@@ -209,6 +210,13 @@ void draw_dialog_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
 int draw_wrapped_text(uint32_t *pixels, uint32_t stride, int x, int baseline,
                       const char *text, int size, int max_width, int line_height,
                       int max_lines, uint32_t color);
+int draw_wrapped_text_from_line(uint32_t *pixels, uint32_t stride, int x, int baseline,
+                      const char *text, int size, int max_width, int line_height,
+                      int max_lines, int first_line, uint32_t color);
+/* Same wrapping rules, but each line is centered on center_x. */
+int draw_wrapped_text_centered(uint32_t *pixels, uint32_t stride, int center_x, int baseline,
+                               const char *text, int size, int max_width, int line_height,
+                               int max_lines, uint32_t color);
 /* Same wrapping rules as draw_wrapped_text, without drawing: returns how many
    lines the text occupies. Wizard layout uses it so uneven strings (ZH vs EN)
    do not leave a fixed row too tight or too loose. */

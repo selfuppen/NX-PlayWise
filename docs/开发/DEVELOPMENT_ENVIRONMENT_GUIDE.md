@@ -50,9 +50,10 @@ This entry point connects via a single SSH session into the devkitPro environmen
 Heavy and non-essential stages are decoupled from routine builds and can be triggered via dedicated flags:
 - `--with-device-lab` (or `--device-lab`): Build and verify the Device Lab experimental sysmodule, NRO, Overlay, and Zip package.
 - `--with-complete` (or `--complete`): Generate the standalone offline HTML frontend `playwise-offline.html` and package the user-facing `playwise-complete-<version>.zip` delivery bundle.
-- `--with-previews`: Render console UI previews, convert to PNG, and synchronize to `docs/images/usage/` and `docs/images/usage-en/`.
+- `--with-previews`: Render only Chinese documentation references (currently 114 console/Overlay images), convert to PNG, and synchronize to `docs/images/usage/`.
+- `--preview-scope docs`: Select Chinese/English references (228 images); `--preview-scope all` selects the full language/style/theme/state matrix. Combine with `--with-previews` or `--previews`.
 - `--release`: One-step authoritative release mode, packaging standard, Eden, complete, and Device Lab zips alongside full preview sync.
-- `--previews`: Only re-render and synchronize UI preview images (without compiling packages).
+- `--previews`: Only incrementally render and synchronize selected images, without compiling packages. The default worker budget is 8; `--jobs 1` runs serially. `--release` always selects the full matrix.
 - `--skip-tests`: Diagnostic packaging only; it does not satisfy daily or release validation.
 
 The unified entrypoint already runs the full Python regression suite, so a separate full `tools/test.py` run is not a required preceding step. Host test/preview binaries reuse valid compiled outputs while tests always execute. Selected profiles share one fresh source/toolchain discovery per Make invocation; identity is never cached across runs. Compiler-generated dependencies limit manifest-triggered recompilation to units that actually include it. See [Build and Test Layers](构建与测试分层.md) for the minimum daily gate, specialized targets and invalidation rules.

@@ -12,7 +12,7 @@ TARGET := playwise-device-lab
 BUILD := build
 APP_TITLE := PlayWise DEVICE LAB
 APP_AUTHOR := PlayWise internal
-APP_VERSION := $(PLAYWISE_VERSION)-lab
+APP_VERSION := $(shell python3 ../../tools/build/playwise_version.py --device-lab-nacp)
 CC := $(DEVKITA64)/bin/aarch64-none-elf-gcc
 ELF2NRO := $(DEVKITPRO)/tools/bin/elf2nro
 PKG_CONFIG := $(DEVKITPRO)/portlibs/switch/bin/aarch64-none-elf-pkg-config
@@ -59,7 +59,7 @@ LAB_DEPENDS := $(LAB_OBJS:.o=.d)
 $(LAB_OBJS): Makefile ../../common/version.mk $(MANIFEST_HEADER)
 -include $(LAB_DEPENDS)
 
-$(NACP): $(MAKEFILE_LIST)
+$(NACP): $(MAKEFILE_LIST) ../../tools/build/playwise_version.py
 	$(DEVKITPRO)/tools/bin/nacptool --create "$(APP_TITLE)" "$(APP_AUTHOR)" "$(APP_VERSION)" $@
 
 $(TARGET).nro: $(TARGET).elf $(NACP)

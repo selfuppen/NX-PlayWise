@@ -1,5 +1,92 @@
 #include "ui_render_internal.h"
 #include "../../common/rules/rules.h"
+#include "../../common/update/update.h"
+#include "../../common/version.h"
+
+static PtcUiTextId update_status_key(int status)
+{
+    static const PtcUiTextId keys[] = {
+        PTC_UI_T_UPDATE_IDLE, PTC_UI_T_UPDATE_CHECKING, PTC_UI_T_UPDATE_CURRENT, PTC_UI_T_UPDATE_AVAILABLE,
+        PTC_UI_T_UPDATE_LOCAL_NEWER, PTC_UI_T_UPDATE_CHANNEL_EXCLUDED, PTC_UI_T_UPDATE_DOWNLOADING,
+        PTC_UI_T_UPDATE_VERIFYING, PTC_UI_T_UPDATE_BACKUP_PENDING, PTC_UI_T_UPDATE_INSTALLING,
+        PTC_UI_T_UPDATE_AWAITING_REOPEN, PTC_UI_T_UPDATE_COMPLETED, PTC_UI_T_UPDATE_FAILED,
+        PTC_UI_T_UPDATE_CANCELED, PTC_UI_T_UPDATE_RECOVERY_REQUIRED, PTC_UI_T_UPDATE_MANUAL_REQUIRED,
+        PTC_UI_T_UPDATE_BACKEND_PENDING, PTC_UI_T_UPDATE_RECONFIRM, PTC_UI_T_UPDATE_BACKUP_UNKNOWN
+    };
+    return status >= 0 && (size_t)status < sizeof(keys) / sizeof(keys[0]) ? keys[status] : PTC_UI_T_UPDATE_FAILED;
+}
+
+static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiModel *m)
+{
+    char text[512];
+    draw_settings_page_shell(pixels, stride, m, ptc_ui_text(PTC_UI_T_UPDATE_TITLE), ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
+    if (m->overlay == PTC_UI_OVERLAY_ONLINE_UPDATE && m->update_notes_open) {
+        home_button(pixels, stride, ptc_ui_settings_page_back_rect(), ptc_ui_text(PTC_UI_T_B_BACK), false, false, false);
+        const int lines_per_page = 14;
+        int lines = count_wrapped_lines(m->update_notes, 20, 1124, 2048);
+        int pages = (lines + lines_per_page - 1) / lines_per_page;
+        if (pages < 1) pages = 1;
+        int page = (m->update_notes_page % pages + pages) % pages;
+        draw_plan_card(pixels, stride, (UiRect){54, 166, 1172, 438}, false);
+        draw_wrapped_text_from_line(pixels, stride, 78, 198, m->update_notes, 20, 1124,
+            28, lines_per_page, page * lines_per_page, UI_INK);
+        snprintf(text, sizeof(text), "%d / %d", page + 1, pages);
+        draw_text(pixels, stride, 78, 638, text, 18, UI_MUTED);
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2), ptc_ui_text(PTC_UI_T_GUIDE_PREV), false, false, false);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(), ptc_ui_text(PTC_UI_T_GUIDE_NEXT), false, false, false);
+        return;
+    }
+    if (m->overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS) {
+        home_button(pixels, stride, ptc_ui_settings_page_back_rect(), ptc_ui_text(PTC_UI_T_B_BACK), false, false, false);
+        if (!m->update_backup_count) draw_text(pixels, stride, 72, 180, ptc_ui_text(PTC_UI_T_UPDATE_NO_BACKUPS), 22, UI_MUTED);
+        for (int i = 0; i < 4 && m->update_backup_index + i < m->update_backup_count; ++i) {
+            PtcUiRect rect = ptc_ui_update_backup_rect(i);
+            draw_plan_card(pixels, stride, (UiRect){rect.x, rect.y, rect.w, rect.h}, m->overlay_selection == i);
+            draw_wrapped_text(pixels, stride, rect.x + 24, rect.y + 28,
+                m->update_backup_labels[m->update_backup_index + i], 20, rect.w - 48, 26, 2, UI_INK);
+        }
+        draw_wrapped_text(pixels, stride, 72, 620, ptc_ui_text(m->update_cleanup_failed ? PTC_UI_T_UPDATE_ERROR_CONFLICT : PTC_UI_T_UPDATE_BACKUP_HINT), 17, 1120, 21, 2, UI_MUTED);
+        bool selected = m->update_backup_count > 0;
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1), ptc_ui_text(PTC_UI_T_UPDATE_DELETE), false, false, !selected || m->parent_support_only);
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2), ptc_ui_text(PTC_UI_T_GUIDE_PREV), false, false, m->update_backup_index == 0);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(), ptc_ui_text(PTC_UI_T_GUIDE_NEXT), false, false, m->update_backup_index + 4 >= m->update_backup_count);
+        return;
+    }
+    draw_plan_card(pixels, stride, (UiRect){54, 166, 1172, 246}, false);
+    snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_VERSIONS), PLAYWISE_VERSION,
+        m->update_installed_version[0] ? m->update_installed_version : "?", m->update_version[0] ? m->update_version : "?");
+    draw_wrapped_text(pixels, stride, 78, 190, text, 18, 1124, 23, 2, UI_INK);
+    snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_BACKEND), m->backend_release_id[0] ? m->backend_release_id : "?");
+    fit_text(text, sizeof(text), text, 15, 1124);
+    draw_text(pixels, stride, 78, 238, text, 15, UI_MUTED);
+    draw_wrapped_text(pixels, stride, 78, 270, ptc_ui_text(update_status_key(m->update_status)), 22, 1124, 28, 2,
+        m->update_status == PTC_UPDATE_COMPLETED ? UI_SUCCESS : (m->update_status == PTC_UPDATE_FAILED || m->update_status == PTC_UPDATE_RECOVERY_REQUIRED ? UI_DANGER : UI_ACCENT));
+    if (m->update_size_kib) {
+        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_SIZE), m->update_size_kib);
+        draw_text(pixels, stride, 78, 322, text, 16, UI_MUTED);
+    }
+    if (m->update_busy) {
+        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_TRANSFER), m->update_received_kib);
+        draw_text(pixels, stride, 78, 350, text, 18, UI_MUTED);
+    } else {
+        const PtcUiTextId errors[] = {PTC_UI_T_UPDATE_IDLE, PTC_UI_T_UPDATE_ERROR_NETWORK, PTC_UI_T_UPDATE_MANUAL_REQUIRED,
+            PTC_UI_T_UPDATE_ERROR_PACKAGE, PTC_UI_T_UPDATE_ERROR_STORAGE, PTC_UI_T_UPDATE_ERROR_BACKUP, PTC_UI_T_UPDATE_ERROR_CONFLICT};
+        const char *notes = m->update_error > 0 && (size_t)m->update_error < sizeof(errors) / sizeof(errors[0]) ? ptc_ui_text(errors[m->update_error]) : m->update_notes;
+        draw_wrapped_text(pixels, stride, 78, 348, notes, 17, 1124, 22, 2, UI_MUTED);
+    }
+    home_button(pixels, stride, ptc_ui_update_notes_rect(), ptc_ui_text(PTC_UI_T_UPDATE_NOTES), false, false,
+        m->update_busy || !m->update_notes[0]);
+    const PtcUiTextId actions[] = {m->update_status == PTC_UPDATE_BACKUP_UNKNOWN ? PTC_UI_T_UPDATE_WAIT_RECEIPT : PTC_UI_T_UPDATE_CHECK, PTC_UI_T_UPDATE_DOWNLOAD,
+        m->update_check_on_startup ? PTC_UI_T_UPDATE_AUTO_ON : PTC_UI_T_UPDATE_AUTO_OFF,
+        m->update_stable_only ? PTC_UI_T_UPDATE_STABLE : PTC_UI_T_UPDATE_FOLLOW,
+        PTC_UI_T_UPDATE_BACKUPS, m->update_status == PTC_UPDATE_RECONFIRM ? PTC_UI_T_UPDATE_SUPPORT : PTC_UI_T_UPDATE_LOAD,
+        m->update_status == PTC_UPDATE_RECOVERY_REQUIRED ? PTC_UI_T_UPDATE_RECOVER : PTC_UI_T_UPDATE_CANCEL, PTC_UI_T_UPDATE_EXIT};
+    for (int i = 0; i < 8; ++i) {
+        PtcUiRect rect = ptc_ui_update_action_rect(i);
+        fit_text(text, sizeof(text), ptc_ui_text(actions[i]), 18, rect.w - 32);
+        home_button(pixels, stride, rect, text, i == 1, m->overlay_selection == i, !ptc_ui_update_action_enabled(m, i));
+    }
+}
 
 static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
@@ -104,6 +191,8 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     fit_text(value, sizeof(value), model->pwa_url, 17, val_max_w);
     draw_text(pixels, stride, details.x + val_offset, details.y + 362, value, 17, UI_SUCCESS);
 
+    home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2),
+                ptc_ui_text(PTC_UI_T_UPDATE_ENTRY), false, false, false);
     if (pending) {
         home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1), ptc_ui_text(PTC_UI_T_B_NOT_YET),
                     false, false, false);
@@ -582,6 +671,10 @@ bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUi
         return true;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
         draw_software_info_overlay(pixels, stride, model);
+        return true;
+    case PTC_UI_OVERLAY_ONLINE_UPDATE:
+    case PTC_UI_OVERLAY_UPDATE_BACKUPS:
+        draw_online_update(pixels, stride, model);
         return true;
     case PTC_UI_OVERLAY_SUPPORT_EVENT:
         draw_support_event_overlay(pixels, stride, model);

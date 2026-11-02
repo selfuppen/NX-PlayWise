@@ -3,6 +3,11 @@
 
 #define CONFIG_BACKUP_PATH APP_ROOT "/backups/config-backup.json"
 
+static const char *selected_backup(const UiState *ui)
+{
+    return ui->config_backup_selected_path[0] ? ui->config_backup_selected_path : CONFIG_BACKUP_PATH;
+}
+
 static unsigned available_groups(const PtcUiModel *model)
 {
     unsigned groups = PTC_CONFIG_BACKUP_ALL;
@@ -75,10 +80,10 @@ void open_config_backup(UiState *ui)
     ui->model.config_metadata[0] = '\0'; ui->model.config_preview[0] = '\0';
     make_next_request_id(ui->config_stage_id, sizeof(ui->config_stage_id));
     if (!ptc_config_stage_path(stage, sizeof(stage), APP_ROOT, ui->config_stage_id)) return;
-    if (!ui->client.storage->vtable->exists(ui->client.storage, CONFIG_BACKUP_PATH)) {
+    if (!ui->client.storage->vtable->exists(ui->client.storage, selected_backup(ui))) {
         snprintf(ui->model.config_preview, sizeof(ui->model.config_preview), "%s", ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_MISSING)); return;
     }
-    if (!ptc_config_archive_load(ui->client.storage, CONFIG_BACKUP_PATH, stage, ui->config_digest)) {
+    if (!ptc_config_archive_load(ui->client.storage, selected_backup(ui), stage, ui->config_digest)) {
         (void)ui->client.storage->vtable->remove_tree(ui->client.storage, stage);
         snprintf(ui->model.config_preview, sizeof(ui->model.config_preview), "%s", ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_INVALID)); return;
     }
@@ -179,6 +184,7 @@ void submit_config_backup(UiState *ui, bool restore)
     char json[512];
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     const char *type = restore ? "restore_config_backup" : "create_config_backup";
+    if (!restore && !online_update_backup_before_submit(ui)) return;
     if (restore) snprintf(json, sizeof(json),
         "{\"version\":1,\"request_id\":\"%s\",\"type\":\"%s\",\"created_at\":%lld,\"payload\":{\"groups\":%u,\"stage_id\":\"%s\",\"sha256\":\"%s\"}}",
         ui->active_request_id, type, (long long)time(NULL), ui->model.config_groups, ui->config_stage_id, ui->config_digest);
@@ -194,6 +200,7 @@ void submit_config_backup(UiState *ui, bool restore)
 
 void config_backup_result(UiState *ui)
 {
+    if (online_update_backup_result(ui)) return;
     bool create = !strcmp(ui->model.result_type, "create_config_backup");
     bool restore = !strcmp(ui->model.result_type, "restore_config_backup");
     if (!create && !restore) return;
@@ -210,7 +217,7 @@ void config_backup_result(UiState *ui)
         bool ok = stage_valid && ptc_config_archive_save(ui->client.storage, stage, CONFIG_BACKUP_PATH);
         if (stage_valid)
             ui->client.storage->vtable->remove_tree(ui->client.storage, stage);
-        if (ok) open_config_backup(ui);
+        if (ok) { ui->config_backup_selected_path[0] = '\0'; open_config_backup(ui); }
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(ok ? PTC_UI_T_CONFIG_BACKUP_SAVED : PTC_UI_T_CONFIG_BACKUP_SAVE_FAILED));
     } else {
         ui->model.weekly_dirty = ui->model.holiday_dirty = ui->model.bedtime_dirty = ui->model.dock_dirty = false;

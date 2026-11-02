@@ -252,6 +252,7 @@ static void handle_album_manager_overlay_input(UiState *ui, u64 down)
 
 static void handle_software_info_overlay_input(UiState *ui, u64 down)
 {
+    if (down & HidNpadButton_X) { open_online_update(ui); return; }
             if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
                 ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !ui->model.parent_support_only) {
     #ifndef PLAYWISE_EDEN

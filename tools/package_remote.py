@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shlex
 import shutil
@@ -35,9 +36,10 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-from tools.build.playwise_version import read_playwise_version
+from tools.build.playwise_version import read_playwise_version, device_lab_nacp_version
 import tools.build.stage_timer as stage_timer
 from tools.build.sync_doc_previews import PREVIEW_FILES, synchronize
+from tools.build.render_ui_previews import SCOPES, selected_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -251,6 +253,9 @@ def verify_eden_nro(path: Path, manifest: dict) -> None:
     embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
     if embedded not in data:
         raise PackageError(f"{path.name}: does not embed the Eden manifest")
+    release_ids = re.findall(rb"playwise-[0-9A-Za-z.-]+\+[0-9a-f]{12}\.[0-9a-f]{16}", data)
+    if any(value.decode("ascii") != manifest.get("release_id") for value in release_ids):
+        raise PackageError(f"{path.name}: contains a stale compiled release identity")
     for marker in (b"EDEN TEST", b"playwise-eden", b"playwise-eden-test-secret-00000001"):
         if marker not in data:
             raise PackageError(f"{path.name}: missing Eden marker {marker.decode('ascii')}")
@@ -387,7 +392,7 @@ def verify_device_lab_zip(path: Path) -> None:
             raise PackageError(f"{path.name}: {overlay_path} does not contain the timer activation A/B UI")
         if DEVICE_LAB_WARNING_MARKER not in package.read("DEVICE-LAB.txt"):
             raise PackageError(f"{path.name}: DEVICE-LAB.txt is not localized")
-        lab_version = f"{PLAYWISE_VERSION}-lab"
+        lab_version = device_lab_nacp_version(PLAYWISE_VERSION)
         verify_nro_asset(package.read(nro_path), f"{path.name}: playwise-device-lab.nro", require_icon=False,
             expected_title=DEVICE_LAB_NRO_TITLE, expected_version=lab_version)
         verify_nro_asset(package.read(overlay_path), f"{path.name}: playwise-device-lab.ovl", require_icon=False,
@@ -503,6 +508,7 @@ def container_command(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
+    preview_scope: str = "docs-zh",
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -554,8 +560,14 @@ def container_command(
 
     targets_str = f"make {job_flag}{' '.join(targets)}"
     test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
-    preview_cmd = f"make {job_flag}ui-previews && " if with_previews else ""
-    sync_cmd = "python3 tools/build/sync_doc_previews.py && " if with_previews else ""
+    if preview_scope not in SCOPES:
+        raise PackageError(f"unknown preview scope: {preview_scope}")
+    if only == "all":
+        preview_scope = "all"
+    preview_cmd = (f"make {job_flag}ui-previews PREVIEW_SCOPE={preview_scope} PREVIEW_JOBS={jobs or 8} && "
+                   if with_previews else "")
+    sync_cmd = (f"python3 tools/build/sync_doc_previews.py --scope {preview_scope} && "
+                if with_previews else "")
     identity_exports = ""
     if build_image:
         identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
@@ -600,6 +612,7 @@ def ssh_command(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
+    preview_scope: str = "docs-zh",
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -625,6 +638,7 @@ def ssh_command(
             with_pctl_capture=with_pctl_capture,
             with_complete=with_complete,
             with_previews=with_previews,
+            preview_scope=preview_scope,
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
@@ -651,6 +665,7 @@ def run_container(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
+    preview_scope: str = "docs-zh",
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -672,6 +687,7 @@ def run_container(
             with_pctl_capture=with_pctl_capture,
             with_complete=with_complete,
             with_previews=with_previews,
+            preview_scope=preview_scope,
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
@@ -721,6 +737,7 @@ def build_and_verify(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
+    preview_scope: str = "docs-zh",
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -738,6 +755,7 @@ def build_and_verify(
     eden_dir = ROOT / "build" / "eden-test"
 
     if only == "all":
+        preview_scope = "all"
         target_pkgs = {"playwise", "complete", "device_lab"}
         check_eden = with_eden
         with_previews = True
@@ -811,6 +829,7 @@ def build_and_verify(
         with_pctl_capture=with_pctl_capture,
         with_complete=with_complete or ("complete" in target_pkgs),
         with_previews=with_previews,
+        preview_scope=preview_scope,
         clean=clean,
         run_tests=run_tests,
         jobs=jobs,
@@ -822,19 +841,23 @@ def build_and_verify(
     if with_previews or only == "previews":
         preview_dir = ROOT / "build" / "ui-previews"
         synchronize(preview_dir, ROOT / "docs" / "images" / "usage", check=True)
-        synchronize(preview_dir / "en", ROOT / "docs" / "images" / "usage-en", check=True)
+        if preview_scope != "docs-zh":
+            synchronize(preview_dir / "en", ROOT / "docs" / "images" / "usage-en", check=True)
 
         if only == "previews":
             t0 = time.perf_counter()
             if not preview_dir.is_dir():
                 raise PackageError(f"missing preview directory: {preview_dir}")
-            png_files = sorted(preview_dir.rglob("*.png"))
-            if not png_files:
+            selection = selected_files(preview_scope)
+            png_files = (sorted(preview_dir.rglob("*.png")) if selection is None else
+                         [(preview_dir / name).with_suffix(".png") for name in selection])
+            if not png_files or not all(path.is_file() and path.stat().st_size for path in png_files):
                 raise PackageError(f"no preview PNG images found in {preview_dir}")
             stage_timer.write_timing_record("playwise", "verify-previews", time.perf_counter() - t0)
             print(f"PASS: verified {len(png_files)} UI preview PNGs in {preview_dir}")
             print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
-            print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage-en'}")
+            if preview_scope != "docs-zh":
+                print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage-en'}")
     
     if with_usage_probe:
         import tools.legacy.package_usage_probe as package_usage_probe
@@ -987,7 +1010,7 @@ def parse_args() -> argparse.Namespace:
         dest="with_previews",
         action="store_true",
         default=False,
-        help="Render, convert, and verify UI preview images. (Default: disabled)",
+        help="Render, convert, and verify Chinese documentation UI images. (Default: disabled)",
     )
     preview_group.add_argument(
         "--no-previews",
@@ -995,6 +1018,12 @@ def parse_args() -> argparse.Namespace:
         dest="with_previews",
         action="store_false",
         help="Disable rendering and verifying UI preview images.",
+    )
+    parser.add_argument(
+        "--preview-scope",
+        choices=SCOPES,
+        default="docs-zh",
+        help="Preview set: docs-zh (default), docs (Chinese/English), all (full matrix; always used by --release).",
     )
     parser.add_argument(
         "--previews",
@@ -1041,9 +1070,11 @@ def parse_args() -> argparse.Namespace:
         "--jobs",
         type=int,
         default=None,
-        help="Number of parallel make compilation jobs. Default: 8.",
+        help="Parallel compilation and preview worker budget. Default: 8; use 1 for serial execution.",
     )
     args = parser.parse_args()
+    if args.jobs is not None and args.jobs < 1:
+        parser.error("--jobs must be positive")
     values = (args.verified_model, args.verified_hos, args.verified_atmosphere)
     if args.manual_device_verified:
         if any(value is not None and not value.strip() for value in values):
@@ -1085,6 +1116,7 @@ def main() -> int:
             with_pctl_capture=args.with_pctl_capture,
             with_complete=with_complete,
             with_previews=with_previews,
+            preview_scope=args.preview_scope,
             clean=args.clean,
             run_tests=not args.skip_tests,
             jobs=jobs,

@@ -619,10 +619,52 @@ static const char *next_wrapped_line(const char *cursor, int size, int max_width
     return *end == '\n' ? end + 1 : (*end == ' ' ? end + 1 : end);
 }
 
-int draw_wrapped_text(
+int draw_wrapped_text_from_line(
     uint32_t *pixels,
     uint32_t stride,
     int x,
+    int baseline,
+    const char *text,
+    int size,
+    int max_width,
+    int line_height,
+    int max_lines,
+    int first_line,
+    uint32_t color)
+{
+    char localized[4096];
+    const char *cursor = ptc_ui_localize(text ? text : "", localized, sizeof(localized));
+    for (int i = 0; *cursor && i < first_line; ++i) {
+        const char *end = NULL;
+        cursor = next_wrapped_line(cursor, size, max_width, &end);
+    }
+    int line = 0;
+    while (*cursor && line < max_lines) {
+        const char *end = NULL;
+        const char *next = next_wrapped_line(cursor, size, max_width, &end);
+        char buffer[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
+        size_t bytes = (size_t)(end - cursor);
+        if (bytes >= sizeof(buffer)) bytes = sizeof(buffer) - 1;
+        memcpy(buffer, cursor, bytes);
+        buffer[bytes] = '\0';
+        draw_text(pixels, stride, x, baseline + line * line_height, buffer, size, color);
+        cursor = next;
+        ++line;
+    }
+    return baseline + line * line_height;
+}
+
+int draw_wrapped_text(uint32_t *pixels, uint32_t stride, int x, int baseline,
+    const char *text, int size, int max_width, int line_height, int max_lines, uint32_t color)
+{
+    return draw_wrapped_text_from_line(pixels, stride, x, baseline, text, size,
+        max_width, line_height, max_lines, 0, color);
+}
+
+int draw_wrapped_text_centered(
+    uint32_t *pixels,
+    uint32_t stride,
+    int center_x,
     int baseline,
     const char *text,
     int size,
@@ -642,7 +684,8 @@ int draw_wrapped_text(
         if (bytes >= sizeof(buffer)) bytes = sizeof(buffer) - 1;
         memcpy(buffer, cursor, bytes);
         buffer[bytes] = '\0';
-        draw_text(pixels, stride, x, baseline + line * line_height, buffer, size, color);
+        int width = measure_text(buffer, size);
+        draw_text(pixels, stride, center_x - width / 2, baseline + line * line_height, buffer, size, color);
         cursor = next;
         ++line;
     }

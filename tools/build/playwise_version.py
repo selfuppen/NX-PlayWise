@@ -36,6 +36,17 @@ def validate_playwise_version(version: str) -> str:
     return version
 
 
+def device_lab_nacp_version(version: str) -> str:
+    version = validate_playwise_version(version)
+    # NACP reserves 16 bytes including the terminator. Keep the full semantic
+    # version and a Lab marker rather than letting nacptool silently truncate.
+    for suffix in ("-lab", "-L"):
+        label = version + suffix
+        if len(label.encode("ascii")) <= 15:
+            return label
+    raise ValueError("Device Lab NACP version exceeds 15 bytes even with -L")
+
+
 def write_playwise_version(version: str, root: Path = ROOT) -> None:
     version = validate_playwise_version(version)
     header_path = root / "common" / "version.h"
@@ -50,3 +61,13 @@ def write_playwise_version(version: str, root: Path = ROOT) -> None:
 
     header_path.write_text(header, encoding="utf-8", newline="\n")
     make_path.write_text(make, encoding="utf-8", newline="\n")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Read the canonical PlayWise display version.")
+    parser.add_argument("--device-lab-nacp", action="store_true")
+    args = parser.parse_args()
+    version = read_playwise_version()
+    print(device_lab_nacp_version(version) if args.device_lab_nacp else version)

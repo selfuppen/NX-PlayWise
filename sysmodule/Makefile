@@ -16,6 +16,7 @@ SOURCES := \
 	source \
 	. \
 	../common/crypto \
+	../common/update \
 	../common/protocol \
 	../common/rules \
 	../common/security \
@@ -45,9 +46,11 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT := $(CURDIR)/$(TARGET)
 export TOPDIR := $(CURDIR)
 export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) $(foreach dir,$(DATA),$(CURDIR)/$(dir))
+export VPATH := $(VPATH) $(CURDIR)/../companion
 export DEPSDIR := $(CURDIR)/$(BUILD)
 
 SYSMODULE_CFILES := \
+	update_install.c \
 	ipc_server.c \
 	lab_session.c \
 	lab_session_report.c \
