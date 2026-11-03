@@ -543,7 +543,10 @@ class Suite:
     def wait_action_ready(self) -> dict:
         # A cached neutral snapshot may precede a slow first render of a new
         # dialog. Require two progressing, presented idle frames before down.
-        readiness_budget = 20 if self.suite in ("input", "input-hold") else 5
+        # This is a read-only wait before down, independent of input sampling.
+        # Slow guest work may pause both UI and HID publication; keep the same
+        # finite window as page/capture readiness without accepting cached frames.
+        readiness_budget = 20
         deadline = min(self.deadline, time.monotonic() + readiness_budget)
         baseline = self.wait_input(False)
         previous = None
@@ -575,7 +578,8 @@ class Suite:
                             save(self.output / f"input-readiness/{self.step + 1:03d}-{index}.json", sample)
                         return value
             except (OSError, ValueError, ObservationPending):
-                pass
+                previous = None
+                ready = 0
             time.sleep(0.05)
         raise GateError("guest did not present two progressing neutral frames before input; no down sent")
 

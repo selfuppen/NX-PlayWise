@@ -476,6 +476,32 @@ def test_input_requires_presented_progress() -> None:
             assert not (root / "input-readiness").exists()
 
 
+def test_input_readiness_waits_for_fresh_frames_after_guest_pause() -> None:
+    first = {"instance": "a", "presentation_version": 1, "input_sampling_version": 2,
+             "sequence": 10, "input_sequence": 20, "input_active": False,
+             "ui": {"waiting": False, "overlay_animating": False}}
+    fresh = [{**first, "sequence": i, "input_sequence": i + 10} for i in (30, 31, 32)]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60, "main")
+        with patch.object(suite, "wait_input", return_value=first), \
+                patch.object(suite, "observe", side_effect=[first, ObservationPending("stale"), *fresh]), \
+                patch("tools.automation.eden_runner.time.monotonic", side_effect=[0, 0, 6, 13, 13.1, 13.2]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            assert suite.wait_action_ready() == fresh[-1]
+        assert json.loads((root / "input-readiness/001-0.json").read_text())["sequence"] == 30
+        verify_input_readiness(root, 1)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60, "main")
+        with patch.object(suite, "wait_input", return_value=first), \
+                patch.object(suite, "observe", return_value=first), \
+                patch("tools.automation.eden_runner.time.monotonic", side_effect=[0, 0, 6, 20.01]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            rejected(lambda: suite.wait_action_ready())
+        assert not (root / "input-readiness").exists()
+
+
 def test_failure_metrics_preserve_original_error() -> None:
     class Client:
         def __init__(self, fail: bool):
@@ -678,6 +704,7 @@ def main() -> None:
     test_stale_observation_waits_without_input()
     test_sampled_input_releases_once_on_failure()
     test_input_requires_presented_progress()
+    test_input_readiness_waits_for_fresh_frames_after_guest_pause()
     test_failure_metrics_preserve_original_error()
     test_progress_stream_boundaries()
     test_profile_capacity_before_copy()
