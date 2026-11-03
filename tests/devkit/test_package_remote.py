@@ -13,6 +13,7 @@ import sys
 import tempfile
 from unittest import mock
 import zipfile
+import zlib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 import tools.package_remote as package_remote  # noqa: E402
 import tools.build.sync_doc_previews as sync_doc_previews  # noqa: E402
+from tools.build.convert_ui_previews import chunk  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -604,15 +606,19 @@ def test_parse_args_manual_verification() -> None:
 
 
 def test_sync_doc_previews() -> None:
+    def png(color: bytes, level: int = 9) -> bytes:
+        return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress((b"\0" + color * 2) * 2, level)) + chunk(b"IEND", b""))
+    new_child, old_child = png(b"\x10\x20\x30"), png(b"\x40\x50\x60")
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         preview_dir = root / "build" / "ui-previews"
         doc_images_dir = root / "docs" / "images" / "usage"
         (preview_dir / "child").mkdir(parents=True)
-        (preview_dir / "child" / "child-light.png").write_bytes(b"NEW_CHILD")
+        (preview_dir / "child" / "child-light.png").write_bytes(new_child)
         (doc_images_dir / "child").mkdir(parents=True)
         target_mod = doc_images_dir / "child" / "child-light.png"
-        target_mod.write_bytes(b"OLD_CHILD")
+        target_mod.write_bytes(old_child)
         with mock.patch.object(sync_doc_previews, "PREVIEW_FILES", ("child/child-light.png", "parent/parent-dark.png")):
             try:
                 sync_doc_previews.synchronize(preview_dir, doc_images_dir)
@@ -620,9 +626,9 @@ def test_sync_doc_previews() -> None:
                 pass
             else:
                 raise AssertionError("a missing selected scene must fail before copying")
-            require(target_mod.read_bytes() == b"OLD_CHILD", "missing scene must not partly synchronize")
+            require(target_mod.read_bytes() == old_child, "missing scene must not partly synchronize")
             (preview_dir / "parent").mkdir()
-            (preview_dir / "parent" / "parent-dark.png").write_bytes(b"PARENT")
+            (preview_dir / "parent" / "parent-dark.png").write_bytes(png(b"\x70\x80\x90"))
             try:
                 sync_doc_previews.synchronize(preview_dir, doc_images_dir, check=True)
             except ValueError:
@@ -631,9 +637,24 @@ def test_sync_doc_previews() -> None:
                 raise AssertionError("stale documentation image must fail the check")
             synced = sync_doc_previews.synchronize(preview_dir, doc_images_dir)
             require(synced == 2, f"expected 2 synced images, got {synced}")
-            require(target_mod.read_bytes() == b"NEW_CHILD", "selected scene must be updated")
+            require(target_mod.read_bytes() == new_child, "selected scene must be updated")
             require(sync_doc_previews.synchronize(preview_dir, doc_images_dir, check=True) == 0,
                     "unchanged previews must pass the freshness check")
+            alternate = png(b"\x10\x20\x30", level=0)
+            require(alternate != new_child, "compression fixture must have different PNG bytes")
+            target_mod.write_bytes(alternate)
+            require(sync_doc_previews.synchronize(preview_dir, doc_images_dir, check=True) == 0,
+                    "identical pixels with different compression must pass")
+            require(target_mod.read_bytes() == alternate, "equal pixels must not rewrite the baseline")
+            corrupt = bytearray(alternate)
+            corrupt[-1] ^= 1
+            target_mod.write_bytes(corrupt)
+            try:
+                sync_doc_previews.synchronize(preview_dir, doc_images_dir, check=True)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("a corrupt PNG must fail comparison")
 
 
 def test_incremental_host_and_manifest_profiles() -> None:

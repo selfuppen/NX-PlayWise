@@ -480,6 +480,7 @@ void ptc_sysmodule_init(
     sysmodule->startup_recovery_checked = false;
     sysmodule->disable_initialized = false;
     sysmodule->disable_present = false;
+    sysmodule->quiescing = false;
     snprintf(sysmodule->boot_id, sizeof(sysmodule->boot_id), "host-boot");
     invalidate_all_caches(sysmodule);
     (void)ptc_sysmodule_refresh_caches(sysmodule);

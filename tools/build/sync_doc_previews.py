@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import shutil
+import struct
+import zlib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -126,6 +128,42 @@ PREVIEW_FILES = (
 )
 
 
+def preview_pixels(path: Path) -> tuple[bytes, bytes]:
+    """Compare our unfiltered RGB previews independently of zlib's encoder version."""
+    data = path.read_bytes()
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError(f"invalid preview PNG: {path}")
+    offset = 8
+    header = b""
+    compressed = bytearray()
+    finished = False
+    while offset < len(data):
+        if len(data) - offset < 12:
+            raise ValueError(f"truncated preview PNG: {path}")
+        length = struct.unpack_from(">I", data, offset)[0]
+        kind = data[offset + 4:offset + 8]
+        payload = data[offset + 8:offset + 8 + length]
+        end = offset + 12 + length
+        if end > len(data) or zlib.crc32(kind + payload) != struct.unpack_from(">I", data, end - 4)[0]:
+            raise ValueError(f"invalid preview PNG chunk: {path}")
+        if kind == b"IHDR":
+            header = payload
+        elif kind == b"IDAT":
+            compressed.extend(payload)
+        elif kind == b"IEND":
+            finished = length == 0 and end == len(data)
+            break
+        offset = end
+    if not finished or len(header) != 13 or header[8:] != b"\x08\x02\x00\x00\x00":
+        raise ValueError(f"unsupported preview PNG layout: {path}")
+    width, height = struct.unpack(">II", header[:8])
+    rows = zlib.decompress(compressed)
+    stride = width * 3 + 1
+    if len(rows) != stride * height or any(rows[y * stride] != 0 for y in range(height)):
+        raise ValueError(f"invalid preview PNG pixels: {path}")
+    return header, rows
+
+
 def synchronize(preview_dir: Path, docs_dir: Path, *, check: bool = False) -> int:
     """Require every selected scene; return the number of changed files."""
     missing = [name for name in PREVIEW_FILES if not (preview_dir / name).is_file()]
@@ -136,7 +174,7 @@ def synchronize(preview_dir: Path, docs_dir: Path, *, check: bool = False) -> in
     for name in PREVIEW_FILES:
         source = preview_dir / name
         target = docs_dir / name
-        if not target.is_file() or source.read_bytes() != target.read_bytes():
+        if not target.is_file() or preview_pixels(source) != preview_pixels(target):
             if check:
                 raise ValueError(f"documentation preview is stale or missing: {target}")
             target.parent.mkdir(parents=True, exist_ok=True)

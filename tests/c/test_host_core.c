@@ -4392,7 +4392,9 @@ static void test_quiescing_scheduler(void)
     PtcPctlStub pctl;
     PtcFakeTime clock;
     PtcSysmodule sysmodule;
+    sysmodule.quiescing = true;
     seed_active_buffer_fixture(&mem, &pctl, &clock, &sysmodule, 60, 5, true);
+    check_true(!sysmodule.quiescing, "initialization clears a previous quiesce state");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/quiesce-status.json",
         "{\"version\":1,\"request_id\":\"quiesce-status\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
         "queue a durable request at the quiesce boundary");

@@ -50,7 +50,7 @@ jobs:
           python-version: "3.x"
 
       # Renders the NRO/Overlay previews with the pinned in-repo font and
-      # byte-compares them against the committed baselines under
+      # compares decoded pixels against the committed baselines under
       # docs/images/usage. Fails when a UI change silently alters a screenshot.
       - name: Render previews and compare against committed baselines
         run: |
