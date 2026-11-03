@@ -124,12 +124,14 @@ int main(int argc, char **argv)
     assert(argc == 2);
     PtcStorageVTable vtable = {0}; vtable.read_text = read_text;
     PtcStorage storage = {&vtable, NULL};
-    for (fault = 0; fault <= 22; ++fault) {
+    for (fault = 0; fault <= 24; ++fault) {
         fixture(); char root[512]; snprintf(root, sizeof(root), "%s/%02d", argv[1], fault);
         PtcOnlineUpdater u; memset(&u, 0, sizeof(u)); atomic_init(&u.cancel, false);
         ptc_update_fs_init(&u.fs, root, &storage);
         strcpy(u.journal.transaction_id, "0123456789abcdef0123456789abcdef"); strcpy(u.offer.version, version);
         memset(u.offer.md5, '0', 32); if (fault == 19) u.offer.md5[0] = '1';
+        u.offer.size_bytes = fault == 23 ? 4 : 3; sha("zip", 3, u.offer.sha256);
+        if (fault == 24) u.offer.sha256[0] = u.offer.sha256[0] == 'a' ? 'b' : 'a';
         write_bytes(&u.fs, "switch/playwise/updates/0123456789abcdef0123456789abcdef/download.zip", "zip", 3);
         write_bytes(&u.fs, "switch/playwise/state.json", "keep-usage", 10);
         bool ok = ptc_online_update_package(&u); assert(ok == (fault == 0 || fault == 21));

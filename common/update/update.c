@@ -2,6 +2,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 const char *const ptc_update_files[PTC_UPDATE_FILE_COUNT] = {
@@ -155,59 +156,129 @@ bool ptc_update_request_id(const char *text)
     return strcmp(text, ".") && strcmp(text, "..");
 }
 
+static bool prefix(const char *url, const char *base)
+{
+    return !strncmp(url, base, strlen(base));
+}
+
+bool ptc_update_url_for(const char *url, unsigned source, bool package, bool redirect)
+{
+    if (!url || source > 1 || strlen(url) >= 4096) return false;
+    for (const unsigned char *p = (const unsigned char *)url; *p; ++p)
+        if (*p <= 32 || *p >= 127 || *p == '\\' || *p == '#') return false;
+    /* curl normalizes dot segments; reject path escapes before dispatch. Signed
+       CDN query strings may contain percent escapes and are kept verbatim. */
+    for (const char *p = url; *p && *p != '?'; ++p) {
+        if (*p == '/' && p[1] == '.' && (p[2] == '/' || (p[2] == '.' && (p[3] == '/' || !p[3])) || !p[2])) return false;
+        if (*p == '%' && p[1] && p[2]) {
+            int a = tolower((unsigned char)p[1]), b = tolower((unsigned char)p[2]);
+            if ((a == '2' && (b == 'e' || b == 'f')) || (a == '5' && b == 'c')) return false;
+        }
+    }
+    if (!package) {
+        if (!source) return !strcmp(url, PTC_UPDATE_REPO_URL) || (redirect &&
+            prefix(url, "https://raw.giteeusercontent.com/selfuppen/nx-playwise/raw/update-feed/updates.json?") );
+        return !strcmp(url, PTC_UPDATE_FALLBACK_URL);
+    }
+    if (!source) return prefix(url, "https://gitee.com/selfuppen/nx-playwise/releases/download/") ||
+        (redirect && prefix(url, "https://gitee.com/attachments/download/"));
+    return prefix(url, "https://github.com/selfuppen/NX-PlayWise/releases/download/") ||
+        (redirect && (prefix(url, "https://release-assets.githubusercontent.com/github-production-release-asset/") ||
+                      prefix(url, "https://objects.githubusercontent.com/github-production-release-asset-2e65be/")));
+}
+
+bool ptc_update_url_allowed(const char *url)
+{
+    return ptc_update_url_for(url, 0, false, true) || ptc_update_url_for(url, 1, false, true) ||
+        ptc_update_url_for(url, 0, true, true) || ptc_update_url_for(url, 1, true, true);
+}
+
+static const char *field(const cJSON *o, const char *name)
+{
+    return cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(o, name));
+}
+
+static bool offer_entry(const cJSON *o, PtcUpdateOffer *offer)
+{
+    const char *version = field(o, "version"), *tag = field(o, "tag"), *notes = field(o, "notes");
+    const cJSON *pre = cJSON_GetObjectItemCaseSensitive(o, "prerelease"), *p = cJSON_GetObjectItemCaseSensitive(o, "package");
+    const cJSON *size = cJSON_GetObjectItemCaseSensitive(p, "size");
+    const char *md5 = field(p, "md5"), *sha = field(p, "sha256"), *name = field(p, "name");
+    const char *gitee = field(p, "gitee_url"), *github = field(p, "github_url");
+    int order; char expected[512];
+    if (!cJSON_IsObject(o) || !version || !ptc_update_version_compare(version, version, &order) ||
+        !tag || tag[0] != 'v' || strcmp(tag + 1, version) || !cJSON_IsBool(pre) ||
+        !notes || strlen(notes) >= sizeof(offer->notes) || !cJSON_IsObject(p) ||
+        !cJSON_IsNumber(size) || size->valuedouble < 1 || size->valuedouble > PTC_UPDATE_ZIP_LIMIT ||
+        size->valuedouble != (double)(unsigned)size->valuedouble ||
+        !ptc_update_hex(md5, 32) || !ptc_update_hex(sha, 64) || !name || !gitee || !github) return false;
+    snprintf(expected, sizeof(expected), "playwise-%s.zip", version);
+    if (strcmp(name, expected)) return false;
+    snprintf(expected, sizeof(expected), "https://gitee.com/selfuppen/nx-playwise/releases/download/%s/%s", tag, name);
+    if (strcmp(gitee, expected) || !ptc_update_url_for(gitee, 0, true, false)) return false;
+    snprintf(expected, sizeof(expected), "https://github.com/selfuppen/NX-PlayWise/releases/download/%s/%s", tag, name);
+    if (strcmp(github, expected) || !ptc_update_url_for(github, 1, true, false)) return false;
+    memset(offer, 0, sizeof(*offer));
+    strcpy(offer->version, version); strcpy(offer->md5, md5); strcpy(offer->sha256, sha);
+    strcpy(offer->gitee_url, gitee); strcpy(offer->github_url, github);
+    offer->size_bytes = (unsigned)size->valuedouble; offer->size_kib = (offer->size_bytes + 1023u) / 1024u;
+    offer->prerelease = cJSON_IsTrue(pre) || ptc_update_version_prerelease(version);
+    /* Remote descriptions are plain text; JSON validation already checked UTF-8. */
+    size_t n = 0;
+    for (const unsigned char *s = (const unsigned char *)notes; *s; ++s)
+        if (*s >= 32 || *s == '\n') offer->notes[n++] = (char)*s;
+    offer->notes[n] = 0;
+    return true;
+}
+
+bool ptc_update_feed_parse(const char *text, PtcUpdateFeed *feed)
+{
+    if (!feed) return false;
+    memset(feed, 0, sizeof(*feed));
+    cJSON *o = ptc_update_parse_json(text);
+    const cJSON *schema = cJSON_GetObjectItemCaseSensitive(o, "schema_version"), *items = cJSON_GetObjectItemCaseSensitive(o, "releases");
+    bool ok = cJSON_IsNumber(schema) && schema->valuedouble == 1 && cJSON_IsArray(items) && cJSON_GetArraySize(items) <= 2;
+    bool seen[2] = {false, false};
+    for (const cJSON *v = ok ? items->child : NULL; v; v = v->next) {
+        PtcUpdateOffer *offer = &feed->offers[feed->count];
+        if (!offer_entry(v, offer) || seen[offer->prerelease ? 1 : 0]) { ok = false; break; }
+        seen[offer->prerelease ? 1 : 0] = true; ++feed->count;
+    }
+    cJSON_Delete(o);
+    if (!ok) memset(feed, 0, sizeof(*feed));
+    return ok;
+}
+
+bool ptc_update_feed_select(const PtcUpdateFeed *feed, bool stable_only, PtcUpdateOffer *offer)
+{
+    if (!feed || !offer || feed->count > 2) return false;
+    memset(offer, 0, sizeof(*offer));
+    for (unsigned i = 0; i < feed->count; ++i) {
+        const PtcUpdateOffer *v = &feed->offers[i]; int order;
+        if (stable_only && v->prerelease) continue;
+        if (!offer->version[0] || (ptc_update_version_compare(v->version, offer->version, &order) && order > 0)) *offer = *v;
+    }
+    /* Retain an excluded offer so UI can explain an empty stable channel. */
+    if (!offer->version[0] && feed->count) *offer = feed->offers[0];
+    return true;
+}
+
 bool ptc_update_offer_parse(const char *text, PtcUpdateOffer *offer)
 {
-    cJSON *root = ptc_update_parse_json(text);
-    const cJSON *packages = cJSON_GetObjectItemCaseSensitive(root, "packages"), *found = NULL;
-    bool ok = offer && cJSON_IsArray(packages);
-    if (offer) memset(offer, 0, sizeof(*offer));
-    for (const cJSON *v = ok ? packages->child : NULL; v; v = v->next) {
-        const char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(v, "name"));
-        if (name && !strcmp(name, "NX-PlayWise")) { if (found) { ok = false; break; } found = v; }
-    }
-    const char *version = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(found, "version"));
-    const char *md5 = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(found, "md5"));
-    int order;
-    ok = ok && version && ptc_update_version_compare(version, version, &order) && ptc_update_hex(md5, 32);
-    const cJSON *size = cJSON_GetObjectItemCaseSensitive(found, "filesize");
-    if (size) ok = ok && cJSON_IsNumber(size) && size->valuedouble >= 0 && size->valuedouble <= PTC_UPDATE_ZIP_LIMIT / 1024u &&
-        (double)(unsigned)size->valuedouble == size->valuedouble;
-    if (ok) {
-        memcpy(offer->version, version, strlen(version) + 1);
-        memcpy(offer->md5, md5, 33);
-        if (size) offer->size_kib = (unsigned)size->valuedouble;
-        const char *notes = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(found, "changelog"));
-        if (!notes || !*notes) notes = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(found, "details"));
-        /* Remote descriptions stay plain text. Keep ASCII controls out of UI. */
-        size_t n = 0;
-        for (const unsigned char *p = (const unsigned char *)(notes ? notes : ""); *p;) {
-            unsigned count = *p < 128 ? 1 : (*p < 0xe0 ? 2 : (*p < 0xf0 ? 3 : 4));
-            if (n + count >= sizeof(offer->notes)) break;
-            if (*p >= 32 || *p == '\n') { memcpy(offer->notes + n, p, count); n += count; }
-            p += count;
-        }
-        offer->notes[n] = '\0';
-    }
-    cJSON_Delete(root);
-    return ok;
+    PtcUpdateFeed feed;
+    return ptc_update_feed_parse(text, &feed) && ptc_update_feed_select(&feed, false, offer);
 }
 
 PtcUpdateStatus ptc_update_offer_status(const PtcUpdateOffer *offer, const char *local, bool stable_only)
 {
     int order;
-    if (!offer || !ptc_update_version_compare(offer->version, local, &order)) return PTC_UPDATE_FAILED;
+    if (!offer) return PTC_UPDATE_FAILED;
+    if (!offer->version[0]) return PTC_UPDATE_CURRENT;
+    if (!ptc_update_version_compare(offer->version, local, &order)) return PTC_UPDATE_FAILED;
+    if (stable_only && (offer->prerelease || ptc_update_version_prerelease(offer->version))) return PTC_UPDATE_CHANNEL_EXCLUDED;
     if (order < 0) return PTC_UPDATE_LOCAL_NEWER;
     if (!order) return PTC_UPDATE_CURRENT;
-    if ((stable_only || !ptc_update_version_prerelease(local)) && ptc_update_version_prerelease(offer->version)) return PTC_UPDATE_CHANNEL_EXCLUDED;
     return PTC_UPDATE_AVAILABLE;
-}
-
-bool ptc_update_url_allowed(const char *url)
-{
-    const char *prefix = "https://download.nswiki.cn/";
-    if (!url || strncmp(url, prefix, strlen(prefix))) return false;
-    for (const unsigned char *p = (const unsigned char *)url; *p; ++p) if (*p <= 32 || *p == 127 || *p == '\\') return false;
-    return true;
 }
 
 int ptc_update_asset_index(const char *path)

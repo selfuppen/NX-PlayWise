@@ -72,6 +72,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_playwise_version.py",
         "tests/devkit/test_test_runner.py",
         "tests/devkit/test_release_version.py",
+        "tests/devkit/test_gitee_releases.py",
         "tests/devkit/test_release_manifest.py",
         "tests/devkit/test_qualification_tools.py",
         "tests/devkit/test_pctl_usage_qualification.py",

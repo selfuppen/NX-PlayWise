@@ -30,7 +30,7 @@ test-environment: $(HOST_ENVIRONMENT_TEST)
 
 test-host: test-environment
 
-$(HOST_ONLINE_UPDATE_TEST): tests/c/test_online_update.c common/update/update.c common/crypto/sha256.c companion/update_install.c platform/host/mem_storage.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+$(HOST_ONLINE_UPDATE_TEST): tests/c/test_online_update.c tests/online_update/feed_fixture.h common/update/update.c common/crypto/sha256.c companion/update_install.c platform/host/mem_storage.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $(filter %.c,$^) -lm
 
 $(HOST_ONLINE_PACKAGE_TEST): tests/online_update/package_test.c companion/nro/online_update_package.c platform/update_fs.c companion/update_install.c common/update/update.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
@@ -41,7 +41,7 @@ test-online-package: $(HOST_ONLINE_PACKAGE_TEST)
 	$(STAGE_TIMER) global test-host -- python3 tests/online_update/run_package.py $(HOST_ONLINE_PACKAGE_TEST)
 test-host: test-online-package
 
-$(HOST_ONLINE_NETWORK_TEST): tests/online_update/network_test.c companion/nro/online_update.c platform/update_fs.c companion/update_install.c companion/hot_reload_guard.c common/update/update.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+$(HOST_ONLINE_NETWORK_TEST): tests/online_update/network_test.c tests/online_update/feed_fixture.h companion/nro/online_update.c platform/update_fs.c companion/update_install.c companion/hot_reload_guard.c common/update/update.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/online_update -o $@ $(filter %.c,$^) -lm
 .PHONY: test-online-network
 test-online-network: $(HOST_ONLINE_NETWORK_TEST)

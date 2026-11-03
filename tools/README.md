@@ -91,6 +91,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | [build/build_ptc_standalone.py](build/build_ptc_standalone.py) | 离线家长网页生成 |
 | [build/convert_ui_previews.py](build/convert_ui_previews.py) | PPM转PNG |
 | [build/render_ui_previews.py](build/render_ui_previews.py) | 按文档引用筛选、增量渲染与并行预算 |
+| [build/sync_gitee_releases.py](build/sync_gitee_releases.py) | GitHub/Gitee 发行版附件同步与验证后的双通道更新清单 |
 | [build/generate_release_manifest.py](build/generate_release_manifest.py) | 产物／源码／工具链身份清单 |
 | [build/make_audio_fixtures.py](build/make_audio_fixtures.py) | 音效fixture生成 |
 | [build/make_fixtures.py](build/make_fixtures.py) | 令牌确定性fixture生成 |

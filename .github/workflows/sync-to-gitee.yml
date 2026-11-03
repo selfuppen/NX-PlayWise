@@ -1,25 +1,65 @@
-name: Sync to Gitee
+name: Sync code and releases to Gitee
 
 on:
   push:
-    branches:
-      - main        # 按需改成 master 或其他分支
-  workflow_dispatch: # 支持手动触发
+    branches: [main]
+  release:
+    types: [published, edited, released, prereleased, unpublished, deleted]
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Optional published tag to backfill or retry (empty: latest channels and known mirrors)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write # Publish the generated update-feed branch; never build release ZIPs here.
+
+concurrency:
+  group: sync-to-gitee
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # 拉取完整历史，避免 push 被拒
-
-      - name: Push to Gitee
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Mirror main without touching the update feed
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_USER: selfuppen
-          GITEE_REPO: nx-playwise
         run: |
-          git remote add gitee https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_USER}/${GITEE_REPO}.git
-          git push gitee HEAD:main --force
+          python - <<'PY'
+          import base64, os, subprocess
+          env = os.environ.copy()
+          env.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.https://gitee.com/.extraheader',
+                     GIT_CONFIG_VALUE_0='Authorization: Basic ' + base64.b64encode(('selfuppen:' + env['GITEE_TOKEN']).encode()).decode(),
+                     GIT_TERMINAL_PROMPT='0')
+          subprocess.run(['git', 'push', 'https://gitee.com/selfuppen/nx-playwise.git',
+                          'HEAD:refs/heads/main', '--force'], env=env, check=True)
+          PY
+      - name: Mirror published attachments and publish verified channels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_ACTION: ${{ github.event.action }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          args=()
+          if [[ "$EVENT_NAME" == workflow_dispatch && -n "$INPUT_TAG" ]]; then
+            args=(--tag "$INPUT_TAG")
+          elif [[ "$EVENT_NAME" == release && "$RELEASE_ACTION" != deleted && "$RELEASE_ACTION" != unpublished ]]; then
+            args=(--tag "$RELEASE_TAG")
+          fi
+          python tools/build/sync_gitee_releases.py "${args[@]}"

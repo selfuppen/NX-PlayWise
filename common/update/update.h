@@ -6,8 +6,8 @@
 #include <stdint.h>
 #include "../../third_party/cjson/cJSON.h"
 
-#define PTC_UPDATE_REPO_URL "https://download.nswiki.cn/gayking/store/repo.json"
-#define PTC_UPDATE_ZIP_URL "https://download.nswiki.cn/gayking/store/zips/NX-PlayWise.zip"
+#define PTC_UPDATE_REPO_URL "https://gitee.com/selfuppen/nx-playwise/raw/update-feed/updates.json"
+#define PTC_UPDATE_FALLBACK_URL "https://raw.githubusercontent.com/selfuppen/NX-PlayWise/update-feed/updates.json"
 #define PTC_UPDATE_METADATA_LIMIT (2u * 1024u * 1024u)
 #define PTC_UPDATE_ZIP_LIMIT (32u * 1024u * 1024u)
 #define PTC_UPDATE_EXTRACT_LIMIT (64u * 1024u * 1024u)
@@ -19,7 +19,13 @@ typedef struct {
     char md5[33];
     char notes[2048];
     unsigned size_kib;
+    unsigned size_bytes;
+    char sha256[65];
+    char gitee_url[512], github_url[512];
+    bool prerelease;
 } PtcUpdateOffer;
+
+typedef struct { PtcUpdateOffer offers[2]; unsigned count; } PtcUpdateFeed;
 
 typedef enum {
     PTC_UPDATE_IDLE, PTC_UPDATE_CHECKING, PTC_UPDATE_CURRENT, PTC_UPDATE_AVAILABLE,
@@ -41,8 +47,12 @@ bool ptc_update_version_compare(const char *left, const char *right, int *order)
 bool ptc_update_version_prerelease(const char *version);
 cJSON *ptc_update_parse_json(const char *text);
 bool ptc_update_offer_parse(const char *text, PtcUpdateOffer *offer);
+bool ptc_update_feed_parse(const char *text, PtcUpdateFeed *feed);
+bool ptc_update_feed_select(const PtcUpdateFeed *feed, bool stable_only, PtcUpdateOffer *offer);
 PtcUpdateStatus ptc_update_offer_status(const PtcUpdateOffer *offer, const char *local, bool stable_only);
 bool ptc_update_url_allowed(const char *url);
+/* source: 0 Gitee, 1 GitHub. Redirects cannot cross provider or purpose. */
+bool ptc_update_url_for(const char *url, unsigned source, bool package, bool redirect);
 bool ptc_update_hex(const char *text, size_t digits);
 bool ptc_update_request_id(const char *text);
 /* Returns a runtime asset index; descriptions and directories are never assets. */

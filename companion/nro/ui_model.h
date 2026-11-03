@@ -730,6 +730,7 @@ typedef struct {
     bool update_busy;
     unsigned update_received_kib;
     unsigned update_size_kib;
+    unsigned update_source;
     char update_version[64];
     char update_installed_version[64];
     char update_notes[2048];

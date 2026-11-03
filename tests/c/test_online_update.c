@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../online_update/feed_fixture.h"
 
 typedef struct { PtcMemStorage mem; unsigned calls, fail; } Fixture;
 static bool step(Fixture *f) { return ++f->calls != f->fail; }
@@ -93,12 +94,40 @@ static void versions(void)
     for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) assert(!ptc_update_version_compare(bad[i], "1.0.0", &order));
     assert(ptc_update_version_compare("1.0.0+build.1", "1.0.0+build.2", &order) && !order);
     PtcUpdateOffer offer;
-    assert(ptc_update_offer_parse("{\"packages\":[{\"name\":\"other\"},{\"name\":\"NX-PlayWise\",\"version\":\"3.1.1-beta.1\",\"md5\":\"64c6d32de7a9188d00ff92d6bafd131f\"}]}", &offer));
+    char metadata[4096]; test_update_metadata(metadata, sizeof(metadata), "3.1.1-beta.1", false);
+    assert(ptc_update_offer_parse(metadata, &offer));
+    assert(offer.prerelease && offer.size_bytes == 3 && offer.size_kib == 1);
     assert(ptc_update_offer_status(&offer, "3.1.2-alpha", false) == PTC_UPDATE_LOCAL_NEWER);
-    assert(ptc_update_offer_status(&offer, "3.1.0", false) == PTC_UPDATE_CHANNEL_EXCLUDED);
+    assert(ptc_update_offer_status(&offer, "3.1.0", false) == PTC_UPDATE_AVAILABLE);
     assert(ptc_update_offer_status(&offer, "3.1.1-alpha", false) == PTC_UPDATE_AVAILABLE);
-    assert(!ptc_update_offer_parse("{\"packages\":[],\"packages\":[]}", &offer));
-    assert(!ptc_update_offer_parse("{\"packages\":[{\"name\":\"NX-PlayWise\"},{\"name\":\"NX-PlayWise\"}]}", &offer));
+    assert(ptc_update_offer_status(&offer, "3.1.0", true) == PTC_UPDATE_CHANNEL_EXCLUDED);
+    assert(ptc_update_offer_status(&offer, "3.1.1-beta.1+another", false) == PTC_UPDATE_CURRENT);
+    PtcUpdateFeed feed;
+    assert(ptc_update_feed_parse(metadata, &feed) && ptc_update_feed_select(&feed, true, &offer));
+    assert(ptc_update_offer_status(&offer, "3.1.0", true) == PTC_UPDATE_CHANNEL_EXCLUDED);
+    cJSON *combined = ptc_update_parse_json(metadata);
+    test_update_metadata(metadata, sizeof(metadata), "3.1.0", false);
+    cJSON *stable = ptc_update_parse_json(metadata);
+    cJSON_AddItemToArray(cJSON_GetObjectItemCaseSensitive(combined, "releases"),
+        cJSON_DetachItemFromArray(cJSON_GetObjectItemCaseSensitive(stable, "releases"), 0));
+    char *both = cJSON_PrintUnformatted(combined);
+    assert(ptc_update_feed_parse(both, &feed) && ptc_update_feed_select(&feed, false, &offer));
+    assert(!strcmp(offer.version, "3.1.1-beta.1"));
+    assert(ptc_update_feed_select(&feed, true, &offer) && !strcmp(offer.version, "3.1.0"));
+    free(both); cJSON_Delete(combined); cJSON_Delete(stable);
+    assert(ptc_update_feed_parse("{\"schema_version\":1,\"releases\":[]}", &feed));
+    assert(ptc_update_feed_select(&feed, false, &offer) && ptc_update_offer_status(&offer, "1.0.0", false) == PTC_UPDATE_CURRENT);
+    assert(!ptc_update_offer_parse("{\"schema_version\":1,\"schema_version\":1,\"releases\":[]}", &offer));
+    test_update_metadata(metadata, sizeof(metadata), "3.1.1", true);
+    assert(ptc_update_offer_parse(metadata, &offer) && offer.prerelease);
+    assert(ptc_update_offer_status(&offer, "3.1.0", true) == PTC_UPDATE_CHANNEL_EXCLUDED);
+    const char *bad_fields[] = {"size", "md5", "sha256", "name", "gitee_url", "github_url"};
+    for (unsigned i = 0; i < sizeof(bad_fields) / sizeof(bad_fields[0]); ++i) {
+        cJSON *o = ptc_update_parse_json(metadata);
+        cJSON *pkg = cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(o, "releases"), 0), "package");
+        cJSON_DeleteItemFromObjectCaseSensitive(pkg, bad_fields[i]); cJSON_AddStringToObject(pkg, bad_fields[i], "invalid");
+        char *bad = cJSON_PrintUnformatted(o); assert(!ptc_update_offer_parse(bad, &offer)); free(bad); cJSON_Delete(o);
+    }
     assert(!ptc_update_parse_json("{\"version\":1,\"version\":2}"));
     char deep[2050];
     const unsigned depths[] = {24, 25, 1024};
@@ -114,7 +143,15 @@ static void versions(void)
     strcat(wide, "}"); assert(!ptc_update_parse_json(wide));
     cJSON *quoted = ptc_update_parse_json("{\"text\":\"[]{}\\\"[]{}\"}");
     assert(quoted); cJSON_Delete(quoted);
-    assert(ptc_update_url_allowed(PTC_UPDATE_ZIP_URL));
+    assert(ptc_update_url_allowed(PTC_UPDATE_REPO_URL));
+    assert(ptc_update_url_for("https://raw.giteeusercontent.com/selfuppen/nx-playwise/raw/update-feed/updates.json?signature=a", 0, false, true));
+    assert(!ptc_update_url_for(PTC_UPDATE_FALLBACK_URL, 0, false, true));
+    assert(!ptc_update_url_for("https://gitee.com/selfuppen/other/releases/download/v1/a.zip", 0, true, false));
+    assert(!ptc_update_url_allowed("https://gitee.com.evil/selfuppen/nx-playwise/releases/download/v1/a.zip"));
+    assert(!ptc_update_url_allowed("https://gitee.com@evil/selfuppen/nx-playwise/releases/download/v1/a.zip"));
+    assert(!ptc_update_url_allowed("https://gitee.com/selfuppen/nx-playwise/releases/download/../../other"));
+    assert(!ptc_update_url_allowed("https://gitee.com/attachments/download/%2e%2e/other"));
+    assert(!ptc_update_url_allowed("http://gitee.com/selfuppen/nx-playwise/raw/update-feed/updates.json"));
     assert(!ptc_update_url_allowed("https://download.nswiki.cn.evil/a"));
     assert(!ptc_update_url_allowed("http://download.nswiki.cn/a"));
     assert(!ptc_update_archive_path("switch/playwise/../state.json", false));

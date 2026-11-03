@@ -1742,6 +1742,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.update_status = 3;
             snprintf(settings_dlg.update_installed_version, sizeof(settings_dlg.update_installed_version), "3.1.2-alpha");
             snprintf(settings_dlg.update_version, sizeof(settings_dlg.update_version), "3.2.0-beta.10");
+            settings_dlg.update_size_kib = 3715;
+            settings_dlg.update_source = 1;
             snprintf(settings_dlg.update_notes, sizeof(settings_dlg.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
             failed |= save_preview(directory, "settings", "settings-online-update", &settings_dlg, dark);
             settings_dlg.update_notes_open = true;

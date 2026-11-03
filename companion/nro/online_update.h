@@ -8,6 +8,8 @@
 typedef struct {
     PtcUpdateFs fs;
     PtcUpdateOffer offer;
+    PtcUpdateFeed feed;
+    unsigned source; /* 0 unknown, 1 Gitee, 2 GitHub; consumed after worker join. */
     PtcUpdateJournal journal;
     PtcUpdateStatus status;
     unsigned long network_result;

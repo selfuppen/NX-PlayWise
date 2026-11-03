@@ -5,13 +5,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "feed_fixture.h"
 
 typedef size_t (*Receive)(void *, size_t, size_t, void *);
 struct TestCurl { Receive receive, header; void *data, *header_data, *progress_data; char url[1024]; long response; };
 static struct TestCurl client;
 static int scenario, requests, resources;
 static u64 ticks;
-static const char body[] = "{\"packages\":[{\"name\":\"NX-PlayWise\",\"version\":\"999.0.0\",\"md5\":\"00000000000000000000000000000000\",\"filesize\":3465}]}";
+static char body[4096];
+static unsigned validations;
+
 
 Result socketInitializeDefault(void) { ++resources; return 0; }
 void socketExit(void) { --resources; }
@@ -24,13 +27,19 @@ Result threadWaitForExit(Thread *t) { (void)t; return 0; }
 Result threadClose(Thread *t) { (void)t; return 0; }
 Result pmshellInitialize(void) { return 0; }
 void pmshellExit(void) {}
-Result pmshellGetProcessId(u64 *pid, u64 program) { (void)pid; (void)program; return 15u | (1u << 9); }
+Result pmshellGetProcessId(u64 *pid, u64 program) { (void)program; if (scenario >= 20) { *pid = 20; return 0; } return 15u | (1u << 9); }
 void svcSleepThread(int64_t ns) { ticks += (u64)ns; }
 u64 armGetSystemTick(void) { return ticks += 1000000; }
 u64 armTicksToNs(u64 value) { return value; }
 u64 randomGet64(void) { return 1; }
-bool ptc_online_update_package(PtcOnlineUpdater *u) { (void)u; return false; }
-bool ptc_online_update_verify_current(PtcOnlineUpdater *u) { (void)u; return false; }
+bool ptc_online_update_package(PtcOnlineUpdater *u)
+{
+    ++validations;
+    char path[160], hash[65]; uint64_t size;
+    snprintf(path, sizeof(path), "switch/playwise/updates/%s/download.zip", u->journal.transaction_id);
+    return u->fs.io.hash(&u->fs, path, &size, hash) && size == 3 && !strcmp(hash, u->offer.sha256) && scenario != 25;
+}
+bool ptc_online_update_verify_current(PtcOnlineUpdater *u) { (void)u; return scenario >= 20; }
 int curl_global_init(long flags) { (void)flags; ++resources; return 0; }
 void curl_global_cleanup(void) { --resources; }
 CURL *curl_easy_init(void) { memset(&client, 0, sizeof(client)); ++resources; return &client; }
@@ -60,22 +69,27 @@ int curl_easy_perform(CURL *c)
 {
     ++requests;
     if (scenario == 3) return 51; /* Certificate verification failed. */
-    bool redirect = requests == 1 && (scenario == 1 || scenario == 4 || scenario == 6);
-    c->response = redirect ? 301 : (scenario == 2 ? 404 : 200);
+    bool redirect = requests == 1 && (scenario == 1 || scenario == 4 || scenario == 6 || scenario == 13 || scenario == 24);
+    c->response = redirect ? 301 : ((scenario == 2 || scenario == 22 || ((scenario == 10) && requests == 1)) ? 404 : 200);
     char header[64]; snprintf(header, sizeof(header), "HTTP/1.1 %ld status\r\n", c->response);
     assert(c->header(header, 1, strlen(header), c->header_data) == strlen(header));
-    if (scenario == 5) atomic_store(&((PtcOnlineUpdater *)c->progress_data)->cancel, true);
+    if (scenario == 5 || scenario == 23) atomic_store(&((PtcOnlineUpdater *)c->progress_data)->cancel, true);
     if (scenario == 7) return c->receive((void *)body, 1, PTC_UPDATE_METADATA_LIMIT + 1u, c->data) == 0 ? 23 : 0;
     if (scenario == 8) return c->receive((void *)body, SIZE_MAX, 2, c->data) == 0 ? 23 : 0;
     if (scenario == 4) ticks += UINT64_C(21000000000);
-    const char *payload = redirect ? "redirect response body" : body;
+    if (scenario == 21 && requests == 1) {
+        assert(c->receive("pa", 1, 2, c->data) == 2); return 56;
+    }
+    const char *payload = redirect ? "redirect response body" : (scenario >= 20 ? (scenario == 26 ? "bad!" : "zip") :
+        ((scenario == 12 || (scenario == 11 && requests == 1)) ? "{}" : body));
     return c->receive((void *)payload, 1, strlen(payload), c->data) == strlen(payload) ? 0 : 23;
 }
 int curl_easy_getinfo(CURL *c, int info, ...)
 {
     va_list args; va_start(args, info);
     if (info == CURLINFO_RESPONSE_CODE) *va_arg(args, long *) = c->response;
-    if (info == CURLINFO_REDIRECT_URL) *va_arg(args, char **) = scenario == 6 ? "https://other.invalid/package" : "https://download.nswiki.cn/next.json";
+    if (info == CURLINFO_REDIRECT_URL) *va_arg(args, char **) = scenario == 6 ? "https://other.invalid/package" : ((scenario == 13 || scenario == 24) ? PTC_UPDATE_FALLBACK_URL :
+        "https://raw.giteeusercontent.com/selfuppen/nx-playwise/raw/update-feed/updates.json?signature=test");
     va_end(args); return 0;
 }
 
@@ -84,6 +98,11 @@ static bool read_text(PtcStorage *storage, const char *path, char *out, size_t s
     (void)storage; FILE *f = fopen(path, "rb"); if (!f) return false;
     size_t n = fread(out, 1, size - 1, f); out[n] = 0;
     bool ok = !ferror(f) && fgetc(f) == EOF; if (fclose(f)) ok = false; return ok;
+}
+
+static bool empty_queue(PtcStorage *storage, const char *path, char (*names)[128], size_t capacity, size_t *count)
+{
+    (void)storage; (void)path; (void)names; (void)capacity; *count = 0; return true;
 }
 
 static void pending_reopen(const char *root)
@@ -128,8 +147,8 @@ static void pending_reopen(const char *root)
 
 int main(int argc, char **argv)
 {
-    (void)argc; (void)argv;
-    for (scenario = 0; scenario <= 9; ++scenario) {
+    assert(argc == 2); test_update_metadata(body, sizeof(body), "999.0.0", false);
+    for (scenario = 0; scenario <= 13; ++scenario) {
         PtcOnlineUpdater u; memset(&u, 0, sizeof(u));
         atomic_init(&u.cancel, false); atomic_init(&u.done, false); atomic_init(&u.progress, 0);
         requests = resources = 0; ticks = 0;
@@ -137,13 +156,36 @@ int main(int argc, char **argv)
         assert(u.worker_live && !ptc_online_update_start(&u, 1));
         if (scenario == 9) atomic_store(&u.cancel, true); /* Completed worker, not yet joined. */
         assert(ptc_online_update_poll(&u)); assert(!u.worker_live && !resources);
-        if (scenario == 0 || scenario == 1) { assert(u.status == PTC_UPDATE_AVAILABLE); assert(u.offer.size_kib == 3465); }
+        if (scenario == 0 || scenario == 1 || scenario == 4 || scenario == 6 || scenario == 10 || scenario == 11 || scenario == 13) {
+            assert(u.status == PTC_UPDATE_AVAILABLE); assert(u.offer.size_bytes == 3);
+            assert(u.source == (scenario == 0 || scenario == 1 ? 1u : 2u));
+        }
         else if (scenario == 5 || scenario == 9) assert(u.status == PTC_UPDATE_CANCELED);
         else assert(u.status == PTC_UPDATE_FAILED);
-        assert(requests == (scenario == 1 ? 2 : 1));
+        assert(requests == (scenario == 0 || scenario == 5 || scenario == 9 ? 1 : 2));
         ptc_online_update_exit(&u); assert(!resources);
     }
-    assert(argc == 2); pending_reopen(argv[1]);
+    for (scenario = 20; scenario <= 26; ++scenario) {
+        PtcStorageVTable vtable = {0}; vtable.read_text = read_text; vtable.list_json = empty_queue; PtcStorage storage = {&vtable, NULL};
+        PtcOnlineUpdater u; char root[512]; snprintf(root, sizeof(root), "%s/download-%d", argv[1], scenario);
+        ptc_online_update_init_at(&u, &storage, root); assert(ptc_update_offer_parse(body, &u.offer));
+        strcpy(u.offer.sha256, "4a70fe9aa6436e02c2dea340fbd1e352e4ef2d8ce6ca52ad25d4b95471fc8bf2");
+        assert(u.fs.io.write(&u.fs, "switch/playwise/handover/runtime-ready.json",
+            "{\"profile\":\"release\",\"release_id\":\"host-update-source\",\"boot_id\":\"0123456789abcdef\",\"pid\":20,\"ipc_version\":2,\"ipc_available\":true}"));
+        u.status = PTC_UPDATE_AVAILABLE;
+        requests = resources = 0; validations = 0; ticks = 0;
+        assert(ptc_online_update_start(&u, 2)); assert(ptc_online_update_poll(&u));
+        if (scenario == 20 || scenario == 21 || scenario == 24) {
+            assert(u.status == PTC_UPDATE_BACKUP_PENDING && validations == 1);
+            assert(u.source == (scenario == 20 ? 1u : 2u));
+        } else if (scenario == 23) assert(u.status == PTC_UPDATE_CANCELED && !validations);
+        else assert(u.status == PTC_UPDATE_FAILED);
+        if (scenario == 25) assert(requests == 1 && validations == 1);
+        if (scenario == 26) assert(requests == 1 && !validations && u.error == PTC_UPDATE_ERROR_PACKAGE);
+        if (scenario == 21 || scenario == 22 || scenario == 24) assert(requests == 2);
+        ptc_online_update_exit(&u); assert(!resources);
+    }
+    pending_reopen(argv[1]);
     puts("PASS real update transport orchestration: HTTPS policy, redirects, total timeout, limits, early/late cancel, one worker and resource release");
     return 0;
 }

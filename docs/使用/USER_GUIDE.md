@@ -762,7 +762,7 @@ See also [Development Environment Guide](../开发/DEVELOPMENT_ENVIRONMENT_GUIDE
 
 ## In-app online updates
 
-After manually installing a version with online-update support, open Parent area → Support and recovery → Software information, then press X or touch Update. Startup checks are asynchronous and optional; installation always requires the parent's PIN and hold confirmation. Stable installations follow stable releases, while prerelease installations also accept newer prereleases. Equal and older versions are not installed.
+After manually installing a version with online-update support, open Parent area → Support and recovery → Software information, then press X or touch Update. Startup checks are asynchronous and optional; installation always requires the parent's PIN and hold confirmation. Stable and prerelease versions are offered by default, and parents decide whether to update or select stable-only. Equal and older versions are not installed. Checks and downloads use the project Gitee repository first, with GitHub as fallback. The page shows the source and package size; downloads and installation never start automatically. Install the new updater in full once to migrate from the old store source.
 
 The app checks the complete package, independently backs up settings and old program files, and installs only program assets. Existing settings, PIN, pairing keys, usage and ledgers remain intact. Exit and reopen the app after file installation, then use the existing backend-loading flow and any required safety confirmation. An unsupported older package requires manual installation. The current source uses HTTPS and integrity checks without an independent publisher signature.
 

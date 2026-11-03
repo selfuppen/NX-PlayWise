@@ -62,7 +62,8 @@ static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiMod
     draw_wrapped_text(pixels, stride, 78, 270, ptc_ui_text(update_status_key(m->update_status)), 22, 1124, 28, 2,
         m->update_status == PTC_UPDATE_COMPLETED ? UI_SUCCESS : (m->update_status == PTC_UPDATE_FAILED || m->update_status == PTC_UPDATE_RECOVERY_REQUIRED ? UI_DANGER : UI_ACCENT));
     if (m->update_size_kib) {
-        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_SIZE), m->update_size_kib);
+        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_SIZE), m->update_size_kib, m->update_source == 2 ? "GitHub" : (m->update_source == 1 ? "Gitee" : "Gitee / GitHub"));
+        fit_text(text, sizeof(text), text, 16, 1124);
         draw_text(pixels, stride, 78, 322, text, 16, UI_MUTED);
     }
     if (m->update_busy) {

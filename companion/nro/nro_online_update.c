@@ -24,6 +24,7 @@ static void sync_model(UiState *ui)
     snprintf(ui->model.update_installed_version, sizeof(ui->model.update_installed_version), "%s", u->installed_version);
     snprintf(ui->model.update_notes, sizeof(ui->model.update_notes), "%s", u->offer.notes);
     ui->model.update_size_kib = u->offer.size_kib;
+    ui->model.update_source = u->source;
 }
 
 static bool history(PtcOnlineUpdater *u, const char *id, PtcUpdateJournal *j)
@@ -187,7 +188,10 @@ void online_update_action(UiState *ui, int action)
         bool old = action == 2 ? ui->model.update_check_on_startup : ui->model.update_stable_only;
         if (action == 2) ui->model.update_check_on_startup = !old; else ui->model.update_stable_only = !old;
         if (!save_ui_preferences(ui)) { if (action == 2) ui->model.update_check_on_startup = old; else ui->model.update_stable_only = old; }
-        if (action == 3 && u->offer.version[0]) u->status = ptc_update_offer_status(&u->offer, PLAYWISE_VERSION, ui->model.update_stable_only);
+        if (action == 3 && u->feed.count) {
+            (void)ptc_update_feed_select(&u->feed, ui->model.update_stable_only, &u->offer);
+            u->status = ptc_update_offer_status(&u->offer, PLAYWISE_VERSION, ui->model.update_stable_only);
+        }
     } else if (action == 5 && !ui->model.parent_support_only) {
         if (u->status == PTC_UPDATE_RECONFIRM) { ui->model.overlay = PTC_UI_OVERLAY_NONE; ui->model.parent_page = PTC_UI_PARENT_SUPPORT; }
         else open_hot_reload_confirmation(ui);

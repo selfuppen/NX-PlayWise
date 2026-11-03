@@ -235,7 +235,9 @@ bool ptc_online_update_package(PtcOnlineUpdater *u)
 {
     char zip[160], path[384], text[2048]; uint64_t size;
     snprintf(zip, sizeof(zip), "switch/playwise/updates/%s/download.zip", u->journal.transaction_id);
-    if (!md5_file(u, zip) || !u->fs.io.hash(&u->fs, zip, &size, u->journal.zip_sha256) ||
+    if (!u->fs.io.hash(&u->fs, zip, &size, u->journal.zip_sha256) ||
+        !ptc_update_hex(u->offer.sha256, 64) || size != u->offer.size_bytes ||
+        strcmp(u->offer.sha256, u->journal.zip_sha256) || !md5_file(u, zip) ||
         !extract(u, zip)) return false;
     snprintf(path, sizeof(path), "switch/playwise/updates/%s/stage/info.json", u->journal.transaction_id);
     bool info = u->fs.io.exists(&u->fs, path);

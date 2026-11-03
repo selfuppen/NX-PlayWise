@@ -41,7 +41,11 @@ static size_t receive(void *data, size_t size, size_t count, void *ctx)
         if (bytes > 65536u - d->skipped || atomic_load(&d->u->cancel)) return 0;
         d->skipped += bytes; return bytes;
     }
-    if (atomic_load(&d->u->cancel) || bytes > d->limit - d->used) return 0;
+    if (atomic_load(&d->u->cancel)) return 0;
+    if (bytes > d->limit - d->used) {
+        if (d->file) d->u->error = PTC_UPDATE_ERROR_PACKAGE;
+        return 0;
+    }
     if (d->file) {
         if (((d->used + bytes) >> 20) != (d->used >> 20) && !ptc_update_fs_space(&d->u->fs, bytes + 8u * 1024u * 1024u)) { d->u->error = PTC_UPDATE_ERROR_STORAGE; return 0; }
         if (fwrite(data, 1, bytes, d->file) != bytes) { d->u->error = PTC_UPDATE_ERROR_STORAGE; return 0; }
@@ -58,13 +62,13 @@ static int progress(void *ctx, curl_off_t total, curl_off_t now, curl_off_t uplo
     return atomic_load(&u->cancel) ? 1 : 0;
 }
 
-static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d)
+static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d, unsigned source)
 {
-    char url[1024]; snprintf(url, sizeof(url), "%s", initial);
+    char url[4096]; snprintf(url, sizeof(url), "%s", initial);
     CURL *curl = curl_easy_init(); if (!curl) return false;
     bool ok = false;
     u64 started = armGetSystemTick(); unsigned timeout = d->file ? 180 : 20;
-    for (int redirects = 0; redirects <= 3 && ptc_update_url_allowed(url); ++redirects) {
+    for (int redirects = 0; redirects <= 3 && ptc_update_url_for(url, source, d->file != NULL, redirects > 0); ++redirects) {
         if (d->file && (d->used || fseek(d->file, 0, SEEK_SET))) break;
         d->used = d->headers = d->skipped = 0; d->redirect = false;
         uint64_t elapsed = armTicksToNs(armGetSystemTick() - started) / UINT64_C(1000000000);
@@ -95,7 +99,7 @@ static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d)
         if (response == 200) { ok = true; break; }
         char *redirect = NULL;
         if (response < 300 || response >= 400 || curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &redirect) != CURLE_OK ||
-            !redirect || !ptc_update_url_allowed(redirect) || strlen(redirect) >= sizeof(url)) break;
+            !redirect || !ptc_update_url_for(redirect, source, d->file != NULL, true) || strlen(redirect) >= sizeof(url)) break;
         /* Never append a redirect response body to the package. */
         if (d->file && d->used) break;
         strcpy(url, redirect);
@@ -112,21 +116,49 @@ static bool network_job(PtcOnlineUpdater *u)
     if (curl && u->job == 1) {
         char *text = calloc(1, PTC_UPDATE_METADATA_LIMIT + 1);
         Download d = {u, NULL, text, 0, PTC_UPDATE_METADATA_LIMIT, 0, 0, false};
-        ok = text && fetch(u, PTC_UPDATE_REPO_URL, &d);
-        if (ok) { ok = !memchr(text, '\0', d.used) && ptc_update_offer_parse(text, &u->offer); if (!ok) u->error = PTC_UPDATE_ERROR_PACKAGE; }
-        if (ok) u->status = ptc_update_offer_status(&u->offer, PLAYWISE_VERSION, u->stable_only);
+        const char *urls[] = {PTC_UPDATE_REPO_URL, PTC_UPDATE_FALLBACK_URL};
+        memset(&u->feed, 0, sizeof(u->feed)); memset(&u->offer, 0, sizeof(u->offer)); u->source = 0;
+        for (unsigned source = 0; text && source < 2 && !atomic_load(&u->cancel); ++source) {
+            text[0] = 0; d.used = 0; atomic_store(&u->progress, 0);
+            ok = fetch(u, urls[source], &d, source);
+            if (ok) {
+                ok = !memchr(text, '\0', d.used) && ptc_update_feed_parse(text, &u->feed);
+                if (!ok) u->error = PTC_UPDATE_ERROR_PACKAGE;
+            }
+            if (ok) { u->source = source + 1; u->error = PTC_UPDATE_ERROR_NONE; break; }
+        }
+        if (ok) {
+            ok = ptc_update_feed_select(&u->feed, u->stable_only, &u->offer);
+            u->status = ptc_update_offer_status(&u->offer, PLAYWISE_VERSION, u->stable_only);
+        }
         free(text);
     } else if (curl && u->job == 2) {
         char relative[160], path[768];
         snprintf(relative, sizeof(relative), "switch/playwise/updates/%s/download.zip", u->journal.transaction_id);
         ok = ptc_update_fs_path(&u->fs, relative, path, sizeof(path)) && !u->fs.io.exists(&u->fs, relative) &&
             ptc_update_fs_space(&u->fs, 8u * 1024u * 1024u) && ptc_update_fs_mkdirs(path);
-        FILE *file = ok ? fopen(path, "wb") : NULL;
-        if (!file) u->error = PTC_UPDATE_ERROR_STORAGE;
-        Download d = {u, file, NULL, 0, PTC_UPDATE_ZIP_LIMIT, 0, 0, false};
-        ok = file && fetch(u, PTC_UPDATE_ZIP_URL, &d);
-        if (file && fclose(file)) ok = false;
-        if (ok) { ok = u->fs.io.commit(&u->fs) && ptc_online_update_package(u); if (!ok && !u->error) u->error = PTC_UPDATE_ERROR_PACKAGE; }
+        if (!ok) u->error = PTC_UPDATE_ERROR_STORAGE;
+        bool prepared = ok; ok = false;
+        const char *urls[] = {u->offer.gitee_url, u->offer.github_url};
+        for (unsigned source = 0; prepared && source < 2 && !atomic_load(&u->cancel); ++source) {
+            if (!ptc_update_url_for(urls[source], source, true, false)) { u->error = PTC_UPDATE_ERROR_PACKAGE; break; }
+            /* Truncate our own partial download before trying the identical fallback asset. */
+            FILE *file = fopen(path, "wb");
+            if (!file) { u->error = PTC_UPDATE_ERROR_STORAGE; break; }
+            Download d = {u, file, NULL, 0, u->offer.size_bytes, 0, 0, false};
+            atomic_store(&u->progress, 0); u->source = source + 1;
+            ok = fetch(u, urls[source], &d, source);
+            if (fclose(file)) { u->error = PTC_UPDATE_ERROR_STORAGE; ok = false; }
+            if (ok || u->error) break;
+        }
+        if (ok) {
+            ok = u->fs.io.commit(&u->fs);
+            if (!ok) u->error = PTC_UPDATE_ERROR_STORAGE;
+            else {
+                ok = ptc_online_update_package(u);
+                if (!ok && !u->error) u->error = PTC_UPDATE_ERROR_PACKAGE;
+            }
+        }
         if (ok) u->status = PTC_UPDATE_BACKUP_PENDING;
     }
     if (curl) curl_global_cleanup();
@@ -180,6 +212,7 @@ bool ptc_online_update_record(PtcOnlineUpdater *u, const char *state)
     cJSON_AddStringToObject(o, "request_id", u->journal.request_id);
     cJSON_AddStringToObject(o, "target_version", u->journal.target_version[0] ? u->journal.target_version : u->offer.version);
     cJSON_AddStringToObject(o, "state", state);
+    cJSON_AddStringToObject(o, "download_source", u->source == 2 ? "github" : (u->source == 1 ? "gitee" : "unknown"));
     cJSON_AddNumberToObject(o, "created_at", (double)u->journal.created_at);
     cJSON_AddNumberToObject(o, "error", u->error);
     cJSON_AddNumberToObject(o, "curl_result", (double)u->network_result);

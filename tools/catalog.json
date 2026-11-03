@@ -2,7 +2,7 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-25",
   "scope": "playwise/tools",
-  "script_count": 72,
+  "script_count": 73,
   "scripts": [
     {
       "path": "automation/eden_dock_flow.py",
@@ -414,6 +414,11 @@
       "path": "compat/run_archived.py",
       "category": "compat",
       "purpose": "显式适配封存Python脚本旧导入；不改原件、不授权设备重放"
+    },
+    {
+      "path": "build/sync_gitee_releases.py",
+      "category": "build",
+      "purpose": "GitHub/Gitee发行附件镜像、摘要验证与双通道更新清单发布"
     }
   ],
   "directories": [
