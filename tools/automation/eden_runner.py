@@ -601,7 +601,10 @@ class Suite:
         return value
 
     def wait_input(self, active: bool, after: dict | None = None) -> dict:
-        sampling_budget = 20 if self.suite in ("input", "input-hold") else 5
+        # After up has been sent, waiting longer for a real neutral guest sample
+        # does not hold the input longer. Never extend ordinary down sampling.
+        release_observation = not active and after is not None
+        sampling_budget = 20 if release_observation or self.suite in ("input", "input-hold") else 5
         deadline = min(self.deadline, time.monotonic() + sampling_budget)
         while time.monotonic() < deadline:
             try:

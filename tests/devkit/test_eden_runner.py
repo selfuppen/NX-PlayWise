@@ -669,6 +669,44 @@ def test_action_across_independent_stream_timings() -> None:
                 rejected(lambda: suite.wait_input(False, after=active))
 
 
+def test_delayed_release_observation_keeps_one_up_and_down_sampling_bound() -> None:
+    class Client:
+        def __init__(self):
+            self.calls = []
+        def tool(self, name, arguments=None):
+            self.calls.append((name, arguments))
+            return {"running": True, "backend": "eden-control", "pid": 1,
+                    "launch": {"target_reached": True, "phase": "game_ready"}}
+    neutral = {"instance": "a", "input_stream_version": 1, "input_sampling_version": 2,
+               "input_sequence": 20, "input_active": False}
+    active = {**neutral, "input_sequence": 21, "input_active": True}
+    released = {**neutral, "input_sequence": 22}
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory); client = Client()
+        suite = Suite(client, root, root, {}, 60, "main")
+        def sampled(expected, after=None):
+            if expected:
+                return active
+            assert client.calls[-1][1]["action"] == "up"
+            return Suite.wait_input(suite, expected, after)
+        with patch.object(suite, "wait_action_ready", return_value=neutral), \
+                patch.object(suite, "wait_input", side_effect=sampled), \
+                patch.object(suite, "observe_input", side_effect=[active, released]), \
+                patch("tools.automation.eden_runner.time.monotonic", side_effect=[0, 0, 0.2, 1, 1, 13]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            suite.action(button="Y")
+        assert [args["action"] for name,args in client.calls if name=="eden_press_button"] == ["down", "up"]
+    for expected, after, ticks, value in ((True,neutral,[0,0,5.01],neutral),
+                                          (False,active,[0,0,20.01],active)):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); suite=Suite(None,root,root,{},60,"main")
+            with patch.object(suite,"observe_input",return_value=value), \
+                    patch("tools.automation.eden_runner.time.monotonic",side_effect=ticks), \
+                    patch("tools.automation.eden_runner.time.sleep"):
+                rejected(lambda:suite.wait_input(expected,after))
+            assert not (root/"input-samples").exists()
+
+
 def test_readonly_status_overlap_preserves_business_gate() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -711,6 +749,7 @@ def main() -> None:
     test_input_evidence_roundtrip()
     test_independent_input_while_presentation_blocked()
     test_action_across_independent_stream_timings()
+    test_delayed_release_observation_keeps_one_up_and_down_sampling_bound()
     test_readonly_status_overlap_preserves_business_gate()
     print("PASS: Eden input/exit gates, stdio failures, identity and evidence roundtrip")
 
