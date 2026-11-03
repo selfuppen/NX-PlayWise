@@ -71,6 +71,9 @@ def render(kind: str, scope: str, directory: Path, *, jobs: int = 8, force: bool
     cache.unlink(missing_ok=True)
     env = os.environ.copy()
     env.pop("PLAYWISE_PREVIEW_FILES", None)
+    # The fixed epoch in preview headers is 08:16 at UTC+08:00. Use a POSIX
+    # offset so localtime() is deterministic without requiring a tzdata package.
+    env["TZ"] = "UTC-8"
     # Two independent Make recipes may render concurrently. Each renderer
     # forks at most three languages, within the requested shared budget.
     env["PLAYWISE_PREVIEW_WORKERS"] = str(max(1, jobs // 2))

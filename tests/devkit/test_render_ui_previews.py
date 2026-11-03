@@ -30,6 +30,7 @@ def test_selection_and_cache() -> None:
             assert check
             calls.append((command, env))
             assert env["PLAYWISE_PREVIEW_WORKERS"] == "1"
+            assert env["TZ"] == "UTC-8", "preview clock must not inherit the runner timezone"
             for name in env["PLAYWISE_PREVIEW_FILES"].splitlines():
                 path = Path(name)
                 if "overlay" in path.parts:
@@ -40,7 +41,8 @@ def test_selection_and_cache() -> None:
         def render(scope: str = "docs-zh", **kwargs: bool) -> int:
             return preview.render("nro", scope, directory, renderer=binary, font=font, jobs=1, **kwargs)
 
-        with mock.patch.object(preview.subprocess, "run", side_effect=run):
+        with mock.patch.dict(preview.os.environ, {"TZ": "UTC0"}), \
+                mock.patch.object(preview.subprocess, "run", side_effect=run):
             expected = sum(not name.startswith("overlay/") for name in preview.PREVIEW_FILES)
             assert render() == expected and len(calls) == 1
             first = json.loads((directory / ".nro-render.json").read_text(encoding="utf-8"))

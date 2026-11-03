@@ -127,7 +127,7 @@ Upstream research order is: repository documentation and protocol specs, vendore
 
 ## CI & Deployment Status
 
-GitHub Actions CI runs `make test` (Host C/C++ and Python regressions), renders UI previews, and compares decoded pixels with committed documentation images (independent of zlib encoder versions) using `sync_doc_previews.py --check`. Pages deploys the Parent Web App separately. Host compilation explicitly enables `-Wformat -Wformat-security` with warnings treated as errors: copy translated text using a fixed `"%s"`; use a translation as a format only when supplying its parameters. The full Switch NRO, Overlay, sysmodule, and package gates still run in the maintainer's devkitPro environment. CI or Pages success does not qualify a Switch candidate package.
+GitHub Actions CI runs `make test` (Host C/C++ and Python regressions), renders UI previews, and compares decoded pixels with committed documentation images (independent of zlib encoder versions, with previews fixed to UTC+08:00) using `sync_doc_previews.py --check`. Pages deploys the Parent Web App separately. Host compilation explicitly enables `-Wformat -Wformat-security` with warnings treated as errors: copy translated text using a fixed `"%s"`; use a translation as a format only when supplying its parameters. The full Switch NRO, Overlay, sysmodule, and package gates still run in the maintainer's devkitPro environment. CI or Pages success does not qualify a Switch candidate package.
 
 ## Real Device Verification
 
