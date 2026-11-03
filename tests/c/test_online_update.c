@@ -146,6 +146,20 @@ static void versions(void)
     assert(ptc_update_url_allowed(PTC_UPDATE_REPO_URL));
     assert(ptc_update_url_for("https://raw.giteeusercontent.com/selfuppen/nx-playwise/raw/update-feed/updates.json?signature=a", 0, false, true));
     assert(!ptc_update_url_for(PTC_UPDATE_FALLBACK_URL, 0, false, true));
+    const char *gitee_redirects[] = {
+        "https://gitee.com/selfuppen/nx-playwise/attach_files/3580057/download/playwise-3.0.2.zip",
+        "https://foruda.gitee.com/attach_file/1793690895109930364/playwise-3.0.2.zip?token=test&ts=1&attname=a.zip"
+    };
+    for (unsigned i = 0; i < sizeof(gitee_redirects) / sizeof(gitee_redirects[0]); ++i) {
+        assert(ptc_update_url_for(gitee_redirects[i], 0, true, true));
+        assert(!ptc_update_url_for(gitee_redirects[i], 0, true, false));
+        assert(!ptc_update_url_for(gitee_redirects[i], 1, true, true));
+        assert(!ptc_update_url_for(gitee_redirects[i], 0, false, true));
+    }
+    assert(!ptc_update_url_allowed("https://foruda.gitee.com.evil/attach_file/1/a.zip"));
+    assert(!ptc_update_url_allowed("https://foruda.gitee.com/other/1/a.zip"));
+    assert(!ptc_update_url_allowed("https://foruda.gitee.com/attach_file/../other/a.zip"));
+    assert(!ptc_update_url_allowed("https://gitee.com/selfuppen/other/attach_files/1/download/a.zip"));
     assert(!ptc_update_url_for("https://gitee.com/selfuppen/other/releases/download/v1/a.zip", 0, true, false));
     assert(!ptc_update_url_allowed("https://gitee.com.evil/selfuppen/nx-playwise/releases/download/v1/a.zip"));
     assert(!ptc_update_url_allowed("https://gitee.com@evil/selfuppen/nx-playwise/releases/download/v1/a.zip"));

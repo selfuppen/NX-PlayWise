@@ -214,6 +214,19 @@ class MirrorTests(unittest.TestCase):
         request.add_header("Authorization", "Bearer secret")
         with self.assertRaises(SyncError):
             handler.redirect_request(request, None, 302, "", {}, "https://github.com/x")
+        first = "https://gitee.com/selfuppen/nx-playwise/attach_files/3580057/download/playwise-3.0.2.zip"
+        cdn = "https://foruda.gitee.com/attach_file/1793690895109930364/playwise-3.0.2.zip?token=test&ts=1"
+        gitee_request = urllib.request.Request(public_url("gitee", "v3.0.2", "playwise-3.0.2.zip"))
+        next_request = handler.redirect_request(gitee_request, None, 302, "", {}, first)
+        self.assertEqual(handler.redirect_request(next_request, None, 302, "", {}, cdn).full_url, cdn)
+        for url in ("https://foruda.gitee.com.evil/attach_file/1/a.zip", "https://foruda.gitee.com/other/1/a.zip",
+                    "https://foruda.gitee.com:444/attach_file/1/a.zip", "https://github.com/x"):
+            with self.assertRaises(SyncError):
+                handler.redirect_request(next_request, None, 302, "", {}, url)
+        for blocked in (urllib.request.Request(first, headers={"Authorization": "Bearer secret"}),
+                        urllib.request.Request(first, data=b"access_token=secret", method="POST")):
+            with self.assertRaises(SyncError):
+                handler.redirect_request(blocked, None, 302, "", {}, cdn)
 
     def test_real_api_upload_form_and_error_redaction(self) -> None:
         api = Api("github-secret", "gitee-secret")

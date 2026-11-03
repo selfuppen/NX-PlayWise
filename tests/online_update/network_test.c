@@ -69,7 +69,8 @@ int curl_easy_perform(CURL *c)
 {
     ++requests;
     if (scenario == 3) return 51; /* Certificate verification failed. */
-    bool redirect = requests == 1 && (scenario == 1 || scenario == 4 || scenario == 6 || scenario == 13 || scenario == 24);
+    bool redirect = (requests == 1 && (scenario == 1 || scenario == 4 || scenario == 6 || scenario == 13 || scenario == 24 || scenario == 28)) ||
+        (scenario == 27 && requests <= 2);
     c->response = redirect ? 301 : ((scenario == 2 || scenario == 22 || ((scenario == 10) && requests == 1)) ? 404 : 200);
     char header[64]; snprintf(header, sizeof(header), "HTTP/1.1 %ld status\r\n", c->response);
     assert(c->header(header, 1, strlen(header), c->header_data) == strlen(header));
@@ -88,8 +89,11 @@ int curl_easy_getinfo(CURL *c, int info, ...)
 {
     va_list args; va_start(args, info);
     if (info == CURLINFO_RESPONSE_CODE) *va_arg(args, long *) = c->response;
-    if (info == CURLINFO_REDIRECT_URL) *va_arg(args, char **) = scenario == 6 ? "https://other.invalid/package" : ((scenario == 13 || scenario == 24) ? PTC_UPDATE_FALLBACK_URL :
-        "https://raw.giteeusercontent.com/selfuppen/nx-playwise/raw/update-feed/updates.json?signature=test");
+    if (info == CURLINFO_REDIRECT_URL) *va_arg(args, char **) = scenario == 27 ? (requests == 1 ?
+        "https://gitee.com/selfuppen/nx-playwise/attach_files/3580057/download/playwise-3.0.2.zip" :
+        "https://foruda.gitee.com/attach_file/1793690895109930364/playwise-3.0.2.zip?token=test&ts=1") :
+        (scenario == 28 ? "https://foruda.gitee.com.evil/attach_file/1/a.zip" : scenario == 6 ? "https://other.invalid/package" : ((scenario == 13 || scenario == 24) ? PTC_UPDATE_FALLBACK_URL :
+        "https://raw.giteeusercontent.com/selfuppen/nx-playwise/raw/update-feed/updates.json?signature=test"));
     va_end(args); return 0;
 }
 
@@ -165,7 +169,7 @@ int main(int argc, char **argv)
         assert(requests == (scenario == 0 || scenario == 5 || scenario == 9 ? 1 : 2));
         ptc_online_update_exit(&u); assert(!resources);
     }
-    for (scenario = 20; scenario <= 26; ++scenario) {
+    for (scenario = 20; scenario <= 28; ++scenario) {
         PtcStorageVTable vtable = {0}; vtable.read_text = read_text; vtable.list_json = empty_queue; PtcStorage storage = {&vtable, NULL};
         PtcOnlineUpdater u; char root[512]; snprintf(root, sizeof(root), "%s/download-%d", argv[1], scenario);
         ptc_online_update_init_at(&u, &storage, root); assert(ptc_update_offer_parse(body, &u.offer));
@@ -175,14 +179,16 @@ int main(int argc, char **argv)
         u.status = PTC_UPDATE_AVAILABLE;
         requests = resources = 0; validations = 0; ticks = 0;
         assert(ptc_online_update_start(&u, 2)); assert(ptc_online_update_poll(&u));
-        if (scenario == 20 || scenario == 21 || scenario == 24) {
+        if (scenario == 20 || scenario == 21 || scenario == 24 || scenario == 27 || scenario == 28) {
             assert(u.status == PTC_UPDATE_BACKUP_PENDING && validations == 1);
-            assert(u.source == (scenario == 20 ? 1u : 2u));
+            assert(u.source == (scenario == 20 || scenario == 27 ? 1u : 2u));
         } else if (scenario == 23) assert(u.status == PTC_UPDATE_CANCELED && !validations);
         else assert(u.status == PTC_UPDATE_FAILED);
         if (scenario == 25) assert(requests == 1 && validations == 1);
         if (scenario == 26) assert(requests == 1 && !validations && u.error == PTC_UPDATE_ERROR_PACKAGE);
         if (scenario == 21 || scenario == 22 || scenario == 24) assert(requests == 2);
+        if (scenario == 27) assert(requests == 3);
+        if (scenario == 28) assert(requests == 2);
         ptc_online_update_exit(&u); assert(!resources);
     }
     pending_reopen(argv[1]);

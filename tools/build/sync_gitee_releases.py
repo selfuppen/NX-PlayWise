@@ -105,9 +105,12 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Any:
         old, new = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(newurl)
         # API credentials never follow a redirect. Downloads are anonymous.
-        allowed = {"github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"} if old.hostname in {
-            "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"} else {"gitee.com", "raw.giteeusercontent.com"}
-        if req.get_method() != "GET" or req.has_header("Authorization") or new.scheme != "https" or new.hostname not in allowed or new.username or new.password:
+        github = {"github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+        gitee = {"gitee.com", "raw.giteeusercontent.com", "foruda.gitee.com"}
+        allowed = github if old.hostname in github else gitee if old.hostname in gitee else set()
+        if (req.get_method() != "GET" or req.has_header("Authorization") or new.scheme != "https"
+                or new.hostname not in allowed or new.username or new.password or new.port not in (None, 443)
+                or (new.hostname == "foruda.gitee.com" and not new.path.startswith("/attach_file/"))):
             raise SyncError("unexpected network redirect")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 

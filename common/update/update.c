@@ -181,7 +181,9 @@ bool ptc_update_url_for(const char *url, unsigned source, bool package, bool red
         return !strcmp(url, PTC_UPDATE_FALLBACK_URL);
     }
     if (!source) return prefix(url, "https://gitee.com/selfuppen/nx-playwise/releases/download/") ||
-        (redirect && prefix(url, "https://gitee.com/attachments/download/"));
+        (redirect && (prefix(url, "https://gitee.com/attachments/download/") ||
+                      prefix(url, "https://gitee.com/selfuppen/nx-playwise/attach_files/") ||
+                      prefix(url, "https://foruda.gitee.com/attach_file/")));
     return prefix(url, "https://github.com/selfuppen/NX-PlayWise/releases/download/") ||
         (redirect && (prefix(url, "https://release-assets.githubusercontent.com/github-production-release-asset/") ||
                       prefix(url, "https://objects.githubusercontent.com/github-production-release-asset-2e65be/")));
