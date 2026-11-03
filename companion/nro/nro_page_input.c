@@ -7,7 +7,7 @@ static void handle_weekly_page_input(UiState *ui, u64 down)
         if (down) {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_WEEKLY_PLAN_IS));
+                     "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_WEEKLY_PLAN_IS));
         }
     } else if (down & HidNpadButton_B) {
         ptc_audio_play(PTC_SE_CANCEL);
@@ -54,22 +54,22 @@ static void handle_weekly_page_input(UiState *ui, u64 down)
         if (ui->model.selected_index == 2) {
             if (weekly_editing_blocked(ui)) {
                 ptc_audio_play(PTC_SE_ERROR);
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_BATCH_OPERATIONS_ARE));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_BATCH_OPERATIONS_ARE));
             } else {
                 ptc_audio_play(PTC_SE_CONFIRM);
                 ui->model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
                 ui->model.overlay_selection = 0;
-                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_BATCH_QUICK_OPERATIONS));
-                snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_DRAFT_RULE_FOR_THE));
+                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_BATCH_QUICK_OPERATIONS));
+                snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_DRAFT_RULE_FOR_THE));
             }
         } else if (ui->model.selected_index == 3) {
             ptc_audio_play(PTC_SE_CANCEL);
             if (ui->model.weekly_dirty) {
                 memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
                 ui->model.weekly_dirty = false;
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
             } else {
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
             }
         } else if (weekly_editing_blocked(ui)) {
             /* Focus remains movable while emergency stop makes the editor read-only. */
@@ -91,7 +91,7 @@ static void handle_weekly_page_input(UiState *ui, u64 down)
         } else {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_THIS_DAY_IS_UNLIMITED_SELECT_CHANGE_MODE));
+                     "%s", ptc_ui_text(PTC_UI_T_THIS_DAY_IS_UNLIMITED_SELECT_CHANGE_MODE));
         }
     } else if (down & HidNpadButton_Plus) {
         ui->model.selected_index = 4;
@@ -107,9 +107,9 @@ static void handle_weekly_page_input(UiState *ui, u64 down)
         if (ui->model.weekly_dirty) {
             memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
             ui->model.weekly_dirty = false;
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
         } else {
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
         }
     }
 }
@@ -121,7 +121,7 @@ static void handle_bedtime_page_input(UiState *ui, u64 down)
         if (down) {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_BEDTIME_SETTINGS_ARE));
+                "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_BEDTIME_SETTINGS_ARE));
         }
     } else if (down & HidNpadButton_B) {
         ptc_audio_play(PTC_SE_CANCEL);
@@ -214,9 +214,9 @@ static void handle_bedtime_page_input(UiState *ui, u64 down)
                 ptc_audio_play(PTC_SE_CONFIRM);
                 ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;
                 ui->model.overlay_selection = ui->model.selected_index - 7;
-                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW));
+                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW));
                 snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                    ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_SWITCHES_AND_TIME_OF));
+                    "%s", ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_SWITCHES_AND_TIME_OF));
             } else if (ui->model.selected_index == 9) {
                 ptc_audio_play(PTC_SE_CANCEL);
                 discard_bedtime_draft(ui);
@@ -341,7 +341,7 @@ static void handle_eye_care_page_input(UiState *ui, u64 down)
         if (down) {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
+                     "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
         }
     } else if (down & HidNpadButton_B) {
         ptc_audio_play(PTC_SE_CANCEL);
@@ -491,7 +491,7 @@ static void handle_parent_page_input(UiState *ui, u64 down)
         if (down) {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_NATIONAL_HOLIDAY_SETTINGS));
+                     "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_NATIONAL_HOLIDAY_SETTINGS));
         }
     } else if (down & HidNpadButton_B) {
         ptc_audio_play(PTC_SE_CANCEL);
@@ -526,7 +526,7 @@ static void handle_parent_page_input(UiState *ui, u64 down)
                ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
         if (ui->model.disable_flag_present) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
         } else if (ui->model.selected_index == 1 ||
                    (ui->model.selected_index != 2 && ui->model.holiday_last_rule == 0)) {
             ptc_audio_play(PTC_SE_TOGGLE);
@@ -552,7 +552,7 @@ static void handle_parent_page_input(UiState *ui, u64 down)
     } else if (down & HidNpadButton_A) {
         if (ui->waiting && !ptc_ui_parent_read_only_action(&ui->model, ui->model.selected_index)) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
         } else if (ui->model.parent_footer_focused) {
             ptc_audio_play(PTC_SE_CONFIRM);
             activate_parent_status(ui);
@@ -591,7 +591,7 @@ bool handle_page_input(UiState *ui, u64 down, u64 held,
         } else if (down & HidNpadButton_A) {
             if (ui->waiting) {
                 ptc_audio_play(PTC_SE_ERROR);
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_CURRENT_OPERATION_TO));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_CURRENT_OPERATION_TO));
             } else {
                 ptc_audio_play(PTC_SE_CONFIRM);
                 open_offline_code_input(ui);
@@ -608,7 +608,7 @@ bool handle_page_input(UiState *ui, u64 down, u64 held,
         } else if (down & HidNpadButton_X) {
             if (ui->model.disable_flag_present) {
                 ptc_audio_play(PTC_SE_ERROR);
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_CONTROL_HAS_BEEN_DEACTIVATED_AND_AUTONOMOUS_BUFFERING));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_CONTROL_HAS_BEEN_DEACTIVATED_AND_AUTONOMOUS_BUFFERING));
             } else if (ui->model.daily_buffer_available && !ui->waiting) {
                 ptc_audio_play(PTC_SE_CLAIM_BUFFER);
                 submit_transport_empty(ui, "claim_daily_buffer",
@@ -616,11 +616,11 @@ bool handle_page_input(UiState *ui, u64 down, u64 held,
             } else if (ui->model.daily_buffer_claimed) {
                 ptc_audio_play(PTC_SE_ERROR);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    ptc_ui_text(PTC_UI_T_THE_BUFFER_HAS_BEEN_USED_TODAY_AND));
+                    "%s", ptc_ui_text(PTC_UI_T_THE_BUFFER_HAS_BEEN_USED_TODAY_AND));
             } else {
                 ptc_audio_play(PTC_SE_ERROR);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    ptc_ui_text(PTC_UI_T_THERE_ARE_NO_AUTONOMOUS_BUFFERS_TO_CLAIM));
+                    "%s", ptc_ui_text(PTC_UI_T_THERE_ARE_NO_AUTONOMOUS_BUFFERS_TO_CLAIM));
             }
         }
     } else if (ui->model.view == PTC_UI_SETUP) {

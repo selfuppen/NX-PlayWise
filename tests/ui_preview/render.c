@@ -756,13 +756,13 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             model.draft_bedtime_policy = rules.bedtime;
             model.redemption_history_available = model.activity_history_available = true;
             snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", titles[overlay]);
-            snprintf(model.numpad_title, sizeof(model.numpad_title), ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE));
+            snprintf(model.numpad_title, sizeof(model.numpad_title), "%s", ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE));
             snprintf(model.numpad_text, sizeof(model.numpad_text), "1234");
-            snprintf(model.pin_title, sizeof(model.pin_title), ptc_ui_text(PTC_UI_T_ENTER_PARENT_PIN));
-            snprintf(model.pin_guide, sizeof(model.pin_guide), ptc_ui_text(PTC_UI_T_CONTINUE_CURRENT_OPERATION_AFTER_VERIFICATION));
+            snprintf(model.pin_title, sizeof(model.pin_title), "%s", ptc_ui_text(PTC_UI_T_ENTER_PARENT_PIN));
+            snprintf(model.pin_guide, sizeof(model.pin_guide), "%s", ptc_ui_text(PTC_UI_T_CONTINUE_CURRENT_OPERATION_AFTER_VERIFICATION));
             snprintf(model.pin_text, sizeof(model.pin_text), "1234");
-            snprintf(model.auth_error_title, sizeof(model.auth_error_title), ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT));
-            snprintf(model.auth_error_message, sizeof(model.auth_error_message), ptc_ui_text(PTC_UI_T_PLEASE_CHECK_AND_RE_ENTER));
+            snprintf(model.auth_error_title, sizeof(model.auth_error_title), "%s", ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT));
+            snprintf(model.auth_error_message, sizeof(model.auth_error_message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_CHECK_AND_RE_ENTER));
             snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
             model.demo_secret_enabled = true;
             if (!ptc_build_pairing_url("kid-switch", PTC_DEMO_GRANT_SECRET, model.pairing_url, sizeof(model.pairing_url)) ||
@@ -799,12 +799,12 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
                 model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
                 if (state == 0) {
                     model.status_loaded = model.remaining_available = model.played_minutes_available = model.forecast_available = false;
-                    snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_WAITING_TO_READ_CONSOLE_STATUS));
+                    snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_WAITING_TO_READ_CONSOLE_STATUS));
                 }
                 if (state == 1) model.remaining_minutes = 0;
                 if (state == 2) { model.unrestricted_today = 1; model.limited_today = 0; }
                 if (state == 3) model.status_updated_at = 879;
-                if (state == 4) { model.waiting = true; snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT)); }
+                if (state == 4) { model.waiting = true; snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT)); }
                 if (state == 5) { model.remaining_minutes = 1440; model.played_minutes = 0; model.forecast[0].minutes = 1440; }
                 snprintf(name, sizeof(name), "matrix-%s-state-%d", parent ? "parent" : "child", state);
                 failed |= save_preview(directory, "matrix", name, &model, dark != 0);
@@ -831,8 +831,8 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             if (state == 5) {
                 details.disable_flag_present = true;
                 snprintf(details.result_status, sizeof(details.result_status), "error");
-                snprintf(details.message, sizeof(details.message), ptc_ui_text(PTC_UI_T_SETUP_INCOMPLETE_PLEASE_WAIT_FOR_STATUS_SYNC));
-                snprintf(details.feedback_detail, sizeof(details.feedback_detail), ptc_ui_text(PTC_UI_T_DO_NOT_RESUBMIT_STATUS_REFRESH_AND_DIAGNOSTICS));
+                snprintf(details.message, sizeof(details.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_INCOMPLETE_PLEASE_WAIT_FOR_STATUS_SYNC));
+                snprintf(details.feedback_detail, sizeof(details.feedback_detail), "%s", ptc_ui_text(PTC_UI_T_DO_NOT_RESUBMIT_STATUS_REFRESH_AND_DIAGNOSTICS));
             }
             ptc_ui_open_home_details(&details);
             snprintf(name, sizeof(name), "details-special-%d", state);
@@ -841,7 +841,7 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         PtcUiModel model = *baseline;
         model.view = PTC_UI_ERROR;
         model.error_code = 306;
-        snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_SYSTEM_ENVIRONMENT_CHANGED_PARENT_RE_CHECK_REQUIRED));
+        snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SYSTEM_ENVIRONMENT_CHANGED_PARENT_RE_CHECK_REQUIRED));
         failed |= save_preview(directory, "error", "error-page", &model, dark != 0);
     }
     return failed;
@@ -1131,7 +1131,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             direct.draft_minutes = 15;
             direct.played_minutes = 100;
             direct.usage_ns = UINT64_C(6059000000000);
-            snprintf(direct.overlay_title, sizeof(direct.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT));
+            snprintf(direct.overlay_title, sizeof(direct.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT));
             failed |= save_preview(directory, "parent", "direct-grant-overrun", &direct, dark);
             direct.forecast[0].minutes = 1435;
             direct.remaining_minutes = direct.displayed_remaining_minutes = 1334;
@@ -1157,7 +1157,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             notice_model.view = PTC_UI_PARENT;
             notice_model.parent_page = PTC_UI_PARENT_TODAY;
             notice_model.waiting = true;
-            snprintf(notice_model.message, sizeof(notice_model.message), ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT));
+            snprintf(notice_model.message, sizeof(notice_model.message), "%s", ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT));
             failed |= save_preview(directory, "parent", "parent-notice-waiting", &notice_model, dark);
             notice_model = baseline;
             notice_model.view = PTC_UI_PARENT;
@@ -1168,10 +1168,10 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             notice_model.view = PTC_UI_PARENT;
             notice_model.parent_page = PTC_UI_PARENT_TODAY;
             snprintf(notice_model.result_status, sizeof(notice_model.result_status), "error");
-            snprintf(notice_model.command_name, sizeof(notice_model.command_name), ptc_ui_text(PTC_UI_T_SET_TODAY_S_TOTAL_QUOTA));
-            snprintf(notice_model.message, sizeof(notice_model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_TODAY_LIMIT_CHECK_AND));
+            snprintf(notice_model.command_name, sizeof(notice_model.command_name), "%s", ptc_ui_text(PTC_UI_T_SET_TODAY_S_TOTAL_QUOTA));
+            snprintf(notice_model.message, sizeof(notice_model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_TODAY_LIMIT_CHECK_AND));
             snprintf(notice_model.feedback_detail, sizeof(notice_model.feedback_detail),
-                     ptc_ui_text(PTC_UI_T_DRAFT_RETAINED_REFRESH_STATUS_FIRST_OR_CHECK));
+                     "%s", ptc_ui_text(PTC_UI_T_DRAFT_RETAINED_REFRESH_STATUS_FIRST_OR_CHECK));
             failed |= save_preview(directory, "parent", "parent-notice-failed", &notice_model, dark);
             if (!ptc_ui_open_notice_details(&notice_model)) return 1;
             failed |= save_preview(directory, "parent", "parent-notice-details", &notice_model, dark);
@@ -1238,7 +1238,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.grant_minutes = 20;
         model.grant_max_minutes = 240;
         model.grant_has_code = false;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_NATIVELY_GENERATES_8_BIT_PLUS_TIME_CODE));
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_NATIVELY_GENERATES_8_BIT_PLUS_TIME_CODE));
         failed |= save_preview(directory, "grant", "grant-empty", &model, dark);
         model.overlay_selection = PTC_UI_GRANT_LOCAL_ADJUST_FIRST;
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_GRANT_MINUTES, PTC_UI_OVERLAY_GRANT_LOCAL,
@@ -1266,7 +1266,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.grant_estimate_minutes = 71;
         model.grant_estimate_capped = false;
         model.grant_status_refresh_failed = true;
-        snprintf(model.grant_notice, sizeof(model.grant_notice), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PLEASE_GO_BACK_AND));
+        snprintf(model.grant_notice, sizeof(model.grant_notice), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PLEASE_GO_BACK_AND));
         failed |= save_preview(directory, "grant", "grant-error", &model, dark);
         model.grant_status_refresh_failed = false;
         model.grant_notice[0] = '\0';
@@ -1288,7 +1288,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.code_preview_after_minutes = 56;
         model.code_effective_add_minutes = 5;
         model.code_preview_capped = true;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_PLAYTIME_GRANT));
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_PLAYTIME_GRANT));
         failed |= save_preview(directory, "redeem", "redeem-confirm", &model, dark);
         model.confirm_hold_required = true;
         model.code_preview_after_minutes = 0;
@@ -1340,14 +1340,14 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         ptc_ui_cancel_overlay(&model);
         model.overlay = PTC_UI_OVERLAY_CONFIRM;
         model.confirm_hold_required = true;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_MAY_BE_RESTRICTED_IMMEDIATELY_AFTER_SETTING));
-        snprintf(model.overlay_body, sizeof(model.overlay_body), ptc_ui_text(PTC_UI_T_TOTAL_DAILY_QUOTA_INCLUDES_PLAYTIME_ALREADY_USED));
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_MAY_BE_RESTRICTED_IMMEDIATELY_AFTER_SETTING));
+        snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_TOTAL_DAILY_QUOTA_INCLUDES_PLAYTIME_ALREADY_USED));
         failed |= save_preview(directory, "parent", "confirmation", &model, dark);
         {
             PtcUiModel positive = model;
             positive.draft_minutes = 150;
             positive.confirm_hold_required = false;
-            snprintf(positive.overlay_title, sizeof(positive.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_TODAY_LIMIT));
+            snprintf(positive.overlay_title, sizeof(positive.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_TODAY_LIMIT));
             failed |= save_preview(directory, "parent", "quota-positive-confirm", &positive, dark);
             positive.quota_refresh_failed = true;
             failed |= save_preview(directory, "parent", "quota-refresh-failed", &positive, dark);
@@ -1356,15 +1356,15 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             quick_add.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
             quick_add.draft_minutes = 30;
             quick_add.confirm_hold_required = false;
-            snprintf(quick_add.overlay_title, sizeof(quick_add.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT));
-            snprintf(quick_add.overlay_body, sizeof(quick_add.overlay_body), ptc_ui_text(PTC_UI_T_VERIFY_REMAINING_TIME_BEFORE_INCREASING_TODAY_LIMIT));
+            snprintf(quick_add.overlay_title, sizeof(quick_add.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT));
+            snprintf(quick_add.overlay_body, sizeof(quick_add.overlay_body), "%s", ptc_ui_text(PTC_UI_T_VERIFY_REMAINING_TIME_BEFORE_INCREASING_TODAY_LIMIT));
             failed |= save_preview(directory, "parent", "quick-add-confirm", &quick_add, dark);
 
             PtcUiModel unlimited = model;
             unlimited.operation = PTC_UI_OPERATION_DISABLE_TODAY_LIMIT;
             unlimited.confirm_hold_required = false;
-            snprintf(unlimited.overlay_title, sizeof(unlimited.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_UNLIMITED_TODAY));
-            snprintf(unlimited.overlay_body, sizeof(unlimited.overlay_body), ptc_ui_text(PTC_UI_T_NO_DAILY_PLAYTIME_LIMIT_FOR_TODAY));
+            snprintf(unlimited.overlay_title, sizeof(unlimited.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_UNLIMITED_TODAY));
+            snprintf(unlimited.overlay_body, sizeof(unlimited.overlay_body), "%s", ptc_ui_text(PTC_UI_T_NO_DAILY_PLAYTIME_LIMIT_FOR_TODAY));
             failed |= save_preview(directory, "parent", "unlimited-confirm", &unlimited, dark);
 
             PtcUiModel unchanged = model;
@@ -1372,8 +1372,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             unchanged.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
             unchanged.draft_minutes = current.rule.minutes;
             unchanged.confirm_hold_required = false;
-            snprintf(unchanged.overlay_title, sizeof(unchanged.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_TODAY_LIMIT));
-            snprintf(unchanged.overlay_body, sizeof(unchanged.overlay_body), ptc_ui_text(PTC_UI_T_INPUT_MATCHES_CURRENT_LIMIT));
+            snprintf(unchanged.overlay_title, sizeof(unchanged.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_TODAY_LIMIT));
+            snprintf(unchanged.overlay_body, sizeof(unchanged.overlay_body), "%s", ptc_ui_text(PTC_UI_T_INPUT_MATCHES_CURRENT_LIMIT));
             failed |= save_preview(directory, "parent", "quota-unchanged-confirm", &unchanged, dark);
         }
         ptc_ui_cancel_overlay(&model);
@@ -1412,7 +1412,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
             confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
             confirmation.confirm_hold_required = false;
-            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE_WEEKLY_PLAN));
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE_WEEKLY_PLAN));
             failed |= save_preview(directory, "plan", "weekly-confirm-other-day", &confirmation, dark);
         }
         model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 90;
@@ -1434,7 +1434,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
             confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
             confirmation.confirm_hold_required = false;
-            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), ptc_ui_text(PTC_UI_T_WEEKLY_PLANS_WILL_AFFECT_TODAY));
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "%s", ptc_ui_text(PTC_UI_T_WEEKLY_PLANS_WILL_AFFECT_TODAY));
             failed |= save_preview(directory, "plan", "weekly-confirm-change", &confirmation, dark);
         }
         model.scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
@@ -1446,7 +1446,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
             confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
             confirmation.confirm_hold_required = false;
-            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE_WEEKLY_PLAN));
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE_WEEKLY_PLAN));
             failed |= save_preview(directory, "plan", "weekly-confirm-covered", &confirmation, dark);
         }
         {
@@ -1457,7 +1457,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
             confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
             confirmation.confirm_hold_required = true;
-            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), ptc_ui_text(PTC_UI_T_WEEKLY_PLANS_WILL_AFFECT_TODAY));
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "%s", ptc_ui_text(PTC_UI_T_WEEKLY_PLANS_WILL_AFFECT_TODAY));
             failed |= save_preview(directory, "plan", "weekly-confirm-danger", &confirmation, dark);
             confirmation.status_updated_at = 879;
             failed |= save_preview(directory, "plan", "weekly-confirm-unknown", &confirmation, dark);
@@ -1481,12 +1481,12 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             failed |= save_preview(directory, "plan", "weekly-friday-duration-editor", &friday_editor, dark);
         }
         snprintf(model.result_status, sizeof(model.result_status), "error");
-        snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PLAN_CHANGES_RETAINED_CHECK));
+        snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PLAN_CHANGES_RETAINED_CHECK));
         model.error_code = 501;
         failed |= save_preview(directory, "plan", "plan-failed", &model, dark);
         model.error_code = 0;
         snprintf(model.result_status, sizeof(model.result_status), "ok");
-        snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_SAVED_PLAN_LOADED));
+        snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SAVED_PLAN_LOADED));
         model.parent_page = PTC_UI_PARENT_PLAN;
         model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
         model.holiday_rule = model.draft_holiday_rule = rules.holiday_rule;
@@ -1501,7 +1501,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             failed |= save_preview(directory, "holiday", "holiday-waiting", &panel_state, dark);
             panel_state = model;
             snprintf(panel_state.result_status, sizeof(panel_state.result_status), "error");
-            snprintf(panel_state.message, sizeof(panel_state.message), ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED_CHECK_AND_RETRY));
+            snprintf(panel_state.message, sizeof(panel_state.message), "%s", ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED_CHECK_AND_RETRY));
             panel_state.error_code = 501;
             failed |= save_preview(directory, "holiday", "holiday-failed", &panel_state, dark);
         }
@@ -1533,7 +1533,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
             confirmation.confirm_hold_required = false;
             snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title),
-                     ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTING_WILL_AFFECT_TODAY));
+                     "%s", ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTING_WILL_AFFECT_TODAY));
             failed |= save_preview(directory, "holiday", "holiday-confirm", &confirmation, dark);
         }
         model.disable_flag_present = true;
@@ -1584,30 +1584,30 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             danger.operation = PTC_UI_OPERATION_SAVE_BEDTIME;
             danger.confirm_hold_required = true;
             danger.overlay_selection = 1;
-            snprintf(danger.overlay_title, sizeof(danger.overlay_title), ptc_ui_text(PTC_UI_T_ENTER_BEDTIME_RESTRICTION_NOW));
+            snprintf(danger.overlay_title, sizeof(danger.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ENTER_BEDTIME_RESTRICTION_NOW));
             snprintf(danger.overlay_body, sizeof(danger.overlay_body),
-                ptc_ui_text(PTC_UI_T_THE_CURRENT_TIME_IS_INSIDE_THE_BEDTIME));
+                "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_TIME_IS_INSIDE_THE_BEDTIME));
             failed |= save_preview(directory, "bedtime", "bedtime-save-danger-confirm", &danger, dark);
         }
         snprintf(model.result_status, sizeof(model.result_status), "error");
-        snprintf(model.command_name, sizeof(model.command_name), ptc_ui_text(PTC_UI_T_SAVE_BEDTIME_SCHEDULE));
-        snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED_CHECK_AND_RETRY));
+        snprintf(model.command_name, sizeof(model.command_name), "%s", ptc_ui_text(PTC_UI_T_SAVE_BEDTIME_SCHEDULE));
+        snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED_CHECK_AND_RETRY));
         model.error_code = 501;
         failed |= save_preview(directory, "bedtime", "bedtime-feedback-error", &model, dark);
         model.error_code = 0;
         snprintf(model.result_status, sizeof(model.result_status), "ok");
-        snprintf(model.command_name, sizeof(model.command_name), ptc_ui_text(PTC_UI_T_REFRESH_STATUS));
-        snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_SAVED_PLAN_LOADED));
+        snprintf(model.command_name, sizeof(model.command_name), "%s", ptc_ui_text(PTC_UI_T_REFRESH_STATUS));
+        snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SAVED_PLAN_LOADED));
         model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
         model.bedtime_editor_day = 1;
         model.overlay_selection = 1;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_EDIT_WEEKLY_BEDTIME_WINDOWS));
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_EDIT_WEEKLY_BEDTIME_WINDOWS));
         snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT));
         failed |= save_preview(directory, "bedtime", "bedtime-window-input", &model, dark);
         model.overlay = PTC_UI_OVERLAY_BEDTIME_SPECIAL;
         model.bedtime_special_kind = 2;
         model.overlay_selection = 0;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_EDIT_SPECIFIC_DATE_BEDTIME_RULES));
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_EDIT_SPECIFIC_DATE_BEDTIME_RULES));
         snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
         model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_INHERIT;
         failed |= save_preview(directory, "bedtime", "bedtime-special-inherit", &model, dark);
@@ -1630,9 +1630,9 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             autonomy.overlay = PTC_UI_OVERLAY_AUTONOMY;
             autonomy.overlay_selection = 2;
             autonomy.draft_autonomy_policy.daily_buffer_minutes = 10;
-            snprintf(autonomy.overlay_title, sizeof(autonomy.overlay_title), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
+            snprintf(autonomy.overlay_title, sizeof(autonomy.overlay_title), "%s", ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
             snprintf(autonomy.overlay_body, sizeof(autonomy.overlay_body),
-                     ptc_ui_text(PTC_UI_T_CHILD_CAN_CLAIM_ONCE_DAILY_ON_LIMITED));
+                     "%s", ptc_ui_text(PTC_UI_T_CHILD_CAN_CLAIM_ONCE_DAILY_ON_LIMITED));
             failed |= save_preview(directory, "autonomy", "autonomy-policy", &autonomy, dark);
         }
         model.parent_page = PTC_UI_PARENT_PLAN;
@@ -1641,8 +1641,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.draft_scheduled_override.rule.minutes = 90;
         model.overlay = PTC_UI_OVERLAY_SCHEDULED;
         model.overlay_selection = 1;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA));
-        snprintf(model.overlay_body, sizeof(model.overlay_body), ptc_ui_text(PTC_UI_T_SCHEDULE_DAILY_LIMITS_FOR_A_DATE_RANGE));
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA));
+        snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_SCHEDULE_DAILY_LIMITS_FOR_A_DATE_RANGE));
         failed |= save_preview(directory, "scheduled", "scheduled-draft", &model, dark);
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_SCHEDULED_MINUTES, PTC_UI_OVERLAY_SCHEDULED,
             ptc_ui_text(PTC_UI_T_SET_THE_QUOTA_FOR_THE_SPECIFIED_DATE), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY), 4, 1, 1440, 90);
@@ -1795,7 +1795,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.recent_events_available = true;
         model.recent_event_count = 3;
         for (int i = 0; i < 3; ++i) {
-            snprintf(model.recent_events[i], sizeof(model.recent_events[i]), ptc_ui_text(PTC_UI_T_RULE_SAVE_INCOMPLETE_PLEASE_VIEW_DETAILS));
+            snprintf(model.recent_events[i], sizeof(model.recent_events[i]), "%s", ptc_ui_text(PTC_UI_T_RULE_SAVE_INCOMPLETE_PLEASE_VIEW_DETAILS));
             model.recent_event_timestamps[i] = 998;
         }
         failed |= save_preview(directory, "support", "support-failed", &model, dark);
@@ -1814,8 +1814,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
     model.remaining_minutes = 0;
     model.temporary_unlocked_available = model.temporary_unlocked = true;
     snprintf(model.result_status, sizeof(model.result_status), "error");
-    snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_SETUP_INCOMPLETE_PLEASE_WAIT_FOR_STATUS_SYNCHRONIZATION));
-    snprintf(model.feedback_detail, sizeof(model.feedback_detail), ptc_ui_text(PTC_UI_T_DO_NOT_SUBMIT_REPEATEDLY_REFRESH_AND_DIAGNOSTICS));
+    snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_INCOMPLETE_PLEASE_WAIT_FOR_STATUS_SYNCHRONIZATION));
+    snprintf(model.feedback_detail, sizeof(model.feedback_detail), "%s", ptc_ui_text(PTC_UI_T_DO_NOT_SUBMIT_REPEATEDLY_REFRESH_AND_DIAGNOSTICS));
     failed |= save_preview(directory, "child", "child-error", &model, false);
     failed |= save_preview(directory, "child", "child-error", &model, true);
     failed |= render_visual_matrix(directory, &baseline);

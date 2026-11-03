@@ -100,27 +100,27 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
     bool remaining_fresh = !model->code_result_failed && ptc_ui_status_is_fresh(model, ptc_ui_render_now());
     format_duration(model->code_actual_add_minutes, actual_value, sizeof(actual_value));
     if (model->code_result_pending) {
-        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRMING_GRANT_RESULT));
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING_GRANT_RESULT));
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
-                 ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMED_REDEMPTION_REQUEST_HAS_BEEN));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMED_REDEMPTION_REQUEST_HAS_BEEN));
     } else if (model->code_result_failed) {
-        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), ptc_ui_text(PTC_UI_T_GRANT_FAILED));
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_FAILED));
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
                  "%s", ptc_ui_code_failure_guidance(model->error_code));
     } else {
-        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), ptc_ui_text(PTC_UI_T_GRANT_SUCCESSFUL));
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_SUCCESSFUL));
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
-                 ptc_ui_text(PTC_UI_T_THIS_GRANT_CODE_HAS_BEEN_USED_AND));
+                 "%s", ptc_ui_text(PTC_UI_T_THIS_GRANT_CODE_HAS_BEEN_USED_AND));
     }
     draw_dialog_shell(pixels, stride, &shell_model, &dialog, 760, 420);
-    if (model->code_before_unlimited) snprintf(before_value, sizeof(before_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    if (model->code_before_unlimited) snprintf(before_value, sizeof(before_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(model->code_before_remaining_available ? model->code_before_remaining_minutes : -1,
                          before_value, sizeof(before_value));
     if (model->code_result_pending) {
         format_duration(model->code_preview_after_available ? model->code_preview_after_minutes : -1,
                         after_value, sizeof(after_value));
-    } else if (!remaining_fresh) snprintf(after_value, sizeof(after_value), ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
-    else if (model->unrestricted_today == 1) snprintf(after_value, sizeof(after_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    } else if (!remaining_fresh) snprintf(after_value, sizeof(after_value), "%s", ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
+    else if (model->unrestricted_today == 1) snprintf(after_value, sizeof(after_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(model->remaining_available ? model->remaining_minutes : -1,
                          after_value, sizeof(after_value));
     draw_time_state_card(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 142, 300, 92},
@@ -177,7 +177,7 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     if (model->auth_cooldown_seconds > 0) {
         snprintf(retry_label, sizeof(retry_label), ptc_ui_text(PTC_UI_T_WAIT_D_SECONDS), model->auth_cooldown_seconds);
     } else {
-        snprintf(retry_label, sizeof(retry_label), ptc_ui_text(PTC_UI_T_A_RE_ENTER));
+        snprintf(retry_label, sizeof(retry_label), "%s", ptc_ui_text(PTC_UI_T_A_RE_ENTER));
     }
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(model->auth_error_parent_entry ? PTC_UI_T_B_BACK : PTC_UI_T_B_CANCEL),
                        UI_RAISED, UI_INK, true);
@@ -252,7 +252,7 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
                 format_duration((int)record->remaining_after_minutes, value, sizeof(value));
                 snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_AFTER_REDEMPTION_S), value);
             } else {
-                snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_TEMPORARILY_UNAVAILABLE_AFTER_REDEMPTION));
+                snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_TEMPORARILY_UNAVAILABLE_AFTER_REDEMPTION));
             }
             snprintf(allowance, sizeof(allowance), ptc_ui_text(PTC_UI_T_CODE_U_MIN_CREDITED_U_MIN_S),
                      (unsigned int)record->grant_minutes,
@@ -357,13 +357,13 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
     int expected = reliable ? ptc_ui_grant_estimate_remaining(model, model->grant_minutes, &capped) : -1;
     uint16_t year; uint8_t month, day;
     PtcUiModel shell = *model;
-    snprintf(shell.overlay_body, sizeof(shell.overlay_body), ptc_ui_text(PTC_UI_T_CHOOSE_THE_DURATION_GENERATE_IT_AND_TELL));
+    snprintf(shell.overlay_body, sizeof(shell.overlay_body), "%s", ptc_ui_text(PTC_UI_T_CHOOSE_THE_DURATION_GENERATE_IT_AND_TELL));
     draw_dialog_shell(pixels, stride, &shell, &dialog, 920, 650);
-    if (reliable && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    if (reliable && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(reliable && model->remaining_available ? model->remaining_minutes : -1, remaining, sizeof(remaining));
     format_duration(expected, estimate, sizeof(estimate));
     format_status_age(model, freshness, sizeof(freshness));
-    if (model->grant_status_refresh_failed) snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_REFRESH_FAILED_REFRESH_AND_TRY_AGAIN_AFTER));
+    if (model->grant_status_refresh_failed) snprintf(freshness, sizeof(freshness), "%s", ptc_ui_text(PTC_UI_T_REFRESH_FAILED_REFRESH_AND_TRY_AGAIN_AFTER));
     snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_LEFT_TODAY_S), remaining, freshness);
     if (model->grant_notice[0]) snprintf(line, sizeof(line), "%s", model->grant_notice);
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 126, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
@@ -394,7 +394,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
         draw_text(pixels, stride, dialog.x + 54, dialog.y + 466, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
         if (ptc_date_from_day_index(model->grant_day_index, &year, &month, &day))
             snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_VALID_ON_U_02U_02U_ONE_USE), (unsigned)year, (unsigned)month, (unsigned)day);
-        else snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_THE_ISSUANCE_DATE_NEEDS_TO_BE_CONFIRMED));
+        else snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_THE_ISSUANCE_DATE_NEEDS_TO_BE_CONFIRMED));
         draw_text(pixels, stride, dialog.x + 54, dialog.y + 499, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
     } else {
         draw_text(pixels, stride, dialog.x + 54, dialog.y + 430, ptc_ui_text(PTC_UI_T_AFTER_SELECTING_THE_DURATION_PRESS_TO_GENERATE), 28, UI_RGB(UI_BLENDED(text_primary)));

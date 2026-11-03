@@ -431,7 +431,7 @@ public:
             std::memset(&bridge_->summary, 0, sizeof(bridge_->summary));
             bridge_->summary.valid = true;
             std::snprintf(bridge_->summary.message, sizeof(bridge_->summary.message),
-                          ptc_ui_text(PTC_UI_T_THE_LAST_GRANT_RECOVERY_INFORMATION_CANNOT_BE));
+                          "%s", ptc_ui_text(PTC_UI_T_THE_LAST_GRANT_RECOVERY_INFORMATION_CANNOT_BE));
             error_ = true;
             status_expanded_ = true;
             last_request_kind_ = OverlayRequestKind::OfflineCode;
@@ -443,7 +443,7 @@ public:
             std::memset(&bridge_->summary, 0, sizeof(bridge_->summary));
             bridge_->summary.valid = true;
             std::snprintf(bridge_->summary.message, sizeof(bridge_->summary.message),
-                          ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMATION_WAS_INTERRUPTED_BEFORE_SUBMISSION));
+                          "%s", ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMATION_WAS_INTERRUPTED_BEFORE_SUBMISSION));
             error_ = true;
             status_expanded_ = true;
             last_request_kind_ = OverlayRequestKind::OfflineCode;
@@ -1101,7 +1101,7 @@ public:
             bridge_->summary.valid = true;
             std::snprintf(bridge_->summary.type, sizeof(bridge_->summary.type), "offline_code");
             std::snprintf(bridge_->summary.message, sizeof(bridge_->summary.message),
-                          ptc_ui_text(PTC_UI_T_SUBMISSION_FAILED_THE_GRANT_CODE_HAS_NOT));
+                          "%s", ptc_ui_text(PTC_UI_T_SUBMISSION_FAILED_THE_GRANT_CODE_HAS_NOT));
             error_ = true;
             status_expanded_ = true;
             last_request_kind_ = OverlayRequestKind::OfflineCode;

@@ -214,7 +214,7 @@ static bool verify_artifacts(char *detail, size_t detail_size)
     const cJSON *artifacts;
     size_t index;
     if (!read_text(ARTIFACTS_PATH, text, sizeof(text)) || !(root = cJSON_Parse(text))) {
-        snprintf(detail, detail_size, ptc_ui_text(PTC_UI_T_PACKAGE_ARTIFACTS_JSON_IS_MISSING_OR_CANNOT));
+        snprintf(detail, detail_size, "%s", ptc_ui_text(PTC_UI_T_PACKAGE_ARTIFACTS_JSON_IS_MISSING_OR_CANNOT));
         return false;
     }
     release = cJSON_GetObjectItemCaseSensitive(root, "release_id");
@@ -224,7 +224,7 @@ static bool verify_artifacts(char *detail, size_t detail_size)
         !cJSON_IsString(release) || strcmp(release->valuestring, PLAYWISE_BUILD_RELEASE_ID) != 0 ||
         !cJSON_IsObject(artifacts) || cJSON_GetArraySize(artifacts) != 3) {
         cJSON_Delete(root);
-        snprintf(detail, detail_size, ptc_ui_text(PTC_UI_T_THE_IDENTITY_OF_THE_INSTALLATION_PACKAGE_IS));
+        snprintf(detail, detail_size, "%s", ptc_ui_text(PTC_UI_T_THE_IDENTITY_OF_THE_INSTALLATION_PACKAGE_IS));
         return false;
     }
     for (index = 0; index < sizeof(ARTIFACT_PATHS) / sizeof(ARTIFACT_PATHS[0]); ++index) {
@@ -389,7 +389,7 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
         ptc_hot_reload_restore_boot(&PATHS, &journal) != PTC_HOT_RELOAD_FLAG_OK) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
         controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THERE_IS_A_CONFLICT_IN_LOADING_THE));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_THERE_IS_A_CONFLICT_IN_LOADING_THE));
         return;
     }
     controller->journal = journal;
@@ -408,7 +408,7 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
     if (R_FAILED(rc)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
         controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_STARTUP_FLAG_RESTORED_BUT_PM_SHELL_IS));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_STARTUP_FLAG_RESTORED_BUT_PM_SHELL_IS));
         return;
     }
     controller->pm_initialized = true;
@@ -453,7 +453,7 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
         controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
         snprintf(controller->detail, sizeof(controller->detail),
-            ptc_ui_text(PTC_UI_T_THE_STARTUP_FLAG_HAS_BEEN_RESTORED_BUT));
+            "%s", ptc_ui_text(PTC_UI_T_THE_STARTUP_FLAG_HAS_BEEN_RESTORED_BUT));
     }
 }
 
@@ -469,14 +469,14 @@ void ptc_hot_reload_inspect(PtcHotReloadController *controller)
     rc = pmshellInitialize();
     if (R_FAILED(rc)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_PM_SHELL_IS_NOT_AVAILABLE_YOU_NEED));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_PM_SHELL_IS_NOT_AVAILABLE_YOU_NEED));
         return;
     }
     rc = pmshellGetProcessId(&pid, RELEASE_PROGRAM_ID);
     if (R_FAILED(rc) || !current_identity(pid, &identity)) {
         pmshellExit();
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_UNABLE_TO_RELIABLY_CONFIRM_THE_CURRENT_BACKGROUND));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_UNABLE_TO_RELIABLY_CONFIRM_THE_CURRENT_BACKGROUND));
         return;
     }
     pmshellExit();
@@ -488,13 +488,13 @@ void ptc_hot_reload_inspect(PtcHotReloadController *controller)
     if (exists(JOURNAL_PATH) || exists(JOURNAL_TEMP_PATH) || exists(BOOT_FLAG_BACKUP_PATH) ||
         exists(INTENT_PATH) || exists(READY_PATH)) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_CONFLICTING_UPGRADE_RECORDS_DETECTED_EXISTING_FILES_UNCHANGED));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_CONFLICTING_UPGRADE_RECORDS_DETECTED_EXISTING_FILES_UNCHANGED));
     } else if (!empty_file(BOOT_FLAG_PATH)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_STANDARD_BOOT2_FLAG_IS_MISSING_OR));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_THE_STANDARD_BOOT2_FLAG_IS_MISSING_OR));
     } else if (strcmp(identity.release_id, PLAYWISE_BUILD_RELEASE_ID) == 0) {
         controller->status = PTC_HOT_RELOAD_CURRENT;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_CURRENT_INSTALLED_VERSION_HAS_BEEN_LOADED));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_INSTALLED_VERSION_HAS_BEEN_LOADED));
         if (!absent_path(CAPTURE_RESTART_PATH)) {
             PtcCaptureRestartBinding binding;
             if (capture_binding(controller, false, &binding) &&
@@ -524,18 +524,18 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
     if (!controller || controller->status != PTC_HOT_RELOAD_PENDING) return false;
     (void)mkdir(PLAYWISE_RELEASE_SD_ROOT "/handover", 0777);
     if (exists(RECOVERY_PATH)) {
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_BACKGROUND_RECOVERY_HAS_NOT_BEEN_COMPLETED));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_THE_BACKGROUND_RECOVERY_HAS_NOT_BEEN_COMPLETED));
         return false;
     }
     if (exists(JOURNAL_PATH) || exists(JOURNAL_TEMP_PATH) || exists(BOOT_FLAG_BACKUP_PATH) ||
         exists(INTENT_PATH) || exists(READY_PATH)) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_CONFLICTING_UPGRADE_RECORDS_DETECTED_EXISTING_FILES_UNCHANGED));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_CONFLICTING_UPGRADE_RECORDS_DETECTED_EXISTING_FILES_UNCHANGED));
         return false;
     }
     if (!empty_file(BOOT_FLAG_PATH)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_STANDARD_BOOT2_FLAG_IS_MISSING_OR_2));
+        snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_THE_STANDARD_BOOT2_FLAG_IS_MISSING_OR_2));
         return false;
     }
     if (!verify_artifacts(controller->detail, sizeof(controller->detail))) {
@@ -589,7 +589,7 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
     controller->deadline_tick = armGetSystemTick();
     controller->phase = PTC_HOT_RELOAD_PHASE_WAIT_ACK;
     controller->status = PTC_HOT_RELOAD_RUNNING;
-    snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_1_4_WAITING_FOR_THE_OLD_BACKEND));
+    snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_1_4_WAITING_FOR_THE_OLD_BACKEND));
     return true;
 }
 
@@ -614,7 +614,7 @@ void ptc_hot_reload_confirm_ipc_closed(PtcHotReloadController *controller)
     controller->boot_disabled = true;
     controller->deadline_tick = armGetSystemTick();
     controller->phase = PTC_HOT_RELOAD_PHASE_WAIT_SOURCE_EXIT;
-    snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_2_4_THE_OLD_BACKGROUND_IS_CLEANING));
+    snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_2_4_THE_OLD_BACKGROUND_IS_CLEANING));
 }
 
 void ptc_hot_reload_tick(PtcHotReloadController *controller)
@@ -625,7 +625,7 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
         if (ack_ready(controller)) {
             ptc_hot_reload_record_event(controller, "quiesce_ready", NULL, 0);
             controller->phase = PTC_HOT_RELOAD_PHASE_NEED_IPC_CLOSE;
-            snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_2_4_THE_BACKGROUND_HAS_BEEN_SILENT));
+            snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_2_4_THE_BACKGROUND_HAS_BEEN_SILENT));
             return;
         }
         elapsed = armTicksToNs(armGetSystemTick() - controller->deadline_tick);
@@ -649,7 +649,7 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
             }
             if (controller->phase != PTC_HOT_RELOAD_PHASE_WAIT_TARGET_READY)
                 fail(controller, ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_FAILED));
-            else snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_3_4_THE_NEW_VERSION_OF_THE));
+            else snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_3_4_THE_NEW_VERSION_OF_THE));
             return;
         }
         elapsed = armTicksToNs(armGetSystemTick() - controller->deadline_tick);
@@ -672,13 +672,13 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
             controller->phase = PTC_HOT_RELOAD_PHASE_COMPLETE;
             controller->status = PTC_HOT_RELOAD_SUCCESS;
             ptc_hot_reload_record_event(controller, "runtime_ready", NULL, 0);
-            snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_4_4_THE_NEW_VERSION_OF_THE));
+            snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_4_4_THE_NEW_VERSION_OF_THE));
             return;
         }
         elapsed = armTicksToNs(armGetSystemTick() - controller->deadline_tick);
         if (elapsed >= READY_TIMEOUT_NS) {
             if (process_absent() && controller->launch_attempts < 2U && launch_target(controller)) {
-                snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_3_4_THE_NEW_VERSION_OF_THE_2));
+                snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_3_4_THE_NEW_VERSION_OF_THE_2));
             } else {
                 fail(controller, ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_BACKGROUND_IDENTITY_VERIFICATION));
             }

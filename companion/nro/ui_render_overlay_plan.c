@@ -36,11 +36,11 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
         snprintf(values[1], sizeof(values[1]), "%04u-%02u-%02u%s", s_year, s_month, s_day,
                  model->status_loaded && draft->start_day_index == model->day_index ? ptc_ui_text(PTC_UI_T_TODAY_2) : "");
     } else {
-        snprintf(values[1], sizeof(values[1]), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+        snprintf(values[1], sizeof(values[1]), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     }
     snprintf(values[2], sizeof(values[2]), ptc_ui_text(PTC_UI_T_U_DAYS_UP_TO_366), (unsigned int)duration);
     if (draft->rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        snprintf(values[3], sizeof(values[3]), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        snprintf(values[3], sizeof(values[3]), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     } else {
         snprintf(values[3], sizeof(values[3]), ptc_ui_text(PTC_UI_T_U_MIN_U_HR_U_MIN),
                  (unsigned int)draft->rule.minutes,
@@ -122,15 +122,15 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
 
     char guide_text[160];
     if (model->overlay_selection == 0) {
-        snprintf(guide_text, sizeof(guide_text), ptc_ui_text(PTC_UI_T_ACTION_PRESS_A_OR_TAP_TO_SWITCH));
+        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_ACTION_PRESS_A_OR_TAP_TO_SWITCH));
     } else if (model->overlay_selection == 1) {
-        snprintf(guide_text, sizeof(guide_text), ptc_ui_text(PTC_UI_T_OPERATION_LEFT_AND_RIGHT_KEYS_1_DAY));
+        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_LEFT_AND_RIGHT_KEYS_1_DAY));
     } else if (model->overlay_selection == 2) {
-        snprintf(guide_text, sizeof(guide_text), ptc_ui_text(PTC_UI_T_OPERATION_LEFT_AND_RIGHT_KEYS_1_DAY_2));
+        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_LEFT_AND_RIGHT_KEYS_1_DAY_2));
     } else if (model->overlay_selection == 3) {
-        snprintf(guide_text, sizeof(guide_text), ptc_ui_text(PTC_UI_T_OPERATION_X_SWITCH_BETWEEN_UNLIMITED_LIMITED_TIME));
+        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_X_SWITCH_BETWEEN_UNLIMITED_LIMITED_TIME));
     } else {
-        snprintf(guide_text, sizeof(guide_text), ptc_ui_text(PTC_UI_T_OPERATION_USE_UP_AND_DOWN_KEYS_TO));
+        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_USE_UP_AND_DOWN_KEYS_TO));
     }
     draw_text(pixels, stride, guide_bar.x + 12, guide_bar.y + 20, guide_text, 13, UI_ACCENT);
 
@@ -151,8 +151,8 @@ static void draw_scheduled_leave(uint32_t *pixels, uint32_t stride, const PtcUiM
 {
     UiRect dialog;
     PtcUiModel copy = *model;
-    snprintf(copy.overlay_title, sizeof(copy.overlay_title), ptc_ui_text(PTC_UI_T_GIVE_UP_THE_DRAFT_QUOTA_FOR_A));
-    snprintf(copy.overlay_body, sizeof(copy.overlay_body), ptc_ui_text(PTC_UI_T_UNSAVED_MODIFICATIONS_WILL_BE_LOST_AND_SAVED));
+    snprintf(copy.overlay_title, sizeof(copy.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GIVE_UP_THE_DRAFT_QUOTA_FOR_A));
+    snprintf(copy.overlay_body, sizeof(copy.overlay_body), "%s", ptc_ui_text(PTC_UI_T_UNSAVED_MODIFICATIONS_WILL_BE_LOST_AND_SAVED));
     draw_dialog_shell(pixels, stride, &copy, &dialog, 720, 300);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_CONTINUE_EDITING),
                        UI_RAISED, UI_ACCENT, true);
@@ -194,7 +194,7 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
         if (OPTIONS[index] > 0u) {
             snprintf(label, sizeof(label), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)OPTIONS[index]);
         } else {
-            snprintf(label, sizeof(label), ptc_ui_text(PTC_UI_T_OFF));
+            snprintf(label, sizeof(label), "%s", ptc_ui_text(PTC_UI_T_OFF));
         }
         fill_round_rect(pixels, stride, option, 12, selected ? UI_SUCCESS_SOFT : UI_RAISED);
         draw_rect_outline(pixels, stride, option, 12, selected ? 2 : 1, selected ? UI_SUCCESS : UI_BORDER);
@@ -452,7 +452,7 @@ static void draw_bedtime_editor_timeline(
                 matched >= 0 ? ptc_ui_text(PTC_BEDTIME_PRESETS[matched].name) : ptc_ui_text(PTC_UI_T_CUSTOM_TIME_PERIOD),
                 (unsigned int)(duration / 60), (unsigned int)(duration % 60));
         } else {
-            snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_CLOSED_TODAY_USE_WILL_NOT_BE_RESTRICTED));
+            snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_CLOSED_TODAY_USE_WILL_NOT_BE_RESTRICTED));
         }
         draw_text_center(pixels, stride,
             (UiRect){bar.x, tick_y + 4, bar.width, 24},

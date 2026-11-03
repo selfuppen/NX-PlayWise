@@ -179,7 +179,7 @@ static void handle_theme_overlay_input(UiState *ui, u64 down)
             ptc_ui_cancel_overlay(&ui->model);
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
+                     "%s", ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
         }
     }
     return;
@@ -225,7 +225,7 @@ static void handle_album_manager_overlay_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_CONFIRM);
         refresh_album_restriction(ui);
         refresh_recovery_state(ui);
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_HOMEBREW_MENU_ADVANCED_ENTRY_STATUS_HAS_BEEN));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_HOMEBREW_MENU_ADVANCED_ENTRY_STATUS_HAS_BEEN));
     } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
         ui->model.overlay_selection = 1 - ui->model.overlay_selection;
     } else if (down & HidNpadButton_A) {
@@ -242,9 +242,9 @@ static void handle_album_manager_overlay_input(UiState *ui, u64 down)
             open_danger_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, ptc_ui_text(PTC_UI_T_FORCE_RESTORE_OF_TRUSTED_BACKUP), body);
         } else if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_THE_PORTAL_HAS_BEEN_CONFIGURED_EXTERNALLY_AND));
+                     "%s", ptc_ui_text(PTC_UI_T_THE_PORTAL_HAS_BEEN_CONFIGURED_EXTERNALLY_AND));
         } else {
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_DOES_NOT_ALLOW_THIS));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_DOES_NOT_ALLOW_THIS));
         }
     }
     return;
@@ -310,7 +310,7 @@ static void handle_shortcut_manager_overlay_input(UiState *ui, u64 down)
                         ? ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_SHORTCUT_KEYS_HAVE_BEEN)
                         : ptc_ui_text(PTC_UI_T_CUSTOM_SHORTCUT_KEYS_TURNED_OFF_FIXED_MINUS));
         } else {
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_SHORTCUT_KEY_SETTINGS_ARE_NOT_SAVED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_SHORTCUT_KEY_SETTINGS_ARE_NOT_SAVED));
         }
     }
     return;
@@ -322,9 +322,9 @@ static void handle_credential_overlay_input(UiState *ui, u64 down)
         if (strcmp(ui->model.credential_current, ui->model.credential_new) != 0) {
             ui->model.overlay = PTC_UI_OVERLAY_CREDENTIAL_LEAVE;
             ui->model.overlay_selection = 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_GIVE_UP_MODIFYING_PAIRING_INFORMATION));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GIVE_UP_MODIFYING_PAIRING_INFORMATION));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     ptc_ui_text(PTC_UI_T_MANUAL_INPUT_AND_RANDOM_GENERATION_ONLY_MODIFY));
+                     "%s", ptc_ui_text(PTC_UI_T_MANUAL_INPUT_AND_RANDOM_GENERATION_ONLY_MODIFY));
         } else {
             show_grant_manager(ui, ui->model.credential_kind == 1
                 ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
@@ -374,7 +374,7 @@ static void handle_credential_leave_overlay_input(UiState *ui, u64 down)
         if ((down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
             show_grant_manager(ui, ui->model.credential_kind == 1
                 ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSAVED_PAIRING_INFORMATION_MODIFICATIONS_WERE_ABANDONED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UNSAVED_PAIRING_INFORMATION_MODIFICATIONS_WERE_ABANDONED));
         } else {
             ptc_ui_cancel_overlay(&ui->model);
         }
@@ -382,7 +382,7 @@ static void handle_credential_leave_overlay_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_CANCEL);
         show_grant_manager(ui, ui->model.credential_kind == 1
             ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSAVED_PAIRING_INFORMATION_MODIFICATIONS_WERE_ABANDONED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UNSAVED_PAIRING_INFORMATION_MODIFICATIONS_WERE_ABANDONED));
     }
     return;
 }

@@ -127,7 +127,7 @@ Upstream research order is: repository documentation and protocol specs, vendore
 
 ## CI & Deployment Status
 
-Currently, GitHub Actions only builds and deploys the Parent Web App (PWA) static assets. Switch C/C++, NRO, Overlay, sysmodule, and package builds are not yet run in CI; authoritative gates are executed in the maintainer's devkitPro environment. A successful Pages workflow run must never be equated to candidate Switch package verification.
+GitHub Actions CI runs `make test` (Host C/C++ and Python regressions), renders UI previews, and compares them with committed documentation images using `sync_doc_previews.py --check`. Pages deploys the Parent Web App separately. Host compilation explicitly enables `-Wformat -Wformat-security` with warnings treated as errors: copy translated text using a fixed `"%s"`; use a translation as a format only when supplying its parameters. The full Switch NRO, Overlay, sysmodule, and package gates still run in the maintainer's devkitPro environment. CI or Pages success does not qualify a Switch candidate package.
 
 ## Real Device Verification
 

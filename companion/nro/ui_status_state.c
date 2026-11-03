@@ -566,9 +566,9 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
 
     if (runtime[0]) snprintf(out->summary, sizeof(out->summary), "%s", runtime);
     else if (model->message[0]) snprintf(out->summary, sizeof(out->summary), "%s", model->message);
-    else if (error) snprintf(out->summary, sizeof(out->summary), ptc_ui_text(PTC_UI_T_OPERATION_INCOMPLETE));
-    else if (model->waiting) snprintf(out->summary, sizeof(out->summary), ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT));
-    else snprintf(out->summary, sizeof(out->summary), ptc_ui_text(PTC_UI_T_STATUS_UPDATED));
+    else if (error) snprintf(out->summary, sizeof(out->summary), "%s", ptc_ui_text(PTC_UI_T_OPERATION_INCOMPLETE));
+    else if (model->waiting) snprintf(out->summary, sizeof(out->summary), "%s", ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT));
+    else snprintf(out->summary, sizeof(out->summary), "%s", ptc_ui_text(PTC_UI_T_STATUS_UPDATED));
 
     if (error || model->disable_flag_present || model->restricted_now == 1 ||
         (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1) ||
@@ -582,25 +582,25 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
         snprintf(out->details, sizeof(out->details), "%s", model->feedback_detail);
     } else if (error) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_Y));
+                 "%s", ptc_ui_text(PTC_UI_T_Y));
     } else if (model->disable_flag_present) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_STOPPED_UPDATING_THE_QUOTA_SETTING_PLEASE_GO));
+                 "%s", ptc_ui_text(PTC_UI_T_STOPPED_UPDATING_THE_QUOTA_SETTING_PLEASE_GO));
     } else if (model->recovery_active) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_RESTORING_PREVIOUS_SETTINGS_PLEASE));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_RESTORING_PREVIOUS_SETTINGS_PLEASE));
     } else if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_PLEASE_GO_TO_SUPPORT_AND_RECOVERY_TO));
+                 "%s", ptc_ui_text(PTC_UI_T_PLEASE_GO_TO_SUPPORT_AND_RECOVERY_TO));
     } else if (model->restriction_enabled_available && !model->restriction_enabled) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_PLEASE_CHECK_WHETHER_NINTENDO_SYSTEM_PARENTAL_CONTROLS));
+                 "%s", ptc_ui_text(PTC_UI_T_PLEASE_CHECK_WHETHER_NINTENDO_SYSTEM_PARENTAL_CONTROLS));
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_TODAY_S_TIME_WILL_NOT_BE_ACCUMULATED));
+                 "%s", ptc_ui_text(PTC_UI_T_TODAY_S_TIME_WILL_NOT_BE_ACCUMULATED));
     } else if (model->apply_pending_confirmation) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_CONFIRMING_WHETHER_THE_SETTINGS));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_CONFIRMING_WHETHER_THE_SETTINGS));
     } else if (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0) {
         snprintf(out->details, sizeof(out->details), "%s",
                  ptc_ui_text(PTC_UI_T_EYE_CARE_INDEPENDENT_RULE));
@@ -609,7 +609,7 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
     } else if (model->restricted_now == 1 ||
                (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)) {
         snprintf(out->details, sizeof(out->details),
-                 ptc_ui_text(PTC_UI_T_MESSAGE_7));
+                 "%s", ptc_ui_text(PTC_UI_T_MESSAGE_7));
     }
     out->has_details = out->details[0] != '\0';
 }
@@ -624,9 +624,9 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
     if (!out) return;
     memset(out, 0, sizeof(*out));
     snprintf(out->clock_text, sizeof(out->clock_text), "--:--");
-    snprintf(out->date_text, sizeof(out->date_text), ptc_ui_text(PTC_UI_T_MESSAGE_6));
-    snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
-    snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
+    snprintf(out->date_text, sizeof(out->date_text), "%s", ptc_ui_text(PTC_UI_T_MESSAGE_6));
+    snprintf(out->remaining_text, sizeof(out->remaining_text), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+    snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
     out->state = PTC_UI_TIME_UNKNOWN;
     local = localtime(&clock_value);
     if (local) {
@@ -657,16 +657,16 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
 
     age = ptc_ui_status_age_seconds(model, now);
     if (model->waiting) {
-        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_SYNCING));
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_SYNCING));
         out->state = PTC_UI_TIME_WAITING;
     } else if (!model->status_loaded) {
-        snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_NO_STATUS_YET_PRESS_Y_TO_REFRESH));
+        snprintf(out->remaining_text, sizeof(out->remaining_text), "%s", ptc_ui_text(PTC_UI_T_NO_STATUS_YET_PRESS_Y_TO_REFRESH));
         snprintf(out->freshness_text, sizeof(out->freshness_text),
-                 model->error_code || strcmp(model->result_status, "error") == 0
+                 "%s", model->error_code || strcmp(model->result_status, "error") == 0
                      ? (ptc_ui_text(PTC_UI_T_UNAVAILABLE)) : (ptc_ui_text(PTC_UI_T_AWAITING_REFRESH)));
     } else if (!ptc_ui_status_is_fresh(model, now)) {
         snprintf(out->freshness_text, sizeof(out->freshness_text),
-                 model->error_code || strcmp(model->result_status, "error") == 0
+                 "%s", model->error_code || strcmp(model->result_status, "error") == 0
                      ? (ptc_ui_text(PTC_UI_T_REFRESH_FAILED)) : (ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)));
         if (age >= 0 && !(model->error_code || strcmp(model->result_status, "error") == 0)) {
             if (age < 3600) snprintf(out->freshness_text, sizeof(out->freshness_text),
@@ -675,7 +675,7 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
                           ptc_ui_text(PTC_UI_T_CONFIRMED_LLDH_AGO), (long long)(age / 3600));
         }
     } else if (age < 60) {
-        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
     } else {
         PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("minutes", age / 60)};
         (void)ptc_ui_text_format(PTC_UI_T_STATUS_REFRESHED_MINUTES_AGO,
@@ -696,7 +696,7 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
                 snprintf(out->remaining_text, sizeof(out->remaining_text),
                          ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED_WITH_UNDOCKED), model->undocked_remaining_minutes);
             } else {
-                snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
+                snprintf(out->remaining_text, sizeof(out->remaining_text), "%s", ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
             }
             out->progress_available = true;
             out->progress_per_mille = 1000;
@@ -729,7 +729,7 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
                 else out->state = PTC_UI_TIME_NORMAL;
             }
         } else {
-            snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+            snprintf(out->remaining_text, sizeof(out->remaining_text), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
         }
     }
 
@@ -752,17 +752,17 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
        they never manufacture a countdown or a zero value. */
     if (model->recovery_active) {
         out->state = PTC_UI_TIME_RECOVERY;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_ADJUST_BADGE_RECOVERING));
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_RECOVERING));
     } else if (strcmp(model->setup_phase, "protection") == 0 ||
                strcmp(model->setup_phase, "failed") == 0) {
         out->state = PTC_UI_TIME_PROTECTION;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_PROTECTION));
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_PROTECTION));
     } else if (model->disable_flag_present) {
         out->state = PTC_UI_TIME_DISABLED;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_DISABLED_3));
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_DISABLED_3));
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
         out->state = PTC_UI_TIME_TEMPORARY_UNLOCK;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_UNLOCKED));
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_UNLOCKED));
     } else if (model->waiting) {
         out->state = PTC_UI_TIME_WAITING;
     }
@@ -772,10 +772,10 @@ void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, s
 {
     int64_t age = ptc_ui_status_age_seconds(model, now);
     if (!out || !out_size) return;
-    if (!model || !model->status_loaded) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
-    else if (model->waiting) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_REFRESHING_STATUS));
-    else if (!ptc_ui_status_is_fresh(model, now)) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_PLEASE_REFRESH));
-    else if (age == 0) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
+    if (!model || !model->status_loaded) snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
+    else if (model->waiting) snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_REFRESHING_STATUS));
+    else if (!ptc_ui_status_is_fresh(model, now)) snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_PLEASE_REFRESH));
+    else if (age == 0) snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
     else if (age < 60) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_LAST_REFRESHED_LLDS_AGO), (long long)age);
     else snprintf(out, out_size, ptc_ui_text(PTC_UI_T_LAST_REFRESHED_LLDM_AGO), (long long)(age / 60));
 }
@@ -822,20 +822,20 @@ void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_siz
 {
     if (!out || out_size == 0) return;
     if (!model || !model->status_loaded) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
     } else if (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0) {
         snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING));
     } else if (model->blocked_today == 1) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PLAY_BLOCKED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_PLAY_BLOCKED));
     } else if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     } else if (model->limited_today == 1) {
         snprintf(out, out_size,
-                 model->remaining_available && model->remaining_minutes <= 0
+                 "%s", model->remaining_available && model->remaining_minutes <= 0
                      ? (ptc_ui_text(PTC_UI_T_LIMITED_EXHAUSTED))
                      : (ptc_ui_text(PTC_UI_T_LIMITED)));
     } else {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN));
     }
 }
 
@@ -845,11 +845,11 @@ void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t ou
     if (!model || !model->status_loaded) {
         snprintf(out, out_size, "--");
     } else if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     } else if (model->remaining_available && model->remaining_minutes >= 0) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_D_MIN), model->remaining_minutes);
     } else {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     }
 }
 
@@ -857,13 +857,13 @@ void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_s
 {
     if (!out || out_size == 0) return;
     if (!model || model->play_timer_enabled < 0) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNCONFIRMED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_UNCONFIRMED));
     } else if (model->play_timer_enabled == 1) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIMING));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_TIMING));
     } else if (model->unrestricted_today == 1) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_TIMER));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_NO_TIMER));
     } else {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NOT_TIMED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_NOT_TIMED));
     }
 }
 
@@ -878,7 +878,7 @@ void ptc_ui_format_console_date(const PtcUiModel *model, char *out, size_t out_s
        sysmodule does not accept. */
     if (!model || !model->status_loaded ||
         !ptc_date_from_day_index(model->day_index, &year, &month, &day)) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONSOLE_DATE_PENDING));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_CONSOLE_DATE_PENDING));
         return;
     }
     snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONSOLE_TODAY_04U_02U_02U),
@@ -899,43 +899,43 @@ void ptc_ui_format_parent_status_summary(
     }
     out[0] = '\0';
     if (!model) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_NO_RELIABLE_READING));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_NO_RELIABLE_READING));
         return;
     }
     age = ptc_ui_status_age_seconds(model, now);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PROTECTION_MODE_ACTION_REQUIRED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_PROTECTION_MODE_ACTION_REQUIRED));
         return;
     }
     if (model->recovery_active) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RECOVERY_INCOMPLETE_VIEW_DETAILS));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_RECOVERY_INCOMPLETE_VIEW_DETAILS));
         return;
     }
     if (model->disable_flag_present) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_EMERGENCY_DISABLED_CONTROL_WRITING_STOPPED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DISABLED_CONTROL_WRITING_STOPPED));
         return;
     }
     if (model->restriction_enabled_available && !model->restriction_enabled) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NINTENDO_PARENTAL_CONTROLS_NOT_ENABLED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_NINTENDO_PARENTAL_CONTROLS_NOT_ENABLED));
         return;
     }
     if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_SYSTEM_RESTRICTION_UNLOCKED_NO_TIMER_UNTIL_SLEEP));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_SYSTEM_RESTRICTION_UNLOCKED_NO_TIMER_UNTIL_SLEEP));
         return;
     }
     if (model->apply_pending_confirmation) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_SETTINGS_AWAITING_CONFIRMATION));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_SETTINGS_AWAITING_CONFIRMATION));
         return;
     }
     if (model->waiting) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CHECKING_CURRENT_STATUS));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_CHECKING_CURRENT_STATUS));
         return;
     }
     if (!ptc_ui_status_is_fresh(model, now)) {
-        if (age < 0) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_NO_RELIABLE_READING));
+        if (age < 0) snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_NO_RELIABLE_READING));
         else if (age < 3600) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_LAST_SUCCESS_LLDM_AGO), (long long)(age / 60));
         else if (age < 86400) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_LAST_SUCCESS_LLDH_AGO), (long long)(age / 3600));
-        else snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_LAST_SUCCESS_OVER_1));
+        else snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_LAST_SUCCESS_OVER_1));
         return;
     }
     if (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0) {
@@ -948,13 +948,13 @@ void ptc_ui_format_parent_status_summary(
     }
     if (model->restricted_now == 1 || model->blocked_today == 1 ||
         (model->remaining_available && model->remaining_minutes <= 0)) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_LIMIT_REACHED_TODAY_QUOTA_EXHAUSTED_JUST_SYNCED));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_LIMIT_REACHED_TODAY_QUOTA_EXHAUSTED_JUST_SYNCED));
         return;
     }
-    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
+    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
     else if (model->remaining_available) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_D_MIN_AVAILABLE_TODAY), model->remaining_minutes);
-    else snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNAVAILABLE));
-    if (age <= 30) snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_JUST_SYNCED));
+    else snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNAVAILABLE));
+    if (age <= 30) snprintf(freshness, sizeof(freshness), "%s", ptc_ui_text(PTC_UI_T_JUST_SYNCED));
     else if (age < 60) snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_LLDS_AGO), (long long)age);
     else snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_LLDM_AGO), (long long)(age / 60));
     snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONTROL_NORMAL_S_S), remaining, freshness);

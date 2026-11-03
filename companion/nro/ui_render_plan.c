@@ -35,7 +35,7 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
             (void)ptc_ui_text_format(kind == PTC_UI_PLAN_WEEKLY ? PTC_UI_T_DRAFT_DAYS_CHANGED_NAMED :
                 PTC_UI_T_DRAFT_ITEMS_CHANGED_NAMED, title, sizeof(title), args, 1);
         } else snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
-    } else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_PLAN_SAVED_ACTIVE));
+    } else snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_PLAN_SAVED_ACTIVE));
     draw_text(pixels, stride, panel.x + 20, panel.y + 34, title, 19,
               dirty ? (requires_hold ? UI_DANGER : UI_WARNING) : UI_SUCCESS);
     const char *sub = model->disable_flag_present ? (ptc_ui_text(PTC_UI_T_CONTROL_DISABLED_PLAN_READ_ONLY)) :
@@ -66,7 +66,7 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         PtcDayRule right_rule = projection.after.rule;
         draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22},
                          current_state ? (ptc_ui_text(PTC_UI_T_TODAY_QUOTA)) : (ptc_ui_text(PTC_UI_T_CURRENT_QUOTA_2)), 13, UI_MUTED);
-        if (left_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        if (left_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         else snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)left_rule.minutes);
         snprintf(left_note, sizeof(left_note), "%s",
                  ptc_ui_effective_rule_label(current_state ? projection.after.source : projection.before.source));
@@ -84,18 +84,18 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 
         if (current_state) {
             draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, ptc_ui_text(PTC_UI_T_REMAINING_TODAY), 13, UI_MUTED);
-            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
             else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_D_MIN), projection.remaining_minutes);
-            else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING));
+            else snprintf(right_value, sizeof(right_value), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING));
             if (played >= 0) snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_USED_D_MIN), played);
-            else snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_SHOWN_AFTER_REFRESH));
+            else snprintf(right_note, sizeof(right_note), "%s", ptc_ui_text(PTC_UI_T_SHOWN_AFTER_REFRESH));
         } else {
             draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, ptc_ui_text(PTC_UI_T_QUOTA_AFTER_SAVE), 13, UI_MUTED);
-            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
             else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)right_rule.minutes);
-            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_EST_REMAINING_NO_LIMIT));
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_note, sizeof(right_note), "%s", ptc_ui_text(PTC_UI_T_EST_REMAINING_NO_LIMIT));
             else if (projection.remaining_available) snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_EST_REMAINING_D_MIN), projection.remaining_minutes);
-            else snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_REMAINING_PENDING_REFRESH));
+            else snprintf(right_note, sizeof(right_note), "%s", ptc_ui_text(PTC_UI_T_REMAINING_PENDING_REFRESH));
         }
         draw_text_center(pixels, stride, (UiRect){right.x, right.y + 24, right.width, 30}, right_value, 19,
                          right_rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS :
@@ -177,11 +177,11 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
             PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("count", changed)};
             (void)ptc_ui_text_format(PTC_UI_T_DRAFT_DAYS_CHANGED_NAMED, title, sizeof(title), args, 1);
         }
-        else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
+        else snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
     } else if (kind == PTC_UI_PLAN_SCHEDULED) {
         if (ptc_ui_scheduled_dirty(model)) ++changed;
-        if (changed > 0) snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_SPECIFIC_DATE_QUOTA_CHANGED));
-        else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
+        if (changed > 0) snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_SPECIFIC_DATE_QUOTA_CHANGED));
+        else snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
     } else {
         if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
         if (ptc_ui_day_rule_effectively_changed(model->holiday_rule, model->draft_holiday_rule)) ++changed;
@@ -191,7 +191,7 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
             PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("count", changed)};
             (void)ptc_ui_text_format(PTC_UI_T_DRAFT_ITEMS_CHANGED_NAMED, title, sizeof(title), args, 1);
         }
-        else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
+        else snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
     }
 
     draw_plan_card(pixels, stride, panel, false);
@@ -211,7 +211,7 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
                           12, result.width - 56, 17, 2, UI_MUTED);
     } else {
         draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22}, ptc_ui_text(PTC_UI_T_CURRENT_QUOTA_2), 12, UI_MUTED);
-        if (projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        if (projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         else snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)projection.before.rule.minutes);
         draw_text_center(pixels, stride, (UiRect){left.x, left.y + 24, left.width, 34}, left_value, 19,
                          projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT);
@@ -225,14 +225,14 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_line(pixels, stride, arrow_x + 4, arrow_y + 5, arrow_x + 9, arrow_y, 2, UI_MUTED);
 
         draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, ptc_ui_text(PTC_UI_T_QUOTA_AFTER_SAVE), 12, UI_MUTED);
-        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)projection.after.rule.minutes);
         draw_text_center(pixels, stride, (UiRect){right.x, right.y + 24, right.width, 34}, right_value, 19,
                          projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS :
                          (projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_ACCENT));
-        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_EST_REMAINING_NO_LIMIT));
+        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "%s", ptc_ui_text(PTC_UI_T_EST_REMAINING_NO_LIMIT));
         else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_EST_REMAINING_D_MIN_2), projection.remaining_minutes);
-        else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_REMAINING_PENDING_REFRESH));
+        else snprintf(right_value, sizeof(right_value), "%s", ptc_ui_text(PTC_UI_T_REMAINING_PENDING_REFRESH));
         draw_text_center(pixels, stride, (UiRect){right.x, right.y + 61, right.width, 18}, right_value, 11,
                          projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_MUTED);
     }
@@ -411,7 +411,7 @@ const char *bedtime_override_label(PtcBedtimeOverrideMode mode)
 
 static void draw_bedtime_window_value(char *out, size_t out_size, const PtcBedtimeWindow *window)
 {
-    if (!window->enabled) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_OFF));
+    if (!window->enabled) snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_OFF));
     else snprintf(out, out_size, ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
         (unsigned int)(window->start_minute / 60), (unsigned int)(window->start_minute % 60),
         (unsigned int)(window->end_minute / 60), (unsigned int)(window->end_minute % 60));
@@ -565,10 +565,10 @@ static void draw_bedtime_preview(uint32_t *pixels, uint32_t stride, const PtcUiM
                                       : (ptc_ui_text(PTC_UI_T_CURRENT_STATE)));
         f1_color = UI_MUTED;
     } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_RESTRICT) {
-        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_IN_BEDTIME_HOURS_SAVING_WILL_RESTRICT_IMMEDIATELY));
+        snprintf(forecast_line1, sizeof(forecast_line1), "%s", ptc_ui_text(PTC_UI_T_IN_BEDTIME_HOURS_SAVING_WILL_RESTRICT_IMMEDIATELY));
         f1_color = UI_DANGER;
     } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN) {
-        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_MAY_RESTRICT_IMMEDIATELY_HOLD_TO));
+        snprintf(forecast_line1, sizeof(forecast_line1), "%s", ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_MAY_RESTRICT_IMMEDIATELY_HOLD_TO));
         f1_color = UI_DANGER;
     } else if (is_skipped_active) {
         uint16_t skipped_start = model->bedtime_skipped_window_available
@@ -580,7 +580,7 @@ static void draw_bedtime_preview(uint32_t *pixels, uint32_t stride, const PtcUiM
             (unsigned int)(skipped_end / 60), (unsigned int)(skipped_end % 60));
         f1_color = UI_SUCCESS;
     } else if (eval.active) {
-        snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_CURRENT_BEDTIME_RESTRICTION_ACTIVE));
+        snprintf(forecast_line1, sizeof(forecast_line1), "%s", ptc_ui_text(PTC_UI_T_CURRENT_BEDTIME_RESTRICTION_ACTIVE));
         f1_color = UI_DANGER;
     } else {
         PtcEffectiveBedtime eff_today = ptc_bedtime_resolve_start_day(
@@ -594,7 +594,7 @@ static void draw_bedtime_preview(uint32_t *pixels, uint32_t stride, const PtcUiM
                      (unsigned int)(diff_m / 60), (unsigned int)(diff_m % 60));
             f1_color = UI_SUCCESS;
         } else {
-            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_TONIGHT_WINDOW_CLOSED_NO_LIMITS));
+            snprintf(forecast_line1, sizeof(forecast_line1), "%s", ptc_ui_text(PTC_UI_T_TONIGHT_WINDOW_CLOSED_NO_LIMITS));
             f1_color = UI_MUTED;
         }
     }
@@ -852,7 +852,7 @@ static void draw_bedtime_scheduled_section(uint32_t *pixels, uint32_t stride, co
         uint8_t month, day;
         if (ptc_date_from_day_index(scheduled->start_day_index, &year, &month, &day))
             snprintf(values[1], sizeof(values[1]), "%04u-%02u-%02u", year, month, day);
-        else snprintf(values[1], sizeof(values[1]), ptc_ui_text(PTC_UI_T_WAITING_FOR_DATE));
+        else snprintf(values[1], sizeof(values[1]), "%s", ptc_ui_text(PTC_UI_T_WAITING_FOR_DATE));
     }
     snprintf(values[2], sizeof(values[2]), ptc_ui_text(PTC_UI_T_U_DAYS), (unsigned int)duration);
     if (scheduled->rule.mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {

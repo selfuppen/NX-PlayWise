@@ -176,7 +176,7 @@ bool ptc_album_restriction_get_status(PtcStorage *storage, PtcAlbumRestrictionSt
     package_exists = storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_PATH);
     if (current_exists && !current) {
         status->state = PTC_ALBUM_RESTRICTION_UNKNOWN;
-        snprintf(status->detail, sizeof(status->detail), ptc_ui_text(PTC_UI_T_UNABLE_TO_READ_CURRENT_CONFIGURATION_COMPLETELY));
+        snprintf(status->detail, sizeof(status->detail), "%s", ptc_ui_text(PTC_UI_T_UNABLE_TO_READ_CURRENT_CONFIGURATION_COMPLETELY));
         return true;
     }
     if (current) {
@@ -197,14 +197,14 @@ bool ptc_album_restriction_get_status(PtcStorage *storage, PtcAlbumRestrictionSt
             checksum(current) == state.target_hash) {
             status->state = PTC_ALBUM_RESTRICTION_CONFIGURED;
             status->restart_required = true;
-            snprintf(status->detail, sizeof(status->detail), ptc_ui_text(PTC_UI_T_CONFIGURED_BY_PLAYWISE_TAKES_EFFECT_AFTER_REBOOT));
+            snprintf(status->detail, sizeof(status->detail), "%s", ptc_ui_text(PTC_UI_T_CONFIGURED_BY_PLAYWISE_TAKES_EFFECT_AFTER_REBOOT));
         } else {
             status->state = PTC_ALBUM_RESTRICTION_ANOMALY;
-            snprintf(status->detail, sizeof(status->detail), ptc_ui_text(PTC_UI_T_ADJACENT_BACKUP_TRANSACTION_OR_CONFIG_INCONSISTENT));
+            snprintf(status->detail, sizeof(status->detail), "%s", ptc_ui_text(PTC_UI_T_ADJACENT_BACKUP_TRANSACTION_OR_CONFIG_INCONSISTENT));
         }
     } else {
         status->state = PTC_ALBUM_RESTRICTION_ANOMALY;
-        snprintf(status->detail, sizeof(status->detail), ptc_ui_text(PTC_UI_T_UNVERIFIABLE_PLAYWISE_RECOVERY_FILE_DETECTED));
+        snprintf(status->detail, sizeof(status->detail), "%s", ptc_ui_text(PTC_UI_T_UNVERIFIABLE_PLAYWISE_RECOVERY_FILE_DETECTED));
     }
     free(current); free(target);
     return true;

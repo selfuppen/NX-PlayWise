@@ -149,7 +149,7 @@ void handle_overlay_input(UiState *ui, u64 down)
         ui->today_limit_refresh_pending = false;
         ui->today_limit_save_pending = false;
         ptc_ui_cancel_overlay(&ui->model);
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||

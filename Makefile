@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := all
 HOST_CC ?= gcc
 HOST_CXX ?= g++
-HOST_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -I.
+HOST_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -Wformat -Wformat-security -I.
 include common/version.mk
 HOST_BUILD_DIR := build/host
 HOST_TEST := $(HOST_BUILD_DIR)/test_host_core
@@ -171,7 +171,7 @@ $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
 
 $(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp | $(HOST_BUILD_DIR)
-	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -fno-exceptions -fno-rtti -I. -o $@ $<
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -Wformat -Wformat-security -fno-exceptions -fno-rtti -I. -o $@ $<
 
 $(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/pctl_adapter -o $@ tests/c/test_pctl_adapter.c platform/switch/pctl_adapter.c platform/switch/play_timer_settings_layout.c common/time/ptc_time.c
@@ -220,7 +220,7 @@ $(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) | $(HOST_BUI
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -ffunction-sections -fdata-sections -r -o $@ $(OVERLAY_PREVIEW_C_SRCS)
 
 $(HOST_BUILD_DIR)/overlay_preview: tests/overlay_preview/render.cpp tests/overlay_preview/renderer.hpp companion/overlay/source/render_types.hpp companion/overlay/source/render_methods.hpp companion/overlay/source/render_pages.hpp companion/overlay/layout.h $(HOST_BUILD_DIR)/overlay_preview_core.o
-	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -Wformat -Wformat-security -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
 
 .PHONY: test-overlay-header
 test-overlay-header: $(HOST_BUILD_DIR)/overlay_preview
@@ -229,7 +229,7 @@ test-overlay-header: $(HOST_BUILD_DIR)/overlay_preview
 test-host: test-overlay-header
 
 $(HOST_BUILD_DIR)/overlay_preview_save_test: tests/overlay_preview/test_save.cpp tests/overlay_preview/renderer.hpp companion/ui_emoji.h | $(HOST_BUILD_DIR)
-	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -o $@ $< -lm
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -Wformat -Wformat-security -I. -o $@ $< -lm
 
 .PHONY: test-overlay-preview-save
 test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test

@@ -155,22 +155,22 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
     }
     if (error_code == 504) {
         snprintf(out, out_size,
-                 ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_504_PLEASE_RESTART_THE_HOST));
+                 "%s", ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_504_PLEASE_RESTART_THE_HOST));
         return;
     }
     if (error_code == 306) {
         if (strcmp(type, "status") == 0) {
             snprintf(out, out_size,
-                     ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_306));
+                     "%s", ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_306));
             return;
         }
         snprintf(out, out_size,
-                 ptc_ui_text(PTC_UI_T_RESULT_CODE_306_NINTENDO_PARENTAL_CONTROLS_MAY));
+                 "%s", ptc_ui_text(PTC_UI_T_RESULT_CODE_306_NINTENDO_PARENTAL_CONTROLS_MAY));
         return;
     }
     if (error_code == 313) {
         snprintf(out, out_size,
-                 ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_313));
+                 "%s", ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_313));
         return;
     }
     if (strcmp(type, "complete_setup") == 0) {
@@ -598,7 +598,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
     } else if (setup_activated) {
         ptc_audio_play(PTC_SE_SUCCESS);
-        snprintf(model->message, sizeof(model->message), ptc_ui_text(PTC_UI_T_AUTOMATIC_CONTROL_IS_ENABLED_AND_FIRST_TIME));
+        snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_AUTOMATIC_CONTROL_IS_ENABLED_AND_FIRST_TIME));
     } else {
         if (type && strcmp(type, "claim_daily_buffer") == 0) {
             ptc_audio_play(PTC_SE_CLAIM_BUFFER);
@@ -615,15 +615,15 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         } else if (type && strcmp(type, "set_today_limit") == 0 &&
                    (model->restricted_now == 1 || model->blocked_today == 1)) {
             snprintf(model->message, sizeof(model->message),
-                     ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_2));
+                     "%s", ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_2));
             snprintf(model->feedback_detail, sizeof(model->feedback_detail),
-                     ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
+                     "%s", ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
         } else if (type && strcmp(type, "set_today_limit") == 0 &&
                    model->remaining_available && model->remaining_minutes <= 0) {
             snprintf(model->message, sizeof(model->message),
-                     ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_3));
+                     "%s", ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_3));
             snprintf(model->feedback_detail, sizeof(model->feedback_detail),
-                     ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
+                     "%s", ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
         } else if (type && strcmp(type, "complete_setup") == 0 &&
                    strcmp(model->setup_phase, "active") != 0) {
             snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_SETUP_CONTROLS_INACTIVE));

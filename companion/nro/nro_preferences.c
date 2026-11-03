@@ -91,7 +91,7 @@ static void format_shortcut_label(u64 mask, char *out, size_t out_size)
         }
     }
     if (first) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NOT_SET));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_NOT_SET));
     }
 }
 
@@ -308,7 +308,7 @@ bool save_setup_step(UiState *ui, int step)
     }
     ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_PROGRESS, PTC_ERR_STORAGE_WRITE_FAILED);
     ui->model.setup_issue_steps[PTC_UI_SETUP_ISSUE_PROGRESS] = previous_step;
-    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_FIRST_TIME_SETUP_PROGRESS));
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_FIRST_TIME_SETUP_PROGRESS));
     return false;
 }
 

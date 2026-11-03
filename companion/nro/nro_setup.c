@@ -29,7 +29,7 @@ static void enter_parent_area_unlocked(UiState *ui)
         ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
     ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
     ui->model.selected_index = 0;
-    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PARENTAL_AREA_UNLOCKED_TO_ENTER_THE_KIDS));
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PARENTAL_AREA_UNLOCKED_TO_ENTER_THE_KIDS));
 #ifndef PLAYWISE_EDEN
     if (ui->updater.status == PTC_UPDATE_RECOVERY_REQUIRED) { ui->update_open_after_parent_auth = false; open_online_update(ui); return; }
     ptc_hot_reload_inspect(&ui->hot_reload);
@@ -61,7 +61,7 @@ void enter_parent_area(UiState *ui)
         if (!pin_input(ui, ptc_ui_text(PTC_UI_T_SET_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_JOYSTICK_DIRECTION_INPUT_X_0_Y_9_2), pin, sizeof(pin)) ||
             !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR), pin_confirm, sizeof(pin_confirm))) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_SETUP_CANCELED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PIN_SETUP_CANCELED));
             ui->update_open_after_parent_auth = false;
             return;
         }
@@ -80,7 +80,7 @@ void enter_parent_area(UiState *ui)
     }
     if (!pin_input(ui, ptc_ui_text(PTC_UI_T_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_JOYSTICK_DIRECTION_INPUT_X_0_Y_9_2), pin, sizeof(pin))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_ACCESS_TO_THE_PARENT_AREA_HAS_BEEN));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_ACCESS_TO_THE_PARENT_AREA_HAS_BEEN));
         ui->update_open_after_parent_auth = false;
         return;
     }
@@ -105,7 +105,7 @@ void enter_parent_area(UiState *ui)
     enter_parent_area_unlocked(ui);
     if (strlen(pin) < 4U) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_HAS_BEEN_UNLOCKED_THE));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_HAS_BEEN_UNLOCKED_THE));
     }
 }
 
@@ -157,9 +157,9 @@ void open_shortcut_manager(UiState *ui)
     ui->model.shortcut_draft_show_hint = ui->model.show_parent_shortcut_hint;
     refresh_shortcut_draft_label(ui);
     ui->model.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_PARENT_AREA_SHORTCUT_KEY_MANAGEMENT));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_PARENT_AREA_SHORTCUT_KEY_MANAGEMENT));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             ptc_ui_text(PTC_UI_T_THE_CUSTOM_COMBINATION_REQUIRES_LONG_PRESSING_FOR));
+             "%s", ptc_ui_text(PTC_UI_T_THE_CUSTOM_COMBINATION_REQUIRES_LONG_PRESSING_FOR));
 }
 
 void setup_pin(UiState *ui)
@@ -182,7 +182,7 @@ void setup_pin(UiState *ui)
             !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_NEW_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR),
                        pin_confirm, sizeof(pin_confirm))) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_CURRENT_PIN_RESERVED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_CURRENT_PIN_RESERVED));
             return;
         }
         if (strcmp(pin, pin_confirm) != 0) {
@@ -209,7 +209,7 @@ void setup_pin(UiState *ui)
         !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR),
                    pin_confirm, sizeof(pin_confirm))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_SETUP_CANCELED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PIN_SETUP_CANCELED));
         return;
     }
     if (strcmp(pin, pin_confirm) != 0) {
@@ -252,7 +252,7 @@ bool ensure_default_setup_pin(UiState *ui)
     ui->model.setup_pin_ready = true;
     ui->setup_parent_authorized = true;
     snprintf(ui->model.message, sizeof(ui->model.message),
-             ptc_ui_text(PTC_UI_T_DEFAULT_PIN_110_HAS_BEEN_CREATED_THIS));
+             "%s", ptc_ui_text(PTC_UI_T_DEFAULT_PIN_110_HAS_BEEN_CREATED_THIS));
     return true;
 }
 
@@ -500,5 +500,5 @@ void open_weekly_page(UiState *ui)
         }
     }
     submit_status(ui);
-    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_REFRESHING_WEEKLY_PLANNER_PRESS_A_AFTER_SELECTING));
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_REFRESHING_WEEKLY_PLANNER_PRESS_A_AFTER_SELECTING));
 }

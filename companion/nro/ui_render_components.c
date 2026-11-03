@@ -3,7 +3,7 @@
 void format_duration(int minutes, char *out, size_t out_size)
 {
     if (minutes < 0) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
         return;
     }
     if (minutes < 60) {

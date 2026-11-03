@@ -24,7 +24,7 @@ void save_weekly_from_page(UiState *ui)
         return;
     }
     if (!ui->model.weekly_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
         return;
     }
     hold = ptc_ui_plan_save_requires_hold(
@@ -35,7 +35,7 @@ void save_weekly_from_page(UiState *ui)
     }
     before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
     after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_WEEKLY);
-    snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_PLEASE_CHECK_TODAY_S_FINAL_RULES_ESTIMATED));
+    snprintf(body, sizeof(body), "%s", ptc_ui_text(PTC_UI_T_PLEASE_CHECK_TODAY_S_FINAL_RULES_ESTIMATED));
     open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY,
         (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
             ? ptc_ui_text(PTC_UI_T_WEEKLY_PLANS_WILL_AFFECT_TODAY) : ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE_WEEKLY_PLAN), body);
@@ -48,11 +48,11 @@ void save_holiday_from_page(UiState *ui)
     bool hold;
     if (!ui || ui->model.disable_flag_present) {
         if (ui) snprintf(ui->model.message, sizeof(ui->model.message),
-                         ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
+                         "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
         return;
     }
     if (!ui->model.holiday_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS_HAVE_NOT_BEEN_MODIFIED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS_HAVE_NOT_BEEN_MODIFIED));
         return;
     }
     hold = ptc_ui_plan_save_requires_hold(
@@ -75,7 +75,7 @@ void save_scheduled_from_overlay(UiState *ui)
         !ptc_ui_scheduled_dirty(&ui->model)) return;
     if (!ptc_scheduled_override_is_valid(&ui->model.draft_scheduled_override)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            ptc_ui_text(PTC_UI_T_THE_SPECIFIED_DATE_QUOTA_IS_INVALID_PLEASE));
+            "%s", ptc_ui_text(PTC_UI_T_THE_SPECIFIED_DATE_QUOTA_IS_INVALID_PLEASE));
         return;
     }
     if (ptc_ui_plan_save_requires_hold(&ui->model, PTC_UI_PLAN_SCHEDULED, (int64_t)time(NULL))) {
@@ -101,7 +101,7 @@ void apply_pending_navigation(UiState *ui)
         submit_status(ui);
     } else if (ui->pending_leave_parent) {
         ptc_ui_return_from_parent(&ui->model);
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_HAS_RETURNED_TO_THE_MAIN_PAGE));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_HAS_RETURNED_TO_THE_MAIN_PAGE));
         if (ui->model.view == PTC_UI_CHILD) {
             submit_status(ui);
         }
@@ -152,7 +152,7 @@ void discard_bedtime_draft(UiState *ui)
     if (!ui) return;
     ptc_ui_bedtime_discard_section(&ui->model, ui->model.bedtime_section);
     update_bedtime_dirty(ui);
-    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_MODIFICATION_OF_THE_CURRENT_BEDTIME_SUBPAGE));
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_MODIFICATION_OF_THE_CURRENT_BEDTIME_SUBPAGE));
 }
 
 static const char *bedtime_section_name(PtcUiBedtimeSection section)
@@ -198,17 +198,17 @@ void save_bedtime_from_page(UiState *ui)
     PtcUiBedtimeImpact impact;
     if (!ui || ui->waiting) return;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_BEDTIME_SETTING_IS));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_BEDTIME_SETTING_IS));
         return;
     }
     if (!ui->model.bedtime_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_BEDTIME_HAS_NOT_BEEN_MODIFIED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_HAS_NOT_BEEN_MODIFIED));
         return;
     }
     draft = ptc_ui_bedtime_section_policy(&ui->model, ui->model.bedtime_section);
     if (!ptc_bedtime_policy_is_valid(&draft)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_PLEASE_CHECK_FOR_OVERNIGHT));
+            "%s", ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_PLEASE_CHECK_FOR_OVERNIGHT));
         return;
     }
     if (draft.enabled && !ui->model.bedtime_official_setting_confirmed) {
@@ -248,7 +248,7 @@ void select_bedtime_section(UiState *ui, int section)
         snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_SAVE_S_DRAFT_BEFORE_SWITCHING),
             bedtime_section_name(ui->model.bedtime_section));
         snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-            ptc_ui_text(PTC_UI_T_SAVE_AND_SWITCH_ABANDON_AND_SWITCH_OR));
+            "%s", ptc_ui_text(PTC_UI_T_SAVE_AND_SWITCH_ABANDON_AND_SWITCH_OR));
         return;
     }
     ui->model.bedtime_section = (PtcUiBedtimeSection)section;
@@ -267,7 +267,7 @@ void open_bedtime_window_editor(UiState *ui, int weekday)
     ui->model.confirm_hold_required = false;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_S_BEDTIME_WINDOW), ptc_ui_weekday_label((unsigned)weekday));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-        ptc_ui_text(PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT));
+        "%s", ptc_ui_text(PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT));
 }
 
 void open_bedtime_special_editor(UiState *ui, int kind)
@@ -281,7 +281,7 @@ void open_bedtime_special_editor(UiState *ui, int kind)
         kind == 0 ? ptc_ui_text(PTC_UI_T_LEGAL_VACATION_BEDTIME_RULES) :
         (kind == 1 ? ptc_ui_text(PTC_UI_T_BEDTIME_RULES_FOR_REST_DAYS) : ptc_ui_text(PTC_UI_T_BEDTIME_RULES_ON_SPECIFIED_DAYS)));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-        ptc_ui_text(PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
+        "%s", ptc_ui_text(PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
 }
 
 void open_bedtime_time_editor(UiState *ui, PtcUiBedtimeTimeTarget target)
@@ -344,7 +344,7 @@ void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
     }
     if (ui->waiting) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_SETTINGS_ARE));
+                 "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_SETTINGS_ARE));
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_SUPPORT &&
@@ -360,13 +360,13 @@ void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
         refresh_disable_flag(ui);
         ui->model.weekly_leave_selection = ui->model.disable_flag_present ? 2 : 1;
         if (!leave_parent && target_page == PTC_UI_PARENT_PLAN) {
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_REFRESH_WEEKLY_PLAN));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_REFRESH_WEEKLY_PLAN));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
                      ui->model.disable_flag_present
                        ? ptc_ui_text(PTC_UI_T_CANNOT_SAVE_DURING_EMERGENCY_SHUTDOWN_CHOOSE_TO)
                        : ptc_ui_text(PTC_UI_T_REFRESH_WILL_READ_THE_SAVED_WEEKLY_PLAN));
         } else {
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_AWAY_WEEK_PLANS));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_AWAY_WEEK_PLANS));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
                      ui->model.disable_flag_present
                        ? ptc_ui_text(PTC_UI_T_CANNOT_SAVE_DURING_EMERGENCY_SHUTDOWN_CHOOSE_TO_2)
@@ -380,9 +380,9 @@ void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
         ui->pending_leave_parent = leave_parent;
         ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_LEAVE;
         ui->model.holiday_leave_selection = 1;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_LEAVE_COUNTRY_HOLIDAY_SETTINGS));
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_LEAVE_COUNTRY_HOLIDAY_SETTINGS));
         snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                 ptc_ui_text(PTC_UI_T_THERE_ARE_UNSAVED_CHANGES_HERE_CONTINUE_EDITING));
+                 "%s", ptc_ui_text(PTC_UI_T_THERE_ARE_UNSAVED_CHANGES_HERE_CONTINUE_EDITING));
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&

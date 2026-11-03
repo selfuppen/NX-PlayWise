@@ -104,7 +104,7 @@ int main(int argc, char **argv)
     ui.model.play_timer_enabled = -1;
     ui.model.restricted_now = -1;
     ptc_ui_set_execution(&ui.model, NULL, NULL);
-    snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS));
+    snprintf(ui.model.message, sizeof(ui.model.message), "%s", ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS));
     ptc_fs_storage_init(&fs);
 #ifndef PLAYWISE_EDEN
     ptc_online_update_init(&ui.updater, ptc_fs_storage_as_storage(&fs));
@@ -168,7 +168,7 @@ int main(int argc, char **argv)
     ) {
         ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_DEFAULTS, PTC_ERR_STORAGE_WRITE_FAILED);
         snprintf(ui.model.message, sizeof(ui.model.message),
-                 ptc_ui_text(PTC_UI_T_THE_INSTALLATION_DATA_INITIALIZATION_FAILED_PLEASE_OVERWRITE));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_INSTALLATION_DATA_INITIALIZATION_FAILED_PLEASE_OVERWRITE));
     }
 #ifndef PLAYWISE_EDEN
     else if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED) {
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
     } else if (!backend_expected) {
         ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_INIT_FAILED);
         snprintf(ui.model.message, sizeof(ui.model.message),
-                 ptc_ui_text(PTC_UI_T_THE_STANDARD_BACKGROUND_STARTUP_FLAG_IS_NOT));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_STANDARD_BACKGROUND_STARTUP_FLAG_IS_NOT));
     }
 #endif
     else if (!restore_pending_redemption(&ui)) {

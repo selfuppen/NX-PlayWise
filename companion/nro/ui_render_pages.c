@@ -418,7 +418,7 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     draw_text(pixels, stride, panel.x + 26, panel.y + 188, age, 15, status_age_color(model));
     if (model->environment_available)
         snprintf(troubleshoot, sizeof(troubleshoot), "HOS %s  |  %s", model->environment_hos, model->environment_model);
-    else snprintf(troubleshoot, sizeof(troubleshoot), ptc_ui_text(PTC_UI_T_ENVIRONMENT_DETAILS_ARE_TEMPORARILY_UNAVAILABLE_DIAGNOSTICS_CA));
+    else snprintf(troubleshoot, sizeof(troubleshoot), "%s", ptc_ui_text(PTC_UI_T_ENVIRONMENT_DETAILS_ARE_TEMPORARILY_UNAVAILABLE_DIAGNOSTICS_CA));
     fit_text(troubleshoot, sizeof(troubleshoot), troubleshoot, 15, panel.width - 52);
     draw_text(pixels, stride, panel.x + 26, panel.y + 214, troubleshoot, 15, UI_RGB(UI_BLENDED(text_secondary)));
     draw_text(pixels, stride, panel.x + 26, panel.y + 252, ptc_ui_text(PTC_UI_T_RECENT_EVENTS), 18, UI_MUTED);
@@ -545,7 +545,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                         (unsigned int)(model->bedtime_next_start_minute % 60),
                         (unsigned int)(model->bedtime_next_end_minute / 60),
                         (unsigned int)(model->bedtime_next_end_minute % 60));
-                else snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_ENABLED_WAITING_FOR_WINDOW));
+                else snprintf(dynamic, sizeof(dynamic), "%s", ptc_ui_text(PTC_UI_T_ENABLED_WAITING_FOR_WINDOW));
                 subtitle = dynamic;
             } else {
                 subtitle = model->bedtime_policy.enabled ? (ptc_ui_text(PTC_UI_T_NO_UPCOMING_WINDOW_TO_SKIP)) : (ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
@@ -947,7 +947,7 @@ static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const Ptc
             snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_U_MIN_DAY),
                 (unsigned int)model->autonomy_policy.daily_buffer_minutes);
         } else {
-            snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
+            snprintf(autonomy_detail, sizeof(autonomy_detail), "%s", ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
         }
         dynamic_action.subtitle = autonomy_detail;
         action = &dynamic_action;
@@ -967,7 +967,7 @@ static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const Ptc
             snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_S),
                      model->custom_shortcut_label);
         } else {
-            snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_MINUS));
+            snprintf(shortcut_detail, sizeof(shortcut_detail), "%s", ptc_ui_text(PTC_UI_T_CURRENT_MINUS));
         }
         dynamic_action.subtitle = shortcut_detail;
         action = &dynamic_action;

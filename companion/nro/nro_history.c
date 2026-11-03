@@ -21,15 +21,15 @@ void open_redemption_history(UiState *ui)
     (void)load_redemption_history(ui);
     ui->model.overlay = PTC_UI_OVERLAY_REDEMPTION_HISTORY;
     ui->model.confirm_hold_required = false;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_USAGE_RECORD));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_USAGE_RECORD));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             ptc_ui_text(PTC_UI_T_ONLY_DISPLAYS_THE_LAST_100_SUCCESSFULLY_REDEEMED));
+             "%s", ptc_ui_text(PTC_UI_T_ONLY_DISPLAYS_THE_LAST_100_SUCCESSFULLY_REDEEMED));
 }
 void request_clear_redemption_history(UiState *ui)
 {
     if (!ui) return;
     if (ui->model.redemption_history_available && ui->model.redemption_history_count == 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_GRANT_CODE_USAGE));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_GRANT_CODE_USAGE));
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_CLEAR_REDEMPTION_HISTORY;
@@ -59,15 +59,15 @@ void open_activity_history(UiState *ui)
     (void)load_activity_history(ui);
     ui->model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
     ui->model.confirm_hold_required = false;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-        ptc_ui_text(PTC_UI_T_RETAINS_UP_TO_200_RULES_GRANT_AUTONOMOUS));
+        "%s", ptc_ui_text(PTC_UI_T_RETAINS_UP_TO_200_RULES_GRANT_AUTONOMOUS));
 }
 void request_clear_activity_history(UiState *ui)
 {
     if (!ui) return;
     if (ui->model.activity_history_available && ui->model.activity_history_count == 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_FAMILY_ACTIVITY_RECORDS));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_FAMILY_ACTIVITY_RECORDS));
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_CLEAR_ACTIVITY_HISTORY;

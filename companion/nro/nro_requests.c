@@ -87,7 +87,7 @@ void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)
     PtcCompanionStatus status;
     const char *type;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_AND_LIMIT_MODIFICATION));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_AND_LIMIT_MODIFICATION));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -99,7 +99,7 @@ void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)
         status = ptc_companion_transport_submit_add_today_minutes(&ui->transport, ui->active_request_id, time(NULL), minutes);
     } else {
         ui->waiting = false;
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSUPPORTED_QUOTA_OPERATION));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UNSUPPORTED_QUOTA_OPERATION));
         return;
     }
     set_command_name(ui, type);
@@ -116,7 +116,7 @@ void submit_weekly(UiState *ui)
 {
     PtcCompanionStatus status;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_AND_THE_WEEKLY));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_AND_THE_WEEKLY));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -139,11 +139,11 @@ void submit_holiday_policy(UiState *ui)
 {
     PtcCompanionStatus status;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
         return;
     }
     if (!ui->model.holiday_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS_HAVE_NOT_BEEN_MODIFIED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS_HAVE_NOT_BEEN_MODIFIED));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -173,7 +173,7 @@ void edit_scheduled_minutes(UiState *ui)
     draft = &ui->model.draft_scheduled_override;
     if (draft->rule.mode != PTC_RULE_MODE_LIMIT) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_IS_CURRENTLY_UNLIMITED_PRESS_X_TO_SWITCH));
+                 "%s", ptc_ui_text(PTC_UI_T_IS_CURRENTLY_UNLIMITED_PRESS_X_TO_SWITCH));
         return;
     }
     ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_SCHEDULED_MINUTES,

@@ -498,7 +498,7 @@ static void format_console_date(const PtcCompanionResultSummary &summary, char *
     if (!out || out_size == 0) return;
     if (!summary.valid || summary.day_index < 0 || summary.day_index > 0xffff ||
         !ptc_date_from_day_index(static_cast<uint16_t>(summary.day_index), &year, &month, &day)) {
-        std::snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONSOLE_DATE_PENDING_REFRESH));
+        std::snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_CONSOLE_DATE_PENDING_REFRESH));
         return;
     }
     std::snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONSOLE_TODAY_04U_02U_02U),

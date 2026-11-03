@@ -691,6 +691,19 @@ def test_incremental_host_and_manifest_profiles() -> None:
                 "same flags preserve the cache")
         require("test-compile" in build(), "restoring default flags rebuilds once")
         require("test-compile" not in build(), "restored defaults are reusable")
+        edit("tests/overlay_memory/test.cpp",
+             '#include <cstdio>\nint main(int, char **argv) { char out[32]; '
+             'return std::snprintf(out, sizeof(out), argv[0]); }\n')
+        unsafe = make(target)
+        require(unsafe.returncode != 0 and "format-security" in unsafe.stderr,
+                "host builds must reject text used as a format without arguments")
+        edit("tests/overlay_memory/test.cpp",
+             '#include <cstdio>\n#include <cstring>\nint main() { char out[32]; '
+             'std::snprintf(out, sizeof(out), "%s", "100% ready"); '
+             'return std::strcmp(out, "100% ready"); }\n')
+        build()
+        require(subprocess.run([str(executable)]).returncode == 0,
+                "literal percent signs in copied text are preserved")
         edit("tests/overlay_memory/test.cpp", "int main() { return 3; }\n")
         require("test-compile" in build(), "source edits invalidate cached binary")
         require(subprocess.run([str(executable)]).returncode == 3, "source edit reaches executable")

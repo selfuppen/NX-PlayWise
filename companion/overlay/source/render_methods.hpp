@@ -429,16 +429,16 @@
     {
         if (!out || out_size == 0) return;
         if (active_request_kind_ == OverlayRequestKind::Status && bridge_->waiting) {
-            std::snprintf(out, out_size, ptc_ui_text(PTC_UI_T_REFRESHING));
+            std::snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_REFRESHING));
             return;
         }
         if (!has_status_snapshot_ || last_refresh_tick_ == 0) {
-            std::snprintf(out, out_size, ptc_ui_text(PTC_UI_T_HAS_NOT_BEEN_REFRESHED_YET));
+            std::snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_HAS_NOT_BEEN_REFRESHED_YET));
             return;
         }
         const u64 age_seconds = armTicksToNs(armGetSystemTick() - last_refresh_tick_) / 1000000000ULL;
         if (age_seconds < 2) {
-            std::snprintf(out, out_size, ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
+            std::snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
         } else if (age_seconds < 60) {
             std::snprintf(out, out_size, ptc_ui_text(PTC_UI_T_LLU_SEC_AGO), static_cast<unsigned long long>(age_seconds));
         } else {

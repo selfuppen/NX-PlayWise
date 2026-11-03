@@ -279,11 +279,11 @@ bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summar
         return false;
     }
     if (summary->unrestricted_today == 1) {
-        snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     } else if (summary->remaining_available && summary->remaining_minutes >= 0) {
         snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_D_MIN), summary->remaining_minutes);
     } else {
-        snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+        snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     }
     timer = summary->play_timer_enabled == 1 ? ptc_ui_text(PTC_UI_T_STARTED) :
         (summary->play_timer_enabled == 0 ? ptc_ui_text(PTC_UI_T_NOT_STARTED_2) : ptc_ui_text(PTC_UI_T_UNCONFIRMED));

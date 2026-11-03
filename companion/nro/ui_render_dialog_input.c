@@ -24,7 +24,7 @@ void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
     } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE && model->numpad_text[0]) {
         ptc_ui_format_code(model->numpad_text, shown, sizeof(shown));
     } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
-        snprintf(shown, sizeof(shown), ptc_ui_text(PTC_UI_T_ENTER_CODE));
+        snprintf(shown, sizeof(shown), "%s", ptc_ui_text(PTC_UI_T_ENTER_CODE));
     } else if (model->numpad_text[0]) {
         snprintf(shown, sizeof(shown), "%s", model->numpad_text);
     } else {
@@ -103,7 +103,7 @@ void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
             snprintf(current, sizeof(current), ptc_ui_text(PTC_UI_T_ENTER_8_DIGIT_CODE_ENTERED_U_8), len);
             duration[0] = '\0';
         } else {
-            snprintf(current, sizeof(current), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_COMPLETE_8_DIGIT_CODE));
+            snprintf(current, sizeof(current), "%s", ptc_ui_text(PTC_UI_T_PLEASE_ENTER_COMPLETE_8_DIGIT_CODE));
             duration[0] = '\0';
         }
     }
@@ -116,7 +116,7 @@ void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         int after_minutes = model->played_minutes_available
             ? (int)entered_minutes - model->played_minutes : -1;
         if (after_minutes < 0 && model->played_minutes_available) after_minutes = 0;
-        if (model->unrestricted_today == 1) snprintf(current_value, sizeof(current_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        if (model->unrestricted_today == 1) snprintf(current_value, sizeof(current_value), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         else format_duration(model->remaining_available ? model->remaining_minutes : -1,
                              current_value, sizeof(current_value));
         format_duration(after_minutes, after_value, sizeof(after_value));
@@ -484,15 +484,15 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             snprintf(total_value, sizeof(total_value), ptc_ui_text(PTC_UI_T_TOTAL_U_MIN), (unsigned int)entered);
         }
     } else {
-        snprintf(value, sizeof(value), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
-        snprintf(total_value, sizeof(total_value), clock ? ptc_ui_text(PTC_UI_T_SET_TIME_HOURS_MINUTES) : ptc_ui_text(PTC_UI_T_TOTAL_MINUTES));
+        snprintf(value, sizeof(value), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+        snprintf(total_value, sizeof(total_value), "%s", clock ? ptc_ui_text(PTC_UI_T_SET_TIME_HOURS_MINUTES) : ptc_ui_text(PTC_UI_T_TOTAL_MINUTES));
     }
     snprintf(hours_value, sizeof(hours_value), clock ? ptc_ui_text(PTC_UI_T_S_HR) : ptc_ui_text(PTC_UI_T_S_HR_2),
              model->duration_hours_text[0] ? model->duration_hours_text : "--");
     snprintf(minutes_value, sizeof(minutes_value), clock ? ptc_ui_text(PTC_UI_T_S_MIN_2) : ptc_ui_text(PTC_UI_T_S_MIN),
              model->duration_minutes_text[0] ? model->duration_minutes_text : "--");
     format_duration(fresh && model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
-    if (fresh && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    if (fresh && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(fresh && model->remaining_available ? model->remaining_minutes : -1, remaining, sizeof(remaining));
     if (weekly) {
         uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
@@ -508,7 +508,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
          (model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES &&
           model->editor_index == ptc_weekday_from_day_index(model->day_index)))) after_minutes = 0;
-    if (unlimited_draft) snprintf(after, sizeof(after), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    if (unlimited_draft) snprintf(after, sizeof(after), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(after_minutes, after, sizeof(after));
     format_status_age(model, freshness, sizeof(freshness));
     if (fresh && entered_valid && model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
@@ -546,7 +546,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         {
             char step_hint[32];
             if (model->duration_field == PTC_UI_DURATION_HOURS)
-                snprintf(step_hint, sizeof(step_hint), clock ? ptc_ui_text(PTC_UI_T_1_POINT_PER_STEP) : ptc_ui_text(PTC_UI_T_1_HOUR_PER_STEP));
+                snprintf(step_hint, sizeof(step_hint), "%s", clock ? ptc_ui_text(PTC_UI_T_1_POINT_PER_STEP) : ptc_ui_text(PTC_UI_T_1_HOUR_PER_STEP));
             else snprintf(step_hint, sizeof(step_hint), clock ? ptc_ui_text(PTC_UI_T_CURRENT_U_MIN) : ptc_ui_text(PTC_UI_T_CURRENT_U), (unsigned)model->duration_step_feedback);
 
             const char *col_txt = ptc_ui_text(PTC_UI_T_LEFT_AND_RIGHT_SELECT_COLUMN);
@@ -683,7 +683,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             if (fresh && model->played_minutes_available && model->played_minutes >= 0) {
                 snprintf(before_formula, sizeof(before_formula), ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN_TODAY), model->played_minutes);
                 if (unlimited_draft) {
-                    snprintf(after_formula, sizeof(after_formula), ptc_ui_text(PTC_UI_T_NO_DAILY_QUOTA_LIMIT));
+                    snprintf(after_formula, sizeof(after_formula), "%s", ptc_ui_text(PTC_UI_T_NO_DAILY_QUOTA_LIMIT));
                 } else if (entered_valid) {
                     snprintf(after_formula, sizeof(after_formula), ptc_ui_text(PTC_UI_T_ENTERED_U_MIN_PLAYED_D_MIN),
                              (unsigned int)entered, model->played_minutes);

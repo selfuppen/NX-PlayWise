@@ -8,7 +8,7 @@ void open_offline_code_input(UiState *ui)
     }
     if (ui->model.disable_flag_present) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ON_GRANT_CODES_CANNOT));
+                 "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ON_GRANT_CODES_CANNOT));
         return;
     }
     if (ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) && ui->model.dock_restriction_active) {
@@ -18,7 +18,7 @@ void open_offline_code_input(UiState *ui)
     if (ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
         ui->model.unrestricted_today == 1) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_2));
+                 "%s", ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_2));
         return;
     }
     ptc_ui_numpad_open(
@@ -47,7 +47,7 @@ void show_pending_redemption(UiState *ui)
     ui->model.code_result_pending = true;
     ui->model.code_result_failed = false;
     snprintf(ui->model.message, sizeof(ui->model.message),
-             ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMED_GRANT_REQUEST_HAS_BEEN));
+             "%s", ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMED_GRANT_REQUEST_HAS_BEEN));
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "pending");
     snprintf(ui->active_request_id, sizeof(ui->active_request_id), "%s", ui->pending_redemption.request_id);
     set_command_name(ui, "offline_code");
@@ -63,14 +63,14 @@ void poll_pending_redemption(UiState *ui)
     if (status != PTC_COMPANION_OK) {
         if (status == PTC_COMPANION_RESULT_INVALID || status == PTC_COMPANION_RESULT_MISMATCH) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_IS_BEING_CONFIRMED_AND));
+                     "%s", ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_IS_BEING_CONFIRMED_AND));
         }
         return;
     }
     if (!ptc_ui_apply_result_json(&ui->model, ui->last_result) ||
         strcmp(ui->model.result_type, "offline_code") != 0) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_IS_BEING_CONFIRMED_AND_2));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_IS_BEING_CONFIRMED_AND_2));
         return;
     }
     ui->recovering_redemption = false;
@@ -87,7 +87,7 @@ void poll_pending_redemption(UiState *ui)
                  "%s", ptc_ui_code_failure_guidance(ui->model.error_code));
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_HAS_BEEN_RESTORED_AND_CONFIRMED_THAT_THE));
+                 "%s", ptc_ui_text(PTC_UI_T_HAS_BEEN_RESTORED_AND_CONFIRMED_THAT_THE));
     }
 }
 
@@ -99,14 +99,14 @@ bool restore_pending_redemption(UiState *ui)
     if (status != PTC_COMPANION_OK) {
         ui->model.view = PTC_UI_ERROR;
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THE_RECOVERY_INFORMATION_FROM_THE_LAST_GRANT));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_RECOVERY_INFORMATION_FROM_THE_LAST_GRANT));
         return found;
     }
     if (!found) return false;
     if (!ptc_companion_pending_redemption_has_submission(&ui->client, &ui->pending_redemption)) {
         (void)ptc_companion_pending_redemption_clear(&ui->client);
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMATION_WAS_INTERRUPTED_BEFORE_SUBMISSION_2));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMATION_WAS_INTERRUPTED_BEFORE_SUBMISSION_2));
         return true;
     }
     ui->recovering_redemption = true;

@@ -62,7 +62,7 @@ static bool keyboard_date(UiState *ui, uint16_t current, uint16_t *out_day_index
     if (!ui || !out_day_index || !ui->model.status_loaded ||
         !ptc_date_from_day_index(current, &year, &month, &day)) {
         if (ui) snprintf(ui->model.message, sizeof(ui->model.message),
-                         ptc_ui_text(PTC_UI_T_THE_HOST_DATE_HAS_NOT_BEEN_LOADED));
+                         "%s", ptc_ui_text(PTC_UI_T_THE_HOST_DATE_HAS_NOT_BEEN_LOADED));
         return false;
     }
     initial[0] = (char)('0' + (year / 1000u) % 10u);
@@ -79,7 +79,7 @@ static bool keyboard_date(UiState *ui, uint16_t current, uint16_t *out_day_index
                                 value, sizeof(value), false, true, false, initial)) return false;
     if (!ptc_ui_parse_date_yyyymmdd(value, ui->model.day_index, out_day_index)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_INVALID_DATE_PLEASE_ENTER_TODAY_S_OR));
+                 "%s", ptc_ui_text(PTC_UI_T_INVALID_DATE_PLEASE_ENTER_TODAY_S_OR));
         return false;
     }
     return true;
@@ -97,7 +97,7 @@ static bool keyboard_span(UiState *ui, uint16_t current, uint16_t *out_days)
     if (!keyboard_input_initial(ptc_ui_text(PTC_UI_T_ENTER_THE_DURATION_IN_DAYS), ptc_ui_text(PTC_UI_T_RANGE_1_TO_366_DAYS), value, sizeof(value),
                                 false, true, false, initial)) return false;
     if (!ptc_ui_parse_span_days(value, out_days)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_DURATION_MUST_BE_1_TO_366));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_DURATION_MUST_BE_1_TO_366));
         return false;
     }
     return true;
@@ -111,7 +111,7 @@ bool edit_date_range_start(UiState *ui, uint16_t *start, uint16_t *end)
     duration = *end >= *start ? (uint32_t)*end - *start + 1u : 1u;
     if (!keyboard_date(ui, *start, &next)) return false;
     if ((uint32_t)next + duration - 1u > UINT16_MAX) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THIS_START_DATE_WOULD_PUT_THE_END));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THIS_START_DATE_WOULD_PUT_THE_END));
         return false;
     }
     *start = next;
@@ -125,7 +125,7 @@ bool edit_date_range_span(UiState *ui, uint16_t start, uint16_t *end)
     uint16_t next;
     if (!ui || !end || !keyboard_span(ui, (uint16_t)duration, &next)) return false;
     if ((uint32_t)start + next - 1u > UINT16_MAX) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_DURATION_OF_DAYS_OUTSIDE_OF_AVAILABLE_DATE));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_DURATION_OF_DAYS_OUTSIDE_OF_AVAILABLE_DATE));
         return false;
     }
     *end = (uint16_t)(start + next - 1u);
@@ -363,7 +363,7 @@ void edit_weekly_minutes(UiState *ui)
         char title[64];
         char guide[128];
         snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_SET_WEEKLY_QUOTA_FOR_S), WEEKDAYS[ui->model.editor_index]);
-        snprintf(guide, sizeof(guide), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1));
+        snprintf(guide, sizeof(guide), "%s", ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1));
         ptc_ui_numpad_open(
             &ui->model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
             title, guide, 4, 1, 1440, day->minutes);

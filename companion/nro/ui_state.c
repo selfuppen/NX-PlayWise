@@ -210,20 +210,20 @@ void ptc_ui_format_today_limit_confirmation(
     if (risk && risk_size > 0) {
         if (!model || !model->played_minutes_available || model->played_minutes < 0) {
             snprintf(risk, risk_size,
-                     ptc_ui_text(PTC_UI_T_RISK_UNABLE_TO_OBTAIN_QUOTA_CONSUMPTION_ESTIMATE));
+                     "%s", ptc_ui_text(PTC_UI_T_RISK_UNABLE_TO_OBTAIN_QUOTA_CONSUMPTION_ESTIMATE));
         } else if (ptc_ui_limit_minutes_would_restrict(model, model->draft_minutes)) {
             snprintf(risk, risk_size,
-                     ptc_ui_text(PTC_UI_T_RISK_THE_NEW_QUOTA_IS_NOT_HIGHER));
+                     "%s", ptc_ui_text(PTC_UI_T_RISK_THE_NEW_QUOTA_IS_NOT_HIGHER));
         } else if (model->unrestricted_today == 1) {
             snprintf(risk, risk_size,
-                     ptc_ui_text(PTC_UI_T_TIP_TODAY_WILL_BE_CHANGED_FROM_NO));
+                     "%s", ptc_ui_text(PTC_UI_T_TIP_TODAY_WILL_BE_CHANGED_FROM_NO));
         } else {
-            snprintf(risk, risk_size, ptc_ui_text(PTC_UI_T_TIP_PLEASE_CONFIRM_TODAY_S_REAL_TIME));
+            snprintf(risk, risk_size, "%s", ptc_ui_text(PTC_UI_T_TIP_PLEASE_CONFIRM_TODAY_S_REAL_TIME));
         }
     }
     if (recovery && recovery_size > 0) {
         snprintf(recovery, recovery_size,
-                 ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK_2));
+                 "%s", ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK_2));
     }
 }
 

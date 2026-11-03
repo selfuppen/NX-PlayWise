@@ -555,16 +555,16 @@ void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
     if (!ptc_ui_parent_status_alert_visible(model)) return;
     if (ptc_ui_operation_feedback_visible(model)) return;
     if (model->disable_flag_present) {
-        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_CONTROLS_DISABLED_PRESS_A_FOR_RECOVERY));
+        snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_CONTROLS_DISABLED_PRESS_A_FOR_RECOVERY));
     } else if (model->recovery_active) {
-        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_RECOVERY_INCOMPLETE_PRESS_A_FOR_ACTIONS));
+        snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_RECOVERY_INCOMPLETE_PRESS_A_FOR_ACTIONS));
     } else if (strcmp(model->setup_phase, "protection") == 0) {
-        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_PROTECTION_ACTIVE_PRESS_A_FOR_DETAILS));
+        snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_PROTECTION_ACTIVE_PRESS_A_FOR_DETAILS));
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_TEMPORARILY_UNLOCKED_PRESS_A_TO_MANAGE));
+        snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_TEMPORARILY_UNLOCKED_PRESS_A_TO_MANAGE));
         color = UI_WARNING;
     } else {
-        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_SYSTEM_ALERT_PRESS_A_FOR_SUPPORT));
+        snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_SYSTEM_ALERT_PRESS_A_FOR_SUPPORT));
     }
 
     fill_round_rect(pixels, stride, box, 12,
@@ -645,7 +645,7 @@ void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             snprintf(progress_label, sizeof(progress_label), ptc_ui_text(PTC_UI_T_A_KEEP_HOLDING_U),
                      (unsigned int)(model->confirm_hold_progress / 10));
         } else {
-            snprintf(progress_label, sizeof(progress_label), ptc_ui_text(PTC_UI_T_A_PRESS_AND_HOLD_FOR_1_SECOND));
+            snprintf(progress_label, sizeof(progress_label), "%s", ptc_ui_text(PTC_UI_T_A_PRESS_AND_HOLD_FOR_1_SECOND));
         }
         draw_text_center(pixels, stride, button,
                          model->confirm_hold_progress >= 1000 ? ptc_ui_text(PTC_UI_T_A_CONFIRMATION_COMPLETED) : progress_label,
@@ -675,9 +675,9 @@ void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size)
     uint16_t today;
     uint16_t minute;
     if (!out || out_size == 0) return;
-    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
+    snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
     if (timestamp <= 0) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
         return;
     }
     {
@@ -702,7 +702,7 @@ void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size)
     } else if (ptc_date_from_day_index(event_day, &year, &month, &day)) {
         snprintf(out, out_size, "%u-%02u-%02u %02u:%02u", year, month, day, minute / 60, minute % 60);
     } else {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
     }
 }
 

@@ -587,7 +587,7 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
     length = strlen(model->numpad_text);
     if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
         if (length != 8) {
-            snprintf(model->numpad_error, sizeof(model->numpad_error), ptc_ui_text(PTC_UI_T_THE_ADDITIONAL_TIME_CODE_MUST_BE_8));
+            snprintf(model->numpad_error, sizeof(model->numpad_error), "%s", ptc_ui_text(PTC_UI_T_THE_ADDITIONAL_TIME_CODE_MUST_BE_8));
             return false;
         }
         return true;
@@ -596,7 +596,7 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         if (!ptc_ui_duration_value(model, &value)) {
             if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
                 snprintf(model->numpad_error, sizeof(model->numpad_error),
-                         ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_VALID_TIME_HOURS_0));
+                         "%s", ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_VALID_TIME_HOURS_0));
             } else {
                 snprintf(model->numpad_error, sizeof(model->numpad_error), ptc_ui_text(PTC_UI_T_ENTER_A_COMPLETE_DURATION_U_TO_U),
                          (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
@@ -606,7 +606,7 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         if (model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES &&
             !ptc_ui_grant_minutes_legal(value, model->numpad_maximum)) {
             snprintf(model->numpad_error, sizeof(model->numpad_error),
-                     ptc_ui_text(PTC_UI_T_SUPPORTS_5_MINUTE_INTERVALS_OF_1_4));
+                     "%s", ptc_ui_text(PTC_UI_T_SUPPORTS_5_MINUTE_INTERVALS_OF_1_4));
             return false;
         }
     } else {

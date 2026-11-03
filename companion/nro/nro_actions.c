@@ -251,7 +251,7 @@ void refresh_album_restriction(UiState *ui)
         ui->model.album_backup_valid = false;
         snprintf(ui->model.album_restriction_detail,
                  sizeof(ui->model.album_restriction_detail),
-                 ptc_ui_text(PTC_UI_T_STATUS_READING_FAILED_PLEASE_CHECK_AGAIN));
+                 "%s", ptc_ui_text(PTC_UI_T_STATUS_READING_FAILED_PLEASE_CHECK_AGAIN));
         return;
     }
     ui->model.album_restriction_state = (int)status.state;

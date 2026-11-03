@@ -10,7 +10,7 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.overlay == PTC_UI_OVERLAY_NONE &&
         hit.kind != PTC_UI_HIT_SUPPORT_GUIDE &&
         !(hit.kind == PTC_UI_HIT_PARENT_CARD && ptc_ui_parent_read_only_action(&ui->model, hit.index))) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS_2));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS_2));
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
@@ -47,7 +47,7 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_CHILD_SUBMIT_CODE:
         if (ui->waiting) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_CURRENT_OPERATION_TO));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_CURRENT_OPERATION_TO));
         } else {
             ptc_audio_play(PTC_SE_CONFIRM);
             open_offline_code_input(ui);
@@ -139,7 +139,7 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_PARENT_CARD:
         if (ui->waiting && !ptc_ui_parent_read_only_action(&ui->model, hit.index)) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
         } else {
             ptc_audio_play(PTC_SE_CONFIRM);
             ui->model.selected_index = hit.index;
@@ -284,7 +284,7 @@ void handle_touch(UiState *ui, int x, int y)
             handle_overlay_input(ui, HidNpadButton_B);
         } else {
             ptc_ui_cancel_overlay(&ui->model);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
         }
         break;
     case PTC_UI_HIT_OVERLAY_CONFIRM:
@@ -323,7 +323,7 @@ void handle_touch(UiState *ui, int x, int y)
         }
         if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM && ui->model.confirm_hold_required) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_TO_AVOID_MISOPERATION_PLEASE_PRESS_AND_HOLD));
+                     "%s", ptc_ui_text(PTC_UI_T_TO_AVOID_MISOPERATION_PLEASE_PRESS_AND_HOLD));
         } else {
             handle_overlay_input(ui, ptc_ui_overlay_primary_uses_plus(ui->model.overlay)
                 ? HidNpadButton_Plus : HidNpadButton_A);
@@ -500,9 +500,9 @@ void handle_touch(UiState *ui, int x, int y)
                 ptc_audio_play(PTC_SE_POPUP);
                 ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;
                 ui->model.overlay_selection = hit.index - 7;
-                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW));
+                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW));
                 snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                    ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_SWITCHES_AND_TIME_OF));
+                    "%s", ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_SWITCHES_AND_TIME_OF));
             } else if ((ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY && hit.index == 9) ||
                        (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index == 3) ||
                        (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 4)) {
@@ -589,13 +589,13 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.selected_index = 2;
         if (weekly_editing_blocked(ui)) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_BATCH_OPERATIONS_ARE));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_BATCH_OPERATIONS_ARE));
         } else {
             ptc_audio_play(PTC_SE_POPUP);
             ui->model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
             ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_BATCH_QUICK_OPERATIONS));
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_DRAFT_RULE_FOR_THE));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_BATCH_QUICK_OPERATIONS));
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_DRAFT_RULE_FOR_THE));
         }
         break;
     case PTC_UI_HIT_WEEKLY_BULK_TARGET:
@@ -706,14 +706,14 @@ void handle_touch(UiState *ui, int x, int y)
         } else {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
+                     "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
         }
         break;
     case PTC_UI_HIT_HOLIDAY_ENABLE:
         ui->model.selected_index = 0;
         if (ui->model.disable_flag_present) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
         } else {
             ptc_audio_play(PTC_SE_TOGGLE);
             ui->model.draft_holiday_enabled = !ui->model.draft_holiday_enabled;
@@ -725,7 +725,7 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.holiday_last_rule = hit.index;
         if (ui->model.disable_flag_present) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
         } else if (hit.index == 0) {
             ptc_audio_play(PTC_SE_TOGGLE);
             ui->model.draft_holiday_rule.mode = ptc_ui_next_rule_mode(ui->model.draft_holiday_rule.mode);
@@ -741,7 +741,7 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.holiday_last_rule = hit.index;
         if (ui->model.disable_flag_present) {
             ptc_audio_play(PTC_SE_ERROR);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
         } else {
             ptc_audio_play(PTC_SE_POPUP);
             handle_parent_action(ui);
@@ -758,9 +758,9 @@ void handle_touch(UiState *ui, int x, int y)
         if (ui->model.weekly_dirty) {
             memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
             ui->model.weekly_dirty = false;
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
         } else {
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
         }
         break;
     case PTC_UI_HIT_CREDENTIAL_INPUT:

@@ -87,7 +87,7 @@ void poll_hot_reload(UiState *ui)
         if (ptc_switch_ipc_client_probe(&ui->ipc)) {
             ptc_companion_transport_set_suspended(&ui->transport, false);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(ui->model.hot_reload_capture_restart ? PTC_UI_T_CAPTURE_RESTART_DONE :
+                "%s", ptc_ui_text(ui->model.hot_reload_capture_restart ? PTC_UI_T_CAPTURE_RESTART_DONE :
                     PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
             submit_status(ui);
             ptc_hot_reload_record_event(&ui->hot_reload, "status_submitted", ui->active_request_id, 0);
@@ -95,7 +95,7 @@ void poll_hot_reload(UiState *ui)
             ptc_hot_reload_record_event(&ui->hot_reload, "ipc_unavailable", NULL, 0);
             ui->hot_reload.status = PTC_HOT_RELOAD_UNAVAILABLE;
             snprintf(ui->hot_reload.detail, sizeof(ui->hot_reload.detail),
-                ptc_ui_text(PTC_UI_T_THE_BACKGROUND_HAS_BEEN_STARTED_BUT_IPC));
+                "%s", ptc_ui_text(PTC_UI_T_THE_BACKGROUND_HAS_BEEN_STARTED_BUT_IPC));
             sync_hot_reload_model(ui);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
         }
@@ -114,7 +114,7 @@ void poll_hot_reload(UiState *ui)
         !ui->model.hot_reload_capture_restart) {
         ui->hot_reload_child_notice_shown = true;
         snprintf(ui->model.message, sizeof(ui->model.message),
-            ptc_ui_text(PTC_UI_T_A_NEW_VERSION_HAS_BEEN_INSTALLED_PLEASE));
+            "%s", ptc_ui_text(PTC_UI_T_A_NEW_VERSION_HAS_BEEN_INSTALLED_PLEASE));
     }
 }
 #endif
@@ -344,7 +344,7 @@ void close_auth_error(UiState *ui, bool cancelled)
     if (cancelled) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
         ui->update_open_after_parent_auth = false;
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_CANCELED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_CANCELED));
         ui->model.result_status[0] = '\0';
     }
 }
@@ -410,7 +410,7 @@ void refresh_disable_flag(UiState *ui)
         ui->model.numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
         ptc_ui_numpad_finish(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_EMERGENCY_OUTAGE_DETECTED_THIS_UNCONFIRMED_MINUTE_ENTRY));
+                 "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_OUTAGE_DETECTED_THIS_UNCONFIRMED_MINUTE_ENTRY));
     }
     if (!was_disabled && ui->model.disable_flag_present &&
         ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE) {
@@ -430,7 +430,7 @@ bool weekly_editing_blocked(UiState *ui)
     }
     if (!cancelling_weekly_input) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_AND_THE_WEEKLY));
+                 "%s", ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_AND_THE_WEEKLY));
     }
     return true;
 }

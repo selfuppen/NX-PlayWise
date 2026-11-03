@@ -66,7 +66,7 @@ void submit_bedtime_confirmation(UiState *ui)
     current_environment_fingerprint(ui, fingerprint);
     if (strcmp(fingerprint, "environment-unavailable") == 0) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            ptc_ui_text(PTC_UI_T_THE_CURRENT_ENVIRONMENT_FINGERPRINT_CANNOT_BE_READ));
+            "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_ENVIRONMENT_FINGERPRINT_CANNOT_BE_READ));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -99,7 +99,7 @@ void submit_bedtime_skip(UiState *ui)
     PtcCompanionStatus status;
     uint64_t instance_id = ui->model.pending_bedtime_skip_instance_id;
     if (instance_id == 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THERE_IS_NO_BEDTIME_WINDOW_TO_SUBMIT));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THERE_IS_NO_BEDTIME_WINDOW_TO_SUBMIT));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));

@@ -41,7 +41,7 @@ bool verify_sensitive_pin(UiState *ui, const char *action)
             ui->model.overlay = return_overlay;
         }
         ui->auth_retry_action = AUTH_RETRY_NONE;
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_SENSITIVE_OPERATION_CANCELED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SENSITIVE_OPERATION_CANCELED));
         return false;
     }
     /* pin_input owns the PIN dialog and closes it on return. Sensitive actions
@@ -72,7 +72,7 @@ void change_parent_pin(UiState *ui)
     if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_BEFORE_CHANGING_YOUR_PIN_PLEASE_ENTER_YOUR))) return;
     if (!pin_input(ui, ptc_ui_text(PTC_UI_T_CHANGE_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_A_NEW_1_TO_64), pin, sizeof(pin)) ||
         !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_NEW_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR), confirm, sizeof(confirm))) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_CHANGE_CANCELED));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PIN_CHANGE_CANCELED));
         return;
     }
     if (strcmp(pin, confirm) != 0) {

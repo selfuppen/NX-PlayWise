@@ -9,7 +9,7 @@ static void format_today_label(uint16_t day_index, char *out, size_t out_size)
     if (ptc_date_from_day_index(day_index, &year, &month, &day)) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_U_U_S_TODAY), month, day, WEEKDAYS[ptc_weekday_from_day_index(day_index)]);
     } else {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_6));
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_TODAY_6));
     }
 }
 
@@ -47,7 +47,7 @@ void request_clear_bedtime_skip(UiState *ui)
     if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
         !ptc_ui_bedtime_skip_matches_policy(&ui->model, &ui->model.bedtime_policy)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECOVERABLE_SKIP_FOR_THIS));
+            "%s", ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECOVERABLE_SKIP_FOR_THIS));
         return;
     }
     current = ui->model.bedtime_active && ui->model.bedtime_skipped &&
@@ -56,7 +56,7 @@ void request_clear_bedtime_skip(UiState *ui)
     ui->auth_retry_action = AUTH_RETRY_CLEAR_BEDTIME_SKIP;
     if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THIS_APPLICATION_PIN_AGAIN_BEFORE))) return;
     snprintf(body, sizeof(body),
-        current ? ptc_ui_text(PTC_UI_T_IS_STILL_WITHIN_THE_SKIPPED_BEDTIME_WINDOW) :
+        "%s", current ? ptc_ui_text(PTC_UI_T_IS_STILL_WITHIN_THE_SKIPPED_BEDTIME_WINDOW) :
                   ptc_ui_text(PTC_UI_T_WILL_CLEAR_THIS_BEDTIME_SKIP_LIMIT_USAGE));
     if (current)
         open_danger_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP,
@@ -84,10 +84,10 @@ void handle_today_action_ready(UiState *ui, int index)
     }
     format_today_label(ui->model.day_index, date, sizeof(date));
     if (ui->model.played_minutes_available) snprintf(played, sizeof(played), ptc_ui_text(PTC_UI_T_ABOUT_D_MIN), ui->model.played_minutes);
-    else snprintf(played, sizeof(played), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
-    if (ui->model.unrestricted_today == 1) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    else snprintf(played, sizeof(played), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+    if (ui->model.unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else if (ui->model.remaining_available) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_D_MIN), ui->model.remaining_minutes);
-    else snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+    else snprintf(remaining, sizeof(remaining), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     switch (index) {
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
         ui->model.today_limit_unlimited_draft = ui->model.unrestricted_today == 1;
@@ -108,15 +108,15 @@ void handle_today_action_ready(UiState *ui, int index)
     case PTC_UI_OPERATION_ADD_TODAY_MINUTES:
         if (ui->model.unrestricted_today == 1) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_TODAY_IS_ALREADY_UNLIMITED_USE_SET_TODAY));
+                     "%s", ptc_ui_text(PTC_UI_T_TODAY_IS_ALREADY_UNLIMITED_USE_SET_TODAY));
         } else {
             ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
             ui->model.draft_minutes = 15;
             ui->model.overlay = PTC_UI_OVERLAY_QUICK_ADD;
             ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_QUICK_GRANT));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_QUICK_GRANT));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                ptc_ui_text(PTC_UI_T_SELECT_A_COMMONLY_USED_DURATION_OR_CUSTOMIZE));
+                "%s", ptc_ui_text(PTC_UI_T_SELECT_A_COMMONLY_USED_DURATION_OR_CUSTOMIZE));
         }
         break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
@@ -146,7 +146,7 @@ void handle_today_action_ready(UiState *ui, int index)
         if (ui->model.disable_flag_present || ui->waiting) break;
         if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL))) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(PTC_UI_T_THE_BEDTIME_STATUS_IS_STILL_TO_BE));
+                "%s", ptc_ui_text(PTC_UI_T_THE_BEDTIME_STATUS_IS_STILL_TO_BE));
             break;
         }
         if (ui->model.bedtime_active) {
@@ -164,7 +164,7 @@ void handle_today_action_ready(UiState *ui, int index)
         }
         if (instance_id == 0) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ui->model.bedtime_skipped_window_available
+                "%s", ui->model.bedtime_skipped_window_available
                     ? ptc_ui_text(PTC_UI_T_THE_MOST_RECENT_BEDTIME_WINDOW_HAS_BEEN) : ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_SKIPPABLE_BEDTIME_WINDOWS));
             break;
         }
@@ -213,7 +213,7 @@ void handle_parent_action(UiState *ui)
     }
     if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index != 6 && index != 7) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
+                 "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
@@ -227,7 +227,7 @@ void handle_parent_action(UiState *ui)
         if (index == 3 && ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
             !ui->model.today_override_present) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_THERE_ARE_NO_CREDIT_ADJUSTMENTS_TO_CLEAR));
+                     "%s", ptc_ui_text(PTC_UI_T_THERE_ARE_NO_CREDIT_ADJUSTMENTS_TO_CLEAR));
             return;
         }
         if (index == 0) {
@@ -237,17 +237,17 @@ void handle_parent_action(UiState *ui)
             /* A failed submit must not leave an action for a later auto-refresh. */
             ui->pending_today_action = ui->waiting ? (int)ptc_ui_today_operation(index) : -1;
             if (ui->waiting)
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IS_REFRESHING_THE_CREDIT_CONSUMPTION_ESTIMATE_AND));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_IS_REFRESHING_THE_CREDIT_CONSUMPTION_ESTIMATE_AND));
         } else if (index == 5) {
             if (ui->model.daily_buffer_minutes == 0) {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    ptc_ui_text(PTC_UI_T_AUTONOMOUS_BUFFERING_IS_CURRENTLY_CLOSED_IT_CAN));
+                    "%s", ptc_ui_text(PTC_UI_T_AUTONOMOUS_BUFFERING_IS_CURRENTLY_CLOSED_IT_CAN));
             } else if (ui->model.daily_buffer_claimed) {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    ptc_ui_text(PTC_UI_T_THE_CHILD_HAS_RECEIVED_INDEPENDENT_BUFFER_TODAY));
+                    "%s", ptc_ui_text(PTC_UI_T_THE_CHILD_HAS_RECEIVED_INDEPENDENT_BUFFER_TODAY));
             } else {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    ptc_ui_text(PTC_UI_T_THE_AUTONOMOUS_BUFFER_IS_READ_ONLY_THE));
+                    "%s", ptc_ui_text(PTC_UI_T_THE_AUTONOMOUS_BUFFER_IS_READ_ONLY_THE));
             }
         }
         return;
@@ -265,9 +265,9 @@ void handle_parent_action(UiState *ui)
             }
             ui->model.overlay = PTC_UI_OVERLAY_SCHEDULED;
             ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                ptc_ui_text(PTC_UI_T_REPLACES_THE_TOTAL_DAILY_QUOTA_WITHIN_THE));
+                "%s", ptc_ui_text(PTC_UI_T_REPLACES_THE_TOTAL_DAILY_QUOTA_WITHIN_THE));
             break;
         case 1:
             ui->model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
@@ -295,7 +295,7 @@ void handle_parent_action(UiState *ui)
             ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
             ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
             ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
             ui->model.overlay_body[0] = '\0';
             break;
         case 5:
@@ -324,7 +324,7 @@ void handle_parent_action(UiState *ui)
     }
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
         if (ui->model.disable_flag_present && index != 4 && index != 6 && index != 7) {
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
             return;
         }
         switch (index) {
@@ -335,7 +335,7 @@ void handle_parent_action(UiState *ui)
         case 1:
             ui->model.holiday_last_rule = 0;
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
                     ptc_ui_text(PTC_UI_T_SET_LEGAL_HOLIDAY_QUOTA), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1), 4, 1, 1440, ui->model.draft_holiday_rule.minutes);
@@ -344,7 +344,7 @@ void handle_parent_action(UiState *ui)
         case 2:
             ui->model.holiday_last_rule = 1;
             if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
                     ptc_ui_text(PTC_UI_T_SET_THE_AMOUNT_OF_REST_WORK_DAYS), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1), 4, 1, 1440,
@@ -365,13 +365,13 @@ void handle_parent_action(UiState *ui)
             char holiday_rule[48];
             char makeup_rule[48];
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(holiday_rule, sizeof(holiday_rule), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+                snprintf(holiday_rule, sizeof(holiday_rule), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
             } else {
                 snprintf(holiday_rule, sizeof(holiday_rule), ptc_ui_text(PTC_UI_T_U_MIN),
                          (unsigned int)ui->model.draft_holiday_rule.minutes);
             }
             if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(makeup_rule, sizeof(makeup_rule), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+                snprintf(makeup_rule, sizeof(makeup_rule), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
             } else {
                 snprintf(makeup_rule, sizeof(makeup_rule), ptc_ui_text(PTC_UI_T_U_MIN),
                          (unsigned int)ui->model.draft_makeup_workday_rule.minutes);
@@ -418,9 +418,9 @@ void handle_parent_action(UiState *ui)
             refresh_album_restriction(ui);
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
+                     "%s", ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
             break;
         case 5: {
             bool new_state = !ptc_audio_is_enabled();
@@ -430,7 +430,7 @@ void handle_parent_action(UiState *ui)
             }
             save_ui_preferences(ui);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     new_state ? ptc_ui_text(PTC_UI_T_BUTTON_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN) : ptc_ui_text(PTC_UI_T_KEYSTROKES_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN));
+                     "%s", new_state ? ptc_ui_text(PTC_UI_T_BUTTON_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN) : ptc_ui_text(PTC_UI_T_KEYSTROKES_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN));
             break;
         }
         case 7: ui->config_backup_selected_path[0] = '\0'; open_config_backup(ui); break;
@@ -488,7 +488,7 @@ void handle_parent_action(UiState *ui)
         sync_hot_reload_model(ui);
 #endif
         ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
         ui->model.overlay_body[0] = '\0';
         snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_VERSION);
         snprintf(ui->model.repository_url, sizeof(ui->model.repository_url), "%s", PLAYWISE_REPOSITORY_URL);
@@ -532,7 +532,7 @@ void finish_today_limit_refresh(UiState *ui, bool success)
         !model->played_minutes_available || model->played_minutes < 0) {
         model->quota_refresh_failed = true;
         snprintf(model->message, sizeof(model->message),
-                 ptc_ui_text(PTC_UI_T_STATUS_REFRESH_FAILED_OR_THE_PLAYED_TIME));
+                 "%s", ptc_ui_text(PTC_UI_T_STATUS_REFRESH_FAILED_OR_THE_PLAYED_TIME));
         return;
     }
     model->quota_refresh_failed = false;
@@ -591,7 +591,7 @@ void finish_quota_recheck(UiState *ui, bool success)
     if (decision == PTC_UI_QUOTA_RECHECK_BLOCK) {
         ui->quota_recheck_ready = false;
         model->quota_refresh_failed = true;
-        snprintf(model->message, sizeof(model->message), ptc_ui_text(PTC_UI_T_REFRESH_FAILED_AND_WAS_NOT_SUBMITTED_PRESS));
+        snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_REFRESH_FAILED_AND_WAS_NOT_SUBMITTED_PRESS));
         return;
     }
     model->quota_refresh_failed = false;
@@ -599,9 +599,9 @@ void finish_quota_recheck(UiState *ui, bool success)
     if (decision == PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN) {
         ui->quota_recheck_ready = false;
         snprintf(model->overlay_title, sizeof(model->overlay_title),
-                 ui->quota_recheck_manual ? ptc_ui_text(PTC_UI_T_THE_ESTIMATE_HAS_BEEN_REFRESHED_PLEASE_CONFIRM) : ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_CHANGED_PLEASE_RECONFIRM));
+                 "%s", ui->quota_recheck_manual ? ptc_ui_text(PTC_UI_T_THE_ESTIMATE_HAS_BEEN_REFRESHED_PLEASE_CONFIRM) : ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_CHANGED_PLEASE_RECONFIRM));
         snprintf(model->message, sizeof(model->message),
-                 ptc_ui_text(PTC_UI_T_THE_REMAINING_VALUE_HAS_BEEN_RECALCULATED_USING));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_REMAINING_VALUE_HAS_BEEN_RECALCULATED_USING));
         return;
     }
     ui->quota_recheck_ready = true;
@@ -643,7 +643,7 @@ void confirm_operation(UiState *ui)
         if (ui->waiting || ui->recovering_redemption || ui->model.recovery_active ||
             ui->updater.worker_live || ui->updater.status == PTC_UPDATE_RECOVERY_REQUIRED) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(PTC_UI_T_THE_CURRENT_OPERATION_OR_RECOVERY_HAS_NOT));
+                "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_OPERATION_OR_RECOVERY_HAS_NOT));
         } else if (ptc_hot_reload_begin(&ui->hot_reload)) {
             ptc_companion_transport_set_suspended(&ui->transport, true);
             ui->hot_reload_terminal_handled = false;
@@ -675,8 +675,8 @@ void confirm_operation(UiState *ui)
         if (return_overlay == PTC_UI_OVERLAY_ALBUM_MANAGER) {
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_BEEN_RECHECKED_CONFIGURATION_CHANGES));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_BEEN_RECHECKED_CONFIGURATION_CHANGES));
         }
         if (ok) {
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
@@ -733,7 +733,7 @@ void confirm_operation(UiState *ui)
         else {
             cancel_bedtime_navigation(ui);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(PTC_UI_T_THE_BEDTIME_DRAFT_HAS_CHANGED_PLEASE_CHECK));
+                "%s", ptc_ui_text(PTC_UI_T_THE_BEDTIME_DRAFT_HAS_CHANGED_PLEASE_CHECK));
         }
         }
         break;
@@ -802,7 +802,7 @@ void confirm_operation(UiState *ui)
         submit_preview_offline_code(ui, ui->model.pending_code);
         break;
     case PTC_UI_OPERATION_SAVE_CREDENTIAL:
-        if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_EXTRA_TIME_CODE_KEY));
+        if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_EXTRA_TIME_CODE_KEY));
         break;
     case PTC_UI_OPERATION_RESET_PAIRING_URL:
         apply_default_pairing_base_url(ui);
@@ -824,7 +824,7 @@ void confirm_operation(UiState *ui)
         if (status == PTC_COMPANION_OK) {
             ui->model.disable_flag_present = true;
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_BACKGROUND_CONTROL_HAS_BEEN_EMERGENCY_DEACTIVATED));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_BACKGROUND_CONTROL_HAS_BEEN_EMERGENCY_DEACTIVATED));
         } else {
             set_message(ui, ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_FAILED), status);
         }
@@ -837,7 +837,7 @@ void confirm_operation(UiState *ui)
         if (status == PTC_COMPANION_OK) {
             ui->model.disable_flag_present = false;
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DISABLEMENT_HAS_BEEN_LIFTED_AND_BACKGROUND));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DISABLEMENT_HAS_BEEN_LIFTED_AND_BACKGROUND));
         } else {
             set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_RELEASE_EMERGENCY_DEACTIVATION), status);
         }
@@ -933,12 +933,12 @@ void close_code_result(UiState *ui)
     if (terminal) {
         if (ptc_companion_pending_redemption_clear(&ui->client) != PTC_COMPANION_OK) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_HAS_BEEN_DISPLAYED_BUT));
+                     "%s", ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_HAS_BEEN_DISPLAYED_BUT));
         }
         memset(&ui->pending_redemption, 0, sizeof(ui->pending_redemption));
         ui->model.code_result_failed = false;
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THE_GRANT_RESULT_IS_STILL_BEING_CONFIRMED));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_GRANT_RESULT_IS_STILL_BEING_CONFIRMED));
     }
 }

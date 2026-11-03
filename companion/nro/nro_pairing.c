@@ -171,10 +171,10 @@ bool commit_credential(UiState *ui)
     refresh_security_state(ui);
     if (ui->model.credential_kind == 1) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THE_DEVICE_NAME_HAS_BEEN_UPDATED_THE));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_DEVICE_NAME_HAS_BEEN_UPDATED_THE));
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_THE_GRANT_CODE_KEY_HAS_BEEN_UPDATED));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_GRANT_CODE_KEY_HAS_BEEN_UPDATED));
     }
     return true;
 }
@@ -183,7 +183,7 @@ void open_credential_manager(UiState *ui, int kind)
     char device[PTC_DEVICE_ID_MAX_LEN + 1];
     char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret))) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_READ_CURRENT_DEVICE_PAIRING_INFORMATION));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_READ_CURRENT_DEVICE_PAIRING_INFORMATION));
         return;
     }
     ui->model.credential_kind = kind;
@@ -233,7 +233,7 @@ void request_save_credential(UiState *ui)
         return;
     }
     if (strcmp(ui->model.credential_current, ui->model.credential_new) == 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_NEW_VALUE_IS_THE_SAME_AS));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_NEW_VALUE_IS_THE_SAME_AS));
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_SAVE_CREDENTIAL;
@@ -243,15 +243,15 @@ void request_save_credential(UiState *ui)
             ptc_ui_text(PTC_UI_T_ANYONE_WHO_KNOWS_THE_DEVICE_NAME_CAN));
         return;
     }
-    if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PAIRING_INFORMATION));
+    if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PAIRING_INFORMATION));
 }
 void show_grant_manager(UiState *ui, int selection)
 {
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
     ui->model.overlay_selection = selection >= 0 && selection < PTC_UI_GRANT_MANAGER_COUNT ? selection : 0;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_GENERATION_MANAGEMENT));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_GENERATION_MANAGEMENT));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             ptc_ui_text(PTC_UI_T_MANAGES_THE_DEVICE_INFORMATION_EXPORT_CONFIGURATION_AND));
+             "%s", ptc_ui_text(PTC_UI_T_MANAGES_THE_DEVICE_INFORMATION_EXPORT_CONFIGURATION_AND));
 }
 void open_grant_manager(UiState *ui)
 {
@@ -262,7 +262,7 @@ void open_local_grant(UiState *ui)
 {
     uint16_t maximum = PTC_TOKEN_V2_MAX_MINUTES;
     if (!read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_READ_NATIVE_GENERATOR_CONFIGURATION));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_READ_NATIVE_GENERATOR_CONFIGURATION));
         return;
     }
     ui->model.grant_max_minutes = maximum;
@@ -280,9 +280,9 @@ void open_local_grant(UiState *ui)
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
     ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
     ui->model.grant_status_refresh_failed = false;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_NATIVELY_GENERATES_8_BIT_PLUS_TIME_CODE));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_NATIVELY_GENERATES_8_BIT_PLUS_TIME_CODE));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             ptc_ui_text(PTC_UI_T_CHOOSE_THE_DURATION_GENERATE_IT_AND_TELL_2));
+             "%s", ptc_ui_text(PTC_UI_T_CHOOSE_THE_DURATION_GENERATE_IT_AND_TELL_2));
     submit_status(ui);
     if (!ui->waiting) ui->model.grant_status_refresh_failed = true;
 }
@@ -295,24 +295,24 @@ void edit_pairing_base_url(UiState *ui)
                         value, sizeof(value), false, false, false)) return;
     if (!ptc_pairing_base_url_valid(value)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 ptc_ui_text(PTC_UI_T_INVALID_ADDRESS_256_CHARACTERS_MAXIMUM_NO_ACCOUNT));
+                 "%s", ptc_ui_text(PTC_UI_T_INVALID_ADDRESS_256_CHARACTERS_MAXIMUM_NO_ACCOUNT));
         return;
     }
     if (!save_pairing_base_url(ui, value)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_THE_QR_CODE_JUMP));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_THE_QR_CODE_JUMP));
         return;
     }
     snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", value);
     snprintf(ui->model.message, sizeof(ui->model.message),
-             ptc_ui_text(PTC_UI_T_THE_QR_CODE_JUMP_ADDRESS_HAS_BEEN));
+             "%s", ptc_ui_text(PTC_UI_T_THE_QR_CODE_JUMP_ADDRESS_HAS_BEEN));
 }
 void apply_default_pairing_base_url(UiState *ui)
 {
     if (!save_pairing_base_url(ui, PTC_PAIRING_BASE_URL)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_RESTORE_THE_OFFICIAL_QR_CODE));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_RESTORE_THE_OFFICIAL_QR_CODE));
     } else {
         snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_DEFAULT_ADDRESS_FOR_QR_CODE_JUMP));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_DEFAULT_ADDRESS_FOR_QR_CODE_JUMP));
     }
     show_grant_manager(ui, PTC_UI_GRANT_MANAGER_RESET_URL);
 }
@@ -339,36 +339,36 @@ void generate_local_grant_code(UiState *ui)
     if (ui->waiting) return;
     ui->model.grant_notice[0] = '\0';
     if (!ui->model.status_loaded) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_UNABLE_TO_CONFIRM_THE_DEVICE_DATE_PLEASE));
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "%s", ptc_ui_text(PTC_UI_T_UNABLE_TO_CONFIRM_THE_DEVICE_DATE_PLEASE));
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_GENERATE_CODE;
     if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_APPLICATION_PIN_AGAIN_BEFORE))) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
         ptc_token_v2_tier_for_minutes(ui->model.grant_minutes, &tier) != PTC_ERR_OK) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_THE_PAIRING_INFORMATION_IS_INVALID_PLEASE_RETURN));
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "%s", ptc_ui_text(PTC_UI_T_THE_PAIRING_INFORMATION_IS_INVALID_PLEASE_RETURN));
         return;
     }
     load_consumed_nonces(ui->model.day_index, consumed);
     if (!load_issued_nonces(ui, ui->model.day_index, issued)) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_ISSUANCE_RECORD_PLEASE));
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_ISSUANCE_RECORD_PLEASE));
         return;
     }
     randomGet(&start, sizeof(start));
     found = ptc_token_v2_find_available_nonce(consumed, issued, start, &nonce);
     if (!found) {
         snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice),
-                 ptc_ui_text(PTC_UI_T_THE_UPPER_LIMIT_OF_512_COINS_HAS));
+                 "%s", ptc_ui_text(PTC_UI_T_THE_UPPER_LIMIT_OF_512_COINS_HAS));
         return;
     }
     if (ptc_token_v2_encode(tier, nonce, device, secret, ui->model.day_index, next_code) != PTC_ERR_OK) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_GENERATION_FAILED_PLEASE_GO_BACK_AND_CHECK));
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "%s", ptc_ui_text(PTC_UI_T_GENERATION_FAILED_PLEASE_GO_BACK_AND_CHECK));
         return;
     }
     issued[nonce] = true;
     if (!save_issued_nonces(ui, ui->model.day_index, issued)) {
         snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice),
-                 ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PLEASE_GO_BACK_AND));
+                 "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PLEASE_GO_BACK_AND));
         return;
     }
     snprintf(ui->model.grant_code, sizeof(ui->model.grant_code), "%s", next_code);
@@ -400,13 +400,13 @@ void show_pairing_qr(UiState *ui)
         !qrcodegen_encodeText(ui->model.pairing_url, temp, ui->model.qr_code,
             qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
             qrcodegen_Mask_AUTO, true)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_GENERATE_MATCHING_QR_CODE));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_GENERATE_MATCHING_QR_CODE));
         return;
     }
     ui->model.overlay = PTC_UI_OVERLAY_QR;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_MOBILE_PHONE_COMPUTER_GENERATES_GRANT_CODE));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_MOBILE_PHONE_COMPUTER_GENERATES_GRANT_CODE));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
+             "%s", ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
 }
 void export_parent_import(UiState *ui)
 {
@@ -426,17 +426,17 @@ void export_parent_import(UiState *ui)
     }
     ui->model.parent_export_succeeded = false;
     ui->model.overlay = PTC_UI_OVERLAY_PARENT_EXPORT_RESULT;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_EXPORT_MOBILE_PHONE_COMPUTER_CONFIGURATION));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_EXPORT_MOBILE_PHONE_COMPUTER_CONFIGURATION));
     ui->model.overlay_body[0] = '\0';
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret))) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            ptc_ui_text(PTC_UI_T_FAILED_TO_READ_DEVICE_NAME_OR_TIME));
+            "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_READ_DEVICE_NAME_OR_TIME));
         return;
     }
     root = cJSON_CreateObject();
     if (!root) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            ptc_ui_text(PTC_UI_T_INSUFFICIENT_MEMORY_AND_THE_CONFIGURATION_FILE_WAS));
+            "%s", ptc_ui_text(PTC_UI_T_INSUFFICIENT_MEMORY_AND_THE_CONFIGURATION_FILE_WAS));
         return;
     }
     cJSON_AddNumberToObject(root, "version", 1);

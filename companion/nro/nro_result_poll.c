@@ -130,7 +130,7 @@ void poll_result(UiState *ui, bool force)
             if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
             return;
         }
-        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_BEING_PROCESSED_PLEASE_WAIT));
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_BEING_PROCESSED_PLEASE_WAIT));
         return;
     }
     ui->waiting = false;
@@ -283,7 +283,7 @@ void poll_result(UiState *ui, bool force)
                     ui->model.view = PTC_UI_CHILD;
                     ui->model.overlay = PTC_UI_OVERLAY_NONE;
                     snprintf(ui->model.message, sizeof(ui->model.message),
-                        ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_3));
+                        "%s", ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_3));
                 } else if (code_error_stays_in_input(ui->model.error_code)) {
                     char error[96];
                     snprintf(error, sizeof(error), "%.95s", ui->model.message);
@@ -307,7 +307,7 @@ void poll_result(UiState *ui, bool force)
                 ui->model.view = PTC_UI_CHILD;
                 ui->model.overlay = PTC_UI_OVERLAY_NONE;
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_3));
+                    "%s", ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_3));
                 (void)ptc_companion_pending_redemption_clear(&ui->client);
             } else if (code_error_stays_in_input(ui->model.error_code)) {
                 char error[96];
@@ -319,7 +319,7 @@ void poll_result(UiState *ui, bool force)
                 char original[192];
                 snprintf(original, sizeof(original), "%s", ui->model.message);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         ptc_ui_text(PTC_UI_T_THE_REDEMPTION_WAS_UNSUCCESSFUL_AND_THE_GRANT));
+                         "%s", ptc_ui_text(PTC_UI_T_THE_REDEMPTION_WAS_UNSUCCESSFUL_AND_THE_GRANT));
                 snprintf(ui->model.feedback_detail, sizeof(ui->model.feedback_detail), "%s", original);
                 ui->model.view = PTC_UI_ERROR;
                 (void)ptc_companion_pending_redemption_clear(&ui->client);
@@ -332,7 +332,7 @@ void poll_result(UiState *ui, bool force)
                 handle_today_action_ready(ui, action);
             } else {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_CANNOT_BE_REFRESHED_AND));
+                         "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_CANNOT_BE_REFRESHED_AND));
             }
         }
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0 &&
@@ -350,7 +350,7 @@ void poll_result(UiState *ui, bool force)
                 ui->pending_parent_page = -1;
                 ui->pending_leave_parent = false;
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         ptc_ui_text(PTC_UI_T_WEEKLY_PLAN_SAVING_IS_NOT_COMPLETED_MODIFICATIONS));
+                         "%s", ptc_ui_text(PTC_UI_T_WEEKLY_PLAN_SAVING_IS_NOT_COMPLETED_MODIFICATIONS));
             } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
                        strcmp(ui->model.result_status, "ok") == 0) {
                 ui->model.bedtime_dirty = false;
@@ -358,7 +358,7 @@ void poll_result(UiState *ui, bool force)
             } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0) {
                 cancel_bedtime_navigation(ui);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         ptc_ui_text(PTC_UI_T_THE_CURRENT_BEDTIME_SUBPAGE_HAS_NOT_BEEN));
+                         "%s", ptc_ui_text(PTC_UI_T_THE_CURRENT_BEDTIME_SUBPAGE_HAS_NOT_BEEN));
             }
         }
         if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
@@ -404,7 +404,7 @@ void poll_result(UiState *ui, bool force)
             if (strcmp(ui->model.result_status, "ok") != 0) {
                 cancel_bedtime_navigation(ui);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    ptc_ui_text(PTC_UI_T_THE_BEDTIME_RESTRICTION_ENVIRONMENT_CONFIRMATION_HAS_NOT));
+                    "%s", ptc_ui_text(PTC_UI_T_THE_BEDTIME_RESTRICTION_ENVIRONMENT_CONFIRMATION_HAS_NOT));
             } else if (!ui->model.bedtime_dirty) {
                 cancel_bedtime_navigation(ui);
             }
@@ -415,7 +415,7 @@ void poll_result(UiState *ui, bool force)
             ui->model.pending_bedtime_skip_instance_id = 0;
             submit_status(ui);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(PTC_UI_T_THE_BEDTIME_WINDOW_HAS_CHANGED_AND_IS));
+                "%s", ptc_ui_text(PTC_UI_T_THE_BEDTIME_WINDOW_HAS_CHANGED_AND_IS));
         }
         if (strcmp(ui->model.result_type, "skip_eye_care_break") == 0 &&
             strcmp(ui->model.result_status, "error") == 0 && ui->model.error_code == 322) {
