@@ -1,0 +1,64 @@
+{
+  "releases": {
+    "v3.0.2": {
+      "assets": {
+        "playwise-3.0.2.zip": {
+          "digest": "sha256:0ac87b4da880f0cf696486e4e82b611969280c9c768a2be722d6230365cbe76b",
+          "gitee_id": 3580057,
+          "github_id": 607632550,
+          "md5": "923510c315958a02902ec4b94c9b2861",
+          "sha256": "0ac87b4da880f0cf696486e4e82b611969280c9c768a2be722d6230365cbe76b",
+          "size": 2036082,
+          "updated_at": "2026-10-03T10:40:26Z"
+        },
+        "playwise-complete-3.0.2.zip": {
+          "digest": "sha256:b4eeb6392cf0107fd2c7ed091d91119856f179f7658af3dc4c83d54c4cfb6430",
+          "gitee_id": 3580180,
+          "github_id": 607632665,
+          "md5": "4a9b5920f3cff218c6931e57a86eaa13",
+          "sha256": "b4eeb6392cf0107fd2c7ed091d91119856f179f7658af3dc4c83d54c4cfb6430",
+          "size": 2047693,
+          "updated_at": "2026-10-03T10:40:28Z"
+        }
+      },
+      "id": 1269154
+    },
+    "v3.1.2-beta.2": {
+      "assets": {
+        "playwise-3.1.2-beta.2.zip": {
+          "digest": "sha256:39dc9c0e3e62b229ed0244d6808971c5e1c0f8adba56b663d9beee31115d7fd0",
+          "gitee_id": 3580335,
+          "github_id": 697822251,
+          "md5": "e5b3b55745f423430d3b4df7a484df3a",
+          "sha256": "39dc9c0e3e62b229ed0244d6808971c5e1c0f8adba56b663d9beee31115d7fd0",
+          "size": 3803303,
+          "updated_at": "2026-11-01T09:01:40Z"
+        },
+        "playwise-complete-3.1.2-beta.2.zip": {
+          "digest": "sha256:aae2b9637c9458eca418cccd173eb8133d72963552f01fb73d2971f4ab36c5ed",
+          "gitee_id": 3580368,
+          "github_id": 697822250,
+          "md5": "c17287be8df27c508837813ae2d119c9",
+          "sha256": "aae2b9637c9458eca418cccd173eb8133d72963552f01fb73d2971f4ab36c5ed",
+          "size": 3812114,
+          "updated_at": "2026-11-01T09:01:40Z"
+        }
+      },
+      "id": 1269201
+    }
+  },
+  "schema_version": 1,
+  "seen_release_ids": [
+    367770378,
+    369747959,
+    372237423,
+    375275988,
+    384406842,
+    398987556,
+    401181541,
+    402461760,
+    424006631,
+    424603501,
+    430465838
+  ]
+}
