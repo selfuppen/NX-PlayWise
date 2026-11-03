@@ -231,9 +231,11 @@ class MirrorTests(unittest.TestCase):
     def test_real_api_upload_form_and_error_redaction(self) -> None:
         api = Api("github-secret", "gitee-secret")
         requests = []
+        timeouts = []
         class Opener:
             def open(self, request: urllib.request.Request, timeout: int) -> io.BytesIO:
                 requests.append(request)
+                timeouts.append(timeout)
                 return io.BytesIO(b'{"id":7,"size":3}')
         api.opener = Opener()
         with tempfile.TemporaryDirectory() as temp:
@@ -247,8 +249,10 @@ class MirrorTests(unittest.TestCase):
             self.assertIn(b'filename="playwise.zip"', request.data)
             self.assertIn(b"\r\n\r\nzip\r\n", request.data)
             self.assertIsNone(request.get_header("Authorization"))
+            self.assertEqual(timeouts[-1], 600)
             api.request("github", "/repos/selfuppen/NX-PlayWise/releases")
             self.assertEqual(requests[-1].get_header("Authorization"), "Bearer github-secret")
+            self.assertEqual(timeouts[-1], 180)
         class Denied:
             def open(self, request: urllib.request.Request, timeout: int) -> None:
                 raise urllib.error.HTTPError(request.full_url, 403, "gitee-secret", {}, None)
@@ -256,6 +260,26 @@ class MirrorTests(unittest.TestCase):
         with self.assertRaises(SyncError) as error:
             api.request("gitee", "/test", "POST", {"name": "test"})
         self.assertIn("403", str(error.exception))
+        self.assertNotIn("secret", str(error.exception))
+
+    def test_api_failure_categories_never_echo_credentials(self) -> None:
+        api = Api("github-secret", "gitee-secret")
+        for failure, category in ((TimeoutError("gitee-secret"), "timeout"),
+                                  (urllib.error.URLError(TimeoutError("gitee-secret")), "network TimeoutError")):
+            class Failed:
+                def open(self, request, timeout):
+                    raise failure
+            api.opener = Failed()
+            with self.assertRaises(SyncError) as error:
+                api.request("gitee", "/test", "POST", {"name":"x"})
+            self.assertIn(category, str(error.exception))
+            self.assertNotIn("secret", str(error.exception))
+        class Invalid:
+            def open(self, request, timeout):
+                return io.BytesIO(b"gitee-secret")
+        api.opener = Invalid()
+        with self.assertRaisesRegex(SyncError, "invalid JSON response") as error:
+            api.request("gitee", "/test", "POST", {"name":"x"})
         self.assertNotIn("secret", str(error.exception))
 
     def test_real_git_feed_roundtrip_and_partial_publish_repair(self) -> None:

@@ -145,16 +145,26 @@ class Api:
                 headers["Content-Type"] = "application/x-www-form-urlencoded"
         req = urllib.request.Request(host + path, data=data, headers=headers, method=method)
         try:
-            with self.opener.open(req, timeout=180) as response:
+            # Release uploads can exceed the ordinary API window. Keep one
+            # bounded attempt; a later run must read back an ambiguous upload.
+            with self.opener.open(req, timeout=600 if file else 180) as response:
                 raw = response.read(8 * 1024 * 1024 + 1)
                 if len(raw) > 8 * 1024 * 1024:
                     raise SyncError("API response exceeds limit")
-                return json.loads(raw) if raw else None
+                try:
+                    return json.loads(raw) if raw else None
+                except (ValueError, UnicodeError):
+                    raise SyncError(f"{provider} API {method} failed: invalid JSON response") from None
         except urllib.error.HTTPError as exc:
             # Do not print request bodies, URLs with credentials, or server echoes.
             raise SyncError(f"{provider} API {method} failed: HTTP {exc.code}") from None
-        except (urllib.error.URLError, TimeoutError, ValueError):
-            raise SyncError(f"{provider} API {method} failed") from None
+        except urllib.error.URLError as exc:
+            reason = type(exc.reason).__name__
+            raise SyncError(f"{provider} API {method} failed: network {reason}") from None
+        except TimeoutError:
+            raise SyncError(f"{provider} API {method} failed: timeout") from None
+        except ValueError:
+            raise SyncError(f"{provider} API {method} failed: invalid request") from None
 
     def pages(self, provider: str, path: str) -> list[dict]:
         result = []
@@ -281,6 +291,7 @@ def sync(api: Api, git: Git, directory: Path, *, tag: str = "") -> dict:
         owned = {"id": mirror["id"], "assets": {}}
         for number, asset in enumerate(assets):
             name = asset["name"]
+            print(f"Mirror {release_tag} attachment {number + 1}/{len(assets)}: {name}", flush=True)
             if asset.get("state") != "uploaded" or type(asset.get("size")) is not int or not 0 <= asset["size"] <= MAX_ATTACHMENT:
                 raise SyncError("release attachment is incomplete or exceeds capacity")
             existing = [a for a in attachments if a["name"] == name]
@@ -306,6 +317,7 @@ def sync(api: Api, git: Git, directory: Path, *, tag: str = "") -> dict:
                     api.request("gitee", path + f"/{existing[0]['id']}", "DELETE")
                     existing = []
             if not existing:
+                print("Upload pending; success requires anonymous readback", flush=True)
                 attached = api.request("gitee", path, "POST", file=source, filename=name)
                 target = directory / f"uploaded-{index}-{number}"
                 api.download(public_url("gitee", release_tag, name), target)
