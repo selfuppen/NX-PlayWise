@@ -443,6 +443,32 @@ static int overlay_text_height(tsl::gfx::Renderer *renderer, const char *value, 
     return static_cast<int>(overlay_wrap(renderer, value, size, width).size()) * ((size * 6 + 4) / 5);
 }
 
+// Fixed controls own their text bounds. Prefer readable type, then limit the
+// final line if a future translation cannot fit at the minimum button size.
+static std::vector<std::string> overlay_button_lines(tsl::gfx::Renderer *renderer,
+    const char *text, int width, int height, int &size)
+{
+    const int minimum = std::min(size, static_cast<int>(PTC_OVERLAY_FONT_SECONDARY));
+    auto lines = overlay_wrap(renderer, text, size, width);
+    while (size > minimum && static_cast<int>(lines.size()) * ((size * 6 + 4) / 5) > height) {
+        --size;
+        lines = overlay_wrap(renderer, text, size, width);
+    }
+    const int count = height / ((size * 6 + 4) / 5);
+    if (count <= 0) return {};
+    if (static_cast<int>(lines.size()) > count) {
+        lines.resize(count);
+        auto &last = lines.back();
+        while (!last.empty() && static_cast<int>(measure_localized(renderer, (last + "...").c_str(), size).first) > width) {
+            size_t end = last.size() - 1;
+            while (end > 0 && (static_cast<unsigned char>(last[end]) & 0xc0) == 0x80) --end;
+            last.resize(end);
+        }
+        if (static_cast<int>(measure_localized(renderer, "...", size).first) <= width) last += "...";
+    }
+    return lines;
+}
+
 static inline std::pair<u32, u32> draw_localized_center(tsl::gfx::Renderer *renderer,
     const char *value, s32 box_x, s32 box_y, s32 box_w, s32 box_h,
     float font_size, tsl::Color color, bool monospace = false)

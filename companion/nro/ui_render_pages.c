@@ -583,7 +583,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         action.subtitle = subtitle;
         draw_action_card(pixels, stride, box, &action, focused,
                          disabled ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE,
-                         (index == 0 || index >= 2) ? (is_en ? 76 : 82) : 0);
+                         (index == 0 || index >= 2) ? (is_en ? 76 : 82) : 0, (UiRect){0});
         if (index == 1 && unavailable)
             draw_text(pixels, stride, box.x + 78, box.y + 88,
                       ptc_ui_text(PTC_UI_T_TO_RESTORE_LIMIT_USE_SET_TODAY_LIMIT), 12, UI_DISABLED);
@@ -733,8 +733,8 @@ static void draw_parent_header(uint32_t *pixels, uint32_t stride, const PtcUiMod
     }
 }
 
-static void draw_parent_action_badges(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
-                                       UiRect card, int index)
+static UiRect parent_action_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                       UiRect card, int index, bool paint)
 {
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
         bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
@@ -750,7 +750,7 @@ static void draw_parent_action_badges(uint32_t *pixels, uint32_t stride, const P
                               (index == 3 && bedtime_enforcing);
 
         /* 当前生效规则的高亮描边（非聚焦时呈现） */
-        if (fresh && is_active_rule && !(index == model->selected_index && !model->parent_footer_focused)) {
+        if (paint && fresh && is_active_rule && !(index == model->selected_index && !model->parent_footer_focused)) {
             uint32_t active_border = (index == 3 ? UI_DANGER : (index == 1 ? UI_SUCCESS : UI_ACCENT));
             draw_rect_outline(pixels, stride, card, 16, 2, active_border);
         }
@@ -774,6 +774,7 @@ static void draw_parent_action_badges(uint32_t *pixels, uint32_t stride, const P
         int p_width = measure_text(badge_label, 12) + 16;
         if (p_width < 76) p_width = 76;
         UiRect pbadge = {card.x + card.width - p_width - 12, card.y + 8, p_width, 22};
+        if (!paint) return pbadge;
         uint32_t badge_color = !fresh ? UI_WARNING :
             bedtime_enforcing && index == 3 ? UI_DANGER :
             (strcmp(badge_label, ptc_ui_text(PTC_UI_T_ACTIVE_2)) == 0 ||
@@ -809,6 +810,7 @@ static void draw_parent_action_badges(uint32_t *pixels, uint32_t stride, const P
         int st_width = measure_text(state_label, 12) + 16;
         if (st_width < 72) st_width = 72;
         UiRect badge = {card.x + card.width - st_width - 14, card.y + 8, st_width, 24};
+        if (!paint) return badge;
         uint32_t st_bg = state_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
                          (state_color == UI_WARNING ? UI_WARNING_SOFT :
                           (state_color == UI_DANGER ? UI_DANGER_SOFT :
@@ -822,6 +824,7 @@ static void draw_parent_action_badges(uint32_t *pixels, uint32_t stride, const P
         draw_text_center(pixels, stride, badge, state_label, 12, state_color);
     } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
         UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
+        if (!paint) return badge;
         draw_language_switcher_badge(pixels, stride, badge, false);
     } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
         bool enabled = ptc_audio_is_enabled();
@@ -830,12 +833,14 @@ static void draw_parent_action_badges(uint32_t *pixels, uint32_t stride, const P
         int au_width = measure_text(state_label, 12) + 16;
         if (au_width < 62) au_width = 62;
         UiRect badge = {card.x + card.width - au_width - 14, card.y + 8, au_width, 24};
+        if (!paint) return badge;
         uint32_t au_bg = enabled ? UI_SUCCESS_SOFT : UI_PAGE;
         uint32_t au_bd = enabled ? UI_SUCCESS_BORDER : UI_BORDER;
         fill_round_rect(pixels, stride, badge, 6, au_bg);
         draw_rect_outline(pixels, stride, badge, 6, 1, au_bd);
         draw_text_center(pixels, stride, badge, state_label, 12, state_color);
     }
+    return (UiRect){0};
 }
 
 static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
@@ -985,13 +990,10 @@ static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const Ptc
         dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_TO_CONFIRM_THE);
         action = &dynamic_action;
     }
-    /* Status badges live in the card's top-right corner.  The one-line
-     * title/status block is vertically centered below that corner, so
-     * it can use the full remaining width without being truncated. */
-    int reserved_right = 0;
+    UiRect status_badge = parent_action_badge(pixels, stride, model, card, index, false);
     draw_action_card(pixels, stride, card, action, index == model->selected_index && !model->parent_footer_focused, astate,
-                     reserved_right);
-    draw_parent_action_badges(pixels, stride, model, card, index);
+                     0, status_badge);
+    parent_action_badge(pixels, stride, model, card, index, true);
 }
 
 static void draw_parent_action_grid(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1087,8 +1089,8 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
         status_text = ptc_ui_text(PTC_UI_T_PROTECTION_ENABLED);
         status_color = UI_SUCCESS;
         desc1 = ptc_ui_text(PTC_UI_T_USED_TO_PROTECT_PARENTAL_ZONE_SETTINGS_HIGH);
-        desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_4_8_DIGIT_PASSWORD_PLEASE_KEEP);
-        desc3 = ptc_ui_text(PTC_UI_T_ENTERING_INCORRECTLY_THREE_TIMES_IN_A_ROW);
+        desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_1_64_DIGIT_PIN);
+        desc3 = ptc_ui_text(PTC_UI_T_PIN_COOLDOWN_FROM_FIFTH_FAILURE);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_THE_MANAGEMENT_PASSWORD);
         break;
     case 1: /* 外观主题 */

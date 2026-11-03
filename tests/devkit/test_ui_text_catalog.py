@@ -73,6 +73,14 @@ def main() -> None:
                 f"invalid parameter syntax: {key}"
             )
     for locale in locales:
+        auth = (COMPANION / "auth.h").read_text(encoding="utf-8")
+        constants = {name: int(value) for name, value in re.findall(r"#define (PTC_AUTH_\w+) (\d+)", auth)}
+        assert re.findall(r"\d+", locale["PTC_UI_T_SUPPORTS_1_64_DIGIT_PIN"]) == [
+            str(constants["PTC_AUTH_PIN_MIN_LEN"]), str(constants["PTC_AUTH_PIN_MAX_LEN"])
+        ], "PIN Inspector length must match authentication constants"
+        assert re.findall(r"\d+", locale["PTC_UI_T_PIN_COOLDOWN_FROM_FIFTH_FAILURE"]) == [
+            str(constants["PTC_AUTH_FAILURE_LIMIT"])
+        ], "PIN Inspector cooldown must start at the real failure threshold"
         for key in ("PTC_UI_T_EYE_CARE_LOGIC_TITLE_3", "PTC_UI_T_EYE_CARE_LOGIC_DESC_3"):
             assert "1440" not in locale[key], f"obsolete unlimited-day timer proxy explanation: {key}"
     language_code = (COMPANION / "ui_language.c").read_text(encoding="utf-8")

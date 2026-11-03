@@ -22,6 +22,17 @@ void config_backup_preview(UiState *ui)
     PtcRules rules;
     ui->model.config_needs_confirmation = false;
     if (!ui->model.config_backup_ready || !ptc_config_stage_path(stage, sizeof(stage), APP_ROOT, ui->config_stage_id)) return;
+    if (!(ui->model.config_groups & (PTC_CONFIG_WEEK | PTC_CONFIG_SCHEDULED | PTC_CONFIG_TODAY |
+            PTC_CONFIG_BUFFER | PTC_CONFIG_HOLIDAY | PTC_CONFIG_BEDTIME | PTC_CONFIG_EYE | PTC_CONFIG_DOCK))) {
+        snprintf(ui->model.config_preview, sizeof(ui->model.config_preview), "%s",
+            ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NON_POLICY));
+        if (ui->model.config_groups & PTC_CONFIG_PAIRING) {
+            size_t n = strlen(ui->model.config_preview);
+            snprintf(ui->model.config_preview + n, sizeof(ui->model.config_preview) - n, "\n%s",
+                ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NEW_KEY));
+        }
+        return;
+    }
     cJSON *current = ptc_config_read_json(ui->client.storage, APP_ROOT, "rules.json", 6144);
     cJSON *source = ptc_config_read_json(ui->client.storage, stage, "rules.json", 6144);
     cJSON *merged = ptc_config_merge_rules(current, source, ui->model.config_groups, ui->model.day_index);

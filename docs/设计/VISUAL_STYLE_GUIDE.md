@@ -1,5 +1,9 @@
 # Visual Style and Design Guide
 
+The PIN Inspector in all three languages follows the authentication constants: 1–64 digits, with cooldown starting on consecutive failure 5. This is a text correction only. Settings and plan card titles use the measured status badge bounds; a title that would collide moves below the badge. Fixed Overlay buttons measure both width and height, keep readable type, and bound future oversized translations to the final line and button clip. Current buffer and grant-code labels remain complete in all three languages, above the Tesla footer.
+
+A hold is a confirmation gate, not proof of exhausted quota. Restoring only preferences, PIN or pairing data explains that rules and consumed time stay unchanged, while retaining current PIN, source PIN where applicable, and hold confirmation. Policy imports and dangerous quota or bedtime actions keep their actual impact warnings. Never infer zero remaining time or immediate restriction from the generic hold flag.
+
 [English](VISUAL_STYLE_GUIDE.md) | [简体中文](视觉风格与设计指南.md) | [Interactive Preview (HTML)](theme_preview.html) | [Design Index](../README_en.md#design)
 
 This guide defines the visual design system, color palette, and layout principles for PlayWise on Nintendo Switch. It provides clear standards for Companion NRO pages, settings menus, overlays, and detail panels to ensure consistent aesthetics, high readability, and reliable rendering across handheld and docked modes. Open [`theme_preview.html`](theme_preview.html) in your browser for an interactive preview of the full light/dark palette and UI components.

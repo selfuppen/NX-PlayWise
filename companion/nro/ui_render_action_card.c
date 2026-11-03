@@ -344,7 +344,7 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
 }
 
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
-    const UiAction *action, bool selected, PtcUiActionState state, int reserved_right)
+    const UiAction *action, bool selected, PtcUiActionState state, int reserved_right, UiRect status_badge)
 {
     UiAction translated = *action;
     translated.title = ptc_ui_text_resolve(action->title);
@@ -385,6 +385,13 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int text_block_h = title_size + ((has_sub || has_visual) ? (compact ? 31 : 36) : 0);
     int text_top = rect.y + (rect.height - text_block_h) / 2;
     if (text_top < rect.y + 12) text_top = rect.y + 12;
+    /* Keep the title at its normal size when a measured status badge needs
+     * its own row. Compact and regular cards use the same collision rule. */
+    int title_right = text_x + measure_text(action->title, title_size);
+    if (status_badge.width > 0 && title_right + 8 > status_badge.x &&
+        text_top < status_badge.y + status_badge.height + 4) {
+        text_top = status_badge.y + status_badge.height + 4;
+    }
     int icon_cx = rect.x + 18 + badge_size / 2;
     int icon_cy = rect.y + rect.height / 2;
     UiRect badge_rect = {icon_cx - badge_size / 2, icon_cy - badge_size / 2, badge_size, badge_size};

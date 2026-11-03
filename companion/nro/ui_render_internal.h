@@ -279,7 +279,7 @@ void draw_unchanged_quota_card(
     uint32_t *pixels, uint32_t stride, UiRect rect, const char *reason);
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                       const UiAction *action, bool selected, PtcUiActionState state,
-                      int reserved_right);
+                      int reserved_right, UiRect status_badge);
 void draw_plan_card(uint32_t *pixels, uint32_t stride, UiRect card, bool focused);
 void draw_toggle_switch(
     uint32_t *pixels,

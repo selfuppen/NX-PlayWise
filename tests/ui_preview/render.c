@@ -17,6 +17,13 @@ uint32_t preview_pixels[1280 * 720];
 static bool preview_all_styles;
 
 static struct {
+    bool enabled;
+    int count;
+    UiRect bounds[256];
+    char text[256][256];
+} action_trace;
+
+static struct {
     bool enabled, started;
     int labels, failed;
 } dock_editor_trace;
@@ -59,6 +66,11 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
 {
     if (!text) return;
     UiRect bounds = {x, baseline - size, measure_text(text, size), size};
+    if (action_trace.enabled && action_trace.count < 256) {
+        int i = action_trace.count++;
+        action_trace.bounds[i] = bounds;
+        snprintf(action_trace.text[i], sizeof(action_trace.text[i]), "%s", text);
+    }
     if (setup_reference_trace.enabled) {
         if (strcmp(text, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE)) == 0) {
             setup_reference_trace.reference = bounds;
@@ -2043,6 +2055,117 @@ static int render_config_backup_previews(const char *directory, const PtcUiModel
     return failed;
 }
 
+static int check_action_text(UiRect card, const char *required_title)
+{
+    int failed = 0;
+    bool title = required_title == NULL;
+    for (int i = 0; i < action_trace.count; ++i) {
+        UiRect a = action_trace.bounds[i];
+        if (a.x < card.x || a.x >= card.x + card.width || a.y < card.y || a.y >= card.y + card.height) continue;
+        if (required_title && !strcmp(action_trace.text[i], required_title)) title = a.height >= 20;
+        if (a.x + a.width > card.x + card.width - 8 || a.y + a.height > card.y + card.height - 6) {
+            fprintf(stderr, "FAIL: action card text bounds '%s'\n", action_trace.text[i]); ++failed;
+        }
+        for (int j = i + 1; j < action_trace.count; ++j) {
+            UiRect b = action_trace.bounds[j];
+            if (a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y) {
+                fprintf(stderr, "FAIL: action card overlaps '%s' / '%s'\n", action_trace.text[i], action_trace.text[j]);
+                ++failed;
+            }
+        }
+    }
+    return failed + !title;
+}
+
+static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
+{
+    int failed = 0;
+    ptc_mkdir(directory);
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        char folder[512];
+        snprintf(folder, sizeof(folder), "%s/lang-%d", directory, lang);
+        ptc_mkdir(folder);
+        for (int dark = 0; dark < 2; ++dark) {
+            for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
+                ptc_ui_theme_set_style((PtcUiThemeStyle)style);
+                for (int state = 0; state < 5; ++state) {
+                    PtcUiModel model = *baseline;
+                    model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;
+                    model.overlay = PTC_UI_OVERLAY_NONE; model.selected_index = 0;
+                    model.album_restriction_state = state;
+                    memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+                    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+                        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                    ptc_ui_graphics_draw(&model, &theme);
+                    action_trace.enabled = false;
+                    failed += check_action_text(to_uirect(ptc_ui_settings_card_rect(4)), ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS));
+                    if (style == 0 && state == PTC_ALBUM_RESTRICTION_EXTERNAL)
+                        failed |= save_preview(folder, "settings", "pin-and-homebrew", &model, dark);
+                }
+                for (int stale = 0; stale < 2; ++stale) {
+                    PtcUiModel model = *baseline;
+                    model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+                    model.plan_page = PTC_UI_PLAN_PAGE_ROOT; model.overlay = PTC_UI_OVERLAY_NONE;
+                    model.status_loaded = !stale;
+                    model.bedtime_active = model.dock_restriction_active = !stale;
+                    memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+                    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+                        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                    ptc_ui_graphics_draw(&model, &theme);
+                    action_trace.enabled = false;
+                    /* The first three cards also draw between-card priority
+                     * annotations. Here exercise the four compact cards. */
+                    for (int card = 3; card < 7; ++card)
+                        failed += check_action_text(to_uirect(ptc_ui_plan_card_rect(card)), NULL);
+                    if (style == 0) failed |= save_preview(folder, "settings", stale ? "compact-pending" : "compact-active", &model, dark);
+                }
+                for (int operation = 0; operation < 4; ++operation) {
+                    PtcUiModel model = *baseline;
+                    model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_CONFIRM;
+                    model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+                    model.confirm_hold_required = true;
+                    model.played_minutes_available = operation != 1;
+                    model.played_minutes = 225;
+                    model.operation = operation < 2 ? PTC_UI_OPERATION_RESTORE_CONFIG_BACKUP :
+                        operation == 2 ? PTC_UI_OPERATION_SET_TODAY_LIMIT : PTC_UI_OPERATION_SAVE_BEDTIME;
+                    model.draft_minutes = 60;
+                    model.config_groups = 256;
+                    snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(operation < 2 ?
+                        PTC_UI_T_CONFIG_BACKUP_IMPORT : operation == 2 ? PTC_UI_T_SET_TODAY_LIMIT : PTC_UI_T_BEDTIME));
+                    snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", operation < 2 ?
+                        ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NON_POLICY) : "");
+                    memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+                    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+                        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                    ptc_ui_graphics_draw(&model, &theme);
+                    action_trace.enabled = false;
+                    bool generic = false, bedtime = false, limit = false;
+                    for (int i = 0; i < action_trace.count; ++i) {
+                        const char *text = action_trace.text[i];
+                        generic |= !strcmp(text, ptc_ui_text(PTC_UI_T_PLEASE_MAKE_SURE_YOU_UNDERSTAND_THE_IMPACT));
+                        bedtime |= !strcmp(text, ptc_ui_text(PTC_UI_T_ENTER_BEDTIME_RESTRICTIONS_IMMEDIATELY_AFTER_SAVING)) ||
+                            !strcmp(text, ptc_ui_text(PTC_UI_T_MAY_ENTER_BEDTIME_RESTRICTIONS_IMMEDIATELY_AFTER_SAVING));
+                        limit |= strstr(text, ptc_ui_text(PTC_UI_T_NEW_REMAINING)) != NULL;
+                        if (operation < 2 && (!strcmp(text, ptc_ui_text(PTC_UI_T_THE_NEW_QUOTA_SHALL_NOT_BE_HIGHER)) ||
+                            !strcmp(text, ptc_ui_text(PTC_UI_T_PLAY_MAY_BE_RESTRICTED_IMMEDIATELY_AFTER_OPERATION)))) ++failed;
+                    }
+                    if ((operation < 2 && !generic) || (operation == 2 && !limit) || (operation == 3 && !bedtime)) {
+                        fprintf(stderr, "FAIL: confirmation lang=%d operation=%d generic=%d limit=%d bedtime=%d\n",
+                            lang, operation, generic, limit, bedtime); ++failed;
+                    }
+                    if (style == 0 && operation != 1) {
+                        const char *name = operation == 0 ? "preferences-confirm" : operation == 2 ? "limit-confirm" : "bedtime-confirm";
+                        failed |= save_preview(folder, "settings", name, &model, dark);
+                    }
+                }
+            }
+        }
+    }
+    fprintf(stderr, "%s: measured settings badges and generic/policy hold confirmations in three languages, four styles, two themes\n", failed ? "FAIL" : "PASS");
+    return failed != 0;
+}
+
 static void localize_preview_baseline(PtcUiModel *model)
 {
     snprintf(model->command_name, sizeof(model->command_name), "%s", ptc_ui_text(PTC_UI_T_REFRESH_STATUS));
@@ -2174,6 +2297,10 @@ int main(int argc, char **argv)
     snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
     snprintf(model.result_status, sizeof(model.result_status), "ok");
 
+    if (strcmp(argv[2], "--check-action-confirmations") == 0) {
+        failed = check_action_confirmations(&model, argc > 3 ? argv[3] : "build/host/ui-regression-previews");
+        FT_Done_Face(g_ui.face); free(bytes); return failed;
+    }
     if (strcmp(argv[2], "--check-parent-tabs") == 0 || strcmp(argv[2], "--check-bedtime-editors") == 0 ||
         strcmp(argv[2], "--check-dock-editor") == 0 || strcmp(argv[2], "--check-setup-reference") == 0) {
         failed = strcmp(argv[2], "--check-parent-tabs") == 0 ? check_parent_tabs(&model) :

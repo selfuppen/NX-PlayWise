@@ -206,7 +206,7 @@ static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const 
             &GRANT_MANAGER_ACTIONS[index],
             model->overlay_selection == index,
             PTC_UI_ACTION_AVAILABLE,
-            0);
+            0, (UiRect){0});
     }
 }
 

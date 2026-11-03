@@ -352,11 +352,24 @@ static void test_config_backup_ui(void)
     config_backup_action(&ui,12); check(ui.model.config_groups == 0,"clear selection");
     config_backup_action(&ui,14); check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,"empty import disabled");
     config_backup_action(&ui,8);
+    ui.model.played_minutes_available = true; ui.model.played_minutes = 225;
+    config_backup_preview(&ui);
+    check(ui.model.config_groups == PTC_CONFIG_PREFS &&
+        !strcmp(ui.model.config_preview, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NON_POLICY)) &&
+        !ui.model.config_needs_confirmation, "preferences-only preview preserves rules even with consumed quota");
     pin_cursor=0; pin_values[0]="1234";
     request_config_restore(&ui);
     check(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required,"import requires hold after current PIN");
+    check(strstr(ui.model.overlay_body, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NON_POLICY)) != NULL,
+        "preferences confirmation keeps the actual non-policy impact after PIN");
     ptc_ui_cancel_overlay(&ui.model);
     check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,"cancel hold returns to backup without submission");
+    ui.model.config_groups = PTC_CONFIG_WEEK;
+    config_backup_preview(&ui);
+    check(strstr(ui.model.config_preview, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_RESTRICT)) != NULL,
+        "restoring an exhausted real limit still warns of immediate restriction");
+    ui.model.config_groups = PTC_CONFIG_PREFS;
+    config_backup_preview(&ui);
     config_backup_action(&ui,9); pin_cursor=0; pin_values[0]="1234"; pin_values[1]="9999";
     request_config_restore(&ui);
     check(ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && !ui.waiting,"incorrect source PIN cannot confirm import");

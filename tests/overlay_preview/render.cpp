@@ -246,6 +246,62 @@ static void test_child_header_controls(const char *font_path)
     ptc_ui_language_set_resolved(saved_language);
 }
 
+static void test_child_button_bounds(const char *font_path, const std::filesystem::path &dir)
+{
+    for (const auto language : {PTC_UI_LANGUAGE_SIMPLIFIED, PTC_UI_LANGUAGE_TRADITIONAL, PTC_UI_LANGUAGE_ENGLISH}) {
+        ptc_ui_language_set_resolved(language);
+        for (int dark = 0; dark < 2; ++dark) {
+            for (const float metric : {1.0f, 1.35f}) {
+                for (int state = 0; state < 3; ++state) {
+                    tsl::gfx::Renderer renderer(font_path);
+                    renderer.horizontal_metric_scale = metric;
+                    PtcOverlayBridge bridge{}; PtcOverlayInput input{};
+                    PreviewView view;
+                    view.bridge_ = &bridge; view.input_ = &input;
+                    view.theme_ = dark ? PTC_UI_RESOLVED_DARK : PTC_UI_RESOLVED_LIGHT;
+                    auto &status = view.displayed_summary_;
+                    status.valid = true; status.unrestricted_today = 1;
+                    status.daily_buffer_available = state == 0;
+                    status.daily_buffer_claimed = state == 1;
+                    view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+                        PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+                    const PtcOverlayRect controls[] = {view.page_layout_.buffer, view.page_layout_.redeem};
+                    for (const auto &rect : controls) {
+                        require(rect.w > 0 && rect.y + rect.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_BOTTOM,
+                            "child controls stay above the Tesla footer");
+                        int runs = 0;
+                        for (const auto &run : renderer.text_runs) {
+                            if (run.x < rect.x || run.x >= rect.x + rect.w || run.y < rect.y - 8) continue;
+                            ++runs;
+                            require(run.x >= rect.x + 12 && run.y - run.size >= rect.y + 4 &&
+                                run.y <= rect.y + rect.h - 4 && run.x + static_cast<int>(
+                                    measure_localized(&renderer, run.text.c_str(), run.size).first) <= rect.x + rect.w - 12,
+                                "every child button text run stays inside its width and height");
+                            if (metric == 1.0f) require(run.text.find("...") == std::string::npos,
+                                "current localized child labels remain complete at normal font metrics");
+                        }
+                        require(runs > 0, "available, claimed and unavailable controls keep visible labels");
+                    }
+                    if (metric == 1.0f) {
+                        std::filesystem::create_directories(dir);
+                        renderer.save((dir / ("child-buttons-" + std::to_string(language) + "-" +
+                            std::to_string(state) + (dark ? "-dark.ppm" : "-light.ppm"))).string());
+                    }
+                    // Deliberately oversized future translations must also stay bounded.
+                    renderer.text_runs.clear();
+                    view.draw_button(&renderer, controls[0],
+                        "A very long button translation with more words than can fit in this fixed rail",
+                        view.current_palette().text_primary);
+                    for (const auto &run : renderer.text_runs)
+                        require(run.y - run.size >= controls[0].y + 4 && run.y <= controls[0].y + controls[0].h - 4,
+                            "oversized future button labels cannot grow into the footer");
+                }
+            }
+        }
+    }
+    std::puts("PASS: child button bounds and complete three-language labels in both themes, including width pressure");
+}
+
 static void test_stale_rest(const char *font_path, const std::filesystem::path &dir)
 {
     const char *names[] = {"overlay-rest-stale", "overlay-rest-refresh-failed",
@@ -394,6 +450,7 @@ int main(int argc, char **argv) {
         test_surface_outline(renderer);
         test_child_header_controls(argv[1]);
         if (std::strcmp(argv[2], "--check-header") == 0) {
+            test_child_button_bounds(argv[1], "build/host/ui-regression-previews/overlay");
             std::puts("PASS: Overlay header brand, controls and focus in three languages");
             return 0;
         }

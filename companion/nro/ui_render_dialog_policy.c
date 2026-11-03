@@ -255,7 +255,6 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
 void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    char comparison[128];
     PtcUiModel shell_model;
     bool restore = model->operation == PTC_UI_OPERATION_RESTORE_TODAY_POLICY;
     bool limit_change = model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;
@@ -272,7 +271,8 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool album_change = model->operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
                         model->operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
                         model->operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY;
-    bool danger = model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
+    bool danger = model->confirm_hold_required ||
+                  model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
                   model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY ||
@@ -468,14 +468,6 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                              ? ptc_ui_text(PTC_UI_T_ENTER_BEDTIME_RESTRICTIONS_IMMEDIATELY_AFTER_SAVING) : ptc_ui_text(PTC_UI_T_MAY_ENTER_BEDTIME_RESTRICTIONS_IMMEDIATELY_AFTER_SAVING), 24, UI_DANGER);
         draw_text_center(pixels, stride, (UiRect){bedtime_risk.x, bedtime_risk.y + 48, bedtime_risk.width, 28},
                          ptc_ui_text(PTC_UI_T_THE_GAME_WILL_PAUSE_IT_CAN_ONLY), 17, UI_DANGER);
-    } else if (!restore && !limit_change && !code_preview && !direct_quota_change &&
-               model->confirm_hold_required && model->played_minutes_available) {
-        snprintf(comparison, sizeof(comparison), ptc_ui_text(PTC_UI_T_USED_D_MIN_0_MIN_LEFT),
-                 model->played_minutes);
-        fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 218, 652, 92}, 16, UI_DANGER_SOFT);
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 226, 652, 34}, comparison, 25, UI_DANGER);
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 264, 652, 34},
-                         ptc_ui_text(PTC_UI_T_THE_NEW_QUOTA_SHALL_NOT_BE_HIGHER), 20, UI_DANGER);
     }
     if (restore || limit_change || code_preview || direct_quota_change) {
         uint32_t impact_background = (limit_keeps_quota || restore_keeps_quota)
@@ -538,8 +530,9 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                                 : (limit_change && model->unrestricted_today == 1 ? ptc_ui_text(PTC_UI_T_UNLIMITED_TIME_WILL_BE_CHANGED_TO_LIMITED) : ptc_ui_text(PTC_UI_T_PLEASE_CONFIRM_THE_STATUS_CHANGE)),
                              19, model->confirm_hold_required ? UI_DANGER : UI_WARNING);
         }
-    } else if (!album_change && !bedtime_save &&
-               (!model->confirm_hold_required || !model->played_minutes_available)) {
+    } else if (!album_change && !bedtime_save) {
+        /* A hold protects many operations; only policy previews above can
+         * establish an immediate restriction, never the hold flag itself. */
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72}, 16, danger ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72},
                          danger ? ptc_ui_text(PTC_UI_T_PLEASE_MAKE_SURE_YOU_UNDERSTAND_THE_IMPACT) : ptc_ui_text(PTC_UI_T_CONFIRM_TO_PERFORM_THIS_OPERATION), 22,

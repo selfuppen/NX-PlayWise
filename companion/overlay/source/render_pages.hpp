@@ -66,9 +66,14 @@
         if (focused) {
             draw_focus_ring(renderer, rect, pal.accent);
         }
-        const int height = overlay_text_height(renderer, text, rect.w - 24, size);
-        overlay_text(renderer, text, rect.x + 12, rect.y + (rect.h - height) / 2,
-            rect.w - 24, size, focused ? pal.accent : emp ? color : color, true);
+        const auto lines = overlay_button_lines(renderer, text, rect.w - 24, rect.h - 8, size);
+        const int step = (size * 6 + 4) / 5;
+        const int top = rect.y + (rect.h - static_cast<int>(lines.size()) * step) / 2;
+        renderer->enableScissoring(rect.x + 12, rect.y + 4, rect.w - 24, rect.h - 8);
+        for (size_t i = 0; i < lines.size(); ++i)
+            overlay_text(renderer, lines[i].c_str(), rect.x + 12, top + static_cast<int>(i) * step,
+                rect.w - 24, size, focused ? pal.accent : color, true);
+        renderer->disableScissoring();
     }
 
     void begin_page(tsl::gfx::Renderer *renderer, int cx, int cy, int cw,
@@ -1366,8 +1371,7 @@
         const int buffer_w = 200;
         page_layout_.buffer = ptc_overlay_rect(cx, button_y, buffer_w, button_h);
         page_layout_.redeem = ptc_overlay_rect(cx + buffer_w + 8, button_y, cw - buffer_w - 8, button_h);
-        char redeem_btn[96];
-        std::snprintf(redeem_btn, sizeof(redeem_btn), "\uE0E0  %s", ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE));
+        const char *redeem_btn = ptc_ui_text(PTC_UI_T_OVERLAY_GRANT_CODE_BUTTON);
         const char *buffer_text = ptc_ui_text(buffer_ready ? PTC_UI_T_L_RECEIVE_AUTONOMOUS_BUFFER :
             summary.daily_buffer_claimed ? PTC_UI_T_BUFFER_RECEIVED_TODAY : PTC_UI_T_THE_BUFFER_IS_TEMPORARILY_UNAVAILABLE);
         draw_button(renderer, page_layout_.buffer, buffer_text,
