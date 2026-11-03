@@ -6,6 +6,31 @@
 #include <switch.h>
 
 typedef struct {
+    bool attempted, curl_result_available, http_status_available, fetched;
+    bool metadata_valid_available, metadata_valid;
+    bool os_errno_available, tls_verify_result_available;
+    unsigned transfers;
+    unsigned long curl_result;
+    long http_status;
+    long os_errno, tls_verify_result;
+    uint64_t received;
+    const char *stage;
+} PtcUpdateNetworkSource;
+
+typedef struct {
+    char observation_id[33], curl_version[64], tls_backend[64];
+    uint64_t begin_ns;
+    bool socket_attempted, nifm_attempted, curl_global_attempted;
+    bool thread_error_available;
+    uint32_t socket_result, nifm_result;
+    uint32_t thread_error_result;
+    unsigned long curl_global_result;
+    const char *initialization_stage;
+    const char *thread_error_stage;
+    PtcUpdateNetworkSource sources[2];
+} PtcUpdateNetworkEvidence;
+
+typedef struct {
     PtcUpdateFs fs;
     PtcUpdateOffer offer;
     PtcUpdateFeed feed;
@@ -13,6 +38,7 @@ typedef struct {
     PtcUpdateJournal journal;
     PtcUpdateStatus status;
     unsigned long network_result;
+    PtcUpdateNetworkEvidence network;
     int error;
     uint64_t received, total;
     bool stable_only, started, worker_live, backup_submitted;

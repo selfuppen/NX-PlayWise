@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "feed_fixture.h"
+#include "../../third_party/cjson/cJSON.h"
+#include <errno.h>
 
 typedef size_t (*Receive)(void *, size_t, size_t, void *);
 struct TestCurl { Receive receive, header; void *data, *header_data, *progress_data; char url[1024]; long response; };
@@ -16,13 +18,13 @@ static char body[4096];
 static unsigned validations;
 
 
-Result socketInitializeDefault(void) { ++resources; return 0; }
+Result socketInitializeDefault(void) { if (scenario == 30) return 0x12340001u; ++resources; return 0; }
 void socketExit(void) { --resources; }
-Result nifmInitialize(int service) { (void)service; ++resources; return 0; }
+Result nifmInitialize(int service) { (void)service; if (scenario == 31) return 0x12340002u; ++resources; return 0; }
 void nifmExit(void) { --resources; }
 Result threadCreate(Thread *t, void (*entry)(void *), void *ctx, void *stack, size_t size, int priority, int core)
-{ (void)stack; (void)size; (void)priority; (void)core; t->entry = entry; t->ctx = ctx; return 0; }
-Result threadStart(Thread *t) { t->entry(t->ctx); return 0; }
+{ (void)stack; (void)size; (void)priority; (void)core; if (scenario == 35) return 0x12340003u; t->entry = entry; t->ctx = ctx; return 0; }
+Result threadStart(Thread *t) { if (scenario == 36) return 0x12340004u; t->entry(t->ctx); return 0; }
 Result threadWaitForExit(Thread *t) { (void)t; return 0; }
 Result threadClose(Thread *t) { (void)t; return 0; }
 Result pmshellInitialize(void) { return 0; }
@@ -40,9 +42,11 @@ bool ptc_online_update_package(PtcOnlineUpdater *u)
     return u->fs.io.hash(&u->fs, path, &size, hash) && size == 3 && !strcmp(hash, u->offer.sha256) && scenario != 25;
 }
 bool ptc_online_update_verify_current(PtcOnlineUpdater *u) { (void)u; return scenario >= 20; }
-int curl_global_init(long flags) { (void)flags; ++resources; return 0; }
+int curl_global_init(long flags) { (void)flags; if (scenario == 32) return 2; ++resources; return 0; }
+curl_version_info_data *curl_version_info(int age)
+{ (void)age; static curl_version_info_data value = {"7.69.1", "libnx"}; return &value; }
 void curl_global_cleanup(void) { --resources; }
-CURL *curl_easy_init(void) { memset(&client, 0, sizeof(client)); ++resources; return &client; }
+CURL *curl_easy_init(void) { if (scenario == 33) return NULL; memset(&client, 0, sizeof(client)); ++resources; return &client; }
 void curl_easy_cleanup(CURL *curl) { (void)curl; --resources; }
 int curl_easy_setopt(CURL *c, int option, ...)
 {
@@ -81,7 +85,7 @@ int curl_easy_perform(CURL *c)
     if (scenario == 21 && requests == 1) {
         assert(c->receive("pa", 1, 2, c->data) == 2); return 56;
     }
-    const char *payload = redirect ? "redirect response body" : (scenario >= 20 ? (scenario == 26 ? "bad!" : "zip") :
+    const char *payload = redirect ? "redirect response body" : (scenario >= 20 && scenario <= 28 ? (scenario == 26 ? "bad!" : "zip") :
         ((scenario == 12 || (scenario == 11 && requests == 1)) ? "{}" : body));
     return c->receive((void *)payload, 1, strlen(payload), c->data) == strlen(payload) ? 0 : 23;
 }
@@ -89,6 +93,8 @@ int curl_easy_getinfo(CURL *c, int info, ...)
 {
     va_list args; va_start(args, info);
     if (info == CURLINFO_RESPONSE_CODE) *va_arg(args, long *) = c->response;
+    if (info == CURLINFO_OS_ERRNO) *va_arg(args, long *) = 0;
+    if (info == CURLINFO_SSL_VERIFYRESULT) *va_arg(args, long *) = scenario == 3 ? 77 : 0;
     if (info == CURLINFO_REDIRECT_URL) *va_arg(args, char **) = scenario == 27 ? (requests == 1 ?
         "https://gitee.com/selfuppen/nx-playwise/attach_files/3580057/download/playwise-3.0.2.zip" :
         "https://foruda.gitee.com/attach_file/1793690895109930364/playwise-3.0.2.zip?token=test&ts=1") :
@@ -107,6 +113,30 @@ static bool read_text(PtcStorage *storage, const char *path, char *out, size_t s
 static bool empty_queue(PtcStorage *storage, const char *path, char (*names)[128], size_t capacity, size_t *count)
 {
     (void)storage; (void)path; (void)names; (void)capacity; *count = 0; return true;
+}
+
+static cJSON *network_report(const char *root, int job)
+{
+    char path[768], text[4097], again[4097];
+    snprintf(path, sizeof(path), "%s/switch/playwise/support/update-network.json", root);
+    assert(read_text(NULL, path, text, sizeof(text)) && read_text(NULL, path, again, sizeof(again)));
+    assert(!strcmp(text, again));
+    assert(!strstr(text, "https://") && !strstr(text, "signature") && !strstr(text, "token=") &&
+        !strstr(text, "redirect response body"));
+    cJSON *value = cJSON_Parse(text); assert(value);
+    assert(cJSON_GetObjectItemCaseSensitive(value, "schema_version")->valueint == 1);
+    assert(!strcmp(cJSON_GetObjectItemCaseSensitive(value, "kind")->valuestring, "online_update_network"));
+    assert(!strcmp(cJSON_GetObjectItemCaseSensitive(value, "nro_release_id")->valuestring, "host-update-source"));
+    assert(!strcmp(cJSON_GetObjectItemCaseSensitive(value, "operation")->valuestring, job == 1 ? "check" : "download"));
+    assert(strlen(cJSON_GetObjectItemCaseSensitive(value, "observation_id")->valuestring) == 32);
+    assert(cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(value, "sources")) == 2);
+    return value;
+}
+
+static bool refuse_report(void *ctx, const char *path, const char *text)
+{
+    PtcUpdateFs *fs = ctx; (void)path; (void)text;
+    fs->last_errno = EACCES; fs->last_result = 0xeeeeeeeeu; errno = EACCES; return false;
 }
 
 static void pending_reopen(const char *root)
@@ -153,8 +183,10 @@ int main(int argc, char **argv)
 {
     assert(argc == 2); test_update_metadata(body, sizeof(body), "999.0.0", false);
     for (scenario = 0; scenario <= 13; ++scenario) {
-        PtcOnlineUpdater u; memset(&u, 0, sizeof(u));
-        atomic_init(&u.cancel, false); atomic_init(&u.done, false); atomic_init(&u.progress, 0);
+        PtcOnlineUpdater u; char root[512]; snprintf(root, sizeof(root), "%s/metadata-%d", argv[1], scenario);
+        PtcStorageVTable vtable = {0}; vtable.read_text = read_text; vtable.list_json = empty_queue;
+        PtcStorage storage = {&vtable, NULL};
+        ptc_online_update_init_at(&u, &storage, root);
         requests = resources = 0; ticks = 0;
         assert(ptc_online_update_start(&u, 1));
         assert(u.worker_live && !ptc_online_update_start(&u, 1));
@@ -167,6 +199,64 @@ int main(int argc, char **argv)
         else if (scenario == 5 || scenario == 9) assert(u.status == PTC_UPDATE_CANCELED);
         else assert(u.status == PTC_UPDATE_FAILED);
         assert(requests == (scenario == 0 || scenario == 5 || scenario == 9 ? 1 : 2));
+        cJSON *report = network_report(root, 1);
+        cJSON *sources = cJSON_GetObjectItemCaseSensitive(report, "sources");
+        cJSON *gitee = cJSON_GetArrayItem(sources, 0), *github = cJSON_GetArrayItem(sources, 1);
+        assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(gitee, "attempted")));
+        if (scenario == 0) {
+            assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(gitee, "metadata_valid")));
+            assert(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(github, "attempted")));
+        }
+        if (scenario == 3) {
+            assert(cJSON_GetObjectItemCaseSensitive(gitee, "curl_result")->valueint == 51);
+            assert(cJSON_GetObjectItemCaseSensitive(github, "curl_result")->valueint == 51);
+            assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(github, "curl_result_available")));
+            assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(gitee, "tls_verify_result_available")));
+            assert(cJSON_GetObjectItemCaseSensitive(gitee, "tls_verify_result")->valueint == 77);
+        }
+        if (scenario == 10) {
+            assert(cJSON_GetObjectItemCaseSensitive(gitee, "http_status")->valueint == 404);
+            assert(cJSON_GetObjectItemCaseSensitive(github, "http_status")->valueint == 200);
+        }
+        if (scenario == 12) {
+            assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(gitee, "metadata_valid_available")));
+            assert(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(gitee, "metadata_valid")));
+        }
+        cJSON_Delete(report);
+        ptc_online_update_exit(&u); assert(!resources);
+    }
+    for (scenario = 30; scenario <= 36; ++scenario) {
+        PtcOnlineUpdater u; char root[512]; snprintf(root, sizeof(root), "%s/initialization-%d", argv[1], scenario);
+        PtcStorageVTable vtable = {0}; vtable.read_text = read_text; vtable.list_json = empty_queue;
+        PtcStorage storage = {&vtable, NULL};
+        ptc_online_update_init_at(&u, &storage, root); requests = resources = 0; ticks = 0;
+        if (scenario == 34) u.fs.io.write = refuse_report;
+        bool started = ptc_online_update_start(&u, 1);
+        assert(started == (scenario < 35));
+        if (started) assert(ptc_online_update_poll(&u));
+        assert(!resources && !u.worker_live && requests == (scenario == 34 ? 1 : 0));
+        if (scenario == 34) {
+            assert(u.status == PTC_UPDATE_AVAILABLE && !u.error);
+            assert(!u.fs.last_errno && !u.fs.last_result); /* Diagnostics must not replace operation results. */
+        } else {
+            assert(u.status == PTC_UPDATE_FAILED);
+            cJSON *report = network_report(root, 1);
+            cJSON *gitee = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(report, "sources"), 0);
+            assert(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(gitee, "curl_result_available")));
+            if (scenario == 30) {
+                assert(cJSON_GetObjectItemCaseSensitive(report, "socket_result")->valuedouble == 0x12340001u);
+                assert(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(report, "nifm_attempted")));
+            }
+            if (scenario == 31) assert(cJSON_GetObjectItemCaseSensitive(report, "nifm_result")->valuedouble == 0x12340002u);
+            if (scenario == 32) assert(cJSON_GetObjectItemCaseSensitive(report, "curl_global_result")->valueint == 2);
+            if (scenario == 33) assert(!strcmp(cJSON_GetObjectItemCaseSensitive(gitee, "stage")->valuestring, "curl_easy_init"));
+            if (scenario >= 35) {
+                assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(report, "thread_error_available")));
+                assert(cJSON_GetObjectItemCaseSensitive(report, "thread_error_result")->valuedouble ==
+                    (scenario == 35 ? 0x12340003u : 0x12340004u));
+            }
+            cJSON_Delete(report);
+        }
         ptc_online_update_exit(&u); assert(!resources);
     }
     for (scenario = 20; scenario <= 28; ++scenario) {
@@ -189,6 +279,7 @@ int main(int argc, char **argv)
         if (scenario == 21 || scenario == 22 || scenario == 24) assert(requests == 2);
         if (scenario == 27) assert(requests == 3);
         if (scenario == 28) assert(requests == 2);
+        cJSON_Delete(network_report(root, 2));
         ptc_online_update_exit(&u); assert(!resources);
     }
     pending_reopen(argv[1]);

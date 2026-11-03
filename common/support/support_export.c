@@ -10,6 +10,7 @@ static const char *const PTC_SUPPORT_FILES[] = {
     "setup.json",
     "compatibility.json",
     "environment.json",
+    "support/update-network.json",
 };
 
 static const char *const PTC_SENSITIVE_MARKERS[] = {

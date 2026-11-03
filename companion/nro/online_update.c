@@ -4,6 +4,7 @@
 #include "../../common/crypto/sha256.h"
 #include "release_manifest.h"
 #include <curl/curl.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,69 @@
 #endif
 
 typedef struct { PtcOnlineUpdater *u; FILE *file; char *text; size_t used, limit, headers, skipped; bool redirect; } Download;
+
+static void network_record(PtcOnlineUpdater *u, bool worker_ok)
+{
+    /* This is a bounded latest-worker snapshot, not an append-only wire log.
+       Collectors freeze its bytes before another check; URLs/bodies stay out. */
+    if (u->job > 2 || !u->fs.io.write || !u->fs.io.commit) return;
+    int saved_errno = errno, saved_fs_errno = u->fs.last_errno;
+    uint32_t saved_fs_result = u->fs.last_result;
+    cJSON *o = cJSON_CreateObject(); if (!o) { errno = saved_errno; return; }
+    PtcUpdateNetworkEvidence *n = &u->network;
+    cJSON_AddNumberToObject(o, "schema_version", 1);
+    cJSON_AddStringToObject(o, "kind", "online_update_network");
+    cJSON_AddStringToObject(o, "observation_id", n->observation_id);
+    cJSON_AddStringToObject(o, "nro_release_id", PLAYWISE_BUILD_RELEASE_ID);
+    cJSON_AddStringToObject(o, "operation", u->job == 1 ? "check" : "download");
+    char ticks[32]; snprintf(ticks, sizeof(ticks), "%llu", (unsigned long long)n->begin_ns);
+    cJSON_AddStringToObject(o, "begin_ns", ticks);
+    snprintf(ticks, sizeof(ticks), "%llu", (unsigned long long)armTicksToNs(armGetSystemTick()));
+    cJSON_AddStringToObject(o, "end_ns", ticks);
+    cJSON_AddBoolToObject(o, "worker_ok", worker_ok);
+    cJSON_AddNumberToObject(o, "worker_status", u->status);
+    cJSON_AddNumberToObject(o, "error", u->error);
+    cJSON_AddBoolToObject(o, "cancel_seen", atomic_load(&u->cancel));
+    cJSON_AddStringToObject(o, "initialization_stage", n->initialization_stage ? n->initialization_stage : "worker_not_entered");
+    cJSON_AddBoolToObject(o, "thread_error_available", n->thread_error_available);
+    cJSON_AddNumberToObject(o, "thread_error_result", n->thread_error_result);
+    cJSON_AddStringToObject(o, "thread_error_stage", n->thread_error_stage ? n->thread_error_stage : "none");
+    cJSON_AddBoolToObject(o, "socket_attempted", n->socket_attempted);
+    cJSON_AddNumberToObject(o, "socket_result", n->socket_result);
+    cJSON_AddBoolToObject(o, "nifm_attempted", n->nifm_attempted);
+    cJSON_AddNumberToObject(o, "nifm_result", n->nifm_result);
+    cJSON_AddBoolToObject(o, "curl_global_attempted", n->curl_global_attempted);
+    cJSON_AddNumberToObject(o, "curl_global_result", (double)n->curl_global_result);
+    cJSON_AddStringToObject(o, "curl_version", n->curl_version);
+    cJSON_AddStringToObject(o, "tls_backend", n->tls_backend);
+    cJSON *sources = cJSON_AddArrayToObject(o, "sources");
+    for (unsigned i = 0; sources && i < 2; ++i) {
+        const PtcUpdateNetworkSource *a = &n->sources[i];
+        cJSON *item = cJSON_CreateObject(); if (!item) continue;
+        cJSON_AddItemToArray(sources, item);
+        cJSON_AddStringToObject(item, "source", i ? "github" : "gitee");
+        cJSON_AddBoolToObject(item, "attempted", a->attempted);
+        cJSON_AddStringToObject(item, "stage", a->stage ? a->stage : "not_attempted");
+        cJSON_AddNumberToObject(item, "transfers", a->transfers);
+        cJSON_AddBoolToObject(item, "curl_result_available", a->curl_result_available);
+        cJSON_AddNumberToObject(item, "curl_result", (double)a->curl_result);
+        cJSON_AddBoolToObject(item, "http_status_available", a->http_status_available);
+        cJSON_AddNumberToObject(item, "http_status", (double)a->http_status);
+        cJSON_AddBoolToObject(item, "os_errno_available", a->os_errno_available);
+        cJSON_AddNumberToObject(item, "os_errno", (double)a->os_errno);
+        cJSON_AddBoolToObject(item, "tls_verify_result_available", a->tls_verify_result_available);
+        cJSON_AddNumberToObject(item, "tls_verify_result", (double)a->tls_verify_result);
+        cJSON_AddNumberToObject(item, "received_bytes", (double)a->received);
+        cJSON_AddBoolToObject(item, "fetched", a->fetched);
+        cJSON_AddBoolToObject(item, "metadata_valid_available", a->metadata_valid_available);
+        cJSON_AddBoolToObject(item, "metadata_valid", a->metadata_valid);
+    }
+    char *text = cJSON_PrintUnformatted(o);
+    if (text && strlen(text) <= 4096 && u->fs.io.write(&u->fs,
+            "switch/playwise/support/update-network.json", text)) (void)u->fs.io.commit(&u->fs);
+    free(text); cJSON_Delete(o);
+    u->fs.last_errno = saved_fs_errno; u->fs.last_result = saved_fs_result; errno = saved_errno;
+}
 
 static size_t header(void *data, size_t size, size_t count, void *ctx)
 {
@@ -64,6 +128,8 @@ static int progress(void *ctx, curl_off_t total, curl_off_t now, curl_off_t uplo
 
 static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d, unsigned source)
 {
+    PtcUpdateNetworkSource *a = &u->network.sources[source];
+    a->attempted = true; a->stage = "curl_easy_init";
     char url[4096]; snprintf(url, sizeof(url), "%s", initial);
     CURL *curl = curl_easy_init(); if (!curl) return false;
     bool ok = false;
@@ -72,7 +138,7 @@ static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d, unsigne
         if (d->file && (d->used || fseek(d->file, 0, SEEK_SET))) break;
         d->used = d->headers = d->skipped = 0; d->redirect = false;
         uint64_t elapsed = armTicksToNs(armGetSystemTick() - started) / UINT64_C(1000000000);
-        if (elapsed >= timeout) break;
+        if (elapsed >= timeout) { a->stage = "deadline"; break; }
         curl_easy_setopt(curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)CURLPROTO_HTTPS);
         curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, (long)CURLPROTO_HTTPS);
@@ -92,26 +158,57 @@ static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d, unsigne
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progress);
         curl_easy_setopt(curl, CURLOPT_XFERINFODATA, u);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        ++a->transfers;
         u->network_result = (unsigned long)curl_easy_perform(curl);
+        a->curl_result_available = true; a->curl_result = u->network_result;
+        a->received = d->used;
         long response = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response);
-        if (u->network_result != CURLE_OK) break;
-        if (response == 200) { ok = true; break; }
+        a->http_status_available = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response) == CURLE_OK;
+        a->http_status = response;
+        a->os_errno_available = curl_easy_getinfo(curl, CURLINFO_OS_ERRNO, &a->os_errno) == CURLE_OK;
+        a->tls_verify_result_available = curl_easy_getinfo(curl, CURLINFO_SSL_VERIFYRESULT, &a->tls_verify_result) == CURLE_OK;
+        if (u->network_result != CURLE_OK) { a->stage = "transfer_failed"; break; }
+        a->stage = "http";
+        if (response == 200) { a->stage = "response_received"; ok = true; break; }
         char *redirect = NULL;
         if (response < 300 || response >= 400 || curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &redirect) != CURLE_OK ||
-            !redirect || !ptc_update_url_for(redirect, source, d->file != NULL, true) || strlen(redirect) >= sizeof(url)) break;
+            !redirect || !ptc_update_url_for(redirect, source, d->file != NULL, true) || strlen(redirect) >= sizeof(url)) {
+            if (response >= 300 && response < 400) a->stage = "redirect_rejected";
+            break;
+        }
         /* Never append a redirect response body to the package. */
         if (d->file && d->used) break;
         strcpy(url, redirect);
     }
+    a->fetched = ok;
     curl_easy_cleanup(curl); return ok;
 }
 
 static bool network_job(PtcOnlineUpdater *u)
 {
-    bool sockets = R_SUCCEEDED(socketInitializeDefault());
-    bool nifm = sockets && R_SUCCEEDED(nifmInitialize(NifmServiceType_User));
-    bool curl = nifm && curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
+    PtcUpdateNetworkEvidence *n = &u->network;
+    n->initialization_stage = "socket_initialize"; n->socket_attempted = true;
+    n->socket_result = socketInitializeDefault();
+    bool sockets = R_SUCCEEDED(n->socket_result);
+    bool nifm = false, curl = false;
+    if (sockets) {
+        n->initialization_stage = "nifm_initialize"; n->nifm_attempted = true;
+        n->nifm_result = nifmInitialize(NifmServiceType_User);
+        nifm = R_SUCCEEDED(n->nifm_result);
+    }
+    if (nifm) {
+        n->initialization_stage = "curl_global_init"; n->curl_global_attempted = true;
+        n->curl_global_result = (unsigned long)curl_global_init(CURL_GLOBAL_DEFAULT);
+        curl = n->curl_global_result == CURLE_OK;
+    }
+    if (curl) {
+        n->initialization_stage = "complete";
+        curl_version_info_data *version = curl_version_info(CURLVERSION_NOW);
+        if (version) {
+            snprintf(n->curl_version, sizeof(n->curl_version), "%s", version->version ? version->version : "");
+            snprintf(n->tls_backend, sizeof(n->tls_backend), "%s", version->ssl_version ? version->ssl_version : "");
+        }
+    }
     bool ok = false;
     if (curl && u->job == 1) {
         char *text = calloc(1, PTC_UPDATE_METADATA_LIMIT + 1);
@@ -123,6 +220,9 @@ static bool network_job(PtcOnlineUpdater *u)
             ok = fetch(u, urls[source], &d, source);
             if (ok) {
                 ok = !memchr(text, '\0', d.used) && ptc_update_feed_parse(text, &u->feed);
+                n->sources[source].metadata_valid_available = true;
+                n->sources[source].metadata_valid = ok;
+                n->sources[source].stage = ok ? "metadata_valid" : "metadata_parse";
                 if (!ok) u->error = PTC_UPDATE_ERROR_PACKAGE;
             }
             if (ok) { u->source = source + 1; u->error = PTC_UPDATE_ERROR_NONE; break; }
@@ -182,6 +282,7 @@ static void worker(void *ctx)
                 u->journal = persisted;
                 if (ptc_update_rollback(&u->fs.io, &u->journal)) {
                     u->error = PTC_UPDATE_ERROR_STORAGE; u->status = PTC_UPDATE_FAILED;
+                    network_record(u, false);
                     (void)ptc_online_update_record(u, "failed"); atomic_store(&u->done, true); return;
                 }
             }
@@ -197,6 +298,7 @@ static void worker(void *ctx)
             (u->error == 2 ? PTC_UPDATE_MANUAL_REQUIRED : (u->job >= 3 ? PTC_UPDATE_RECOVERY_REQUIRED : PTC_UPDATE_FAILED));
     }
     if (u->status == PTC_UPDATE_CANCELED) u->error = PTC_UPDATE_ERROR_NONE;
+    if (u->job <= 2) network_record(u, ok);
     if (u->job >= 2) (void)ptc_online_update_record(u, u->status == PTC_UPDATE_BACKUP_PENDING ? "verified" :
         (u->status == PTC_UPDATE_AWAITING_REOPEN ? "installed" : (u->status == PTC_UPDATE_CANCELED ? "canceled" : "failed")));
     atomic_store_explicit(&u->done, true, memory_order_release);
@@ -355,14 +457,36 @@ bool ptc_online_update_start(PtcOnlineUpdater *u, int job)
         }
     }
     u->job = job; u->error = 0; u->network_result = 0;
+    if (job <= 2) {
+        memset(&u->network, 0, sizeof(u->network));
+        u->network.begin_ns = armTicksToNs(armGetSystemTick());
+        snprintf(u->network.observation_id, sizeof(u->network.observation_id), "%016llx%016llx",
+            (unsigned long long)randomGet64(), (unsigned long long)randomGet64());
+    }
     if (job == 1) u->started = true;
     atomic_store(&u->cancel, false); atomic_store(&u->done, false); atomic_store(&u->progress, 0);
     u->status = job == 1 ? PTC_UPDATE_CHECKING : (job == 2 ? PTC_UPDATE_DOWNLOADING : PTC_UPDATE_INSTALLING);
     Result rc = threadCreate(&u->worker, worker, u, NULL, 128u * 1024u, 0x2c, -2);
-    if (R_FAILED(rc)) { u->error = PTC_UPDATE_ERROR_STORAGE; u->status = PTC_UPDATE_FAILED; if (job >= 2) (void)ptc_online_update_record(u, "failed"); return false; }
+    if (R_FAILED(rc)) {
+        u->error = PTC_UPDATE_ERROR_STORAGE; u->status = PTC_UPDATE_FAILED;
+        if (job <= 2) {
+            u->network.thread_error_available = true; u->network.thread_error_result = rc;
+            u->network.thread_error_stage = "thread_create"; network_record(u, false);
+        }
+        if (job >= 2) (void)ptc_online_update_record(u, "failed");
+        return false;
+    }
     u->worker_live = true;
     rc = threadStart(&u->worker);
-    if (R_FAILED(rc)) { threadClose(&u->worker); u->worker_live = false; u->status = PTC_UPDATE_FAILED; if (job >= 2) (void)ptc_online_update_record(u, "failed"); return false; }
+    if (R_FAILED(rc)) {
+        threadClose(&u->worker); u->worker_live = false; u->status = PTC_UPDATE_FAILED;
+        if (job <= 2) {
+            u->network.thread_error_available = true; u->network.thread_error_result = rc;
+            u->network.thread_error_stage = "thread_start"; network_record(u, false);
+        }
+        if (job >= 2) (void)ptc_online_update_record(u, "failed");
+        return false;
+    }
     return true;
 }
 

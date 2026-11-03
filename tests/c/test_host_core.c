@@ -825,12 +825,17 @@ static void test_daily_summary_and_read_only_stats_boundary(void)
 static void test_support_redaction(void)
 {
     size_t index;
-    check_int((long)ptc_support_export_file_count(), 7, "support export uses a fixed allowlist");
+    check_int((long)ptc_support_export_file_count(), 8, "support export uses a fixed allowlist");
+    bool network_report_seen = false;
     for (index = 0; index < ptc_support_export_file_count(); ++index) {
         const char *name = ptc_support_export_file(index);
+        if (name && !strcmp(name, "support/update-network.json")) network_report_seen = true;
         check_true(name && strcmp(name, "credentials.json") != 0 && strcmp(name, "auth.json") != 0,
             "support allowlist excludes credential files");
     }
+    check_true(network_report_seen, "support export includes the bounded network worker snapshot");
+    check_true(ptc_support_export_text_safe("{\"kind\":\"online_update_network\",\"tls_backend\":\"libnx\",\"curl_result_available\":false}"),
+        "network result availability exports without credential material");
     check_true(ptc_support_export_text_safe("{\"version\":1,\"device_id\":\"kid-switch\"}"),
         "ordinary support data is exportable");
     check_true(!ptc_support_export_text_safe("{\"grant_secret\":\"secret\"}"), "support rejects secret fields");
