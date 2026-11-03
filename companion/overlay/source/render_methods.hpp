@@ -446,12 +446,18 @@
         }
     }
 
-    bool status_is_stale() const
+    bool status_snapshot_is_stale() const
     {
         if (!has_status_snapshot_ || last_refresh_tick_ == 0) return false;
-        if (armTicksToNs(armGetSystemTick() - last_refresh_tick_) >= 30000000000ULL) return true;
-        if (displayed_summary_.usage_present && !displayed_summary_.played_minutes_available) return true;
-        return false;
+        const u64 tick = armGetSystemTick();
+        return tick < last_refresh_tick_ ||
+            armTicksToNs(tick - last_refresh_tick_) >= 30000000000ULL;
+    }
+
+    bool status_is_stale() const
+    {
+        return status_snapshot_is_stale() ||
+            (displayed_summary_.usage_present && !displayed_summary_.played_minutes_available);
     }
 
     bool needs_refresh() const
@@ -467,20 +473,24 @@
         day = second = -1;
         bool clock_fresh = true;
 #ifdef PTC_OVERLAY_PREVIEW_CLOCK
-        day = 2469;
-        second = 496 * 60;
-#else
-        const u64 tick = armGetSystemTick();
-        const uint64_t age = usage_snapshot_tick_ != 0 && tick >= usage_snapshot_tick_
-            ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
-        clock_fresh = ptc_policy_snapshot_clock(&summary, age, &day, &second);
+        if (preview_clock_) {
+            day = 2469;
+            second = 496 * 60;
+        } else
 #endif
+        {
+            const u64 tick = armGetSystemTick();
+            const uint64_t age = usage_snapshot_tick_ != 0 && tick >= usage_snapshot_tick_
+                ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
+            clock_fresh = ptc_policy_snapshot_clock(&summary, age, &day, &second);
+        }
         return summary.valid && summary.day_index == day && clock_fresh && has_status_snapshot_ && last_refresh_tick_ != 0;
     }
 
     bool child_status_fresh(const PtcCompanionResultSummary &summary, int &day, int &second) const
     {
-        return child_snapshot_usable(summary, day, second) && !status_is_stale() &&
+        // Missing console usage does not invalidate independently reported rules.
+        return child_snapshot_usable(summary, day, second) && !status_snapshot_is_stale() &&
             !(error_ && last_request_kind_ == OverlayRequestKind::Status);
     }
 

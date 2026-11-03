@@ -22,6 +22,7 @@ namespace {
 #include "../../companion/overlay/source/render_types.hpp"
 class PreviewView {
 public:
+    bool preview_clock_ = true;
     PtcUiResolvedTheme theme_ = PTC_UI_RESOLVED_DARK;
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
@@ -59,6 +60,68 @@ public:
 static void require(bool value, const char *message)
 {
     if (!value) throw std::runtime_error(message);
+}
+
+static void test_child_policy_freshness()
+{
+    PreviewView view;
+    view.preview_clock_ = false; // Exercise the production clock path, not the sample clock.
+    view.last_refresh_tick_ = view.usage_snapshot_tick_ = armGetSystemTick();
+    auto &s = view.displayed_summary_;
+    s.valid = s.local_clock_available = true;
+    s.day_index = 2498;
+    s.local_second_of_day = 10 * 3600;
+    s.completed_at = 1793671200;
+    s.bedtime_available = s.dock_available = s.dock_policy_available = true;
+    std::snprintf(s.operation_mode, sizeof(s.operation_mode), "undocked");
+    s.usage_present = true;
+    s.played_minutes_available = false;
+    int day, second;
+    require(view.status_is_stale() && view.needs_refresh(),
+        "unavailable console usage keeps its existing refresh warning");
+    require(view.child_status_fresh(s, day, second),
+        "fresh rules do not depend on console usage availability");
+    auto p = view.child_policy_status(s);
+    require(p.bedtime.state == PTC_POLICY_OFF && p.dock.state == PTC_POLICY_OFF,
+        "fresh disabled rules must display off even when console usage is unavailable");
+    s.bedtime_enabled = s.bedtime_next_available = true;
+    s.bedtime_next_start_day_index = s.day_index;
+    s.bedtime_next_start_minute = 21 * 60;
+    s.bedtime_next_end_minute = 7 * 60;
+    s.bedtime_next_window_instance_id = (static_cast<uint64_t>(s.day_index) << 16) | (21 * 60);
+    s.undocked_limit_enabled = s.undocked_usage_available = true;
+    s.undocked_daily_minutes = 30;
+    s.undocked_used_minutes = 12;
+    s.undocked_remaining_minutes = 18;
+    p = view.child_policy_status(s);
+    require(p.bedtime.state == PTC_POLICY_PENDING && p.bedtime.minutes == 660 &&
+        p.dock.state == PTC_POLICY_AVAILABLE && p.dock.minutes == 18,
+        "known bedtime and TV allowance survive missing console usage");
+    s.undocked_usage_available = false;
+    require(view.child_policy_status(s).dock.state == PTC_POLICY_UNKNOWN,
+        "missing TV usage cannot be replaced by console usage or a guessed balance");
+    s.undocked_usage_available = true;
+    view.last_refresh_tick_ = armGetSystemTick() - 29ULL * 1000000000ULL;
+    require(view.child_policy_status(s).dock.state == PTC_POLICY_AVAILABLE,
+        "rules remain fresh before thirty seconds");
+    view.last_refresh_tick_ -= 1000000000ULL;
+    require(view.child_policy_status(s).dock.state == PTC_POLICY_UNKNOWN,
+        "TV allowance still expires at thirty seconds");
+    view.last_refresh_tick_ = armGetSystemTick();
+    view.error_ = true;
+    view.last_request_kind_ = OverlayRequestKind::Status;
+    require(view.child_policy_status(s).dock.state == PTC_POLICY_UNKNOWN,
+        "failed status refresh does not renew TV allowance");
+    view.error_ = false;
+    s.local_clock_available = false;
+    p = view.child_policy_status(s);
+    require(p.bedtime.state == PTC_POLICY_UNKNOWN && p.dock.state == PTC_POLICY_UNKNOWN,
+        "missing backend clock keeps both policies unknown");
+    s.local_clock_available = true;
+    view.usage_snapshot_tick_ = 0;
+    require(view.child_policy_status(s).bedtime.state == PTC_POLICY_UNKNOWN,
+        "a persisted result without a request origin cannot renew policies");
+    std::puts("PASS: Overlay policy freshness is independent of console usage");
 }
 
 static void test_text_layout(tsl::gfx::Renderer &renderer)
@@ -445,6 +508,7 @@ int main(int argc, char **argv) {
     if (argc != 3) return 2;
     try {
         tsl::gfx::Renderer renderer(argv[1]);
+        test_child_policy_freshness();
         test_child_cards(renderer);
         test_parent_cards(renderer);
         test_surface_outline(renderer);

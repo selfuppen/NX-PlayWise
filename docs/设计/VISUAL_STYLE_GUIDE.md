@@ -291,6 +291,8 @@ The child hero uses four compact 56px cards for quota, eye care, bedtime and TV,
 
 The global status bar adapts to eye-care and policy rows, with its bottom no lower than y=104. Bedtime and TV summaries share two columns when both are enabled. The Overlay displays policies in individual large overview cards and complete scrollable status details. Input, submit, parent access and the Tesla footer must remain unobstructed. Boundary confirmation uses warning colors; active backend restrictions use danger colors. An empty non-TV balance on TV uses warning colors. Existing measured multilingual layouts, overflow handling, NRO themes and the Overlay dark baseline remain mandatory.
 
+Overlay policy freshness uses the backend civil clock and the bound request's monotonic age. Missing console usage keeps that reading's refresh warning but does not hide valid bedtime or TV rule states. TV allowance still requires its own usage reading. The thirty-second freshness limit, failed-refresh checks and unknown clock or request-origin handling remain in effect.
+
 ### Online updates and pre-update backups
 
 Software information exposes an X shortcut and a separate touch button while preserving load, defer and close. The update page distinguishes the running app, installed files and store version. Checking, downloading, backing up, installing, reopening, loading the backend, safety confirmation, an unknown receipt and verified completion are separate states. Success requires runtime identity and receipt verification; failures use danger semantics and ordinary progress uses the existing accent palette.
