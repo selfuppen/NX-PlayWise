@@ -1,18 +1,18 @@
 {
   "releases": [
     {
-      "notes": "# 任我玩 PlayWise v3.1.2-beta.2\n\n[简体中文](#简体中文) | [English](#english)\n\n## 简体中文\n\n相较于 `v3.1.1-beta.1`，本版新增应用内在线更新与更新前备份恢复，放宽系统环境兼容性提示，并改善孩子区和游戏内浮窗的可读性。本次按预发布版发布。\n\n### 新功能与改进\n\n- **应用内在线更新**：在“支持与恢复 → 软件信息”进入更新页，支持启动时或手动检查、版本通道选择、完整更新说明，以及经家长密码和长按确认后的下载与安装。发现适用新版时，首页独立显示“软件有新版本”，与数据刷新状态分开展示。\n- **更新前备份与恢复**：安装前创建独立备份，支持查看历史备份、选择恢复配置、失败时回退程序文件和受保护的清理流程。正常更新保留规则、用量、离线码消费记录及原安装快照。\n- **系统环境兼容性**：较低或较高的 HOS / Atmosphère 版本、未知机型和缺少固件摘要时显示兼容性提示；仍须通过实际 PCTL、布局、写入确认与恢复检查才能接管。固件摘要查询失败后仍继续读取机型，并改善诊断中的接管阶段、最近设置错误和停用原因。\n- **孩子区更易读**：放大时间读数和守护卡说明，调整首页布局，并为“使用详情”增加阅读指引。\n- **浮窗更清晰**：提高面板底色不透明度，减少游戏画面对文字的干扰。\n- **构建与文档**：修复 Eden 增量构建可能混用旧身份的问题，修正预发布版 Device Lab 显示版本，并同步使用说明与文档预览图。\n\n### 安装与升级\n\n- 首次安装推荐 `playwise-complete-3.1.2-beta.2.zip`，内含标准安装包和备用离线家长网页。\n- 已安装用户可下载 `playwise-3.1.2-beta.2.zip`，将 `atmosphere` 和 `switch` 目录完整合并覆盖到 SD 卡根目录。升级前建议备份，保留数据时不要先删除原目录或只替换单个组件。\n- 从 `v3.1.1-beta.1` 升级需要先",
+      "notes": "# 任我玩 PlayWise v3.1.3-beta.1\n\n- 在线更新改用项目 Gitee 发行清单和安装包，GitHub 作为备用。默认允许正式版和测试版，保留“仅正式版”。\n- 下载固定同一版本、精确大小与 SHA-256/MD5；只有传输失败尝试 GitHub 同版本完整重下，取消或内容校验失败不换源。\n- 支持 Gitee 仓库附件及 foruda CDN 的实际匿名跳转，保留 HTTPS、来源隔离和路径白名单。\n- 改善 PIN 说明、设置标题和徽章排版、配置恢复风险提示及英文浮窗按钮；修正规则刷新待确认的显示。\n- 发布镜像核验全部附件并匿名回读后才发布清单，上传未知时先回查，日志提供脱敏错误分类。\n\n首次取得新更新器仍需完整安装。普通升级保留家庭规则、PIN、配对、已用时间、nonce、账本与活动；v3.0.2 未声明在线安装兼容，继续手动完整安装。\n\n本测试版通过 Host C/Python、网络及包故障注入、UI 和安装包门禁，Eden 模拟主流程17项与支持恢复6项分别通过。真实 Switch TLS、下载、在线独立备份/安装、恢复及后台交接仍待两阶段实测；构建资格保持 pending，以上结果不表示完整真机资格。\n",
       "package": {
-        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.2-beta.2/playwise-3.1.2-beta.2.zip",
-        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.1.2-beta.2/playwise-3.1.2-beta.2.zip",
-        "md5": "e5b3b55745f423430d3b4df7a484df3a",
-        "name": "playwise-3.1.2-beta.2.zip",
-        "sha256": "39dc9c0e3e62b229ed0244d6808971c5e1c0f8adba56b663d9beee31115d7fd0",
-        "size": 3803303
+        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.3-beta.1/playwise-3.1.3-beta.1.zip",
+        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.1.3-beta.1/playwise-3.1.3-beta.1.zip",
+        "md5": "c2019dec3f2443ab8920adc1fcfc65d4",
+        "name": "playwise-3.1.3-beta.1.zip",
+        "sha256": "562fe4cd41337af1e21b8c46c35a5a2376207f0161f6cb8a03c2ff973faadb0f",
+        "size": 3809611
       },
       "prerelease": true,
-      "tag": "v3.1.2-beta.2",
-      "version": "3.1.2-beta.2"
+      "tag": "v3.1.3-beta.1",
+      "version": "3.1.3-beta.1"
     },
     {
       "notes": "## 中文｜PlayWise v3.0.2\n\n本次更新重点完善多语言体验，并修复英文界面的排版问题。\n\n### 更新内容\n\n- Switch 主应用和游戏内浮窗现支持简体中文、繁體中文和 English；可在设置中选择语言或跟随系统。\n- 家长网页及离线版 `playwise-offline.html` 支持中文和英文切换。\n- 优化就寝计划总开关的状态显示与保存指引。\n- 修复英文界面多处文字溢出、重叠和按键图标识别问题。\n- 新增英文 README、使用指南、技术文档及界面预览图。\n\n### 升级提示\n\n建议备份数据后，将新版标准安装包中的 `atmosphere` 和 `switch` 两个目录完整合并到 SD 卡根目录，并重启主机。普通覆盖升级会保留现有家长密码、密钥、规则和运行记录。首次安装可下载 `playwise-complete-3.0.2.zip`，其中包含 Switch 安装包和离线家长网页。\n---\n## English | PlayWise v3.0.2\n\nThis release improves language support and fixes layout issues in the English interface.\n\n### What’s new\n\n- The Switch app and in-game overlay support Simplified Chinese, Traditional Chinese, and English. Choose a language in Settings or follow the system language.\n- The parent web app and standalone `playwise-offline.html` support Chinese and English.\n- Improved the bedtime schedule’s master switch status and save guidance.\n- Fixed text overflow, overlapping labels, and button icon recognition across the English interface.\n- Added an English README, user guide, technical documentation, and interface previews.\n\n### Upgrading\n\nBack up your data, then merge both the `atmosphere` and `switch` folders from the new standard package onto the SD card and reboot. A normal in-place upgrade preserves existing PINs, secrets, rules, and activity records. For a first installation, `playwise-complete-3.0.2.zip` includes the Switch package and the offline parent web page.",
