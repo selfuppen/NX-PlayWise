@@ -340,8 +340,12 @@ static void test_child_button_bounds(const char *font_path, const std::filesyste
                                 run.y <= rect.y + rect.h - 4 && run.x + static_cast<int>(
                                     measure_localized(&renderer, run.text.c_str(), run.size).first) <= rect.x + rect.w - 12,
                                 "every child button text run stays inside its width and height");
-                            if (metric == 1.0f) require(run.text.find("...") == std::string::npos,
-                                "current localized child labels remain complete at normal font metrics");
+                            // Real system-font metrics truncated the disabled English label
+                            // even though the documentation font fit at 1.0. Keep this
+                            // current label complete under the existing width stress.
+                            if (metric == 1.0f || (language == PTC_UI_LANGUAGE_ENGLISH && state == 2 && rect.x == controls[0].x))
+                                require(run.text.find("...") == std::string::npos,
+                                    "current labels and width-stressed disabled English buffer remain complete");
                         }
                         require(runs > 0, "available, claimed and unavailable controls keep visible labels");
                     }
