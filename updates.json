@@ -1,6 +1,20 @@
 {
   "releases": [
     {
+      "notes": "# 任我玩 PlayWise v3.1.3\n\n- 改进 Gitee 更新附件跳转与原生 TLS 信任链，保留证书、主机名和有效期验证，并提供有界网络诊断。\n- 支持更新前独立配置备份、安全安装与后台交接；正常业务消费、PIN、nonce、账本和活动不回退。\n- 修复英文浮窗禁用缓冲按钮的文字截断，完整显示 No buffer，并增加 1.35 倍字宽回归。\n\n发布附件绑定 clean commit ded7fd49e982：完整构建、三包安全校验、GitHub CI、Eden 主流程17项均通过；本候选标准更新、13文件身份核对与英文标签真机复测通过，画面已获人工确认。此前 beta.2 的在线更新和控制补测继续按其原候选范围记录。\n\n完整真机资格仍为 pending。本次不宣称真实 POWER/整机重启、底座与两游戏、同实例完整自然跨夜、GitHub备用故障路径、安装中断恢复或完整 Device Lab campaign 已通过；Eden 不替代真实 PCTL 验收。\n\n首次使用推荐完整包，其中包含标准安装包及离线家长网页。已有更新器若因 TLS 失败无法联网，请按文档手动完整覆盖并执行正常安全交接；v3.0.2不声明在线安装兼容。Device Lab和Eden不作为公开附件。旧版tag和附件保留原身份。\n",
+      "package": {
+        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.3/playwise-3.1.3.zip",
+        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.1.3/playwise-3.1.3.zip",
+        "md5": "402680bd9eeb8efbef01e5de95d2eef8",
+        "name": "playwise-3.1.3.zip",
+        "sha256": "4f16c6d1ac874d031adab5812dfcac179aa7de0a9d1cdf60835bc40468a89d06",
+        "size": 3812666
+      },
+      "prerelease": false,
+      "tag": "v3.1.3",
+      "version": "3.1.3"
+    },
+    {
       "notes": "# 任我玩 PlayWise v3.1.3-beta.2\n\n- 补充 Gitee 原生 libnx TLS 连接所需的固定应用级 CA，保留系统信任库、证书、主机名和有效期验证。\n- 标准支持诊断保存有界网络快照，区分初始化、两来源传输及 CA 导入结果；不记录凭据、签名 URL 或响应正文。\n- 延续 beta.1 的 Gitee 附件跳转、独立配置备份与安全安装／后台交接；保留正常规则、PIN、配对、用量、nonce、账本及活动。\n\n完整构建与产物校验通过，冻结 Eden NRO 的普通主流程17/17、支持恢复6/6通过。内部 clean 6caf 标准构建已在目标机通过 Gitee HTTP200及合法元信息检查；该证据绑定内部构建。本冻结 beta.2 的真实下载、在线安装两阶段及 GitHub 备用仍待独立验证，完整资格pending。\n\n旧更新器若因TLS失败无法联网，需要先按正常手动完整安装／安全交接流程升级。v3.0.2不声明在线安装兼容。公开附件为标准包及含离线家长网页的完整包；Device Lab／Eden仅用于内部验证。已发布beta.1附件及tag保持原身份。\n",
       "package": {
         "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.3-beta.2/playwise-3.1.3-beta.2.zip",
@@ -13,20 +27,6 @@
       "prerelease": true,
       "tag": "v3.1.3-beta.2",
       "version": "3.1.3-beta.2"
-    },
-    {
-      "notes": "## 中文｜PlayWise v3.0.2\n\n本次更新重点完善多语言体验，并修复英文界面的排版问题。\n\n### 更新内容\n\n- Switch 主应用和游戏内浮窗现支持简体中文、繁體中文和 English；可在设置中选择语言或跟随系统。\n- 家长网页及离线版 `playwise-offline.html` 支持中文和英文切换。\n- 优化就寝计划总开关的状态显示与保存指引。\n- 修复英文界面多处文字溢出、重叠和按键图标识别问题。\n- 新增英文 README、使用指南、技术文档及界面预览图。\n\n### 升级提示\n\n建议备份数据后，将新版标准安装包中的 `atmosphere` 和 `switch` 两个目录完整合并到 SD 卡根目录，并重启主机。普通覆盖升级会保留现有家长密码、密钥、规则和运行记录。首次安装可下载 `playwise-complete-3.0.2.zip`，其中包含 Switch 安装包和离线家长网页。\n---\n## English | PlayWise v3.0.2\n\nThis release improves language support and fixes layout issues in the English interface.\n\n### What’s new\n\n- The Switch app and in-game overlay support Simplified Chinese, Traditional Chinese, and English. Choose a language in Settings or follow the system language.\n- The parent web app and standalone `playwise-offline.html` support Chinese and English.\n- Improved the bedtime schedule’s master switch status and save guidance.\n- Fixed text overflow, overlapping labels, and button icon recognition across the English interface.\n- Added an English README, user guide, technical documentation, and interface previews.\n\n### Upgrading\n\nBack up your data, then merge both the `atmosphere` and `switch` folders from the new standard package onto the SD card and reboot. A normal in-place upgrade preserves existing PINs, secrets, rules, and activity records. For a first installation, `playwise-complete-3.0.2.zip` includes the Switch package and the offline parent web page.",
-      "package": {
-        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.0.2/playwise-3.0.2.zip",
-        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.0.2/playwise-3.0.2.zip",
-        "md5": "923510c315958a02902ec4b94c9b2861",
-        "name": "playwise-3.0.2.zip",
-        "sha256": "0ac87b4da880f0cf696486e4e82b611969280c9c768a2be722d6230365cbe76b",
-        "size": 2036082
-      },
-      "prerelease": false,
-      "tag": "v3.0.2",
-      "version": "3.0.2"
     }
   ],
   "schema_version": 1
