@@ -436,8 +436,13 @@ static void handle_eye_care_page_input(UiState *ui, u64 down)
 static void handle_parent_page_input(UiState *ui, u64 down)
 {
     if ((down & HidNpadButton_X) && ptc_ui_open_notice_details(&ui->model)) {
-    } else if ((down & HidNpadButton_Plus) && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+    } else if (down & HidNpadButton_Plus) {
+        ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_home_details(&ui->model);
+    } else if ((down & HidNpadButton_Minus) &&
+               !(ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
+        ptc_audio_play(PTC_SE_POPUP);
+        ptc_ui_open_home_details_page(&ui->model, 1);
     } else if ((down & (HidNpadButton_ZL | HidNpadButton_ZR)) && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         ptc_audio_play(PTC_SE_POPUP);
         open_language_overlay(ui);
@@ -461,11 +466,10 @@ static void handle_parent_page_input(UiState *ui, u64 down)
             ui->model.selected_index = ui->model.parent_content_selection;
         } else if (down & HidNpadButton_Left) {
             ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.parent_footer_selection = 0;
+            ptc_ui_move_parent_selection(&ui->model, -1, 0);
         } else if (down & HidNpadButton_Right) {
             ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.parent_footer_selection =
-                ptc_ui_parent_status_alert_visible(&ui->model) ? 1 : 0;
+            ptc_ui_move_parent_selection(&ui->model, 1, 0);
         } else if (down & HidNpadButton_Y) {
             ptc_audio_play(PTC_SE_CONFIRM);
             refresh_disable_flag(ui);
@@ -473,6 +477,8 @@ static void handle_parent_page_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_A) {
             ptc_audio_play(PTC_SE_CONFIRM);
             if (ui->model.parent_footer_selection == 0) submit_status(ui);
+            else if (ui->model.parent_footer_selection == 1) ptc_ui_open_home_details(&ui->model);
+            else if (ui->model.parent_footer_selection == 2) ptc_ui_open_home_details_page(&ui->model, 1);
             else activate_parent_status(ui);
         }
     } else if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&

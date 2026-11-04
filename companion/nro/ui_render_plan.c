@@ -972,10 +972,12 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     draw_text(pixels, stride, panel.x + 16, panel.y + 26, ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST), 17, UI_INK);
 
-    UiRect plan_rule_btn = to_uirect(ptc_ui_plan_today_rules_rect());
-    fill_round_rect(pixels, stride, plan_rule_btn, 4, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, plan_rule_btn, 4, 1, UI_ACCENT);
-    draw_text_center(pixels, stride, plan_rule_btn, ptc_ui_text(PTC_UI_T_PLAN_TODAY_RULES_BTN), 11, UI_ACCENT);
+    /* 右上角单日规则提示说明（原重复的规则按钮已由底栏常驻呈现） */
+    const char *daily_hint = ptc_ui_text(PTC_UI_T_PRESS_A_OR_CLICK_TO_VIEW_DAILY);
+    int hint_size = is_en ? 12 : 13;
+    int hint_w = measure_text(daily_hint, hint_size);
+    int hint_x = panel.x + panel.width - 16 - hint_w;
+    draw_text(pixels, stride, hint_x, panel.y + 26, daily_hint, hint_size, UI_MUTED);
 
     if (!model->forecast_available) {
         draw_text(pixels, stride, panel.x + 16, panel.y + 110, ptc_ui_text(PTC_UI_T_REFRESH_STATUS_TO_VIEW_FORECAST_DATA), 15, UI_MUTED);
@@ -1109,8 +1111,8 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
     }
     draw_text_center(pixels, stride, dock_capsule, dock_text, 11, dock_on ? UI_ACCENT : UI_MUTED);
 
-    draw_text(pixels, stride, panel.x + 14, panel.y + panel.height - 12,
-              ptc_ui_text(PTC_UI_T_PRESS_A_OR_CLICK_TO_VIEW_DAILY), 11, UI_MUTED);
+
+
 }
 
 static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

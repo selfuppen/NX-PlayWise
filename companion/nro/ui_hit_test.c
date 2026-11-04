@@ -481,9 +481,16 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
     {
         PtcUiNoticeProjection notice;
         ptc_ui_project_notice(model, &notice);
-        if (notice.visible && notice.has_details &&
-            ptc_ui_rect_contains(ptc_ui_notice_details_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_NOTICE_DETAILS, 0);
+        bool notice_visible = notice.visible &&
+            (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model));
+        if (notice_visible) {
+            if (notice.has_details &&
+                ptc_ui_rect_contains(ptc_ui_notice_details_rect(), x, y)) {
+                return make_hit(PTC_UI_HIT_NOTICE_DETAILS, 0);
+            }
+            if (ptc_ui_rect_contains(ptc_ui_notice_rect(), x, y)) {
+                return make_hit(PTC_UI_HIT_NONE, 0);
+            }
         }
     }
     if ((model->view == PTC_UI_CHILD ||
@@ -491,9 +498,8 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         ptc_ui_rect_contains(ptc_ui_header_language_rect(), x, y)) {
         return make_hit(PTC_UI_HIT_LANGUAGE_SWITCH, 0);
     }
-    if ((model->view == PTC_UI_CHILD ||
-         (model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY)) &&
-        ptc_ui_rect_contains(ptc_ui_home_details_rect(model->view == PTC_UI_PARENT), x, y)) {
+    if (model->view == PTC_UI_CHILD &&
+        ptc_ui_rect_contains(ptc_ui_home_details_rect(false), x, y)) {
         return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
     }
     if (model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY &&
@@ -609,6 +615,16 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         !ptc_ui_operation_feedback_visible(model) &&
         ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
+    }
+    if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
+        if (!ptc_ui_operation_feedback_visible(model) && !ptc_ui_parent_status_alert_visible(model)) {
+            if (ptc_ui_rect_contains(ptc_ui_parent_footer_details_rect(), x, y)) {
+                return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
+            }
+            if (ptc_ui_rect_contains(ptc_ui_parent_footer_rules_rect(), x, y)) {
+                return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_RULES, 0);
+            }
+        }
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
         for (i = 0; i <= 5; ++i)

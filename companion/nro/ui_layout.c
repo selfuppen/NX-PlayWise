@@ -178,6 +178,16 @@ PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
     return rect;
 }
 
+PtcUiRect ptc_ui_parent_footer_details_rect(void)
+{
+    return (PtcUiRect){790, 664, 210, 44};
+}
+
+PtcUiRect ptc_ui_parent_footer_rules_rect(void)
+{
+    return (PtcUiRect){1016, 664, 210, 44};
+}
+
 PtcUiRect ptc_ui_parent_footer_rect(int index)
 {
     static const int widths[] = {130, 130, 170, 130, 564};
@@ -496,13 +506,13 @@ PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){368, 186, 152, 32} : (PtcUiRect){964, 378, 268, 112};
+    return parent ? ptc_ui_parent_footer_details_rect() : (PtcUiRect){964, 378, 268, 112};
 }
 
 PtcUiRect ptc_ui_home_rules_rect(void)
 {
-    PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
-    return (PtcUiRect){dt_rect.x - 128, dt_rect.y, 120, dt_rect.h};
+    PtcUiRect box = ptc_ui_home_summary_rect(true);
+    return (PtcUiRect){box.x + box.w - 24 - 144, box.y + 14, 144, 32};
 }
 
 PtcUiRect ptc_ui_today_quota_card_rect(void)

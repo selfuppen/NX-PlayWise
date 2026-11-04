@@ -124,11 +124,15 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_footer_focused) {
-        if (!ptc_ui_parent_status_alert_visible(model)) model->parent_footer_selection = 0;
+        bool alert_visible = ptc_ui_parent_status_alert_visible(model);
+        bool has_prominent_buttons = !(model->parent_page == PTC_UI_PARENT_PLAN &&
+                                       model->plan_page == PTC_UI_PLAN_PAGE_DOCK);
+        int max_sel = alert_visible ? (has_prominent_buttons ? 3 : 1) : (has_prominent_buttons ? 2 : 0);
+        if (model->parent_footer_selection > max_sel) model->parent_footer_selection = max_sel;
         if (horizontal < 0 && model->parent_footer_selection > 0) {
             --model->parent_footer_selection;
-        } else if (horizontal > 0 && model->parent_footer_selection < 1 &&
-                   ptc_ui_parent_status_alert_visible(model)) {
+        } else if (horizontal > 0 && model->parent_footer_selection < max_sel) {
+
             ++model->parent_footer_selection;
         }
         if (vertical < 0) {

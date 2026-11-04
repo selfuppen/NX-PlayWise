@@ -1428,8 +1428,10 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "parent today header language switcher");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_REFRESH, 0,
               "parent global refresh occupies the fourth footer slot");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_NONE, 0,
-              "healthy parent footer does not expose a status card");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_details_rect()), PTC_UI_HIT_HOME_DETAILS, 0,
+              "parent footer details action is present and touchable");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
+              "parent footer rules action is present and touchable");
     check_true(!ptc_ui_parent_status_alert_visible(&model),
                "healthy parent state does not request a footer alert");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "failed");
@@ -1442,8 +1444,8 @@ static void test_release_hit_targets(void)
     model.status_updated_at = 1;
     check_true(!ptc_ui_parent_status_alert_visible(&model),
                "stale status remains in the top status bar instead of the footer");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_NONE, 0,
-              "stale status does not create a footer support target");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
+              "stale status preserves the footer rules action");
     check_true(!rects_overlap(ptc_ui_parent_footer_rect(3), ptc_ui_parent_footer_rect(4)),
                "parent status does not overlap global refresh");
     check_int(ptc_ui_parent_footer_rect(0).w, 130, "parent previous-page footer is narrower");
@@ -1468,8 +1470,8 @@ static void test_release_hit_targets(void)
               "unlimited weekly quota remains semantic for an explanatory message");
     check_hit(hit_center(&model, ptc_ui_weekly_day_header_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
               "weekly header only selects the day");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_NONE, 0,
-              "healthy weekly page leaves the right footer empty");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
+              "healthy weekly page preserves the footer rules action");
     check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(0)), PTC_UI_HIT_PARENT_BACK, 0,
               "plan subpage keeps a stable back action");
     check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(1)), PTC_UI_HIT_PARENT_REFRESH, 0,
@@ -2763,12 +2765,15 @@ static void test_visual_action_boundaries(void)
     check_hit(hit_center(&model, ptc_ui_today_card_rect(0)), PTC_UI_HIT_NONE, 0,
               "primary styling never enables control while disabled");
     PtcUiRect parent_summary = ptc_ui_home_summary_rect(true);
-    PtcUiRect parent_details = ptc_ui_home_details_rect(true);
-    check_true(parent_details.x >= parent_summary.x &&
-               parent_details.y >= parent_summary.y &&
-               parent_details.x + parent_details.w <= parent_summary.x + parent_summary.w &&
-               parent_details.y + parent_details.h <= parent_summary.y + parent_summary.h,
-               "parent details action remains strictly contained within summary card");
+    PtcUiRect parent_rules = ptc_ui_home_rules_rect();
+    check_true(parent_rules.x >= parent_summary.x &&
+               parent_rules.y >= parent_summary.y &&
+               parent_rules.x + parent_rules.w <= parent_summary.x + parent_summary.w &&
+               parent_rules.y + parent_rules.h <= parent_summary.y + parent_summary.h,
+               "parent rules action remains strictly contained within summary card");
+    PtcUiRect parent_details = ptc_ui_parent_footer_details_rect();
+    check_true(parent_details.y == 664 && parent_details.h == 44,
+               "parent footer details action sits on the footer baseline");
 }
 
 static void test_grant_flow_polish(void)
