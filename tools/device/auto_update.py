@@ -59,6 +59,38 @@ def require(value: object, message: str) -> None:
         raise UpdateError(message)
 
 
+def restored_today_rules(before: dict, after: dict, day: int) -> bool:
+    """Compare rules after a proven disable_today_limit -> restore_today_policy pair.
+
+    Only supports an originally absent override. Callers must separately prove
+    the original requests/receipts, full PCTL settings, timer and normal usage.
+    Normal successful adjustment retains its inactive date/mode/minutes; this
+    predicate never writes rules or permits changes to other policy fields.
+    """
+    fields = ("today_override_present", "today_override_day_index",
+              "today_override_mode", "today_override_minutes")
+    if not isinstance(before, dict) or not isinstance(after, dict) or type(day) is not int:
+        return False
+    if not all(key in before and key in after for key in fields):
+        return False
+    if before[fields[0]] is not False or after[fields[0]] is not False:
+        return False
+    if type(before[fields[1]]) is not int or not 0 <= before[fields[1]] <= day:
+        return False
+    if type(before[fields[2]]) is not str or type(before[fields[3]]) is not int:
+        return False
+    if type(after[fields[1]]) is not int or type(after[fields[3]]) is not int:
+        return False
+    expected = dict(before, today_override_day_index=day,
+                    today_override_mode="unlimited", today_override_minutes=0)
+    try:
+        # JSON comparison preserves type differences such as false versus 0.
+        return json.dumps(after, sort_keys=True, allow_nan=False) == json.dumps(
+            expected, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError):
+        return False
+
+
 def capture_event_chain(rows: list[dict], binding: dict, source: dict, target: dict, transaction: str) -> None:
     for row in rows:
         require(row.get("transaction_id") == transaction and row.get("source_pid") == source["pid"] and

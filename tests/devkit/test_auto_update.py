@@ -15,6 +15,36 @@ sys.path.insert(0, str(ROOT))
 import tools.device.auto_update as update
 
 
+def test_restored_today_rules() -> None:
+    before = {"today_override_present": False, "today_override_day_index": 2498,
+              "today_override_mode": "limit", "today_override_minutes": 60,
+              "week": [{"mode": "limit", "minutes": 60}], "eye_care_enabled": False}
+    original = deepcopy(before)
+    after = dict(before, today_override_day_index=2499,
+                 today_override_mode="unlimited", today_override_minutes=0)
+    require(update.restored_today_rules(before, after, 2499), "normal inactive metadata retained")
+    require(update.restored_today_rules(after, deepcopy(after), 2499), "same-day inactive roundtrip")
+    require(update.restored_today_rules(*json.loads(json.dumps([before, after, 2499]))), "JSON readback")
+    require(before == original, "comparison cannot mutate original rules")
+    for change in ({"today_override_present": True}, {"today_override_day_index": 2498},
+                   {"today_override_minutes": 1}, {"today_override_minutes": False},
+                   {"today_override_mode": "limit"}, {"eye_care_enabled": 0},
+                   {"week": [{"mode": "unlimited", "minutes": 60}]}, {"foreign": 1}):
+        require(not update.restored_today_rules(before, dict(after, **change), 2499),
+                "active/wrong/foreign policy change refused")
+    missing = dict(after); del missing["week"]
+    require(not update.restored_today_rules(before, missing, 2499), "missing unrelated field refused")
+    require(not update.restored_today_rules(dict(before, today_override_present=True), after, 2499),
+            "original active override needs its own recovery transaction")
+    require(not update.restored_today_rules(before, after, True), "boolean is not a day")
+    require(not update.restored_today_rules(dict(before, today_override_minutes=False), after, 2499),
+            "malformed original minutes refused")
+    require(not update.restored_today_rules(dict(before, today_override_mode=0), after, 2499),
+            "malformed original mode refused")
+    require(not update.restored_today_rules(dict(before, today_override_day_index=2500), after, 2499),
+            "unexpected future baseline refused")
+
+
 def require(value: object, label: str) -> None:
     if not value:
         raise AssertionError(label)
@@ -700,6 +730,7 @@ def main():
                     pass
                 else:
                     raise AssertionError("ambiguous FTP failure must stop instead of proving absence")
+    test_restored_today_rules()
     test_update_recovery_without_host_target()
     test_capture_stop_proof()
     test_success_and_offline_report()
