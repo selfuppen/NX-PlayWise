@@ -9,6 +9,8 @@ typedef struct {
     bool attempted, curl_result_available, http_status_available, fetched;
     bool metadata_valid_available, metadata_valid;
     bool os_errno_available, tls_verify_result_available;
+    bool ca_import_attempted;
+    uint32_t ca_import_result;
     unsigned transfers;
     unsigned long curl_result;
     long http_status;

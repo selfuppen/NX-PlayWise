@@ -5,6 +5,9 @@
 #include <stddef.h>
 typedef struct { void (*entry)(void *); void *ctx; } Thread;
 enum { NifmServiceType_User = 0 };
+typedef struct { int unused; } SslContext;
+enum { SslCertificateFormat_Der = 2 };
+Result sslContextImportServerPki(SslContext *context, const void *buffer, uint32_t size, int format, uint64_t *id);
 Result socketInitializeDefault(void);
 void socketExit(void);
 Result nifmInitialize(int service);

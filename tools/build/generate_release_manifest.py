@@ -207,7 +207,7 @@ def make_manifest(profile: str, *, build_identity: dict | None = None) -> dict:
         data["build"]["git_autocrlf"] = os.environ["PLAYWISE_GIT_AUTOCRLF"]
     if profile == "release":
         data["online_update_version"] = 1
-        data["online_update_network_report_version"] = 1
+        data["online_update_network_report_version"] = 2
         data["hot_reload_events_version"] = 1
         data["capture_restart_version"] = 1
         from tools.qualification.pctl_usage_qualification import CURRENT_CONTRACT

@@ -3,6 +3,7 @@
 #include "../../common/version.h"
 #include "../../common/crypto/sha256.h"
 #include "release_manifest.h"
+#include "update_ca.h"
 #include <curl/curl.h>
 #include <errno.h>
 #include <stdio.h>
@@ -26,7 +27,7 @@ static void network_record(PtcOnlineUpdater *u, bool worker_ok)
     uint32_t saved_fs_result = u->fs.last_result;
     cJSON *o = cJSON_CreateObject(); if (!o) { errno = saved_errno; return; }
     PtcUpdateNetworkEvidence *n = &u->network;
-    cJSON_AddNumberToObject(o, "schema_version", 1);
+    cJSON_AddNumberToObject(o, "schema_version", 2);
     cJSON_AddStringToObject(o, "kind", "online_update_network");
     cJSON_AddStringToObject(o, "observation_id", n->observation_id);
     cJSON_AddStringToObject(o, "nro_release_id", PLAYWISE_BUILD_RELEASE_ID);
@@ -68,6 +69,8 @@ static void network_record(PtcOnlineUpdater *u, bool worker_ok)
         cJSON_AddNumberToObject(item, "os_errno", (double)a->os_errno);
         cJSON_AddBoolToObject(item, "tls_verify_result_available", a->tls_verify_result_available);
         cJSON_AddNumberToObject(item, "tls_verify_result", (double)a->tls_verify_result);
+        cJSON_AddBoolToObject(item, "ca_import_attempted", a->ca_import_attempted);
+        cJSON_AddNumberToObject(item, "ca_import_result", a->ca_import_result);
         cJSON_AddNumberToObject(item, "received_bytes", (double)a->received);
         cJSON_AddBoolToObject(item, "fetched", a->fetched);
         cJSON_AddBoolToObject(item, "metadata_valid_available", a->metadata_valid_available);
@@ -126,6 +129,18 @@ static int progress(void *ctx, curl_off_t total, curl_off_t now, curl_off_t uplo
     return atomic_load(&u->cancel) ? 1 : 0;
 }
 
+static CURLcode import_update_ca(CURL *curl, void *context, void *userdata)
+{
+    (void)curl;
+    PtcUpdateNetworkSource *a = userdata;
+    a->ca_import_attempted = true;
+    /* The pinned native backend passes SslContext*, not an OpenSSL context.
+       The system store remains active; only this connection gains the fixed CA. */
+    a->ca_import_result = sslContextImportServerPki(context, ptc_update_certum_ca,
+        sizeof(ptc_update_certum_ca), SslCertificateFormat_Der, NULL);
+    return R_SUCCEEDED(a->ca_import_result) ? CURLE_OK : CURLE_SSL_CACERT_BADFILE;
+}
+
 static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d, unsigned source)
 {
     PtcUpdateNetworkSource *a = &u->network.sources[source];
@@ -133,6 +148,12 @@ static bool fetch(PtcOnlineUpdater *u, const char *initial, Download *d, unsigne
     char url[4096]; snprintf(url, sizeof(url), "%s", initial);
     CURL *curl = curl_easy_init(); if (!curl) return false;
     bool ok = false;
+    if (!source && (strcmp(u->network.tls_backend, "libnx") ||
+            curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, import_update_ca) != CURLE_OK ||
+            curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, a) != CURLE_OK)) {
+        a->stage = "ca_setup_failed";
+        curl_easy_cleanup(curl); return false;
+    }
     u64 started = armGetSystemTick(); unsigned timeout = d->file ? 180 : 20;
     for (int redirects = 0; redirects <= 3 && ptc_update_url_for(url, source, d->file != NULL, redirects > 0); ++redirects) {
         if (d->file && (d->used || fseek(d->file, 0, SEEK_SET))) break;
