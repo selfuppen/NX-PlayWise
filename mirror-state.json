@@ -68,6 +68,29 @@
         }
       },
       "id": 1270230
+    },
+    "v3.1.3-beta.2": {
+      "assets": {
+        "playwise-3.1.3-beta.2.zip": {
+          "digest": "sha256:2a6f44e70834507650933b9c81756e64acfcb571954cc2ee0cfbc5fcdf1c9b10",
+          "gitee_id": 3586015,
+          "github_id": 707858398,
+          "md5": "c484c174c517fbf6fea04f46a10f20b1",
+          "sha256": "2a6f44e70834507650933b9c81756e64acfcb571954cc2ee0cfbc5fcdf1c9b10",
+          "size": 3812857,
+          "updated_at": "2026-11-04T01:57:57Z"
+        },
+        "playwise-complete-3.1.3-beta.2.zip": {
+          "digest": "sha256:c792fc74f97069ef308d8dcd7c9665809eced51899605b7bb1a1eca94247ce13",
+          "gitee_id": 3586084,
+          "github_id": 707858500,
+          "md5": "291800fe5f7d889822e1e59bce843c9b",
+          "sha256": "c792fc74f97069ef308d8dcd7c9665809eced51899605b7bb1a1eca94247ce13",
+          "size": 3822269,
+          "updated_at": "2026-11-04T01:57:57Z"
+        }
+      },
+      "id": 1271275
     }
   },
   "schema_version": 1,
@@ -83,6 +106,7 @@
     424006631,
     424603501,
     430465838,
-    432702450
+    432702450,
+    433425434
   ]
 }
