@@ -40,6 +40,16 @@ bool ptc_companion_auth_read_clock(int64_t *unix_seconds)
     return true;
 }
 
+PtcAuthStatus ptc_companion_auth_check_cooldown_now(
+    PtcCompanionAuth *auth, int64_t *retry_after_seconds)
+{
+    int64_t now;
+    if (retry_after_seconds) *retry_after_seconds = 0;
+    if (!auth) return PTC_AUTH_BAD_ARGUMENT;
+    if (!ptc_companion_auth_read_clock(&now)) return PTC_AUTH_TIME_UNAVAILABLE;
+    return ptc_companion_auth_check_cooldown(auth, now, retry_after_seconds);
+}
+
 PtcAuthStatus ptc_companion_auth_verify_pin_now(
     PtcCompanionAuth *auth, const char *pin, int64_t *retry_after_seconds)
 {

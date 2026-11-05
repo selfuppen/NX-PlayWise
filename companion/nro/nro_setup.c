@@ -78,6 +78,14 @@ void enter_parent_area(UiState *ui)
         show_auth_error(ui, ptc_ui_text(PTC_UI_T_UNABLE_TO_ENTER_PARENT_AREA), auth_status_zh(state), 0);
         return;
     }
+    {
+        int64_t retry_after = 0;
+        state = ptc_companion_auth_check_cooldown_now(&ui->auth, &retry_after);
+        if (state == PTC_AUTH_COOLDOWN && retry_after > 0) {
+            show_parent_pin_error(ui, retry_after);
+            return;
+        }
+    }
     if (!pin_input(ui, ptc_ui_text(PTC_UI_T_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_JOYSTICK_DIRECTION_INPUT_X_0_Y_9_2), pin, sizeof(pin))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_ACCESS_TO_THE_PARENT_AREA_HAS_BEEN));

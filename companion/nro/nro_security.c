@@ -36,6 +36,14 @@ bool verify_sensitive_pin(UiState *ui, const char *action)
     PtcAuthStatus status;
     int64_t retry_after = 0;
     const PtcUiOverlay return_overlay = ui ? ui->model.overlay : PTC_UI_OVERLAY_NONE;
+    if (!ui) return false;
+    status = ptc_companion_auth_check_cooldown_now(&ui->auth, &retry_after);
+    if (status == PTC_AUTH_COOLDOWN && retry_after > 0) {
+        ptc_audio_play(PTC_SE_ERROR);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_TEMPORARILY_LOCKED),
+                        ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR), retry_after);
+        return false;
+    }
     if (!pin_input(ui, ptc_ui_text(PTC_UI_T_VERIFY_PLAYWISE_PIN), action, pin, sizeof(pin))) {
         if (ui && return_overlay != PTC_UI_OVERLAY_NONE && ui->model.overlay == PTC_UI_OVERLAY_NONE) {
             ui->model.overlay = return_overlay;

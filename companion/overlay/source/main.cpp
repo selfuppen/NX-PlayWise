@@ -579,6 +579,13 @@ public:
         pin_message_[0] = '\0';
         left_pin_latched_ = -1;
         right_pin_latched_ = -1;
+        int64_t retry_after = 0;
+        PtcAuthStatus cooldown_status = ptc_companion_auth_check_cooldown_now(&auth_, &retry_after);
+        if (cooldown_status == PTC_AUTH_COOLDOWN && retry_after > 0) {
+            PtcUiTextArg args[] = {{"seconds", nullptr, retry_after, true}};
+            (void)ptc_ui_text_format(PTC_UI_T_PIN_COOLDOWN,
+                pin_message_, sizeof(pin_message_), args, 1);
+        }
         if ((!has_status_snapshot_ || status_is_stale()) && !bridge_->waiting)
             (void)begin_status_refresh();
     }
@@ -854,6 +861,17 @@ public:
                 std::memset(pin_, 0, sizeof(pin_));
                 pin_length_ = 0;
             } else if (keysDown & HidNpadButton_Plus) {
+                int64_t cooldown_retry = 0;
+                PtcAuthStatus cooldown_status = ptc_companion_auth_check_cooldown_now(&auth_, &cooldown_retry);
+                if (cooldown_status == PTC_AUTH_COOLDOWN && cooldown_retry > 0) {
+                    std::memset(pin_, 0, sizeof(pin_));
+                    pin_length_ = 0;
+                    PtcUiTextArg args[] = {{"seconds", nullptr, cooldown_retry, true}};
+                    (void)ptc_ui_text_format(PTC_UI_T_PIN_COOLDOWN,
+                        pin_message_, sizeof(pin_message_), args, 1);
+                    reset_page_scroll();
+                    return true;
+                }
                 if (pin_length_ == 0) {
                     std::snprintf(pin_message_, sizeof(pin_message_), "%s", ptc_ui_text(PTC_UI_T_PIN_ENTER_FIRST));
                     return true;

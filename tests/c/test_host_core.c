@@ -1031,6 +1031,12 @@ static void test_auth_and_queue(void)
     }
     check_int(ptc_companion_auth_verify_pin(&auth, "000000", 100, &retry_after), PTC_AUTH_COOLDOWN, "fifth failure starts cooldown");
     check_int(retry_after, 30, "initial PIN cooldown is 30 seconds");
+    check_int(ptc_companion_auth_check_cooldown(&auth, 100, &retry_after), PTC_AUTH_COOLDOWN, "cooldown active at t=100");
+    check_int(retry_after, 30, "cooldown remaining is 30 at t=100");
+    check_int(ptc_companion_auth_check_cooldown(&auth, 110, &retry_after), PTC_AUTH_COOLDOWN, "cooldown active at t=110");
+    check_int(retry_after, 20, "cooldown remaining is 20 at t=110");
+    check_int(ptc_companion_auth_check_cooldown(&auth, 130, &retry_after), PTC_AUTH_OK, "cooldown expired at t=130");
+    check_int(retry_after, 0, "cooldown remaining is 0 at t=130");
     check_int(ptc_companion_auth_verify_pin(&auth, "123456", 110, &retry_after), PTC_AUTH_COOLDOWN, "correct PIN waits for cooldown");
     check_int(ptc_companion_auth_verify_pin(&auth, "123456", 130, &retry_after), PTC_AUTH_OK, "successful PIN clears cooldown");
 

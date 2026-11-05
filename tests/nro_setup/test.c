@@ -232,8 +232,8 @@ static void test_parent_pin_error(void)
         parent_error_action(&ui, touch, HidNpadButton_B);
         ptc_companion_auth_init(&ui.auth, APP_ROOT, &mem.storage);
         pin_cursor = 0; enter_parent_area(&ui);
-        check(ui.model.auth_cooldown_seconds == 30 && ui.model.auth_error_parent_entry && !ui.setup_parent_authorized,
-              "closing and re-entering does not bypass persisted cooldown even with the correct PIN");
+        check(ui.model.auth_cooldown_seconds == 30 && ui.model.auth_error_parent_entry && !ui.setup_parent_authorized && pin_opens == 5,
+              "closing and re-entering intercepts before opening PIN input even with the correct PIN");
         mem.storage.vtable->read_text(&mem.storage, APP_ROOT "/auth.json", after, sizeof(after));
         check(strcmp(before, after) == 0, "cooldown re-entry does not alter persisted failure counters");
         fixed_time = start + 29;
@@ -241,11 +241,11 @@ static void test_parent_pin_error(void)
         check(ui.model.auth_cooldown_seconds == 1, "cooldown countdown uses fixed time");
         fixed_time = start + 30;
         refresh_auth_error_cooldown(&ui);
-        check(ui.model.auth_cooldown_seconds == 0 && ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && pin_opens == 6,
+        check(ui.model.auth_cooldown_seconds == 0 && ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && pin_opens == 5,
               "cooldown expiry enables retry without opening input automatically");
         pin_cursor = 0;
         parent_error_action(&ui, touch, HidNpadButton_A);
-        check(ui.setup_parent_authorized && !ui.model.parent_support_only && pin_opened_empty,
+        check(ui.setup_parent_authorized && !ui.model.parent_support_only && pin_opened_empty && pin_opens == 6,
               "explicit correct retry succeeds at the cooldown boundary");
         fixed_time = start;
     }

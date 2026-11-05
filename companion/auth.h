@@ -45,6 +45,10 @@ PtcAuthStatus ptc_companion_auth_set_pin(
     int64_t updated_at,
     PtcAuthRandomFn random_fn,
     void *random_ctx);
+PtcAuthStatus ptc_companion_auth_check_cooldown(
+    PtcCompanionAuth *auth,
+    int64_t now,
+    int64_t *retry_after_seconds);
 PtcAuthStatus ptc_companion_auth_verify_pin(
     PtcCompanionAuth *auth,
     const char *pin,

@@ -250,6 +250,34 @@ PtcAuthStatus ptc_companion_auth_set_pin(
     return write_auth_record(auth, &record);
 }
 
+PtcAuthStatus ptc_companion_auth_check_cooldown(
+    PtcCompanionAuth *auth,
+    int64_t now,
+    int64_t *retry_after_seconds)
+{
+    char text[AUTH_JSON_SIZE];
+    AuthRecord record;
+    PtcAuthStatus status;
+
+    if (retry_after_seconds) *retry_after_seconds = 0;
+    if (!auth || !auth->storage) {
+        return PTC_AUTH_BAD_ARGUMENT;
+    }
+    status = read_auth_json(auth, text, sizeof(text));
+    if (status != PTC_AUTH_OK) {
+        return status;
+    }
+    status = parse_auth_json(text, &record);
+    if (status != PTC_AUTH_OK) {
+        return status;
+    }
+    if (record.cooldown_until > now) {
+        if (retry_after_seconds) *retry_after_seconds = record.cooldown_until - now;
+        return PTC_AUTH_COOLDOWN;
+    }
+    return PTC_AUTH_OK;
+}
+
 PtcAuthStatus ptc_companion_auth_verify_pin(
     PtcCompanionAuth *auth,
     const char *pin,

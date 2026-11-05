@@ -72,6 +72,8 @@ int main(void)
     for (int i = 0; i < 4; ++i)
         assert(ptc_companion_auth_verify_pin_now(&auth, "000000", &retry) == PTC_AUTH_DENIED);
     assert(ptc_companion_auth_verify_pin_now(&auth, "000000", &retry) == PTC_AUTH_COOLDOWN && retry == 30);
+    assert(ptc_companion_auth_check_cooldown_now(&auth, &retry) == PTC_AUTH_COOLDOWN && retry == 30);
+    assert(ptc_companion_auth_check_cooldown(&auth, epoch + 10, &retry) == PTC_AUTH_COOLDOWN && retry == 20);
     /* NRO compares the same Unix deadline, not the positive Tesla uptime. */
     assert(ptc_companion_auth_verify_pin(&auth, "123456", epoch + 10, &retry) == PTC_AUTH_COOLDOWN && retry == 20);
     epoch += 30;
@@ -86,6 +88,7 @@ int main(void)
     for (failure = 1; failure <= 4; ++failure) {
         now = 99;
         assert(!ptc_companion_auth_read_clock(&now) && now == 0);
+        assert(ptc_companion_auth_check_cooldown_now(&auth, &retry) == PTC_AUTH_TIME_UNAVAILABLE && retry == 0);
         assert(ptc_companion_auth_verify_pin_now(&auth, "123456", &retry) == PTC_AUTH_TIME_UNAVAILABLE && retry == 0);
         assert(ptc_companion_auth_verify_pin_now(&auth, "000000", &retry) == PTC_AUTH_TIME_UNAVAILABLE);
         assert(mem.storage.vtable->read_text(&mem.storage, "app/auth.json", after, sizeof(after)) && !strcmp(before, after));

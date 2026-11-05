@@ -14,6 +14,9 @@ def main() -> None:
         assert 'ptc_companion_auth_verify_pin(' not in text, (
             f'{path.name}: PIN must not receive client libc time (Overlay can return positive uptime)')
         assert 'ptc_companion_auth_verify_pin_now(' in text
+        assert 'ptc_companion_auth_check_cooldown(' not in text, (
+            f'{path.name}: PIN cooldown check must not receive client libc time')
+        assert 'ptc_companion_auth_check_cooldown_now(' in text
     clock = (ROOT / 'companion/auth_clock.c').read_text(encoding='utf-8')
     assert '#ifdef __SWITCH__' in clock and '"time:u"' in clock
     assert 'timeInitialize(' not in clock, 'PIN clock must not retain all time service sessions/shared memory'
