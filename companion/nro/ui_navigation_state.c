@@ -125,9 +125,13 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     }
     if (model->parent_footer_focused) {
         bool alert_visible = ptc_ui_parent_status_alert_visible(model);
-        bool has_prominent_buttons = !(model->parent_page == PTC_UI_PARENT_PLAN &&
-                                       model->plan_page == PTC_UI_PLAN_PAGE_DOCK);
-        int max_sel = alert_visible ? (has_prominent_buttons ? 3 : 1) : (has_prominent_buttons ? 2 : 0);
+        PtcUiNoticeProjection notice;
+        ptc_ui_project_notice(model, &notice);
+        bool notice_visible = notice.visible &&
+            (ptc_ui_operation_feedback_visible(model) || !alert_visible);
+        bool has_prominent_buttons = !alert_visible && !notice_visible &&
+            !(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK);
+        int max_sel = alert_visible ? 1 : (has_prominent_buttons ? 2 : 0);
         if (model->parent_footer_selection > max_sel) model->parent_footer_selection = max_sel;
         if (horizontal < 0 && model->parent_footer_selection > 0) {
             --model->parent_footer_selection;

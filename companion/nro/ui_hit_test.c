@@ -483,7 +483,8 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         ptc_ui_project_notice(model, &notice);
         bool notice_visible = notice.visible &&
             (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model));
-        if (notice_visible) {
+        if (notice_visible &&
+            !(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
             if (notice.has_details &&
                 ptc_ui_rect_contains(ptc_ui_notice_details_rect(), x, y)) {
                 return make_hit(PTC_UI_HIT_NOTICE_DETAILS, 0);
@@ -617,7 +618,11 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }
     if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
-        if (!ptc_ui_operation_feedback_visible(model) && !ptc_ui_parent_status_alert_visible(model)) {
+        PtcUiNoticeProjection notice;
+        ptc_ui_project_notice(model, &notice);
+        bool notice_visible = notice.visible &&
+            (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model));
+        if (!notice_visible && !ptc_ui_parent_status_alert_visible(model)) {
             if (ptc_ui_rect_contains(ptc_ui_parent_footer_details_rect(), x, y)) {
                 return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
             }

@@ -27,12 +27,13 @@ def isolated_process_snapshot():
             script, *arguments = command[index + 1:]
             env = {**os.environ, 'PW_TEST_SCRIPT': script, 'PW_TEST_ARGS': json.dumps(arguments)}
             wrapper = ("$ErrorActionPreference='Stop'; function Get-CimInstance { @() }; "
-                       "$a=@(ConvertFrom-Json $env:PW_TEST_ARGS); $p=@{}; "
+                       "$raw=ConvertFrom-Json $env:PW_TEST_ARGS; $a=@($raw | ForEach-Object { $_ }); $p=@{}; "
                        "for($i=0;$i -lt $a.Count;$i++){ $k=$a[$i].TrimStart('-'); "
                        "if($k -eq 'ReleaseOnly'){$p[$k]=$true}else{$i++;$p[$k]=$a[$i]} }; "
                        "try { & $env:PW_TEST_SCRIPT @p; exit 0 } catch { [Console]::Error.WriteLine($_); exit 1 }")
-            command = ['pwsh', '-NoProfile', '-Command', wrapper]
+            command = [runtime.powershell_exe(), '-NoProfile', '-Command', wrapper]
             options['env'] = env
+            return run(command, **options)
         return run(command, **options)
     with patch.object(runtime, 'no_emulator'), patch.object(runtime.subprocess, 'run', side_effect=execute):
         yield
@@ -95,8 +96,12 @@ def test_firmware_access_without_content_writes() -> None:
         rejected(lambda: runtime.firmware_access(cache, expected))
 
 
+def has_powershell() -> bool:
+    return os.name == 'nt' and bool(shutil.which('pwsh') or shutil.which('powershell'))
+
+
 def test_cache_tamper_and_lease_conflict() -> None:
-    if os.name != 'nt' or shutil.which('pwsh') is None:
+    if not has_powershell():
         return
     with tempfile.TemporaryDirectory() as folder, isolated_process_snapshot():
         eden, source, data, aliases, cache = fixture(Path(folder))
@@ -115,7 +120,7 @@ def test_cache_tamper_and_lease_conflict() -> None:
 
 
 def test_hardlink_isolation_cleanup_and_protection() -> None:
-    if os.name != 'nt' or shutil.which('pwsh') is None:
+    if not has_powershell():
         return
     with tempfile.TemporaryDirectory() as folder, isolated_process_snapshot():
         eden, source, data, aliases, cache = fixture(Path(folder))
@@ -159,7 +164,7 @@ def test_hardlink_isolation_cleanup_and_protection() -> None:
 
 
 def test_prepare_failure_retains_without_blocking_next_batch() -> None:
-    if os.name != 'nt' or shutil.which('pwsh') is None:
+    if not has_powershell():
         return
     with tempfile.TemporaryDirectory() as folder, isolated_process_snapshot():
         eden, source, data, aliases, cache = fixture(Path(folder))
@@ -182,10 +187,10 @@ def main() -> None:
     test_cache_tamper_and_lease_conflict()
     test_hardlink_isolation_cleanup_and_protection()
     test_prepare_failure_retains_without_blocking_next_batch()
-    if os.name == 'nt' and shutil.which('pwsh') is not None:
+    if has_powershell():
         print('PASS: shared Eden resources, isolation, cache/lease/capacity gates and owned cleanup')
     else:
-        print('PASS: source selection/capacity; SKIP: native NTFS isolation/cleanup requires Windows and pwsh')
+        print('PASS: source selection/capacity; SKIP: native NTFS isolation/cleanup requires Windows and pwsh/powershell')
 
 
 if __name__ == '__main__':

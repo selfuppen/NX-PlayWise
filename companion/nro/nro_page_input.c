@@ -436,7 +436,8 @@ static void handle_eye_care_page_input(UiState *ui, u64 down)
 static void handle_parent_page_input(UiState *ui, u64 down)
 {
     if ((down & HidNpadButton_X) && ptc_ui_open_notice_details(&ui->model)) {
-    } else if (down & HidNpadButton_Plus) {
+    } else if ((down & HidNpadButton_Plus) &&
+               !(ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
         ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_home_details(&ui->model);
     } else if ((down & HidNpadButton_Minus) &&
@@ -477,6 +478,7 @@ static void handle_parent_page_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_A) {
             ptc_audio_play(PTC_SE_CONFIRM);
             if (ui->model.parent_footer_selection == 0) submit_status(ui);
+            else if (ptc_ui_parent_status_alert_visible(&ui->model)) activate_parent_status(ui);
             else if (ui->model.parent_footer_selection == 1) ptc_ui_open_home_details(&ui->model);
             else if (ui->model.parent_footer_selection == 2) ptc_ui_open_home_details_page(&ui->model, 1);
             else activate_parent_status(ui);

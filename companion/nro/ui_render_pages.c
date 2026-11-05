@@ -1262,10 +1262,18 @@ static void draw_parent_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
         draw_rect_outline(pixels, stride, to_uirect(plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) : ptc_ui_parent_footer_rect(3)),
             12, 3, UI_ACCENT);
     }
-    if (!ptc_ui_operation_feedback_visible(model)) {
-        if (ptc_ui_parent_status_alert_visible(model)) {
+    PtcUiNoticeProjection notice;
+    ptc_ui_project_notice(model, &notice);
+    bool alert_visible = ptc_ui_parent_status_alert_visible(model);
+    bool notice_showing = notice.visible &&
+        (ptc_ui_operation_feedback_visible(model) || !alert_visible);
+
+    if (alert_visible) {
+        if (!ptc_ui_operation_feedback_visible(model)) {
             draw_parent_status_footer(pixels, stride, model);
-        } else if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
+        }
+    } else if (!notice_showing) {
+        if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
             bool details_focused = (model->parent_footer_focused && model->parent_footer_selection == 1);
             bool rules_focused = (model->parent_footer_focused && model->parent_footer_selection == 2);
             bool actions_disabled = model->waiting;
@@ -1282,6 +1290,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const bool plan_subpage = model->parent_page == PTC_UI_PARENT_PLAN &&
         model->plan_page != PTC_UI_PLAN_PAGE_ROOT;
+    PtcUiNoticeProjection notice;
+    ptc_ui_project_notice(model, &notice);
+    bool alert_visible = ptc_ui_parent_status_alert_visible(model);
+    bool notice_showing = notice.visible &&
+        (ptc_ui_operation_feedback_visible(model) || !alert_visible);
+
     draw_parent_header(pixels, stride, model);
     if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
         draw_parent_action_grid(pixels, stride, model);
@@ -1301,7 +1315,8 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
         model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
         draw_diagnostic_notice(pixels, stride, model);
-    } else if (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model)) {
+    } else if (notice_showing &&
+               !(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
         draw_notice(pixels, stride, model);
     }
     draw_parent_footer(pixels, stride, model, plan_subpage);

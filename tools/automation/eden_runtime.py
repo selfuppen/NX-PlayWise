@@ -83,8 +83,12 @@ def capacity(root: Path, needed: int) -> dict:
     return {'copy_bytes': needed, 'reserve_bytes': RESERVE, 'free_before': free}
 
 
+def powershell_exe() -> str:
+    return shutil.which('pwsh') or shutil.which('powershell') or 'powershell'
+
+
 def powershell(script: str, **env: str) -> str:
-    result = subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-Command', script],
+    result = subprocess.run([powershell_exe(), '-NoProfile', '-NonInteractive', '-Command', script],
                             env={**os.environ, **env}, capture_output=True,
                             encoding='utf-8', errors='strict')
     require(result.returncode == 0, f'PowerShell gate failed: {result.stderr.strip()}')
@@ -237,7 +241,7 @@ def finish(output: Path, success: bool) -> dict:
               'reason': 'failed/unknown run or preparation; no automatic deletion',
               'runtime': value['runtime'], 'storage': value['storage'],
               'review_by_utc': (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()})
-    command = ['pwsh', '-NoProfile', '-NonInteractive', '-File',
+    command = [powershell_exe(), '-NoProfile', '-NonInteractive', '-File',
                str(Path(__file__).with_name('eden_runtime_cleanup.ps1')), '-Ownership', str(source),
                '-OwnershipSha256', digest(source), '-Result', str(supplement / 'result.json')]
     if not success:

@@ -43,13 +43,18 @@ foreach ($entry in $owner.links) {
     if (-not $expected.ContainsKey($path) -or (Full $entry.target) -ne $expected[$path]) { throw 'Unexpected link in manifest' }
     if (-not $ReleaseOnly) {
         $item=Get-Item -LiteralPath $path -Force
-        if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or (Full $item.ResolveLinkTarget($true).FullName) -ne $expected[$path]) { throw 'Junction target differs' }
+        $target = if ($item.PSObject.Methods['ResolveLinkTarget']) { $item.ResolveLinkTarget($true).FullName } else { $item.Target }
+        if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or (Full $target) -ne $expected[$path]) { throw 'Junction target differs' }
     }
 }
 if (Test-Path -LiteralPath $Result) { throw 'Cleanup result already exists; no replay' }
 $journal="$Result.events.jsonl"
 if (Test-Path -LiteralPath $journal) { throw 'Cleanup journal already exists; inspect partial cleanup' }
-function Event($action,$path) { @{action=$action;path=$path;at_utc=(Get-Date).ToUniversalTime().ToString('o')} | ConvertTo-Json -Compress | Add-Content -LiteralPath $journal -Encoding utf8NoBOM }
+$utf8NoBOM=[System.Text.UTF8Encoding]::new($false)
+function Event($action,$path) {
+    $line=(@{action=$action;path=$path;at_utc=(Get-Date).ToUniversalTime().ToString('o')} | ConvertTo-Json -Compress) + "`r`n"
+    [IO.File]::AppendAllText($journal, $line, $utf8NoBOM)
+}
 if (-not $ReleaseOnly) {
     # Validate every link before any mutation, then unlink only the entries, never their targets.
     foreach ($entry in $owner.links) {
@@ -69,4 +74,5 @@ if (-not $ReleaseOnly) {
 Event 'release_lease_started' $owner.lease
 Remove-Item -LiteralPath $owner.lease
 Event 'lease_released' $owner.lease
-@{schema_version=1;status=$(if ($ReleaseOnly) {'retained_for_review'} else {'removed'});run_id=$owner.run_id;runtime=$runtime;storage=$storage;source_executable=$owner.source_executable;firmware_cache_retained=$owner.firmware_cache} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Result -Encoding utf8NoBOM
+$resultJson=@{schema_version=1;status=$(if ($ReleaseOnly) {'retained_for_review'} else {'removed'});run_id=$owner.run_id;runtime=$runtime;storage=$storage;source_executable=$owner.source_executable;firmware_cache_retained=$owner.firmware_cache} | ConvertTo-Json -Depth 5
+[IO.File]::WriteAllText($Result, $resultJson, $utf8NoBOM)
