@@ -54,18 +54,18 @@
   ],
   "releases": [
     {
-      "notes": "# 任我玩 PlayWise v3.1.3 Release Notes\n\n累计更新范围：`v3.1.0-beta.1 → v3.1.3`\n\n## 中文\n\n### 新增\n\n- **应用内在线更新**：在「支持与恢复 → 软件信息」检查更新、查看完整更新说明并下载安装包。优先使用 Gitee，不可用时尝试 GitHub；支持自动检查开关，以及仅正式版或包含测试版的更新提示。\n- **更新前备份与中断恢复**：安装前自动保存独立配置备份和旧程序文件，支持查看更新前备份、选择恢复配置，以及恢复中断的程序安装。\n- **非电视额度实时预览**：编辑额度时，即时显示当前规则、已用时间、调整后预计余量和限制结果。\n\n### 改进与修复\n\n- 修复旧版非电视用量跨日迁移异常，避免掌机仍有可用额度时错误提示连接底座。\n- 放大孩子区时间读数及守护卡文字，新增使用详情导读。\n- 提高游戏内浮窗面板的不透明度，改善复杂游戏画面上的文字可读性。\n- 修复浮窗规则刷新后仍显示「待确认」的问题，并保留过期数据及刷新失败时的安全检查。\n- 调整「暮霭」主题为薰衣草冷紫配色，优化首次设置、PIN 说明、备份导入确认和多语言文字布局，修复英文缓冲按钮文字显示不全。\n- 放宽参考系统环境限制：机型或系统版本不同、部分环境信息缺失时提供兼容性提示，实际接管仍需通过 PCTL、布局及恢复检查。\n- 修复 Gitee 更新附件下载跳转和 TLS 证书兼容问题，补充网络检查与下载的分层诊断记录。\n- 优化增量构建、文档预览缓存和回归工具，修复 Eden 增量构建身份混用问题。\n\n### 升级提示\n\n- 从 `v3.1.0-beta.1` 升级，请完整覆盖安装新版标准包；旧更新器不会自动切换至 Gitee 更新源。\n- 在线安装完成后，退出并正常重开应用，再按提示加载新版后台。\n- 更新保留现有规则、家长密码、配对资料和使用记录；恢复配置不会退还已消费",
+      "notes": "## 中文\n\n- 内置中国大陆 2027 年放假和调休安排，支持跨年查看。数据依据国办发明电〔2026〕10 号。\n- 在「时间计划 → 节假日安排 → 管理日历 → 日历更新」可单独检查并导入新年份，也可设置日历启动检查。\n- 「今日安排详情」和「限时规则」集中在家长主菜单右侧底栏，二级页面隐藏入口。\n- 修复家长页通知与状态提示的交互。PIN 冷却期间提前拦截输入，避免弹出输入框。\n\n[2027 年节假日安排原文](https://www.gov.cn/zhengce/content/202611/content_7085101.htm)\n\n## English\n\n- Built in mainland China's 2027 holiday and makeup workday schedule, with year-by-year browsing.\n- Added a dedicated Calendar Updates tab for importing newly published years and configuring a separate startup check.\n- Moved Today's Schedule Details and Time Limit Rules to the right side of the parent main-menu footer.\n- Fixed parent-page notice and status interactions and prevented the PIN prompt from opening during cooldown.\n",
       "package": {
-        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.3/playwise-3.1.3.zip",
-        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.1.3/playwise-3.1.3.zip",
-        "md5": "402680bd9eeb8efbef01e5de95d2eef8",
-        "name": "playwise-3.1.3.zip",
-        "sha256": "4f16c6d1ac874d031adab5812dfcac179aa7de0a9d1cdf60835bc40468a89d06",
-        "size": 3812666
+        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.4/playwise-3.1.4.zip",
+        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.1.4/playwise-3.1.4.zip",
+        "md5": "1e61e15f01fd6edf9b62bfe490a90a21",
+        "name": "playwise-3.1.4.zip",
+        "sha256": "016b4efd03f87ea6a672fad1b250b769a70b9610f5c1f0d79a24d08e454525e6",
+        "size": 3817777
       },
       "prerelease": false,
-      "tag": "v3.1.3",
-      "version": "3.1.3"
+      "tag": "v3.1.4",
+      "version": "3.1.4"
     },
     {
       "notes": "# 任我玩 PlayWise v3.1.3-beta.2\n\n- 补充 Gitee 原生 libnx TLS 连接所需的固定应用级 CA，保留系统信任库、证书、主机名和有效期验证。\n- 标准支持诊断保存有界网络快照，区分初始化、两来源传输及 CA 导入结果；不记录凭据、签名 URL 或响应正文。\n- 延续 beta.1 的 Gitee 附件跳转、独立配置备份与安全安装／后台交接；保留正常规则、PIN、配对、用量、nonce、账本及活动。\n\n完整构建与产物校验通过，冻结 Eden NRO 的普通主流程17/17、支持恢复6/6通过。内部 clean 6caf 标准构建已在目标机通过 Gitee HTTP200及合法元信息检查；该证据绑定内部构建。本冻结 beta.2 的真实下载、在线安装两阶段及 GitHub 备用仍待独立验证，完整资格pending。\n\n旧更新器若因TLS失败无法联网，需要先按正常手动完整安装／安全交接流程升级。v3.0.2不声明在线安装兼容。公开附件为标准包及含离线家长网页的完整包；Device Lab／Eden仅用于内部验证。已发布beta.1附件及tag保持原身份。\n",
