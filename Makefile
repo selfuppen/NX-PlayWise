@@ -41,7 +41,7 @@ test-online-package: $(HOST_ONLINE_PACKAGE_TEST)
 	$(STAGE_TIMER) global test-host -- python3 tests/online_update/run_package.py $(HOST_ONLINE_PACKAGE_TEST)
 test-host: test-online-package
 
-$(HOST_ONLINE_NETWORK_TEST): tests/online_update/network_test.c tests/online_update/feed_fixture.h tests/online_update/curl/curl.h tests/online_update/switch.h companion/nro/online_update.c companion/nro/online_update.h companion/nro/update_ca.h platform/update_fs.c companion/update_install.c companion/hot_reload_guard.c common/update/update.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
+$(HOST_ONLINE_NETWORK_TEST): tests/online_update/network_test.c tests/online_update/feed_fixture.h tests/online_update/curl/curl.h tests/online_update/switch.h companion/nro/online_update.c companion/nro/online_update.h companion/nro/update_ca.h platform/update_fs.c platform/host/mem_storage.c platform/calendar_store.c common/rules/holiday_calendar.c common/rules/holiday_calendar_import.c common/time/ptc_time.c companion/update_install.c companion/hot_reload_guard.c common/update/update.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/online_update -o $@ $(filter %.c,$^) -lm
 .PHONY: test-online-network
 test-online-network: $(HOST_ONLINE_NETWORK_TEST)

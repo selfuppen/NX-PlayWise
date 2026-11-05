@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from tools.build.sync_gitee_releases import (
     GITEE_REPO, GITHUB_REPO, MARKER, Api, Git, SafeRedirect, SyncError,
-    candidates, compare, hashes, json_bytes, preview, public_url, sync, version_parts,
+    candidates, compare, hashes, json_bytes, preview, public_url, published_calendars, sync, version_parts,
 )
 
 
@@ -112,9 +112,26 @@ class MirrorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.api, self.git = FakeApi(), FakeGit()
 
-    def run_sync(self, **kwargs: str) -> dict:
+    def run_sync(self, *, tag: str = "", calendars: list[dict] | None = None) -> dict:
         with tempfile.TemporaryDirectory() as directory:
-            return sync(self.api, self.git, Path(directory), **kwargs)
+            return sync(self.api, self.git, Path(directory), tag=tag, calendars=calendars)
+
+    def test_calendar_publication_without_new_software(self) -> None:
+        calendars = published_calendars(ROOT / "data" / "holiday-calendars")
+        current = next(calendar for calendar in calendars if calendar["year"] == 2027)
+        self.assertEqual(len(current["holidays"]), 7)
+        self.assertEqual(current["workdays"], [
+            "2027-01-31", "2027-02-14", "2027-05-08", "2027-09-26", "2027-10-09",
+        ])
+        feed = self.run_sync(calendars=calendars)
+        self.assertEqual(feed["releases"], [])
+        self.assertEqual(feed["holiday_calendars"], calendars)
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = {**current, "workdays": ["2027-02-05"]}
+            path = Path(directory) / "CN-2027.json"
+            path.write_bytes(json_bytes(invalid))
+            with self.assertRaisesRegex(SyncError, "Invalid published holiday calendar"):
+                published_calendars(path.parent)
 
     def test_bootstrap_repeat_and_late_attachment(self) -> None:
         self.api.release("v1.0.0")

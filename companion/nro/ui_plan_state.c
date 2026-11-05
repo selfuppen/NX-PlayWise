@@ -46,7 +46,14 @@ int ptc_ui_holiday_calendar_nearest_page(const PtcUiModel *model, int *out_dista
                 (uint16_t)(jan1 + i), row++, &distance, &best_day, &page);
         }
     } else if (model->calendar_builtin) {
-        uint16_t year = ptc_holiday_calendar_info()->last_year;
+        uint16_t year = model->holiday_calendar_year;
+        if (!year) {
+            uint8_t month, day;
+            const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
+            if (!ptc_date_from_day_index(model->day_index, &year, &month, &day) || year < info->first_year)
+                year = info->first_year;
+            if (year > info->last_year) year = info->last_year;
+        }
         PtcHolidayCalendarMatch match;
         for (i = 0; i < ptc_holiday_calendar_arrangement_count(year); ++i) {
             const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(year, i);
@@ -57,7 +64,8 @@ int ptc_ui_holiday_calendar_nearest_page(const PtcUiModel *model, int *out_dista
                     &distance, &best_day, &page);
         }
         if (!ptc_day_index_from_date(year, 1, 1, &jan1)) return page;
-        while (ptc_holiday_calendar_find(PTC_CALENDAR_DAY_MAKEUP_WORKDAY, jan1, &match)) {
+        while (ptc_holiday_calendar_find(PTC_CALENDAR_DAY_MAKEUP_WORKDAY, jan1, &match) &&
+               match.arrangement && match.arrangement->year == year) {
             for (i = 0; i < ptc_holiday_calendar_arrangement_count(year); ++i)
                 if (match.arrangement == ptc_holiday_calendar_arrangement(year, i))
                     nearest_calendar_row(model->day_index, match.day_index, match.day_index,

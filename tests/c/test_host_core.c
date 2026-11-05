@@ -497,6 +497,35 @@ static void test_release_request_contract(void)
         PTC_ERR_BAD_REQUEST, "weekly LIMIT day above 1440 is rejected");
 }
 
+static void test_2027_holiday_calendar(void)
+{
+    static const unsigned holiday_ranges[][2] = {
+        {101, 103}, {205, 213}, {403, 405}, {501, 505}, {609, 609}, {915, 915}, {1001, 1007}
+    };
+    static const unsigned workdays[] = {131, 214, 508, 926, 1009};
+    uint16_t first, last;
+    check_true(ptc_day_index_from_date(2027, 1, 1, &first) &&
+        ptc_day_index_from_date(2027, 12, 31, &last), "2027 endpoints convert");
+    for (uint16_t index = first; index <= last; ++index) {
+        uint16_t year;
+        uint8_t month, day;
+        bool covered;
+        (void)ptc_date_from_day_index(index, &year, &month, &day);
+        unsigned date = month * 100u + day;
+        PtcCalendarDayType expected = PTC_CALENDAR_DAY_ORDINARY;
+        for (size_t i = 0; i < sizeof(holiday_ranges) / sizeof(holiday_ranges[0]); ++i)
+            if (date >= holiday_ranges[i][0] && date <= holiday_ranges[i][1])
+                expected = PTC_CALENDAR_DAY_STATUTORY_HOLIDAY;
+        for (size_t i = 0; i < sizeof(workdays) / sizeof(workdays[0]); ++i)
+            if (date == workdays[i]) expected = PTC_CALENDAR_DAY_MAKEUP_WORKDAY;
+        check_int(ptc_holiday_calendar_classify(index, &covered), expected, "2027 date matches the notice");
+        check_true(covered, "all 2027 dates are covered");
+    }
+    bool covered;
+    (void)ptc_holiday_calendar_classify((uint16_t)(last + 1u), &covered);
+    check_true(!covered, "2028 requires an online publication");
+}
+
 static void test_holiday_calendar_and_priority(void)
 {
     PtcRules rules;
@@ -527,8 +556,8 @@ static void test_holiday_calendar_and_priority(void)
         strcmp(ptc_holiday_calendar_arrangement(2026, 1)->display_name, "春节") == 0 &&
         strcmp(ptc_holiday_calendar_arrangement(2026, 1)->makeup_workdays, "2月14日、2月28日") == 0,
         "calendar arrangement carries display name and related makeup days");
-    check_true(ptc_holiday_calendar_arrangement_count(2027) == 0 &&
-        ptc_holiday_calendar_arrangement(2027, 0) == NULL,
+    check_true(ptc_holiday_calendar_arrangement_count(2028) == 0 &&
+        ptc_holiday_calendar_arrangement(2028, 0) == NULL,
         "uncovered year does not invent official arrangements");
     check_true(ptc_holiday_calendar_find(PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, holiday, &match) &&
         match.day_index == holiday && match.arrangement != NULL &&
@@ -538,8 +567,10 @@ static void test_holiday_calendar_and_priority(void)
         match.day_index == next_makeup && match.arrangement != NULL &&
         strcmp(match.arrangement->display_name, "中秋节") == 0,
         "calendar query returns the next makeup workday and related holiday name");
-    check_true(!ptc_holiday_calendar_find(PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, (uint16_t)(makeup + 1u), &match),
-        "calendar query does not invent a holiday after the last embedded arrangement");
+    check_true(ptc_holiday_calendar_find(PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, (uint16_t)(makeup + 1u), &match) &&
+        match.arrangement && match.arrangement->year == 2027 &&
+        strcmp(match.arrangement->holiday_id, "new_year") == 0,
+        "calendar query crosses into the next covered year");
     check_true(!ptc_holiday_calendar_find(PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, uncovered, &match),
         "calendar query does not cross from an uncovered year into embedded arrangements");
 
@@ -4439,6 +4470,7 @@ int main(void)
     test_result_summary_access_recovery();
     test_tokens();
     test_release_request_contract();
+    test_2027_holiday_calendar();
     test_holiday_calendar_and_priority();
     test_imported_region_calendar();
     test_calendar_import_activation_transactions();

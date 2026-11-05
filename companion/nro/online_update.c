@@ -1,4 +1,5 @@
 #include "online_update.h"
+#include "../../platform/calendar_store.h"
 #include "../hot_reload_guard.h"
 #include "../../common/version.h"
 #include "../../common/crypto/sha256.h"
@@ -231,7 +232,28 @@ static bool network_job(PtcOnlineUpdater *u)
         }
     }
     bool ok = false;
-    if (curl && u->job == 1) {
+    if (curl && u->job == PTC_ONLINE_JOB_CALENDAR) {
+        char *text = calloc(1, PTC_UPDATE_METADATA_LIMIT + 1);
+        char root[768];
+        Download d = {u, NULL, text, 0, PTC_UPDATE_METADATA_LIMIT, 0, 0, false};
+        const char *urls[] = {PTC_UPDATE_REPO_URL, PTC_UPDATE_FALLBACK_URL};
+        int imported = -1;
+        if (ptc_update_fs_path(&u->fs, "switch/playwise", root, sizeof(root))) {
+            for (unsigned source = 0; text && source < 2 && !atomic_load(&u->cancel); ++source) {
+                if (!fetch(u, urls[source], &d, source) || atomic_load(&u->cancel) ||
+                    memchr(text, '\0', d.used)) continue;
+                cJSON *json = ptc_update_parse_json(text);
+                if (!json) continue;
+                imported = ptc_calendar_import_published(u->fs.storage, root, json);
+                cJSON_Delete(json);
+                if (imported != -1) break;
+            }
+        }
+        ok = imported >= 0;
+        u->calendar_status = !ok ? PTC_UPDATE_FAILED :
+            (imported ? PTC_UPDATE_COMPLETED : PTC_UPDATE_CURRENT);
+        free(text);
+    } else if (curl && u->job == 1) {
         char *text = calloc(1, PTC_UPDATE_METADATA_LIMIT + 1);
         Download d = {u, NULL, text, 0, PTC_UPDATE_METADATA_LIMIT, 0, 0, false};
         const char *urls[] = {PTC_UPDATE_REPO_URL, PTC_UPDATE_FALLBACK_URL};
@@ -292,6 +314,12 @@ static void worker(void *ctx)
 {
     PtcOnlineUpdater *u = ctx;
     bool ok;
+    if (u->job == PTC_ONLINE_JOB_CALENDAR) {
+        if (!network_job(u)) u->calendar_status = PTC_UPDATE_FAILED;
+        if (atomic_load(&u->cancel)) u->calendar_status = PTC_UPDATE_CANCELED;
+        atomic_store_explicit(&u->done, true, memory_order_release);
+        return;
+    }
     if (u->job <= 2) ok = network_job(u);
     else if (u->job == 3) {
         ok = ptc_update_prepare(&u->fs.io, &u->journal) && ptc_update_install(&u->fs.io, &u->journal);
@@ -460,7 +488,7 @@ bool ptc_online_update_pending_backup(PtcOnlineUpdater *u, bool save)
 
 bool ptc_online_update_start(PtcOnlineUpdater *u, int job)
 {
-    if (!u || u->worker_live || job < 1 || job > 4 ||
+    if (!u || u->worker_live || job < 1 || job > PTC_ONLINE_JOB_CALENDAR ||
         (job <= 2 && (u->status == PTC_UPDATE_RECOVERY_REQUIRED || u->status == PTC_UPDATE_AWAITING_REOPEN ||
         u->status == PTC_UPDATE_BACKEND_PENDING || u->status == PTC_UPDATE_RECONFIRM))) return false;
     if (job == 2) {
@@ -477,8 +505,11 @@ bool ptc_online_update_start(PtcOnlineUpdater *u, int job)
             u->error = PTC_UPDATE_ERROR_STORAGE; u->status = PTC_UPDATE_FAILED; return false;
         }
     }
-    u->job = job; u->error = 0; u->network_result = 0;
-    if (job <= 2) {
+    u->job = job;
+    bool calendar = job == PTC_ONLINE_JOB_CALENDAR;
+    if (!calendar) u->error = 0;
+    u->network_result = 0;
+    if (job <= 2 || calendar) {
         memset(&u->network, 0, sizeof(u->network));
         u->network.begin_ns = armTicksToNs(armGetSystemTick());
         snprintf(u->network.observation_id, sizeof(u->network.observation_id), "%016llx%016llx",
@@ -486,9 +517,11 @@ bool ptc_online_update_start(PtcOnlineUpdater *u, int job)
     }
     if (job == 1) u->started = true;
     atomic_store(&u->cancel, false); atomic_store(&u->done, false); atomic_store(&u->progress, 0);
-    u->status = job == 1 ? PTC_UPDATE_CHECKING : (job == 2 ? PTC_UPDATE_DOWNLOADING : PTC_UPDATE_INSTALLING);
+    if (calendar) u->calendar_status = PTC_UPDATE_CHECKING;
+    else u->status = job == 1 ? PTC_UPDATE_CHECKING : (job == 2 ? PTC_UPDATE_DOWNLOADING : PTC_UPDATE_INSTALLING);
     Result rc = threadCreate(&u->worker, worker, u, NULL, 128u * 1024u, 0x2c, -2);
     if (R_FAILED(rc)) {
+        if (calendar) { u->calendar_status = PTC_UPDATE_FAILED; return false; }
         u->error = PTC_UPDATE_ERROR_STORAGE; u->status = PTC_UPDATE_FAILED;
         if (job <= 2) {
             u->network.thread_error_available = true; u->network.thread_error_result = rc;
@@ -500,7 +533,9 @@ bool ptc_online_update_start(PtcOnlineUpdater *u, int job)
     u->worker_live = true;
     rc = threadStart(&u->worker);
     if (R_FAILED(rc)) {
-        threadClose(&u->worker); u->worker_live = false; u->status = PTC_UPDATE_FAILED;
+        threadClose(&u->worker); u->worker_live = false;
+        if (calendar) { u->calendar_status = PTC_UPDATE_FAILED; return false; }
+        u->status = PTC_UPDATE_FAILED;
         if (job <= 2) {
             u->network.thread_error_available = true; u->network.thread_error_result = rc;
             u->network.thread_error_stage = "thread_start"; network_record(u, false);
@@ -522,7 +557,7 @@ bool ptc_online_update_poll(PtcOnlineUpdater *u)
 void ptc_online_update_exit(PtcOnlineUpdater *u)
 {
     if (u->worker_live) {
-        if (u->job <= 2) atomic_store(&u->cancel, true);
+        if (u->job <= 2 || u->job == PTC_ONLINE_JOB_CALENDAR) atomic_store(&u->cancel, true);
         threadWaitForExit(&u->worker); threadClose(&u->worker); u->worker_live = false;
     }
 }

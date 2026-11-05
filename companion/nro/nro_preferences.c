@@ -116,6 +116,10 @@ void refresh_shortcut_draft_label(UiState *ui)
 void load_ui_preferences(UiState *ui)
 {
     ui->model.update_check_on_startup = true;
+    ui->model.calendar_check_on_startup = true;
+#ifdef PLAYWISE_EDEN
+    ui->model.calendar_check_unavailable = true;
+#endif
     ui->model.update_stable_only = false;
     char text[RESULT_TEXT_SIZE];
     u64 mask;
@@ -196,6 +200,9 @@ void load_ui_preferences(UiState *ui)
     ui->model.language_preference = ui->language_preference;
     item = cJSON_GetObjectItemCaseSensitive(root, "update_check_on_startup");
     if (cJSON_IsBool(item)) ui->model.update_check_on_startup = cJSON_IsTrue(item);
+    item = cJSON_GetObjectItemCaseSensitive(root, "calendar_check_on_startup");
+    ui->model.calendar_check_on_startup = cJSON_IsBool(item) ?
+        cJSON_IsTrue(item) : ui->model.update_check_on_startup;
     item = cJSON_GetObjectItemCaseSensitive(root, "update_stable_only");
     if (cJSON_IsBool(item)) ui->model.update_stable_only = cJSON_IsTrue(item);
     item = cJSON_GetObjectItemCaseSensitive(root, "sound_effects_enabled");
@@ -276,6 +283,8 @@ bool save_ui_preferences(UiState *ui)
         ptc_ui_language_preference_name(ui->language_preference));
     cJSON_DeleteItemFromObject(root, "update_check_on_startup");
     cJSON_AddBoolToObject(root, "update_check_on_startup", ui->model.update_check_on_startup);
+    cJSON_DeleteItemFromObject(root, "calendar_check_on_startup");
+    cJSON_AddBoolToObject(root, "calendar_check_on_startup", ui->model.calendar_check_on_startup);
     cJSON_DeleteItemFromObject(root, "update_stable_only");
     cJSON_AddBoolToObject(root, "update_stable_only", ui->model.update_stable_only);
     cJSON_DeleteItemFromObject(root, "sound_effects_enabled");

@@ -95,7 +95,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY));
     draw_text(pixels, stride, x, box.y + 36, header_title, 20, UI_RGB(UI_BLENDED(hero_secondary)));
 
-    /* 规则来源标签：融入 Hero 顶行信息流，支持手柄焦点与触控直达限时规则 */
+    /* 规则来源作为今日状态的一部分。 */
     char rule_label[64];
     if (bedtime_enforcing) {
         snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
@@ -107,18 +107,14 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     }
     PtcUiRect rule_rect = ptc_ui_home_rules_rect();
     UiRect rule_badge = to_uirect(rule_rect);
-    int rw = measure_text(rule_label, 13) + 32;
+    int rw = measure_text(rule_label, 13) + 24;
     if (rw < 88) rw = 88;
     if (rw > rule_rect.w) rw = rule_rect.w;
     rule_badge.x = rule_rect.x + rule_rect.w - rw;
     rule_badge.width = rw;
-    bool rule_focused = (model->selected_index == 11 && !model->parent_footer_focused);
-    fill_round_rect(pixels, stride, rule_badge, 10, rule_focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised)));
-    if (rule_focused) draw_focus_ring(pixels, stride, rule_badge, 10);
-    else draw_rect_outline(pixels, stride, rule_badge, 10, 1, UI_RGB(UI_BLENDED(border_control)));
-    uint32_t rule_fg = rule_focused ? UI_ACCENT : UI_RGB(UI_BLENDED(text_secondary));
-    draw_text(pixels, stride, rule_badge.x + 12, rule_badge.y + (rule_badge.height + 13) / 2 - 2, rule_label, 13, rule_fg);
-    draw_chevron_right(pixels, stride, rule_badge.x + rule_badge.width - 12, rule_badge.y + rule_badge.height / 2, 5, rule_fg);
+    fill_round_rect(pixels, stride, rule_badge, 10, UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, rule_badge, 10, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_button_label(pixels, stride, rule_badge, rule_label, 13, UI_RGB(UI_BLENDED(text_secondary)));
 
     /* 主数值：剩余分钟数 */
     int minutes;
@@ -1248,41 +1244,29 @@ static void draw_prominent_footer_action(
 static void draw_parent_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                                 bool plan_subpage)
 {
-    if (!plan_subpage) {
+    bool compact_left = plan_subpage || ptc_ui_parent_footer_feedback(model);
+    if (!compact_left) {
         draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
                            ptc_ui_text(PTC_UI_T_L_PREVIOUS_PAGE));
         draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1),
                            ptc_ui_text(PTC_UI_T_R_NEXT_PAGE));
     }
-    draw_footer_button(pixels, stride, plan_subpage ? ptc_ui_parent_subpage_footer_rect(0) : ptc_ui_parent_footer_rect(2),
-                       plan_subpage ? ptc_ui_text(model->today_settings_origin ? PTC_UI_T_BACK_TO_TODAY : PTC_UI_T_B_BACK_TO_PLANS_2) : ptc_ui_text(PTC_UI_T_B_RETURN_TO_CHILD_PAGE));
-    draw_footer_button(pixels, stride, plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) : ptc_ui_parent_footer_rect(3),
-                       ptc_ui_text(PTC_UI_T_Y_REFRESH));
-    if (model->parent_footer_focused && model->parent_footer_selection == 0) {
-        draw_rect_outline(pixels, stride, to_uirect(plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) : ptc_ui_parent_footer_rect(3)),
-            12, 3, UI_ACCENT);
-    }
-    PtcUiNoticeProjection notice;
-    ptc_ui_project_notice(model, &notice);
-    bool alert_visible = ptc_ui_parent_status_alert_visible(model);
-    bool notice_showing = notice.visible &&
-        (ptc_ui_operation_feedback_visible(model) || !alert_visible);
-
-    if (alert_visible) {
-        if (!ptc_ui_operation_feedback_visible(model)) {
-            draw_parent_status_footer(pixels, stride, model);
-        }
-    } else if (!notice_showing) {
-        if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
-            bool details_focused = (model->parent_footer_focused && model->parent_footer_selection == 1);
-            bool rules_focused = (model->parent_footer_focused && model->parent_footer_selection == 2);
-            bool actions_disabled = model->waiting;
-
-            draw_prominent_footer_action(pixels, stride, ptc_ui_parent_footer_details_rect(),
-                                         ptc_ui_text(PTC_UI_T_VIEW_DETAILS), details_focused, actions_disabled);
-            draw_prominent_footer_action(pixels, stride, ptc_ui_parent_footer_rules_rect(),
-                                         ptc_ui_text(PTC_UI_T_VIEW_RULES_FOOTER), rules_focused, actions_disabled);
-        }
+    PtcUiRect back = compact_left ? ptc_ui_parent_subpage_footer_rect(0) : ptc_ui_parent_footer_rect(2);
+    PtcUiRect refresh = compact_left ? ptc_ui_parent_subpage_footer_rect(1) : ptc_ui_parent_footer_rect(3);
+    draw_footer_button(pixels, stride, back,
+        plan_subpage ? ptc_ui_text(model->today_settings_origin ? PTC_UI_T_BACK_TO_TODAY : PTC_UI_T_B_BACK_TO_PLANS_2) :
+        ptc_ui_text(PTC_UI_T_B_RETURN_TO_CHILD_PAGE));
+    draw_footer_button(pixels, stride, refresh, ptc_ui_text(PTC_UI_T_Y_REFRESH));
+    if (model->parent_footer_focused && model->parent_footer_selection == 0)
+        draw_rect_outline(pixels, stride, to_uirect(refresh), 12, 3, UI_ACCENT);
+    draw_parent_status_footer(pixels, stride, model);
+    if (ptc_ui_parent_footer_shortcuts(model)) {
+        draw_prominent_footer_action(pixels, stride, ptc_ui_parent_footer_details_rect(),
+            ptc_ui_text(PTC_UI_T_VIEW_DETAILS), model->parent_footer_focused &&
+            model->parent_footer_selection == PTC_UI_PARENT_FOOTER_DETAILS, model->waiting);
+        draw_prominent_footer_action(pixels, stride, ptc_ui_parent_footer_rules_rect(),
+            ptc_ui_text(PTC_UI_T_VIEW_RULES_FOOTER), model->parent_footer_focused &&
+            model->parent_footer_selection == PTC_UI_PARENT_FOOTER_RULES, model->waiting);
     }
 }
 

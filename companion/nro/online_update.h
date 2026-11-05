@@ -32,6 +32,8 @@ typedef struct {
     PtcUpdateNetworkSource sources[2];
 } PtcUpdateNetworkEvidence;
 
+#define PTC_ONLINE_JOB_CALENDAR 5
+
 typedef struct {
     PtcUpdateFs fs;
     PtcUpdateOffer offer;
@@ -48,6 +50,7 @@ typedef struct {
     atomic_ullong progress;
     Thread worker;
     int job;
+    PtcUpdateStatus calendar_status;
     char installed_version[64];
 } PtcOnlineUpdater;
 
@@ -62,7 +65,7 @@ bool ptc_online_update_complete(PtcOnlineUpdater *u, const char *request_id, con
 bool ptc_online_update_record(PtcOnlineUpdater *u, const char *state);
 bool ptc_online_update_pending_backup(PtcOnlineUpdater *u, bool save);
 
-/* Jobs: check=1, download+validate=2, backup-program+install=3, rollback=4. */
+/* Jobs: check=1, download+validate=2, backup-program+install=3, rollback=4, calendar check=5. */
 bool ptc_online_update_package(PtcOnlineUpdater *u);
 bool ptc_online_update_verify_current(PtcOnlineUpdater *u);
 

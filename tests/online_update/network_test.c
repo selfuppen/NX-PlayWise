@@ -1,4 +1,7 @@
 #include "../../companion/nro/online_update.h"
+#include "../../common/time/ptc_time.h"
+#include "../../platform/calendar_store.h"
+#include "../../platform/host/mem_storage.h"
 #include "curl/curl.h"
 #include <assert.h>
 #include <stdarg.h>
@@ -203,9 +206,76 @@ static void pending_reopen(const char *root)
         !strcmp(reopened.journal.files[i].after_sha256, u.journal.files[i].after_sha256));
 }
 
+static void published_calendars(const char *root)
+{
+    static const char valid[] = "{\"format_version\":1,\"year\":2028,\"region_id\":\"CN\","
+        "\"region_name\":\"China\",\"source_note\":\"Test notice\","
+        "\"holidays\":[{\"name\":\"New Year\",\"from\":\"2028-01-01\",\"to\":\"2028-01-01\"}],"
+        "\"workdays\":[\"2028-01-02\"]}";
+    static const char invalid[] = "{\"format_version\":1,\"year\":2029,\"region_id\":\"CN\","
+        "\"region_name\":\"China\",\"source_note\":\"Test notice\","
+        "\"holidays\":[{\"name\":\"New Year\",\"from\":\"2029-01-01\",\"to\":\"2029-01-01\"}],"
+        "\"workdays\":[\"2029-01-01\"]}";
+    static PtcMemStorage mem;
+    ptc_mem_storage_init(&mem);
+    PtcOnlineUpdater u;
+    ptc_online_update_init_at(&u, &mem.storage, root);
+    char app[768];
+    assert(ptc_update_fs_path(&u.fs, "switch/playwise", app, sizeof(app)));
+    PtcCalendarRuntime runtime;
+    PtcImportedCalendarYear imported;
+    uint16_t new_year;
+    bool covered;
+    assert(ptc_day_index_from_date(2028, 1, 1, &new_year));
+
+    snprintf(body, sizeof(body), "{\"schema_version\":1,\"releases\":[],\"holiday_calendars\":[%s]}", valid);
+    scenario = requests = resources = 0;
+    assert(ptc_online_update_start(&u, 1) && ptc_online_update_poll(&u));
+    assert(!ptc_calendar_published_load(&mem.storage, app, 2028, &imported));
+    assert(u.calendar_status == PTC_UPDATE_IDLE);
+    u.status = PTC_UPDATE_AVAILABLE;
+    u.error = PTC_UPDATE_ERROR_CONFLICT;
+    strcpy(u.offer.version, "999.0.0");
+
+    for (int i = 0; i < 4; ++i) {
+        scenario = i == 0 ? 5 : i == 2 ? 10 : 0;
+        requests = resources = 0;
+        mem.fail_write_path_contains = i == 1 ? "calendars/published" : NULL;
+        snprintf(body, sizeof(body), "{\"schema_version\":1,\"releases\":[],\"holiday_calendars\":[%s,%s]}",
+            valid, invalid);
+        if (i == 3) {
+            char *workday = strstr(body, "2028-01-02");
+            assert(workday);
+            workday[9] = '3';
+        }
+        if (i == 2) body[strstr(body, "releases") - body] = 'x';
+        assert(ptc_online_update_start(&u, PTC_ONLINE_JOB_CALENDAR) && ptc_online_update_poll(&u));
+        assert(!resources && requests == (i == 2 ? 2 : 1));
+        assert(u.status == PTC_UPDATE_AVAILABLE && u.error == PTC_UPDATE_ERROR_CONFLICT &&
+            !strcmp(u.offer.version, "999.0.0"));
+        assert(ptc_calendar_runtime_load(&mem.storage, app, new_year, &runtime));
+        assert(runtime.builtin);
+        PtcCalendarDayType type = ptc_holiday_calendar_classify_in(&runtime.set, new_year, &covered);
+        if (i == 0) {
+            assert(u.calendar_status == PTC_UPDATE_CANCELED && !covered);
+        } else if (i == 1) {
+            assert(u.calendar_status == PTC_UPDATE_FAILED && !covered);
+        } else {
+            assert(u.calendar_status == (i == 2 ? PTC_UPDATE_COMPLETED : PTC_UPDATE_CURRENT));
+            assert(covered && type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY);
+            assert(ptc_holiday_calendar_classify_in(&runtime.set, new_year + 1u, &covered) ==
+                PTC_CALENDAR_DAY_MAKEUP_WORKDAY && covered);
+        }
+        assert(!ptc_calendar_published_load(&mem.storage, app, 2029, &imported));
+    }
+    ptc_online_update_exit(&u);
+}
+
 int main(int argc, char **argv)
 {
-    assert(argc == 2); test_update_metadata(body, sizeof(body), "999.0.0", false);
+    assert(argc == 2);
+    published_calendars(argv[1]);
+    test_update_metadata(body, sizeof(body), "999.0.0", false);
     for (scenario = 0; scenario <= 14; ++scenario) {
         PtcOnlineUpdater u; char root[512]; snprintf(root, sizeof(root), "%s/metadata-%d", argv[1], scenario);
         PtcStorageVTable vtable = {0}; vtable.read_text = read_text; vtable.list_json = empty_queue;

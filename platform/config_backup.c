@@ -255,7 +255,7 @@ bool ptc_config_preferences_valid(const cJSON *o)
         if (*end || !value || (value & ~0xffccULL)) return false;
     }
     return boolean(o, "custom_shortcut_enabled") && boolean(o, "show_parent_shortcut_hint") &&
-        boolean(o, "sound_effects_enabled") && boolean(o, "update_check_on_startup") && boolean(o, "update_stable_only") &&
+        boolean(o, "sound_effects_enabled") && boolean(o, "update_check_on_startup") && boolean(o, "update_stable_only") && boolean(o, "calendar_check_on_startup") &&
         number(o, "max_add_minutes", 1, 1440, true) &&
         number(o, "default_request_timeout_ms", 1, 2147483647, true);
 }
@@ -318,7 +318,7 @@ static bool add_file(PtcStorage *s, const char *root, const char *stage, cJSON *
             bool keep = true;
             if (!strcmp(relative, "config.json")) {
                 static const char *keys[] = {"version", "device_id", "max_add_minutes", "default_request_timeout_ms", "pairing_base_url",
-                    "theme", "theme_style", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint", "update_check_on_startup", "update_stable_only"};
+                    "theme", "theme_style", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint", "update_check_on_startup", "update_stable_only", "calendar_check_on_startup"};
                 keep = false;
                 for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) if (!strcmp(v->string, keys[i])) keep = true;
             } else if (!strcmp(relative, "rules.json")) keep = !confirmation(v->string);
@@ -520,7 +520,7 @@ cJSON *ptc_config_merge_rules(const cJSON *current, const cJSON *source, unsigne
 
 cJSON *ptc_config_merge_preferences(const cJSON *current, const cJSON *source, unsigned groups)
 {
-    static const char *prefs[] = {"theme", "theme_style", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint", "update_check_on_startup", "update_stable_only"};
+    static const char *prefs[] = {"theme", "theme_style", "ui_language", "sound_effects_enabled", "parent_shortcut_mask", "custom_shortcut_enabled", "show_parent_shortcut_hint", "update_check_on_startup", "update_stable_only", "calendar_check_on_startup"};
     static const char *pairing[] = {"device_id", "pairing_base_url", "max_add_minutes", "default_request_timeout_ms"};
     if (!ptc_config_preferences_valid(current) || !ptc_config_preferences_valid(source)) return NULL;
     cJSON *out = cJSON_Duplicate(current, true);

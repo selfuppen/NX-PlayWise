@@ -41,7 +41,7 @@ void config_backup_preview(UiState *ui)
     if (ok) ok = calendar && ptc_calendar_runtime_load(ui->client.storage,
         (ui->model.config_groups & PTC_CONFIG_HOLIDAY) ? stage : APP_ROOT, ui->model.day_index, calendar);
     if (ok) {
-        rules.calendar = calendar->builtin ? NULL : &calendar->set;
+        rules.calendar = &calendar->set;
         PtcDayRule day = ptc_rules_today_rule(&rules, ui->model.day_index, ptc_weekday_from_day_index(ui->model.day_index));
         time_t now = time(NULL); struct tm local = {0}; localtime_r(&now, &local);
         PtcBedtimeEvaluation bedtime = ptc_bedtime_evaluate(&rules, ui->model.day_index,

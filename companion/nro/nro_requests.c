@@ -225,7 +225,7 @@ void load_rule_drafts(UiState *ui)
     ptc_rules_default(&rules);
     if (ptc_calendar_runtime_load(ui->client.storage, APP_ROOT, ui->model.day_index,
             &ui->calendar_runtime)) {
-        ui->model.calendar = ui->calendar_runtime.builtin ? NULL : &ui->calendar_runtime.set;
+        ui->model.calendar = &ui->calendar_runtime.set;
         ui->model.calendar_builtin = ui->calendar_runtime.builtin;
         snprintf(ui->model.calendar_option_id, sizeof(ui->model.calendar_option_id), "%s",
             ui->calendar_runtime.option_id);

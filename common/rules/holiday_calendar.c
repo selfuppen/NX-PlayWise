@@ -6,62 +6,23 @@
 #include "../time/ptc_time.h"
 
 typedef struct {
+    uint16_t year;
     uint8_t month;
     uint8_t day;
-    PtcCalendarDayType type;
     uint8_t arrangement_index;
-} PtcHolidayDate;
+} PtcMakeupDate;
 
-/* 国办发明电〔2025〕7号. Dates are kept as the auditable source form; the
-   classifier converts the platform-independent day index before matching. */
-static const PtcHolidayDate PTC_2026_DATES[] = {
-    {1, 1, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 0},
-    {1, 2, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 0},
-    {1, 3, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 0},
-    {1, 4, PTC_CALENDAR_DAY_MAKEUP_WORKDAY, 0},
-    {2, 14, PTC_CALENDAR_DAY_MAKEUP_WORKDAY, 1},
-    {2, 15, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 16, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 17, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 18, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 19, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 20, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 21, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 22, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 23, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 1},
-    {2, 28, PTC_CALENDAR_DAY_MAKEUP_WORKDAY, 1},
-    {4, 4, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 2},
-    {4, 5, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 2},
-    {4, 6, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 2},
-    {5, 1, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 3},
-    {5, 2, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 3},
-    {5, 3, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 3},
-    {5, 4, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 3},
-    {5, 5, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 3},
-    {5, 9, PTC_CALENDAR_DAY_MAKEUP_WORKDAY, 3},
-    {6, 19, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 4},
-    {6, 20, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 4},
-    {6, 21, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 4},
-    {9, 25, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 5},
-    {9, 26, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 5},
-    {9, 27, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 5},
-    {10, 1, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 6},
-    {10, 2, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 6},
-    {10, 3, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 6},
-    {10, 4, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 6},
-    {10, 5, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 6},
-    {10, 6, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 6},
-    {10, 7, PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, 6},
-    {9, 20, PTC_CALENDAR_DAY_MAKEUP_WORKDAY, 5},
-    {10, 10, PTC_CALENDAR_DAY_MAKEUP_WORKDAY, 6}
-};
-
-static const PtcHolidayCalendarInfo PTC_CALENDAR_INFO = {
+static const PtcHolidayCalendarInfo PTC_CALENDAR_2026_INFO = {
     2026, 2026, 1, "2025-11-04",
     "https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm"
 };
 
-/* Display data shares this authoritative module with the classifier so UI and policy cannot drift. */
+static const PtcHolidayCalendarInfo PTC_CALENDAR_INFO = {
+    2026, 2027, 2, "2026-11-05",
+    "https://www.gov.cn/zhengce/content/202611/content_7085101.htm"
+};
+
+/* Holiday ranges drive both the classifier and the calendar view. */
 static const PtcHolidayArrangement PTC_2026_ARRANGEMENTS[] = {
     {2026, "new_year", "元旦", 1, 1, 1, 3, "1月4日"},
     {2026, "spring_festival", "春节", 2, 15, 2, 23, "2月14日、2月28日"},
@@ -72,54 +33,80 @@ static const PtcHolidayArrangement PTC_2026_ARRANGEMENTS[] = {
     {2026, "national_day", "国庆节", 10, 1, 10, 7, "10月10日"}
 };
 
-PtcCalendarDayType ptc_holiday_calendar_classify(uint16_t day_index, bool *covered)
-{
-    uint16_t year;
-    uint8_t month;
-    uint8_t day;
-    size_t i;
-    if (covered) *covered = false;
-    if (!ptc_date_from_day_index(day_index, &year, &month, &day) || year != 2026) {
-        return PTC_CALENDAR_DAY_ORDINARY;
-    }
-    if (covered) *covered = true;
-    for (i = 0; i < sizeof(PTC_2026_DATES) / sizeof(PTC_2026_DATES[0]); ++i) {
-        if (PTC_2026_DATES[i].month == month && PTC_2026_DATES[i].day == day) {
-            return PTC_2026_DATES[i].type;
-        }
-    }
-    return PTC_CALENDAR_DAY_ORDINARY;
-}
+static const PtcHolidayArrangement PTC_2027_ARRANGEMENTS[] = {
+    {2027, "new_year", "元旦", 1, 1, 1, 3, "无"},
+    {2027, "spring_festival", "春节", 2, 5, 2, 13, "1月31日、2月14日"},
+    {2027, "qingming", "清明节", 4, 3, 4, 5, "无"},
+    {2027, "labour_day", "劳动节", 5, 1, 5, 5, "5月8日"},
+    {2027, "dragon_boat", "端午节", 6, 9, 6, 9, "无"},
+    {2027, "mid_autumn", "中秋节", 9, 15, 9, 15, "无"},
+    {2027, "national_day", "国庆节", 10, 1, 10, 7, "9月26日、10月9日"}
+};
 
-static const PtcHolidayArrangement *arrangement_for_date(
-    uint16_t year, uint8_t month, uint8_t day, PtcCalendarDayType type)
-{
-    size_t i;
-    if (year != 2026) return NULL;
-    for (i = 0; i < sizeof(PTC_2026_DATES) / sizeof(PTC_2026_DATES[0]); ++i) {
-        const PtcHolidayDate *date = &PTC_2026_DATES[i];
-        if (date->month == month && date->day == day && date->type == type &&
-            date->arrangement_index < sizeof(PTC_2026_ARRANGEMENTS) / sizeof(PTC_2026_ARRANGEMENTS[0])) {
-            return &PTC_2026_ARRANGEMENTS[date->arrangement_index];
-        }
-    }
-    return NULL;
-}
+static const PtcMakeupDate PTC_MAKEUP_DATES[] = {
+    {2026, 1, 4, 0}, {2026, 2, 14, 1}, {2026, 2, 28, 1},
+    {2026, 5, 9, 3}, {2026, 9, 20, 5}, {2026, 10, 10, 6},
+    {2027, 1, 31, 1}, {2027, 2, 14, 1}, {2027, 5, 8, 3},
+    {2027, 9, 26, 6}, {2027, 10, 9, 6}
+};
 
 const PtcHolidayCalendarInfo *ptc_holiday_calendar_info(void)
 {
     return &PTC_CALENDAR_INFO;
 }
 
+const PtcHolidayCalendarInfo *ptc_holiday_calendar_info_for_year(uint16_t year)
+{
+    if (year == 2026) return &PTC_CALENDAR_2026_INFO;
+    return year == 2027 ? &PTC_CALENDAR_INFO : NULL;
+}
+
 size_t ptc_holiday_calendar_arrangement_count(uint16_t year)
 {
-    return year == 2026 ? sizeof(PTC_2026_ARRANGEMENTS) / sizeof(PTC_2026_ARRANGEMENTS[0]) : 0;
+    if (year == 2026) return sizeof(PTC_2026_ARRANGEMENTS) / sizeof(PTC_2026_ARRANGEMENTS[0]);
+    if (year == 2027) return sizeof(PTC_2027_ARRANGEMENTS) / sizeof(PTC_2027_ARRANGEMENTS[0]);
+    return 0;
 }
 
 const PtcHolidayArrangement *ptc_holiday_calendar_arrangement(uint16_t year, size_t index)
 {
-    if (year != 2026 || index >= ptc_holiday_calendar_arrangement_count(year)) return NULL;
-    return &PTC_2026_ARRANGEMENTS[index];
+    if (index >= ptc_holiday_calendar_arrangement_count(year)) return NULL;
+    return year == 2026 ? &PTC_2026_ARRANGEMENTS[index] : &PTC_2027_ARRANGEMENTS[index];
+}
+
+static const PtcHolidayArrangement *arrangement_for_date(
+    uint16_t year, uint8_t month, uint8_t day, PtcCalendarDayType *type)
+{
+    int date = month * 100 + day;
+    *type = PTC_CALENDAR_DAY_ORDINARY;
+    for (size_t i = 0; i < ptc_holiday_calendar_arrangement_count(year); ++i) {
+        const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(year, i);
+        if (date >= entry->start_month * 100 + entry->start_day &&
+            date <= entry->end_month * 100 + entry->end_day) {
+            *type = PTC_CALENDAR_DAY_STATUTORY_HOLIDAY;
+            return entry;
+        }
+    }
+    for (size_t i = 0; i < sizeof(PTC_MAKEUP_DATES) / sizeof(PTC_MAKEUP_DATES[0]); ++i) {
+        const PtcMakeupDate *entry = &PTC_MAKEUP_DATES[i];
+        if (entry->year == year && entry->month == month && entry->day == day) {
+            *type = PTC_CALENDAR_DAY_MAKEUP_WORKDAY;
+            return ptc_holiday_calendar_arrangement(year, entry->arrangement_index);
+        }
+    }
+    return NULL;
+}
+
+PtcCalendarDayType ptc_holiday_calendar_classify(uint16_t day_index, bool *covered)
+{
+    uint16_t year;
+    uint8_t month, day;
+    PtcCalendarDayType type = PTC_CALENDAR_DAY_ORDINARY;
+    bool available = ptc_date_from_day_index(day_index, &year, &month, &day) &&
+        ptc_holiday_calendar_info_for_year(year) != NULL;
+    if (covered) *covered = available;
+    if (available) (void)arrangement_for_date(year, month, day, &type);
+    return type;
 }
 
 bool ptc_holiday_calendar_find(PtcCalendarDayType type, uint16_t from_day_index,
@@ -143,10 +130,12 @@ bool ptc_holiday_calendar_find(PtcCalendarDayType type, uint16_t from_day_index,
         uint8_t month;
         uint8_t day;
         if (!ptc_date_from_day_index((uint16_t)day_index, &year, &month, &day)) break;
-        if (ptc_holiday_calendar_classify((uint16_t)day_index, NULL) == type) {
+        PtcCalendarDayType actual;
+        const PtcHolidayArrangement *arrangement = arrangement_for_date(year, month, day, &actual);
+        if (actual == type) {
             out->type = type;
             out->day_index = (uint16_t)day_index;
-            out->arrangement = arrangement_for_date(year, month, day, type);
+            out->arrangement = arrangement;
             return true;
         }
     }

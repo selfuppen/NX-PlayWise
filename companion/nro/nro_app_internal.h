@@ -110,7 +110,7 @@ typedef struct {
     PtcUiModel model;
     PtcCalendarRuntime calendar_runtime;
     PtcImportedCalendarYear *calendar_view_data;
-    uint16_t calendar_view_years[PTC_CALENDAR_MAX_INDEX_ENTRIES];
+    uint16_t calendar_view_years[PTC_CALENDAR_PUBLISHED_MAX_YEAR - 2020u + 1u];
     int calendar_view_year_count;
     int calendar_view_year_index;
     PtcUiThemePreference theme_preference;
@@ -173,6 +173,7 @@ typedef struct {
     PtcOnlineUpdater updater;
     bool update_backup_pending;
     bool update_child_notice_shown;
+    bool calendar_startup_checked;
     char update_backup_ids[16][33];
     char update_cleanup_id[33];
     bool hot_reload_prompted;
@@ -280,6 +281,7 @@ int holiday_calendar_view_pages(const PtcUiModel *model);
 void calendar_manager_select_tab(UiState *ui, int tab);
 void calendar_manager_select_row(UiState *ui, int row);
 void calendar_manager_nav(UiState *ui, int action);
+void check_calendar_update(UiState *ui);
 void calendar_manager_refresh(UiState *ui);
 void submit_calendar_operation(UiState *ui, PtcUiOperation operation);
 void refresh_security_state(UiState *ui);

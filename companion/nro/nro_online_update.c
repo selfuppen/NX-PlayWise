@@ -13,8 +13,10 @@ static void sync_model(UiState *ui)
     PtcOnlineUpdater *u = &ui->updater;
     ui->model.update_busy = u->worker_live || ui->update_backup_pending;
     ui->model.update_received_kib = (unsigned)(atomic_load(&u->progress) / 1024u);
-    /* Worker-owned results are consumed only after acquire + thread join. */
-    if (u->worker_live) {
+    /* Each check only publishes its own worker-owned result after join. */
+    bool checking_calendar = u->worker_live && u->job == PTC_ONLINE_JOB_CALENDAR;
+    ui->model.calendar_update_status = checking_calendar ? PTC_UPDATE_CHECKING : u->calendar_status;
+    if (u->worker_live && !checking_calendar) {
         ui->model.update_status = u->job == 1 ? PTC_UPDATE_CHECKING : (u->job == 2 ? PTC_UPDATE_DOWNLOADING : PTC_UPDATE_INSTALLING);
         return;
     }
@@ -291,6 +293,19 @@ void confirm_online_update(UiState *ui, PtcUiOperation operation)
 #endif
 }
 
+void check_calendar_update(UiState *ui)
+{
+#ifndef PLAYWISE_EDEN
+    PtcOnlineUpdater *u = &ui->updater;
+    if (ui->waiting || u->worker_live || ui->update_backup_pending) return;
+    ui->calendar_startup_checked = true;
+    (void)ptc_online_update_start(u, PTC_ONLINE_JOB_CALENDAR);
+    sync_model(ui);
+#else
+    (void)ui;
+#endif
+}
+
 void poll_online_update(UiState *ui)
 {
 #ifndef PLAYWISE_EDEN
@@ -301,6 +316,14 @@ void poll_online_update(UiState *ui)
         if (ui->model.update_check_on_startup && u->status == PTC_UPDATE_IDLE && !u->backup_submitted) {
             u->stable_only = ui->model.update_stable_only; (void)ptc_online_update_start(u, 1);
         }
+    }
+    if (!ui->calendar_startup_checked && ui->model.calendar_check_on_startup &&
+        !u->worker_live && ui->model.setup_wizard_completed && !ui_busy(ui) &&
+        !u->backup_submitted && (u->status == PTC_UPDATE_IDLE || u->status == PTC_UPDATE_CURRENT ||
+        u->status == PTC_UPDATE_AVAILABLE || u->status == PTC_UPDATE_LOCAL_NEWER ||
+        u->status == PTC_UPDATE_CHANNEL_EXCLUDED || u->status == PTC_UPDATE_FAILED ||
+        u->status == PTC_UPDATE_CANCELED)) {
+        check_calendar_update(ui);
     }
     if (!u->worker_live && u->status == PTC_UPDATE_BACKUP_PENDING && !ui->update_backup_pending &&
         ptc_ui_update_can_resume_backup(&ui->model) && !ui_busy(ui)) {

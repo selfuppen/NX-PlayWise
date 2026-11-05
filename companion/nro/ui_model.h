@@ -610,6 +610,9 @@ typedef struct {
     bool holiday_calendar_has_next_year;
     int holiday_last_rule;
     int calendar_manager_tab;
+    int calendar_update_status;
+    bool calendar_check_on_startup;
+    bool calendar_check_unavailable;
     int calendar_manager_count;
     int calendar_manager_selected;
     int calendar_manager_page;

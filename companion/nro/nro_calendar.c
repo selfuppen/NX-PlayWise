@@ -8,7 +8,7 @@ int holiday_calendar_view_pages(const PtcUiModel *model)
     if (!model->calendar_builtin && !model->holiday_calendar_data) return 1;
     count = model->holiday_calendar_data
         ? model->holiday_calendar_data->group_count + model->holiday_calendar_data->workday_count
-        : ptc_holiday_calendar_arrangement_count(2026);
+        : ptc_holiday_calendar_arrangement_count(model->holiday_calendar_year);
     return count ? (int)((count + 3u) / 4u) : 1;
 }
 
@@ -26,7 +26,12 @@ static void load_calendar_view_year(UiState *ui)
     ui->model.holiday_calendar_has_previous_year = ui->calendar_view_year_index > 0;
     ui->model.holiday_calendar_has_next_year =
         ui->calendar_view_year_index + 1 < ui->calendar_view_year_count;
-    if (ui->model.calendar_builtin) return;
+    if (ui->model.calendar_builtin) {
+        if (ui->calendar_view_data && ptc_calendar_published_load(ui->client.storage, APP_ROOT,
+                ui->model.holiday_calendar_year, ui->calendar_view_data))
+            ui->model.holiday_calendar_data = ui->calendar_view_data;
+        return;
+    }
     active = malloc(sizeof(*active));
     runtime = malloc(sizeof(*runtime));
     if (!active || !runtime || !ui->calendar_view_data ||
@@ -49,7 +54,8 @@ done:
 void open_holiday_calendar_view(UiState *ui)
 {
     PtcCalendarIndex *active = NULL;
-    uint16_t current_year = 2026;
+    const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
+    uint16_t current_year = info->first_year;
     uint8_t month, day;
     size_t i;
     if (!ui) return;
@@ -58,7 +64,15 @@ void open_holiday_calendar_view(UiState *ui)
     ui->calendar_view_year_index = 0;
     if (!ui->calendar_view_data) ui->calendar_view_data = malloc(sizeof(*ui->calendar_view_data));
     if (ui->model.calendar_builtin) {
-        ui->calendar_view_years[ui->calendar_view_year_count++] = 2026;
+        for (uint16_t year = info->first_year; year <= info->last_year; ++year)
+            ui->calendar_view_years[ui->calendar_view_year_count++] = year;
+        if (ui->calendar_view_data) {
+            for (uint16_t year = (uint16_t)(info->last_year + 1u);
+                    year <= PTC_CALENDAR_PUBLISHED_MAX_YEAR; ++year) {
+                if (ptc_calendar_published_load(ui->client.storage, APP_ROOT, year, ui->calendar_view_data))
+                    ui->calendar_view_years[ui->calendar_view_year_count++] = year;
+            }
+        }
     } else {
         int nearest_year_distance = INT_MAX;
         active = malloc(sizeof(*active));
@@ -247,7 +261,7 @@ static void calendar_preview(UiState *ui)
         rules.holiday_rule = model->holiday_rule;
         rules.makeup_workday_rule = model->makeup_workday_rule;
         rules.bedtime = model->bedtime_policy;
-        rules.calendar = runtime->builtin ? NULL : &runtime->set;
+        rules.calendar = &runtime->set;
         today = ptc_rules_today_rule(&rules, model->day_index,
             ptc_weekday_from_day_index(model->day_index));
         bedtime = ptc_bedtime_evaluate(&rules, model->day_index,
@@ -267,7 +281,7 @@ static void calendar_preview(UiState *ui)
         uint8_t m, d;
         bool covered = false;
         PtcCalendarDayType kind = ptc_holiday_calendar_classify_in(
-            runtime->builtin ? NULL : &runtime->set, date, &covered);
+            &runtime->set, date, &covered);
         const char *label = !covered ? ptc_ui_text(PTC_UI_T_CALENDAR_UNCOVERED) :
             kind == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY ? ptc_ui_text(PTC_UI_T_STATUTORY_HOLIDAY) :
             kind == PTC_CALENDAR_DAY_MAKEUP_WORKDAY ? ptc_ui_text(PTC_UI_T_MAKEUP_WORKDAY) :
@@ -288,6 +302,7 @@ done:
 void calendar_manager_refresh(UiState *ui)
 {
     PtcUiModel *model = &ui->model;
+    if (model->calendar_manager_tab == 2) return;
     PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
     PtcCalendarIndex *active = malloc(sizeof(*active));
     size_t i, count = 0;
@@ -303,9 +318,12 @@ void calendar_manager_refresh(UiState *ui)
         PtcUiCalendarRow *row = &model->calendar_manager_rows[model->calendar_manager_count++];
         snprintf(row->id, sizeof(row->id), "builtin-cn");
         snprintf(row->title, sizeof(row->title), "%s", ptc_ui_text(PTC_UI_T_CALENDAR_BUILTIN_CHINA));
-        snprintf(row->detail, sizeof(row->detail), "%s",
-            strcmp(active->option_id, "builtin-cn") == 0 ?
-            ptc_ui_text(PTC_UI_T_CALENDAR_ACTIVE) : "2026");
+        if (strcmp(active->option_id, "builtin-cn") == 0)
+            snprintf(row->detail, sizeof(row->detail), "%s", ptc_ui_text(PTC_UI_T_CALENDAR_ACTIVE));
+        else {
+            const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
+            snprintf(row->detail, sizeof(row->detail), "%u-%u", info->first_year, info->last_year);
+        }
         for (i = 0; i < catalog->count && model->calendar_manager_count < 96; ++i) {
             const PtcCalendarIndexEntry *entry = &catalog->entries[i];
             PtcUiCalendarRow *candidate;
@@ -382,7 +400,7 @@ void open_calendar_manager(UiState *ui)
 
 void calendar_manager_select_tab(UiState *ui, int tab)
 {
-    if (!ui || tab < 0 || tab > 1) return;
+    if (!ui || tab < 0 || tab > 2) return;
     ptc_audio_play(PTC_SE_TAB);
     ui->model.calendar_manager_tab = tab;
     ui->model.calendar_manager_selected = 0;
@@ -392,7 +410,7 @@ void calendar_manager_select_tab(UiState *ui, int tab)
 void calendar_manager_select_row(UiState *ui, int row)
 {
     int index;
-    if (!ui || row < 0 || row >= 6) return;
+    if (!ui || ui->model.calendar_manager_tab == 2 || row < 0 || row >= 6) return;
     index = ui->model.calendar_manager_page * 6 + row;
     if (index >= ui->model.calendar_manager_count) return;
     ptc_audio_play(PTC_SE_FOCUS);
@@ -408,6 +426,17 @@ void calendar_manager_nav(UiState *ui, int action)
     if (action == 5) {
         ptc_audio_play(PTC_SE_CANCEL);
         ptc_ui_cancel_overlay(model);
+        return;
+    }
+    if (model->calendar_manager_tab == 2) {
+        if (!ptc_ui_calendar_update_action_enabled(model, action)) return;
+        ptc_audio_play(PTC_SE_CONFIRM);
+        if (action == 2) check_calendar_update(ui);
+        else if (action == 4) {
+            model->calendar_check_on_startup = !model->calendar_check_on_startup;
+            if (!save_ui_preferences(ui))
+                model->calendar_check_on_startup = !model->calendar_check_on_startup;
+        }
         return;
     }
     if (action == 3) {

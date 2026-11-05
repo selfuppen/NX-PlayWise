@@ -1,6 +1,13 @@
 #include "ui_state.h"
 #include "../../common/update/update.h"
 
+bool ptc_ui_calendar_update_action_enabled(const PtcUiModel *model, int action)
+{
+    if (action == 5) return true;
+    if (model->calendar_check_unavailable || model->waiting) return false;
+    return action == 4 || (action == 2 && !model->update_busy);
+}
+
 bool ptc_ui_update_action_enabled(const PtcUiModel *m, int action)
 {
     if (!m || m->view != PTC_UI_PARENT || action < 0 || action >= 8) return false;

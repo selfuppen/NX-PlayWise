@@ -134,9 +134,48 @@ PtcUiRect ptc_ui_notice_rect(void)
     return (PtcUiRect){806, 664, 420, 44};
 }
 
+bool ptc_ui_parent_footer_shortcuts(const PtcUiModel *model)
+{
+    return model->view == PTC_UI_PARENT && model->overlay == PTC_UI_OVERLAY_NONE &&
+        (model->parent_page != PTC_UI_PARENT_PLAN || model->plan_page == PTC_UI_PLAN_PAGE_ROOT);
+}
+
+bool ptc_ui_parent_footer_feedback(const PtcUiModel *model)
+{
+    bool operation = ptc_ui_operation_feedback_visible(model);
+    bool alert = ptc_ui_parent_status_alert_visible(model);
+    if (alert && !operation) return true;
+    PtcUiNoticeProjection notice;
+    ptc_ui_project_notice(model, &notice);
+    return notice.visible && (operation || !alert) &&
+        !(model->parent_page == PTC_UI_PARENT_SUPPORT && model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE);
+}
+
+bool ptc_ui_parent_footer_status_visible(const PtcUiModel *model)
+{
+    return ptc_ui_parent_status_alert_visible(model) && !ptc_ui_operation_feedback_visible(model);
+}
+
+PtcUiRect ptc_ui_notice_rect_for_model(const PtcUiModel *model)
+{
+    if (!model || !ptc_ui_parent_footer_shortcuts(model)) return ptc_ui_notice_rect();
+    return (PtcUiRect){378, 664, 396, 44};
+}
+
+PtcUiRect ptc_ui_parent_status_footer_rect(const PtcUiModel *model)
+{
+    return ptc_ui_parent_footer_shortcuts(model) ?
+        ptc_ui_notice_rect_for_model(model) : ptc_ui_parent_footer_rect(4);
+}
+
 PtcUiRect ptc_ui_notice_details_rect(void)
 {
-    PtcUiRect notice = ptc_ui_notice_rect();
+    return ptc_ui_notice_details_rect_for_model(NULL);
+}
+
+PtcUiRect ptc_ui_notice_details_rect_for_model(const PtcUiModel *model)
+{
+    PtcUiRect notice = ptc_ui_notice_rect_for_model(model);
     return (PtcUiRect){notice.x + notice.w - 82, notice.y + (notice.h - 28) / 2, 70, 28};
 }
 
@@ -521,11 +560,6 @@ PtcUiRect ptc_ui_today_quota_card_rect(void)
     return (PtcUiRect){box.x + 22, box.y + 154, box.w - 44, 52};
 }
 
-PtcUiRect ptc_ui_plan_today_rules_rect(void)
-{
-    return (PtcUiRect){1074, 184, 140, 24};
-}
-
 PtcUiRect ptc_ui_day_decision_refresh_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_DAY_DECISION);
@@ -629,8 +663,8 @@ PtcUiRect ptc_ui_holiday_manage_rect(void)
 
 PtcUiRect ptc_ui_calendar_manager_tab_rect(int index)
 {
-    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){110 + index * 250, 113, 236, 42};
+    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){110 + index * 205, 113, 191, 42};
 }
 
 PtcUiRect ptc_ui_calendar_manager_row_rect(int index)

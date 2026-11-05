@@ -153,7 +153,14 @@ PtcCalendarDayType ptc_holiday_calendar_classify_in(const PtcHolidayCalendarSet 
     uint16_t year, first;
     uint8_t month, day;
     size_t i;
-    if (!set) return ptc_holiday_calendar_classify(day_index, covered);
+    if (!set || set->include_builtin) {
+        bool builtin_covered;
+        PtcCalendarDayType builtin = ptc_holiday_calendar_classify(day_index, &builtin_covered);
+        if (!set || builtin_covered) {
+            if (covered) *covered = builtin_covered;
+            return builtin;
+        }
+    }
     if (covered) *covered = false;
     if (!ptc_date_from_day_index(day_index, &year, &month, &day))
         return PTC_CALENDAR_DAY_ORDINARY;

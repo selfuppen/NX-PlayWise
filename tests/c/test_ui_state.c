@@ -134,7 +134,7 @@ static void test_parent_status_summary(void)
     check_true(notice.visible && !notice.has_details && notice.level == PTC_UI_NOTICE_WARNING,
                "waiting parent operation uses a compact summary without a fake details action");
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "projecting a notice never opens its details dialog");
-    check_hit(hit_center(&model, ptc_ui_notice_details_rect()), PTC_UI_HIT_NONE, 0,
+    check_hit(hit_center(&model, ptc_ui_notice_details_rect_for_model(&model)), PTC_UI_HIT_NONE, 0,
               "notice without details has no hidden touch action");
 
     model.waiting = false;
@@ -148,9 +148,9 @@ static void test_parent_status_summary(void)
     ptc_ui_project_notice(&model, &notice);
     check_true(notice.has_details && strstr(notice.details, "指定日期额度") != NULL,
                "operation guidance enables the explicit details action");
-    check_hit(hit_center(&model, ptc_ui_notice_details_rect()), PTC_UI_HIT_NOTICE_DETAILS, 0,
+    check_hit(hit_center(&model, ptc_ui_notice_details_rect_for_model(&model)), PTC_UI_HIT_NOTICE_DETAILS, 0,
               "visible details button owns its exact touch target");
-    check_hit(ptc_ui_hit_test(&model, ptc_ui_notice_rect().x + 20, ptc_ui_notice_rect().y + 24),
+    check_hit(ptc_ui_hit_test(&model, ptc_ui_notice_rect_for_model(&model).x + 20, ptc_ui_notice_rect_for_model(&model).y + 24),
               PTC_UI_HIT_NONE, 0, "notice text does not masquerade as the details button");
     snprintf(model.overlay_title, sizeof(model.overlay_title), "指定日期额度");
     snprintf(model.overlay_body, sizeof(model.overlay_body), "旧描述");
@@ -1435,8 +1435,19 @@ static void test_release_hit_targets(void)
     check_true(!ptc_ui_parent_status_alert_visible(&model),
                "healthy parent state does not request a footer alert");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "failed");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_PARENT_STATUS, 0,
+    check_hit(hit_center(&model, ptc_ui_parent_status_footer_rect(&model)), PTC_UI_HIT_PARENT_STATUS, 0,
               "system failure exposes the footer support entry");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_details_rect()), PTC_UI_HIT_HOME_DETAILS, 0,
+              "system failure leaves the right-side details entry available");
+    check_true(!rects_overlap(ptc_ui_parent_status_footer_rect(&model), ptc_ui_parent_footer_details_rect()),
+               "status and right-side details have separate space");
+    model.parent_footer_focused = true;
+    model.parent_footer_selection = PTC_UI_PARENT_FOOTER_STATUS;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.parent_footer_selection, PTC_UI_PARENT_FOOTER_DETAILS, "alert can move right to details");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.parent_footer_selection, PTC_UI_PARENT_FOOTER_RULES, "details can move right to rules");
+    model.parent_footer_focused = false;
     check_true(ptc_ui_parent_status_alert_visible(&model),
                "system failure requests a footer alert");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
@@ -1470,8 +1481,15 @@ static void test_release_hit_targets(void)
               "unlimited weekly quota remains semantic for an explanatory message");
     check_hit(hit_center(&model, ptc_ui_weekly_day_header_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
               "weekly header only selects the day");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
-              "healthy weekly page preserves the footer rules action");
+    for (int page = PTC_UI_PLAN_PAGE_WEEKLY; page <= PTC_UI_PLAN_PAGE_DOCK; ++page) {
+        model.plan_page = page;
+        check_true(!ptc_ui_parent_footer_shortcuts(&model), "plan editor hides the main-menu shortcuts");
+        check_true(hit_center(&model, ptc_ui_parent_footer_rules_rect()).kind != PTC_UI_HIT_HOME_RULES,
+                   "plan editor does not activate the hidden rules shortcut");
+        check_true(hit_center(&model, ptc_ui_parent_footer_details_rect()).kind != PTC_UI_HIT_HOME_DETAILS,
+                   "plan editor does not activate the hidden details shortcut");
+    }
+    model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
     check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(0)), PTC_UI_HIT_PARENT_BACK, 0,
               "plan subpage keeps a stable back action");
     check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(1)), PTC_UI_HIT_PARENT_REFRESH, 0,
@@ -2581,7 +2599,7 @@ static void test_home_redesign(void)
         model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
         check_hit(hit_center(&model, ptc_ui_home_details_rect(parent)), PTC_UI_HIT_HOME_DETAILS, 0, "details touch entry");
         if (parent) {
-            check_hit(hit_center(&model, ptc_ui_home_rules_rect()), PTC_UI_HIT_HOME_RULES, 0, "home rules touch entry");
+            check_hit(hit_center(&model, ptc_ui_home_rules_rect()), PTC_UI_HIT_NONE, 0, "rule source badge is informational");
             check_hit(hit_center(&model, ptc_ui_today_quota_card_rect()), PTC_UI_HIT_NONE, 0, "quota card is read-only telemetry");
         }
         check_true(ptc_ui_open_home_details(&model), "details open without a request");
@@ -3582,8 +3600,8 @@ static void test_forecast_day_decision_and_navigation(void)
         check_hit(hit_center(&model, row), PTC_UI_HIT_FORECAST_DAY, i,
                   "forecast row hit test matches index");
     }
-    check_hit(hit_center(&model, ptc_ui_plan_today_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
-              "plan today rules hit test");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
+              "plan root rules are in the footer");
 
     /* 2. D-pad navigation between cards and forecast rows */
     model.selected_index = 3;
@@ -3950,6 +3968,29 @@ static void test_calendar_manager_surface(void)
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
 }
 
+static void test_calendar_update_tab(void)
+{
+    PtcUiModel model = {0};
+    model.view = PTC_UI_PARENT;
+    model.overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
+    model.calendar_manager_tab = 2;
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_tab_rect(2)), PTC_UI_HIT_CALENDAR_MANAGER_TAB, 2,
+              "calendar update has its own tab");
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(2)), PTC_UI_HIT_CALENDAR_MANAGER_NAV, 2,
+              "calendar update can be checked manually");
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_row_rect(0)), PTC_UI_HIT_NONE, 0,
+              "calendar update has no file-list hit targets");
+    model.update_busy = true;
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(2)), PTC_UI_HIT_NONE, 0,
+              "calendar update shares the transport lock");
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(4)), PTC_UI_HIT_CALENDAR_MANAGER_NAV, 4,
+              "calendar startup preference is independent of the transport");
+    model.update_busy = false;
+    model.calendar_check_unavailable = true;
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(2)), PTC_UI_HIT_NONE, 0,
+              "offline test profile disables the network action");
+}
+
 static void test_calendar_nearest_page(void)
 {
     PtcUiModel model;
@@ -3967,8 +4008,11 @@ static void test_calendar_nearest_page(void)
         "makeup workday selects its holiday arrangement row");
     check_int(distance, 0, "builtin makeup day counts as a current arrangement");
     ptc_day_index_from_date(2027, 1, 1, &model.day_index);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 0,
+        "new year opens the first page of the new calendar");
+    model.holiday_calendar_year = 2026;
     check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
-        "after coverage opens the closest final arrangement");
+        "explicit prior year retains its final arrangement page");
     model.calendar_builtin = false;
     memset(&data, 0, sizeof(data));
     data.year = 2028;
@@ -4200,16 +4244,12 @@ static void test_today_settings_links(void)
     }
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 11, "left from quota enters rule source badge");
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 0, "right from rule badge returns to quota card");
+    check_int(model.selected_index, 0, "quota does not focus the informational rule source badge");
     model.selected_index = 2;
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 8, "left from unlimited quota enters status column");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 11, "up from eye care status reaches rule source badge");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 8, "down from rule badge returns to eye care status");
+    check_int(model.selected_index, 8, "eye care stays focused above the status column");
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 9, "down traverses bedtime status");
     ptc_ui_move_parent_selection(&model, 0, 1);
@@ -4732,6 +4772,7 @@ int main(void)
     test_online_update_layout();
     test_dock_ui();
     test_dock_editor_preview();
+    test_calendar_update_tab();
     test_calendar_nearest_page();
     test_calendar_manager_surface();
     test_language_and_short_weekly_limits();

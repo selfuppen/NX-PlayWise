@@ -9,6 +9,7 @@
 #include "../common/rules/holiday_calendar.h"
 
 #define PTC_CALENDAR_MAX_INDEX_ENTRIES 64u
+#define PTC_CALENDAR_PUBLISHED_MAX_YEAR 2198u
 #define PTC_CALENDAR_INDEX_TEXT_SIZE 16384u
 
 typedef struct {
@@ -32,6 +33,11 @@ typedef struct {
     PtcImportedCalendarYear years[3];
 } PtcCalendarRuntime;
 
+bool ptc_calendar_published_load(PtcStorage *storage, const char *root, uint16_t year,
+                                 PtcImportedCalendarYear *out);
+struct cJSON;
+/* A nonnegative result counts imported years. -1 denotes feed format, -2 storage or allocation. */
+int ptc_calendar_import_published(PtcStorage *storage, const char *root, const struct cJSON *feed);
 bool ptc_calendar_file_name_valid(const char *name);
 void ptc_calendar_sha256_hex(const char *text, size_t length, char out[65]);
 bool ptc_calendar_index_load(PtcStorage *storage, const char *root, bool active,

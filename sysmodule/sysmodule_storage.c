@@ -851,8 +851,7 @@ bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
     ptc_rules_default(rules);
     if (!ptc_calendar_runtime_load(sysmodule->storage, sysmodule->app_root,
             calendar_now.day_index, &sysmodule->calendar_runtime)) return false;
-    rules->calendar = sysmodule->calendar_runtime.builtin
-        ? NULL : &sysmodule->calendar_runtime.set;
+    rules->calendar = &sysmodule->calendar_runtime.set;
     join_path(path, sizeof(path), sysmodule->app_root, "rules.json");
     if (!read_cached_text(sysmodule, "rules.json", sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text),
             &sysmodule->rules_meta, &sysmodule->rules_cache_valid, text, sizeof(text), true)) return false;

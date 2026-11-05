@@ -57,9 +57,16 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
-        for (i = 0; i < 2; ++i)
+        for (i = 0; i < 3; ++i)
             if (ptc_ui_rect_contains(ptc_ui_calendar_manager_tab_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_TAB, i);
+        if (model->calendar_manager_tab == 2) {
+            for (i = 0; i < 6; ++i)
+                if (ptc_ui_calendar_update_action_enabled(model, i) &&
+                    ptc_ui_rect_contains(ptc_ui_calendar_manager_nav_rect(i), x, y))
+                    return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_NAV, i);
+            return make_hit(PTC_UI_HIT_NONE, 0);
+        }
         for (i = 0; i < 6; ++i)
             if (ptc_ui_rect_contains(ptc_ui_calendar_manager_row_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_ROW, i);
@@ -484,12 +491,14 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         bool notice_visible = notice.visible &&
             (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model));
         if (notice_visible &&
+            !(model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_SUPPORT &&
+              model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) &&
             !(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
             if (notice.has_details &&
-                ptc_ui_rect_contains(ptc_ui_notice_details_rect(), x, y)) {
+                ptc_ui_rect_contains(ptc_ui_notice_details_rect_for_model(model), x, y)) {
                 return make_hit(PTC_UI_HIT_NOTICE_DETAILS, 0);
             }
-            if (ptc_ui_rect_contains(ptc_ui_notice_rect(), x, y)) {
+            if (ptc_ui_rect_contains(ptc_ui_notice_rect_for_model(model), x, y)) {
                 return make_hit(PTC_UI_HIT_NONE, 0);
             }
         }
@@ -502,10 +511,6 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
     if (model->view == PTC_UI_CHILD &&
         ptc_ui_rect_contains(ptc_ui_home_details_rect(false), x, y)) {
         return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
-    }
-    if (model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY &&
-        ptc_ui_rect_contains(ptc_ui_home_rules_rect(), x, y)) {
-        return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_RULES, 0);
     }
     if (model->view == PTC_UI_CHILD) {
         if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
@@ -578,16 +583,18 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             if (ptc_ui_rect_contains(ptc_ui_today_status_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_PARENT_CARD, i);
     }
-    if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
+    bool plan_subpage = !ptc_ui_parent_footer_shortcuts(model);
+    bool compact_left = plan_subpage || ptc_ui_parent_footer_feedback(model);
+    if (!plan_subpage) {
         for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_PARENT_TAB, i);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
+        if (!compact_left && ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
             return make_hit(PTC_UI_HIT_PARENT_PREV_PAGE, 0);
         }
-        if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(1), x, y)) {
+        if (!compact_left && ptc_ui_rect_contains(ptc_ui_parent_footer_rect(1), x, y)) {
             return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
         }
     }
@@ -595,8 +602,6 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
-    bool plan_subpage = model->parent_page == PTC_UI_PARENT_PLAN &&
-        model->plan_page != PTC_UI_PLAN_PAGE_ROOT;
     /* The dock page keeps save/waive in the footer action row, so its hit test
        has to run before the generic plan footer buttons. */
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
@@ -604,32 +609,23 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
     }
-    if (ptc_ui_rect_contains(plan_subpage ? ptc_ui_parent_subpage_footer_rect(0) :
+    if (ptc_ui_rect_contains(compact_left ? ptc_ui_parent_subpage_footer_rect(0) :
                              ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
-    if (ptc_ui_rect_contains(plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) :
+    if (ptc_ui_rect_contains(compact_left ? ptc_ui_parent_subpage_footer_rect(1) :
                              ptc_ui_parent_footer_rect(3), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
     }
-    if (ptc_ui_parent_status_alert_visible(model) &&
-        !ptc_ui_operation_feedback_visible(model) &&
-        ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
+    if (ptc_ui_parent_footer_status_visible(model) &&
+        ptc_ui_rect_contains(ptc_ui_parent_status_footer_rect(model), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }
-    if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
-        PtcUiNoticeProjection notice;
-        ptc_ui_project_notice(model, &notice);
-        bool notice_visible = notice.visible &&
-            (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model));
-        if (!notice_visible && !ptc_ui_parent_status_alert_visible(model)) {
-            if (ptc_ui_rect_contains(ptc_ui_parent_footer_details_rect(), x, y)) {
-                return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
-            }
-            if (ptc_ui_rect_contains(ptc_ui_parent_footer_rules_rect(), x, y)) {
-                return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_RULES, 0);
-            }
-        }
+    if (!plan_subpage && !model->waiting) {
+        if (ptc_ui_rect_contains(ptc_ui_parent_footer_details_rect(), x, y))
+            return make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
+        if (ptc_ui_rect_contains(ptc_ui_parent_footer_rules_rect(), x, y))
+            return make_hit(PTC_UI_HIT_HOME_RULES, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
         for (i = 0; i <= 5; ++i)
@@ -732,9 +728,6 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT) {
-        if (ptc_ui_rect_contains(ptc_ui_plan_today_rules_rect(), x, y)) {
-            return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_RULES, 0);
-        }
         if (model->forecast_available) {
             for (i = 0; i < 7; ++i) {
                 if (ptc_ui_rect_contains(ptc_ui_forecast_day_row_rect(i), x, y)) {

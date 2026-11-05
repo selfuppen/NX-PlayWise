@@ -59,10 +59,11 @@ typedef struct {
     uint16_t workday_count;
 } PtcImportedCalendarYear;
 
-/* A null set selects the immutable built-in China 2026 calendar. */
+/* A null set selects the compiled mainland China calendar. */
 typedef struct {
     PtcImportedCalendarYear *years[3];
     size_t count;
+    bool include_builtin;
 } PtcHolidayCalendarSet;
 
 bool ptc_calendar_region_id_valid(const char *id);
@@ -73,6 +74,7 @@ PtcCalendarDayType ptc_holiday_calendar_classify_in(const PtcHolidayCalendarSet 
 
 PtcCalendarDayType ptc_holiday_calendar_classify(uint16_t day_index, bool *covered);
 const PtcHolidayCalendarInfo *ptc_holiday_calendar_info(void);
+const PtcHolidayCalendarInfo *ptc_holiday_calendar_info_for_year(uint16_t year);
 size_t ptc_holiday_calendar_arrangement_count(uint16_t year);
 const PtcHolidayArrangement *ptc_holiday_calendar_arrangement(uint16_t year, size_t index);
 bool ptc_holiday_calendar_find(PtcCalendarDayType type, uint16_t from_day_index,

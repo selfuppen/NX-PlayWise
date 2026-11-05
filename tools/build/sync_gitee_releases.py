@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from datetime import date, timedelta
 from functools import cmp_to_key
 import hashlib
 import json
@@ -252,7 +253,51 @@ def public_url(provider: str, tag: str, name: str) -> str:
     return f"https://{provider}.com/{repo}/releases/download/{urllib.parse.quote(tag, safe='+')}/{urllib.parse.quote(name, safe='+')}"
 
 
-def sync(api: Api, git: Git, directory: Path, *, tag: str = "") -> dict:
+def published_calendars(directory: Path) -> list[dict]:
+    def parse_date(value: str, year: int) -> date:
+        parsed = date.fromisoformat(value)
+        if parsed.year != year or parsed.isoformat() != value:
+            raise ValueError("date outside calendar year")
+        return parsed
+
+    def valid_text(value: str, limit: int) -> bool:
+        return isinstance(value, str) and 0 < len(value.encode("utf-8")) < limit and "\0" not in value
+
+    calendars = []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            year = value["year"]
+            groups, workdays = value["holidays"], value["workdays"]
+            if (type(year) is not int or not 2020 <= year <= 2198 or path.name != f"CN-{year}.json"
+                    or type(value["format_version"]) is not int or value["format_version"] != 1
+                    or value["region_id"] != "CN" or not valid_text(value["region_name"], 65)
+                    or not valid_text(value["source_note"], 129) or not isinstance(groups, list)
+                    or not 1 <= len(groups) <= 64 or not isinstance(workdays, list)
+                    or len(json_bytes(value)) > 16384):
+                raise ValueError("invalid calendar fields")
+            used: set[date] = set()
+            for group in groups:
+                start = parse_date(group["from"], year)
+                end = parse_date(group["to"], year)
+                if start > end or not valid_text(group["name"], 65):
+                    raise ValueError("invalid holiday range")
+                days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
+                if used & days:
+                    raise ValueError("overlapping holiday ranges")
+                used.update(days)
+            for value_date in workdays:
+                day = parse_date(value_date, year)
+                if day in used:
+                    raise ValueError("overlapping or duplicate workday")
+                used.add(day)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SyncError(f"Invalid published holiday calendar: {path.name}") from exc
+        calendars.append(value)
+    return calendars
+
+
+def sync(api: Api, git: Git, directory: Path, *, tag: str = "", calendars: list[dict] | None = None) -> dict:
     state = git.load()
     published = candidates(api.pages("github", f"/repos/{GITHUB_REPO}/releases"))
     by_tag = {r["tag_name"]: r for r in published}
@@ -328,6 +373,8 @@ def sync(api: Api, git: Git, directory: Path, *, tag: str = "") -> dict:
             owned["assets"][name] = {**identity, **digest, "gitee_id": attached["id"]}
         state["releases"][release_tag] = owned
     feed: dict = {"schema_version": 1, "releases": []}
+    if calendars:
+        feed["holiday_calendars"] = calendars
     for release in latest.values():
         version = release_version(release)
         name = f"playwise-{version}.zip"
@@ -353,11 +400,12 @@ def main() -> int:
     if not github_token or not gitee_token:
         parser.error("GH_TOKEN and GITEE_TOKEN must be set")
     try:
+        calendars = published_calendars(Path(__file__).resolve().parents[2] / "data" / "holiday-calendars")
         with tempfile.TemporaryDirectory(prefix="playwise-release-mirror-") as temp:
             root = Path(temp)
             repo = root / "git"
             repo.mkdir()
-            feed = sync(Api(github_token, gitee_token), Git(repo, github_token, gitee_token), root, tag=args.tag)
+            feed = sync(Api(github_token, gitee_token), Git(repo, github_token, gitee_token), root, tag=args.tag, calendars=calendars)
             print(f"Verified and published {len(feed['releases'])} update channels")
     except (SyncError, OSError, KeyError, TypeError, ValueError) as exc:
         # Untrusted API responses and exceptions may contain credential echoes.

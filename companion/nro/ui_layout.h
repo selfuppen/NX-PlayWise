@@ -159,6 +159,16 @@ PtcUiRect ptc_ui_setup_theme_rect(int index);
 PtcUiRect ptc_ui_setup_eye_care_rect(void);
 PtcUiRect ptc_ui_setup_bedtime_rect(void);
 PtcUiRect ptc_ui_notice_rect(void);
+PtcUiRect ptc_ui_notice_rect_for_model(const PtcUiModel *model);
+PtcUiRect ptc_ui_notice_details_rect_for_model(const PtcUiModel *model);
+PtcUiRect ptc_ui_parent_status_footer_rect(const PtcUiModel *model);
+bool ptc_ui_parent_footer_shortcuts(const PtcUiModel *model);
+bool ptc_ui_parent_footer_feedback(const PtcUiModel *model);
+bool ptc_ui_parent_footer_status_visible(const PtcUiModel *model);
+enum {
+    PTC_UI_PARENT_FOOTER_REFRESH, PTC_UI_PARENT_FOOTER_STATUS,
+    PTC_UI_PARENT_FOOTER_DETAILS, PTC_UI_PARENT_FOOTER_RULES
+};
 PtcUiRect ptc_ui_notice_details_rect(void);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
@@ -197,7 +207,6 @@ PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index);
 PtcUiRect ptc_ui_home_details_data_rect(const PtcUiModel *model, int index);
 PtcUiRect ptc_ui_home_rules_rect(void);
 PtcUiRect ptc_ui_today_quota_card_rect(void);
-PtcUiRect ptc_ui_plan_today_rules_rect(void);
 PtcUiRect ptc_ui_day_decision_refresh_rect(void);
 PtcUiRect ptc_ui_day_decision_prev_rect(void);
 PtcUiRect ptc_ui_day_decision_next_rect(void);

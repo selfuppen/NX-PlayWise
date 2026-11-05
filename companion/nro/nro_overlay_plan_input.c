@@ -342,9 +342,11 @@ static void handle_calendar_manager_overlay_input(UiState *ui, u64 down)
     if (down & HidNpadButton_B) calendar_manager_nav(ui, 5);
     else if (down & HidNpadButton_X) calendar_manager_nav(ui, 3);
     else if (down & HidNpadButton_Y) calendar_manager_nav(ui, 4);
-    else if (down & HidNpadButton_L) calendar_manager_select_tab(ui, 0);
-    else if (down & HidNpadButton_R) calendar_manager_select_tab(ui, 1);
-    else if (down & (HidNpadButton_Left | HidNpadButton_ZL)) calendar_manager_nav(ui, 0);
+    else if (down & HidNpadButton_L) calendar_manager_select_tab(ui, ui->model.calendar_manager_tab - 1);
+    else if (down & HidNpadButton_R) calendar_manager_select_tab(ui, ui->model.calendar_manager_tab + 1);
+    else if (ui->model.calendar_manager_tab == 2) {
+        if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
+    } else if (down & (HidNpadButton_Left | HidNpadButton_ZL)) calendar_manager_nav(ui, 0);
     else if (down & (HidNpadButton_Right | HidNpadButton_ZR)) calendar_manager_nav(ui, 1);
     else if ((down & HidNpadButton_Up) && ui->model.calendar_manager_selected > 0) {
         --ui->model.calendar_manager_selected;

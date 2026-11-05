@@ -268,6 +268,64 @@ done:
     return ok;
 }
 
+static bool published_path(char *out, size_t size, const char *root, uint16_t year)
+{
+    if (year <= ptc_holiday_calendar_info()->last_year || year > PTC_CALENDAR_PUBLISHED_MAX_YEAR)
+        return false;
+    int length = snprintf(out, size, "%s/calendars/published/CN-%u.json", root, (unsigned)year);
+    return length > 0 && (size_t)length < size;
+}
+
+static bool parse_published(const char *text, PtcImportedCalendarYear *out)
+{
+    return ptc_holiday_calendar_parse_import(text, strlen(text), out) &&
+        strcmp(out->region_id, "CN") == 0 && out->group_count > 0 && out->source_note[0];
+}
+
+bool ptc_calendar_published_load(PtcStorage *storage, const char *root, uint16_t year,
+                                 PtcImportedCalendarYear *out)
+{
+    char path[320];
+    if (!published_path(path, sizeof(path), root, year) ||
+        !storage->vtable->exists(storage, path)) return false;
+    char *text = malloc(PTC_CALENDAR_IMPORT_MAX_BYTES + 1u);
+    bool ok = text && storage->vtable->read_text(storage, path, text, PTC_CALENDAR_IMPORT_MAX_BYTES + 1u) &&
+        parse_published(text, out) && out->year == year;
+    free(text);
+    return ok;
+}
+
+int ptc_calendar_import_published(PtcStorage *storage, const char *root, const cJSON *feed)
+{
+    const cJSON *years = cJSON_GetObjectItemCaseSensitive(feed, "holiday_calendars");
+    const cJSON *schema = cJSON_GetObjectItemCaseSensitive(feed, "schema_version");
+    if (!cJSON_IsNumber(schema) || schema->valuedouble != 1 ||
+        (years && !cJSON_IsArray(years))) {
+        return -1;
+    }
+    if (!years || !years->child) return 0;
+    PtcImportedCalendarYear *calendar = malloc(sizeof(*calendar));
+    int imported = 0;
+    bool failed = !calendar;
+    for (const cJSON *item = years->child; calendar && item; item = item->next) {
+        char path[320];
+        char *text = cJSON_PrintUnformatted(item);
+        if (text && parse_published(text, calendar) &&
+            published_path(path, sizeof(path), root, calendar->year)) {
+            /* Never replace an installed year, including on mirror fallback. */
+            if (!storage->vtable->exists(storage, path)) {
+                if (storage->vtable->write_text_atomic(storage, path, text)) ++imported;
+                else failed = true;
+            }
+        } else if (!text) {
+            failed = true;
+        }
+        free(text);
+    }
+    free(calendar);
+    return failed ? -2 : imported;
+}
+
 bool ptc_calendar_runtime_from_selection(PtcStorage *storage, const char *root,
                                          const PtcCalendarIndex *selected,
                                          uint16_t day_index, PtcCalendarRuntime *out)
@@ -284,6 +342,12 @@ bool ptc_calendar_runtime_from_selection(PtcStorage *storage, const char *root,
     snprintf(out->option_id, sizeof(out->option_id), "%s", selected->option_id);
     if (strcmp(selected->option_id, "builtin-cn") == 0) {
         out->builtin = true;
+        out->set.include_builtin = true;
+        for (uint16_t nearby = (uint16_t)(year - 1u); nearby <= year + 1u; ++nearby) {
+            PtcImportedCalendarYear *calendar = &out->years[out->set.count];
+            if (ptc_calendar_published_load(storage, root, nearby, calendar))
+                out->set.years[out->set.count++] = calendar;
+        }
         snprintf(out->region_name, sizeof(out->region_name), "中国大陆（内置）");
         ok = true;
         goto done;
