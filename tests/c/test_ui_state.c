@@ -4757,6 +4757,17 @@ static void test_online_update_layout(void)
         model.update_status = state;
         check_true(ptc_ui_update_badge_visible(&model) == (state == 3), "offline, failed, excluded and equal versions never advertise an update");
     }
+    model.update_status = 3;
+    strcpy(model.update_version, "2.1.0");
+    check_true(strcmp(ptc_ui_settings_status_label(&model), ptc_ui_text(PTC_UI_T_UPDATE_NEW_VERSION_BADGE)) == 0,
+        "available update provides visible badge for support tab");
+    model.disable_flag_present = true;
+    check_true(strcmp(ptc_ui_settings_status_label(&model), ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED)) == 0,
+        "system fault takes precedence over software update badge");
+    model.disable_flag_present = false;
+    model.update_status = 2;
+    check_true(ptc_ui_settings_status_label(&model) == NULL,
+        "current software status clears support badge");
 }
 
 int main(void)

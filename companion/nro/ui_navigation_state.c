@@ -86,6 +86,9 @@ const char *ptc_ui_settings_status_label(const PtcUiModel *model)
         return ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED);
     }
     if (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0) return ptc_ui_text(PTC_UI_T_TO_BE_COMPLETED);
+    if (model->update_status == PTC_UPDATE_AVAILABLE && model->update_version[0]) {
+        return ptc_ui_text(PTC_UI_T_UPDATE_NEW_VERSION_BADGE);
+    }
     return NULL;
 }
 

@@ -375,7 +375,8 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
             int width = measure_text(status, 11) + 16;
             if (width > tab.width - 16) width = tab.width - 16;
             UiRect badge = {tab.x + (tab.width - width) / 2, tab.y + tab.height - 18, width, 16};
-            uint32_t color = strcmp(status, ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED)) == 0 ? UI_DANGER : UI_WARNING;
+            uint32_t color = strcmp(status, ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED)) == 0 ? UI_DANGER :
+                (strcmp(status, ptc_ui_text(PTC_UI_T_UPDATE_NEW_VERSION_BADGE)) == 0 ? UI_ACCENT : UI_WARNING);
             draw_text_center(pixels, stride, title, LABELS[index], 16, active ? UI_ON_ACCENT : UI_INK);
             fill_round_rect(pixels, stride, badge, 5, color);
             draw_text_center(pixels, stride, badge, status, 11, UI_ON_ACCENT);
@@ -828,6 +829,18 @@ static UiRect parent_action_badge(uint32_t *pixels, uint32_t stride, const PtcUi
         fill_round_rect(pixels, stride, badge, 6, au_bg);
         draw_rect_outline(pixels, stride, badge, 6, 1, au_bd);
         draw_text_center(pixels, stride, badge, state_label, 12, state_color);
+    } else if (model->parent_page == PTC_UI_PARENT_SUPPORT && index == 5 &&
+               model->update_status == PTC_UPDATE_AVAILABLE && model->update_version[0]) {
+        const char *state_label = ptc_ui_text(PTC_UI_T_UPDATE_NEW_VERSION_BADGE);
+        uint32_t state_color = UI_ACCENT;
+        int st_width = measure_text(state_label, 12) + 16;
+        if (st_width < 72) st_width = 72;
+        UiRect badge = {card.x + card.width - st_width - 14, card.y + 8, st_width, 24};
+        if (!paint) return badge;
+        fill_round_rect(pixels, stride, badge, 6, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, badge, 6, 1, UI_ACCENT);
+        draw_text_center(pixels, stride, badge, state_label, 12, state_color);
+        return badge;
     }
     return (UiRect){0};
 }
@@ -852,6 +865,16 @@ static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const Ptc
     if (model->parent_page == PTC_UI_PARENT_SUPPORT && model->disable_flag_present && index == 0) {
         action = ptc_ui_runtime_fingerprint_reconfirmation_needed(model)
             ? &RECONFIRM_ENVIRONMENT_ACTION : &RESUME_CONTROL_ACTION;
+    }
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT && index == 5 &&
+        model->update_status == PTC_UPDATE_AVAILABLE && model->update_version[0]) {
+        static char update_subtitle[96];
+        dynamic_action = *action;
+        snprintf(update_subtitle, sizeof(update_subtitle), ptc_ui_text(PTC_UI_T_UPDATE_AVAILABLE_TARGET), model->update_version);
+        dynamic_action.subtitle = update_subtitle;
+        dynamic_action.accent = UI_ACCENT;
+        action = &dynamic_action;
+        astate = PTC_UI_ACTION_RECOMMENDED;
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 4) {
         const char *detail = ptc_ui_text(PTC_UI_T_STATUS_IS_UNKNOWN_PLEASE_CHECK_AGAIN);

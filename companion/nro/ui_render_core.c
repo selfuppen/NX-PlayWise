@@ -88,7 +88,8 @@ void draw_update_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     if (!ptc_ui_update_badge_visible(model)) return;
     UiRect update = to_uirect(ptc_ui_update_badge_rect(model));
     char label[64];
-    fill_round_rect(pixels, stride, update, 6, UI_SURFACE);
+    fill_round_rect(pixels, stride, update, 6, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, update, 6, 1, UI_ACCENT);
     fit_text(label, sizeof(label), ptc_ui_text(PTC_UI_T_UPDATE_BADGE), 12, update.width - 32);
     int label_x = update.x + update.width - 8 - measure_text(label, 12);
     int icon_x = label_x - 13;
@@ -96,7 +97,7 @@ void draw_update_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_line(pixels, stride, icon_x - 3, update.y + 8, icon_x, update.y + 11, 1, UI_ACCENT);
     draw_line(pixels, stride, icon_x, update.y + 11, icon_x + 3, update.y + 8, 1, UI_ACCENT);
     draw_line(pixels, stride, icon_x - 4, update.y + 14, icon_x + 4, update.y + 14, 1, UI_ACCENT);
-    draw_text(pixels, stride, label_x, update.y + 14, label, 12, UI_MUTED);
+    draw_text(pixels, stride, label_x, update.y + 14, label, 12, UI_ACCENT);
 }
 
 uint32_t time_projection_color(PtcUiTimeState state)
