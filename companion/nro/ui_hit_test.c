@@ -665,9 +665,6 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
                 return make_hit(PTC_UI_HIT_HOLIDAY_MINUTES, i);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_holiday_calendar_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_HOLIDAY_CALENDAR, 0);
-        }
         if (ptc_ui_rect_contains(ptc_ui_holiday_manage_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CALENDAR_MANAGER, 0);
         }

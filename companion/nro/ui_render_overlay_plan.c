@@ -786,8 +786,129 @@ static void draw_holiday_calendar_overlay(uint32_t *pixels, uint32_t stride, con
     }
 }
 
-static void draw_calendar_update_tab(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+static void draw_calendar_schedule_tab(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
+    uint16_t year = model->holiday_calendar_year;
+    if (!year) year = ptc_holiday_calendar_info()->first_year;
+    const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info_for_year(year);
+    size_t count = ptc_holiday_calendar_arrangement_count(year);
+    const int per_page = 4;
+    int pages = (int)((count + per_page - 1) / per_page);
+    int page = model->holiday_calendar_page;
+    char line[192];
+    uint16_t cur_year = 0;
+    uint8_t cur_month = 0, cur_day = 0;
+    bool has_date = model->status_loaded && ptc_date_from_day_index(model->day_index, &cur_year, &cur_month, &cur_day);
+
+    UiRect top_bar = {110, 166, 1060, 36};
+    const char *reg_name = model->calendar_region_name[0] ? model->calendar_region_name :
+        (model->calendar_builtin ? ptc_ui_text(PTC_UI_T_CALENDAR_BUILTIN_CHINA) : ptc_ui_text(PTC_UI_T_CALENDAR_INVALID_FILE));
+    char region_hdr[128];
+    snprintf(region_hdr, sizeof(region_hdr), ptc_ui_text(PTC_UI_T_CALENDAR_CURRENT_ACTIVE_PREFIX), reg_name, (unsigned int)year);
+    draw_text_bold(pixels, stride, top_bar.x, top_bar.y + 24, region_hdr, 19, UI_INK);
+
+    draw_text(pixels, stride, top_bar.x + 480, top_bar.y + 24,
+              ptc_ui_text(PTC_UI_T_CALENDAR_YEAR_NAV_HINT), 14, UI_MUTED);
+
+    if (model->holiday_calendar_data) {
+        const PtcImportedCalendarYear *imported = model->holiday_calendar_data;
+        size_t total = imported->group_count + imported->workday_count;
+        uint16_t first = 0;
+        pages = total ? (int)((total + 3u) / 4u) : 1;
+        if (page < 0 || page >= pages) page = 0;
+        (void)ptc_day_index_from_date(imported->year, 1, 1, &first);
+        for (int row = 0; row < 4; ++row) {
+            size_t index = (size_t)(page * 4 + row);
+            UiRect card = {110, 208 + row * 88, 1060, 76};
+            const char *name;
+            if (index >= total) break;
+            if (index < imported->group_count) {
+                const PtcCalendarHolidayGroup *group = &imported->groups[index];
+                uint16_t y;
+                uint8_t sm = 0, sd = 0, em = 0, ed = 0;
+                (void)ptc_date_from_day_index(group->first_day_index, &y, &sm, &sd);
+                (void)ptc_date_from_day_index(group->last_day_index, &y, &em, &ed);
+                name = group->name;
+                snprintf(line, sizeof(line), "%04u-%02u-%02u - %04u-%02u-%02u",
+                    imported->year, sm, sd, imported->year, em, ed);
+            } else {
+                size_t ordinal = index - imported->group_count, seen = 0;
+                uint16_t y = 0;
+                uint8_t m = 0, d = 0;
+                name = ptc_ui_text(PTC_UI_T_MAKEUP_WORKDAY);
+                for (uint16_t offset = 0; offset < 366; ++offset) {
+                    if (imported->days[offset] != PTC_CALENDAR_DAY_MAKEUP_WORKDAY) continue;
+                    if (seen++ == ordinal) {
+                        (void)ptc_date_from_day_index((uint16_t)(first + offset), &y, &m, &d);
+                        break;
+                    }
+                }
+                snprintf(line, sizeof(line), "%04u-%02u-%02u", y, m, d);
+            }
+            fill_round_rect(pixels, stride, card, 14, UI_RAISED);
+            draw_rect_outline(pixels, stride, card, 14, 1, UI_BORDER);
+            draw_text_bold(pixels, stride, card.x + 22, card.y + 30, name, 21, UI_INK);
+            draw_text(pixels, stride, card.x + 22, card.y + 57, line, 16, UI_MUTED);
+        }
+        if (!total)
+            draw_text_center(pixels, stride, (UiRect){110, 280, 1060, 60},
+                ptc_ui_text(PTC_UI_T_CALENDAR_EMPTY), 19, UI_MUTED);
+    } else if (info) {
+        if (page < 0 || page >= pages) page = 0;
+        for (int row = 0; row < per_page; ++row) {
+            size_t index = (size_t)(page * per_page + row);
+            const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(year, index);
+            UiRect card = {110, 208 + row * 88, 1060, 76};
+            if (!entry) break;
+            bool is_past = false, is_today = false;
+            if (has_date) {
+                holiday_is_past_or_today(entry, cur_year, cur_month, cur_day, &is_past, &is_today);
+            }
+            uint32_t bg_color = is_today ? UI_ACCENT_SOFT : (is_past ? UI_SURFACE : UI_RAISED);
+            uint32_t border_color = is_today ? UI_ACCENT : UI_BORDER;
+            uint32_t title_color = is_today ? UI_ACCENT : (is_past ? UI_MUTED : UI_INK);
+            uint32_t line_color = is_today ? UI_INK : (is_past ? UI_DISABLED : UI_MUTED);
+            fill_round_rect(pixels, stride, card, 14, bg_color);
+            draw_rect_outline(pixels, stride, card, 14, is_today ? 2 : 1, border_color);
+            draw_text_bold(pixels, stride, card.x + 22, card.y + 30, entry->display_name, 21, title_color);
+            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_HOLIDAY_U_U_U_U_MAKEUP_WORKDAY),
+                     entry->start_month, entry->start_day, entry->end_month, entry->end_day, entry->makeup_workdays);
+            draw_text(pixels, stride, card.x + 180, card.y + 30, line, 18, line_color);
+            UiRect badge = {card.x + card.width - 110, card.y + 24, 88, 28};
+            if (is_today) {
+                fill_round_rect(pixels, stride, badge, 6, UI_ACCENT);
+                draw_text_center(pixels, stride, badge, ptc_ui_text(PTC_UI_T_IN_PROGRESS), 14, UI_ON_ACCENT);
+            } else if (is_past) {
+                fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+                draw_text_center(pixels, stride, badge, ptc_ui_text(PTC_UI_T_ENDED), 14, UI_MUTED);
+            }
+        }
+    } else {
+        draw_text_center(pixels, stride, (UiRect){110, 280, 1060, 60},
+            ptc_ui_text(PTC_UI_T_CALENDAR_INVALID_FILE), 19, UI_WARNING);
+    }
+
+    char page_str[32];
+    snprintf(page_str, sizeof(page_str), "%d / %d", page + 1, pages > 0 ? pages : 1);
+    draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(0),
+        ptc_ui_text(PTC_UI_T_L_PREVIOUS_PAGE), UI_RAISED, UI_INK, false, page == 0 && !model->holiday_calendar_has_previous_year);
+    draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(1),
+        ptc_ui_text(PTC_UI_T_R_NEXT_PAGE), UI_RAISED, UI_INK, false, page + 1 >= pages && !model->holiday_calendar_has_next_year);
+    draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(5),
+        ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, false, false);
+}
+
+static void draw_calendar_sources_tab(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    bool focus_left = (model->calendar_sources_subpanel == 0);
+    bool focus_right = (model->calendar_sources_subpanel == 1);
+
+    UiRect left_card = {110, 176, 490, 405};
+    fill_round_rect(pixels, stride, left_card, 14, focus_left ? UI_ACCENT_SOFT : UI_RAISED);
+    draw_rect_outline(pixels, stride, left_card, 14, focus_left ? 2 : 1, focus_left ? UI_ACCENT : UI_BORDER);
+    draw_text_bold(pixels, stride, left_card.x + 20, left_card.y + 32,
+                   ptc_ui_text(PTC_UI_T_CALENDAR_ONLINE_UPDATE), 18, UI_INK);
+
     PtcUiTextId status = PTC_UI_T_CALENDAR_UPDATE_READY;
     uint32_t color = UI_MUTED;
     if (model->calendar_check_unavailable) status = PTC_UI_T_CALENDAR_UPDATE_UNAVAILABLE;
@@ -807,24 +928,72 @@ static void draw_calendar_update_tab(uint32_t *pixels, uint32_t stride, const Pt
         status = PTC_UI_T_UPDATE_BUSY;
         color = UI_MUTED;
     }
-    UiRect card = {110, 176, 1060, 388};
-    fill_round_rect(pixels, stride, card, 16, UI_RAISED);
-    draw_rect_outline(pixels, stride, card, 16, 1, UI_BORDER);
-    draw_wrapped_text(pixels, stride, card.x + 32, card.y + 52,
-        ptc_ui_text(status), 21, card.width - 64, 27, 2, color);
-    draw_wrapped_text(pixels, stride, card.x + 32, card.y + 121,
-        ptc_ui_text(PTC_UI_T_CALENDAR_UPDATE_HELP), 17, card.width - 64, 25, 3, UI_MUTED);
-    const int actions[] = {2, 4, 5};
-    const PtcUiTextId captions[] = {PTC_UI_T_CALENDAR_UPDATE_CHECK,
-        model->calendar_check_on_startup ? PTC_UI_T_CALENDAR_STARTUP_ON : PTC_UI_T_CALENDAR_STARTUP_OFF,
-        PTC_UI_T_B_BACK};
-    for (size_t i = 0; i < sizeof(actions) / sizeof(actions[0]); ++i) {
-        bool primary = actions[i] == 2;
-        draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(actions[i]),
-            ptc_ui_text(captions[i]), primary ? UI_ACCENT : UI_RAISED,
-            primary ? UI_ON_ACCENT : UI_INK, false,
-            !ptc_ui_calendar_update_action_enabled(model, actions[i]));
+
+    UiRect status_box = {left_card.x + 18, left_card.y + 54, left_card.width - 36, 68};
+    fill_round_rect(pixels, stride, status_box, 10, UI_SURFACE);
+    draw_rect_outline(pixels, stride, status_box, 10, 1, UI_BORDER);
+    draw_wrapped_text(pixels, stride, status_box.x + 14, status_box.y + 26,
+                      ptc_ui_text(status), 16, status_box.width - 28, 22, 2, color);
+
+    draw_wrapped_text(pixels, stride, left_card.x + 20, left_card.y + 146,
+                      ptc_ui_text(PTC_UI_T_CALENDAR_UPDATE_HELP), 14, left_card.width - 40, 20, 3, UI_MUTED);
+
+    PtcUiRect btn_check = {left_card.x + 20, left_card.y + 230, left_card.width - 40, 46};
+    draw_candidate_button(pixels, stride, btn_check,
+        ptc_ui_text(PTC_UI_T_CALENDAR_UPDATE_CHECK), UI_ACCENT, UI_ON_ACCENT, focus_left, false);
+
+    PtcUiRect btn_startup = {left_card.x + 20, left_card.y + 290, left_card.width - 40, 46};
+    draw_candidate_button(pixels, stride, btn_startup,
+        model->calendar_check_on_startup ? ptc_ui_text(PTC_UI_T_CALENDAR_STARTUP_ON) : ptc_ui_text(PTC_UI_T_CALENDAR_STARTUP_OFF),
+        UI_SURFACE, UI_INK, false, false);
+
+    UiRect right_card = {620, 176, 550, 405};
+    fill_round_rect(pixels, stride, right_card, 14, focus_right ? UI_ACCENT_SOFT : UI_RAISED);
+    draw_rect_outline(pixels, stride, right_card, 14, focus_right ? 2 : 1, focus_right ? UI_ACCENT : UI_BORDER);
+    draw_text_bold(pixels, stride, right_card.x + 20, right_card.y + 32,
+                   ptc_ui_text(PTC_UI_T_CALENDAR_LOCAL_IMPORT), 18, UI_INK);
+
+    UiRect path_chip = {right_card.x + 20, right_card.y + 48, right_card.width - 40, 28};
+    fill_round_rect(pixels, stride, path_chip, 6, UI_ACCENT_SOFT);
+    draw_text(pixels, stride, path_chip.x + 12, path_chip.y + 19,
+              "/switch/playwise/calendar-import/", 13, UI_ACCENT);
+
+    if (model->calendar_manager_count == 0) {
+        draw_wrapped_text(pixels, stride, right_card.x + 20, right_card.y + 98,
+                          ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_GUIDE), 14, right_card.width - 40, 20, 3, UI_INK);
+        draw_wrapped_text(pixels, stride, right_card.x + 20, right_card.y + 180,
+                          ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FIELDS), 13, right_card.width - 40, 19, 3, UI_MUTED);
+        draw_wrapped_text(pixels, stride, right_card.x + 20, right_card.y + 260,
+                          ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 12, right_card.width - 40, 17, 3, UI_ACCENT);
+    } else {
+        int show_count = model->calendar_manager_count < 4 ? model->calendar_manager_count : 4;
+        for (int i = 0; i < show_count; ++i) {
+            UiRect file_row = {right_card.x + 20, right_card.y + 86 + i * 50, right_card.width - 40, 44};
+            bool row_sel = (i == model->calendar_manager_selected % 4) && focus_right;
+            fill_round_rect(pixels, stride, file_row, 8, row_sel ? UI_ACCENT : UI_SURFACE);
+            draw_text(pixels, stride, file_row.x + 12, file_row.y + 27,
+                      model->calendar_manager_rows[i].title, 15, row_sel ? UI_ON_ACCENT : UI_INK);
+        }
+        if (model->calendar_preview_count > 0) {
+            draw_text(pixels, stride, right_card.x + 20, right_card.y + 300,
+                      model->calendar_preview_lines[0], 15, UI_INK);
+            if (model->calendar_preview_count > 1) {
+                draw_text(pixels, stride, right_card.x + 20, right_card.y + 324,
+                          model->calendar_preview_lines[1], 13, UI_ACCENT);
+            }
+        }
+        PtcUiRect btn_import = {right_card.x + 20, right_card.y + 346, right_card.width - 40, 46};
+        draw_candidate_button(pixels, stride, btn_import,
+            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_ACTION), UI_ACCENT, UI_ON_ACCENT, focus_right,
+            !model->calendar_pending_file[0]);
     }
+
+    draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(3),
+        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_ACTION), UI_RAISED, UI_INK, false, false);
+    draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(4),
+        ptc_ui_text(PTC_UI_T_Y_REFRESH), UI_RAISED, UI_INK, false, false);
+    draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(5),
+        ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, false, false);
 }
 
 static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -833,7 +1002,7 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
     char page_text[40];
     int pages = (model->calendar_manager_count + 5) / 6;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
-    const PtcUiTextId tabs[] = {PTC_UI_T_SAVED_REGIONS, PTC_UI_T_IMPORT_FILES, PTC_UI_T_CALENDAR_UPDATE_TAB};
+    const PtcUiTextId tabs[] = {PTC_UI_T_CALENDAR_TAB_SCHEDULE, PTC_UI_T_CALENDAR_TAB_REGIONS, PTC_UI_T_CALENDAR_TAB_SOURCES};
     for (int i = 0; i < 3; ++i) {
         draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_tab_rect(i),
             ptc_ui_text(tabs[i]),
@@ -842,12 +1011,18 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
             model->calendar_manager_tab == i, false);
     }
     draw_wrapped_text(pixels, stride, 740, 128,
-        ptc_ui_text(model->calendar_manager_tab == 2 ? PTC_UI_T_CALENDAR_SWITCH_TABS :
-            PTC_UI_T_CALENDAR_FORMAT_BRIEF), 13, 430, 16, 2, UI_MUTED);
-    if (model->calendar_manager_tab == 2) {
-        draw_calendar_update_tab(pixels, stride, model);
+        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_BRIEF), 13, 430, 16, 2, UI_MUTED);
+
+    if (model->calendar_manager_tab == 0) {
+        draw_calendar_schedule_tab(pixels, stride, model);
         return;
     }
+    if (model->calendar_manager_tab == 2) {
+        draw_calendar_sources_tab(pixels, stride, model);
+        return;
+    }
+
+    /* Tab 1: 地区日历库 */
     for (int i = 0; i < 6; ++i) {
         int index = model->calendar_manager_page * 6 + i;
         UiRect rect = to_uirect(ptc_ui_calendar_manager_row_rect(i));
@@ -866,100 +1041,39 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
     }
     if (model->calendar_manager_count == 0)
         draw_text(pixels, stride, 130, 230, ptc_ui_text(PTC_UI_T_CALENDAR_EMPTY), 19, UI_MUTED);
+
     fill_round_rect(pixels, stride, (UiRect){650, 176, 520, 405}, 12, UI_RAISED);
     draw_rect_outline(pixels, stride, (UiRect){650, 176, 520, 405}, 12, 1, UI_BORDER);
-    if (model->calendar_manager_tab == 1) {
-        bool has_preview = model->calendar_manager_count > 0 && model->calendar_preview_count > 0;
-        if (!has_preview) {
-            /* 状态一：导入向导与路径卡 (未选中文件或空列表) */
-            draw_wrapped_text(pixels, stride, 672, 202,
-                ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_GUIDE), 15, 476, 20, 2, UI_INK);
 
-            /* 步骤 1：SD卡目录卡片 */
-            UiRect step1 = {672, 250, 476, 68};
-            fill_round_rect(pixels, stride, step1, 8, UI_SURFACE);
-            draw_rect_outline(pixels, stride, step1, 8, 1, UI_BORDER);
-            draw_text(pixels, stride, step1.x + 14, step1.y + 24,
-                      ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FILE), 13, UI_INK);
-            UiRect chip = {step1.x + 14, step1.y + 36, step1.width - 28, 24};
-            fill_round_rect(pixels, stride, chip, 6, UI_ACCENT_SOFT);
-            draw_text(pixels, stride, chip.x + 10, chip.y + 17,
-                      "/switch/playwise/calendar-import/", 13, UI_ACCENT);
-
-            /* 步骤 2：格式说明卡片 */
-            UiRect step2 = {672, 328, 476, 56};
-            fill_round_rect(pixels, stride, step2, 8, UI_SURFACE);
-            draw_rect_outline(pixels, stride, step2, 8, 1, UI_BORDER);
-            draw_wrapped_text(pixels, stride, step2.x + 14, step2.y + 24,
-                              ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FIELDS), 13, step2.width - 28, 18, 2, UI_MUTED);
-
-            /* 步骤 3：导入与应用提醒 */
-            UiRect step3 = {672, 394, 476, 56};
-            fill_round_rect(pixels, stride, step3, 8, UI_SURFACE);
-            draw_rect_outline(pixels, stride, step3, 8, 1, UI_BORDER);
-            draw_wrapped_text(pixels, stride, step3.x + 14, step3.y + 24,
-                              ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM), 13, step3.width - 28, 18, 2, UI_WARNING);
-
-            /* 底部文档网址与按键说明 */
-            draw_wrapped_text(pixels, stride, 672, 476,
-                              ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 12, 476, 17, 3, UI_ACCENT);
-        } else {
-            /* 状态二：完整大字日历数据详情看板 (选中具体日历文件) */
-            UiRect top_header = {668, 192, 484, 68};
-            fill_round_rect(pixels, stride, top_header, 10, UI_SURFACE);
-            draw_rect_outline(pixels, stride, top_header, 10, 1, UI_BORDER);
-            char fitted_head[144];
-            fit_text(fitted_head, sizeof(fitted_head), model->calendar_preview_lines[0], 20, top_header.width - 110);
-            draw_text_bold(pixels, stride, top_header.x + 16, top_header.y + 30, fitted_head, 20, UI_INK);
-            if (model->calendar_preview_count > 1) {
-                fit_text(fitted_head, sizeof(fitted_head), model->calendar_preview_lines[1], 14, top_header.width - 110);
-                draw_text(pixels, stride, top_header.x + 16, top_header.y + 54, fitted_head, 14, UI_ACCENT);
-            }
-            UiRect format_badge = {top_header.x + top_header.width - 92, top_header.y + 12, 80, 22};
-            fill_round_rect(pixels, stride, format_badge, 6, UI_ACCENT_SOFT);
-            draw_rect_outline(pixels, stride, format_badge, 6, 1, UI_ACCENT);
-            draw_text_center(pixels, stride, format_badge, "UTF-8 JSON", 11, UI_ACCENT);
-
-            int list_start_y = 286;
-            int list_step = 25;
-            for (int i = 2; i < model->calendar_preview_count && i < 13; ++i) {
-                char fitted_item[144];
-                fit_text(fitted_item, sizeof(fitted_item), model->calendar_preview_lines[i], 15, 480);
-                draw_text(pixels, stride, 684, list_start_y + (i - 2) * list_step, fitted_item, 15, UI_INK);
-            }
-            draw_text(pixels, stride, 672, 564,
-                      ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM), 12, UI_WARNING);
-        }
-    } else {
-        int preview_y = 206, preview_step = 30;
-        int preview_title_size = 18, preview_detail_size = 15;
-        for (int i = 0; i < model->calendar_preview_count && i < 12; ++i) {
-            char fitted[144];
-            int size = i == 0 ? preview_title_size : preview_detail_size;
-            fit_text(fitted, sizeof(fitted), model->calendar_preview_lines[i],
-                size, 480);
-            draw_text(pixels, stride, 670, preview_y + i * preview_step,
-                fitted, size, i == 0 ? UI_INK : UI_MUTED);
-        }
+    int preview_y = 206, preview_step = 30;
+    int preview_title_size = 18, preview_detail_size = 15;
+    for (int i = 0; i < model->calendar_preview_count && i < 12; ++i) {
+        char fitted[144];
+        int size = i == 0 ? preview_title_size : preview_detail_size;
+        fit_text(fitted, sizeof(fitted), model->calendar_preview_lines[i],
+            size, 480);
+        draw_text(pixels, stride, 670, preview_y + i * preview_step,
+            fitted, size, i == 0 ? UI_INK : UI_MUTED);
     }
+
     snprintf(page_text, sizeof(page_text), "%d / %d", model->calendar_manager_page + 1,
         pages > 0 ? pages : 1);
     draw_text(pixels, stride, 110, 665, page_text, 14, UI_MUTED);
     draw_text(pixels, stride, 250, 665, ptc_ui_text(PTC_UI_T_CALENDAR_MANAGER_HINT), 14, UI_MUTED);
+
     for (int i = 0; i < 6; ++i) {
         char label[96];
         bool disabled = (i == 0 && model->calendar_manager_page == 0) ||
             (i == 1 && model->calendar_manager_page + 1 >= pages) ||
-            (i == 2 && (!model->calendar_pending_file[0] && !model->calendar_pending_option_id[0])) ||
-            (i == 2 && model->calendar_manager_tab == 0 && model->disable_flag_present) ||
+            (i == 2 && !model->calendar_pending_option_id[0]) ||
+            (i == 2 && model->disable_flag_present) ||
             (model->waiting && i < 3) || (model->waiting && i == 4);
         const char *caption = i == 0 ? ptc_ui_text(PTC_UI_T_CALENDAR_PREVIOUS) :
             i == 1 ? ptc_ui_text(PTC_UI_T_CALENDAR_NEXT) :
             i == 3 ? ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_ACTION) :
             i == 4 ? ptc_ui_text(PTC_UI_T_Y_REFRESH) :
             i == 5 ? ptc_ui_text(PTC_UI_T_B_BACK) :
-            model->calendar_manager_tab == 0 ? ptc_ui_text(PTC_UI_T_CALENDAR_APPLY_ACTION) :
-                ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_ACTION);
+            ptc_ui_text(PTC_UI_T_CALENDAR_APPLY_ACTION);
         snprintf(label, sizeof(label), "%s%s", i == 0 ? "ZL " :
             i == 1 ? "ZR " : i == 2 ? "A " : i == 3 ? "X " : "", caption);
         draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(i),

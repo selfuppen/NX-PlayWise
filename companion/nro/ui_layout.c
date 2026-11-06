@@ -653,12 +653,12 @@ PtcUiRect ptc_ui_holiday_card_rect(int index)
 
 PtcUiRect ptc_ui_holiday_calendar_rect(void)
 {
-    return (PtcUiRect){862, 532, 336, 50};
+    return (PtcUiRect){838, 532, 388, 104};
 }
 
 PtcUiRect ptc_ui_holiday_manage_rect(void)
 {
-    return (PtcUiRect){862, 590, 336, 48};
+    return (PtcUiRect){838, 532, 388, 104};
 }
 
 PtcUiRect ptc_ui_calendar_manager_tab_rect(int index)

@@ -395,11 +395,27 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                            holiday_hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 5,
                            disabled || model->waiting || !model->holiday_dirty);
     draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_HOLIDAY, model->holiday_dirty, panel);
-    draw_candidate_button(pixels, stride, ptc_ui_holiday_calendar_rect(), ptc_ui_text(PTC_UI_T_VIEW_HOLIDAY_CALENDAR),
-                           UI_ACCENT_SOFT, UI_ACCENT, model->selected_index == 6, false);
-    draw_candidate_button(pixels, stride, ptc_ui_holiday_manage_rect(),
-                           ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER),
-                           UI_ACCENT_SOFT, UI_ACCENT, model->selected_index == 7, false);
+    UiRect manage_btn = to_uirect(ptc_ui_holiday_manage_rect());
+    bool manage_focused = (model->selected_index == 6 && !model->parent_footer_focused);
+    if (!manage_focused) draw_card_shadow(pixels, stride, manage_btn, 14);
+    fill_round_rect(pixels, stride, manage_btn, 14, manage_focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface)));
+    if (manage_focused) draw_focus_ring(pixels, stride, manage_btn, 14);
+    else draw_rect_outline(pixels, stride, manage_btn, 14, 1, UI_BORDER);
+
+    draw_text_bold(pixels, stride, manage_btn.x + 20, manage_btn.y + 36,
+                   ptc_ui_text(PTC_UI_T_HOLIDAY_SCHEDULE_AND_CALENDAR), 20, UI_INK);
+
+    char sub_label[128];
+    const char *reg_name = model->calendar_region_name[0] ? model->calendar_region_name :
+        (model->calendar_builtin ? ptc_ui_text(PTC_UI_T_CALENDAR_BUILTIN_CHINA) : ptc_ui_text(PTC_UI_T_CALENDAR_INVALID_FILE));
+    uint16_t show_year = model->holiday_calendar_year ? model->holiday_calendar_year : 2026;
+    snprintf(sub_label, sizeof(sub_label), ptc_ui_text(PTC_UI_T_CALENDAR_CURRENT_ACTIVE_PREFIX),
+             reg_name, (unsigned int)show_year);
+    draw_text(pixels, stride, manage_btn.x + 20, manage_btn.y + 70, sub_label, 14, UI_MUTED);
+
+    UiRect arrow_badge = {manage_btn.x + manage_btn.width - 56, manage_btn.y + 34, 36, 36};
+    fill_round_rect(pixels, stride, arrow_badge, 10, manage_focused ? UI_ACCENT : UI_RAISED);
+    draw_text_center(pixels, stride, arrow_badge, ">", 22, manage_focused ? UI_ON_ACCENT : UI_ACCENT);
 }
 
 const char *bedtime_override_label(PtcBedtimeOverrideMode mode)

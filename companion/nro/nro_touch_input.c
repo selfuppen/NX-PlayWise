@@ -150,13 +150,9 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_HOLIDAY_CALENDAR:
-        ptc_audio_play(PTC_SE_POPUP);
-        ui->model.selected_index = 6;
-        handle_parent_action(ui);
-        break;
     case PTC_UI_HIT_CALENDAR_MANAGER:
         ptc_audio_play(PTC_SE_POPUP);
-        ui->model.selected_index = 7;
+        ui->model.selected_index = 6;
         open_calendar_manager(ui);
         break;
     case PTC_UI_HIT_CALENDAR_MANAGER_TAB:

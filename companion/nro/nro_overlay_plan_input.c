@@ -342,22 +342,51 @@ static void handle_calendar_manager_overlay_input(UiState *ui, u64 down)
     if (down & HidNpadButton_B) calendar_manager_nav(ui, 5);
     else if (down & HidNpadButton_X) calendar_manager_nav(ui, 3);
     else if (down & HidNpadButton_Y) calendar_manager_nav(ui, 4);
-    else if (down & HidNpadButton_L) calendar_manager_select_tab(ui, ui->model.calendar_manager_tab - 1);
-    else if (down & HidNpadButton_R) calendar_manager_select_tab(ui, ui->model.calendar_manager_tab + 1);
-    else if (ui->model.calendar_manager_tab == 2) {
-        if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
-    } else if (down & (HidNpadButton_Left | HidNpadButton_ZL)) calendar_manager_nav(ui, 0);
-    else if (down & (HidNpadButton_Right | HidNpadButton_ZR)) calendar_manager_nav(ui, 1);
-    else if ((down & HidNpadButton_Up) && ui->model.calendar_manager_selected > 0) {
-        --ui->model.calendar_manager_selected;
-        ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
-        calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
-    } else if ((down & HidNpadButton_Down) &&
-        ui->model.calendar_manager_selected + 1 < ui->model.calendar_manager_count) {
-        ++ui->model.calendar_manager_selected;
-        ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
-        calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
-    } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
+    else if (down & HidNpadButton_L) calendar_manager_select_tab(ui, (ui->model.calendar_manager_tab + 2) % 3);
+    else if (down & HidNpadButton_R) calendar_manager_select_tab(ui, (ui->model.calendar_manager_tab + 1) % 3);
+    else if (ui->model.calendar_manager_tab == 0) {
+        if (down & HidNpadButton_Left) holiday_calendar_view_year_step(ui, -1);
+        else if (down & HidNpadButton_Right) holiday_calendar_view_year_step(ui, 1);
+        else if (down & (HidNpadButton_ZL | HidNpadButton_Up)) holiday_calendar_view_step(ui, -1);
+        else if (down & (HidNpadButton_ZR | HidNpadButton_Down)) holiday_calendar_view_step(ui, 1);
+    } else if (ui->model.calendar_manager_tab == 1) {
+        if (down & (HidNpadButton_Left | HidNpadButton_ZL)) calendar_manager_nav(ui, 0);
+        else if (down & (HidNpadButton_Right | HidNpadButton_ZR)) calendar_manager_nav(ui, 1);
+        else if ((down & HidNpadButton_Up) && ui->model.calendar_manager_selected > 0) {
+            --ui->model.calendar_manager_selected;
+            ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+            calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+        } else if ((down & HidNpadButton_Down) &&
+            ui->model.calendar_manager_selected + 1 < ui->model.calendar_manager_count) {
+            ++ui->model.calendar_manager_selected;
+            ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+            calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
+    } else if (ui->model.calendar_manager_tab == 2) {
+        if (down & HidNpadButton_Left) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.calendar_sources_subpanel = 0;
+        } else if (down & HidNpadButton_Right) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.calendar_sources_subpanel = 1;
+        } else if (ui->model.calendar_sources_subpanel == 0) {
+            if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
+            else if (down & HidNpadButton_Y) calendar_manager_nav(ui, 4);
+        } else {
+            if (down & (HidNpadButton_ZL)) calendar_manager_nav(ui, 0);
+            else if (down & (HidNpadButton_ZR)) calendar_manager_nav(ui, 1);
+            else if ((down & HidNpadButton_Up) && ui->model.calendar_manager_selected > 0) {
+                --ui->model.calendar_manager_selected;
+                ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+                calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+            } else if ((down & HidNpadButton_Down) &&
+                ui->model.calendar_manager_selected + 1 < ui->model.calendar_manager_count) {
+                ++ui->model.calendar_manager_selected;
+                ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+                calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+            } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
+        }
+    }
     return;
 }
 

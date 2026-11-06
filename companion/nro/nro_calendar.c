@@ -51,7 +51,7 @@ done:
     free(active);
 }
 
-void open_holiday_calendar_view(UiState *ui)
+static void init_calendar_view_data(UiState *ui)
 {
     PtcCalendarIndex *active = NULL;
     const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
@@ -115,6 +115,12 @@ done:
     }
     load_calendar_view_year(ui);
     ui->model.holiday_calendar_page = ptc_ui_holiday_calendar_nearest_page(&ui->model, NULL);
+}
+
+void open_holiday_calendar_view(UiState *ui)
+{
+    if (!ui) return;
+    init_calendar_view_data(ui);
     ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
     ui->model.overlay_selection = 2;
     {
@@ -130,6 +136,18 @@ done:
         memcpy(ui->model.overlay_title, title, bytes);
         ui->model.overlay_title[bytes] = '\0';
     }
+}
+
+void holiday_calendar_view_year_step(UiState *ui, int direction)
+{
+    int next;
+    if (!ui || (direction != -1 && direction != 1)) return;
+    next = ui->calendar_view_year_index + direction;
+    if (next < 0 || next >= ui->calendar_view_year_count) return;
+    ptc_audio_play(PTC_SE_STEP);
+    ui->calendar_view_year_index = next;
+    load_calendar_view_year(ui);
+    ui->model.holiday_calendar_page = 0;
 }
 
 void holiday_calendar_view_step(UiState *ui, int direction)
@@ -178,7 +196,7 @@ static void calendar_preview(UiState *ui)
         !ptc_calendar_index_load(ui->client.storage, APP_ROOT, false, catalog,
             model->calendar_pending_catalog_sha256) ||
         !ptc_calendar_index_load(ui->client.storage, APP_ROOT, true, active, NULL)) goto done;
-    if (model->calendar_manager_tab == 1) {
+    if (model->calendar_manager_tab == 2) {
         if (!ptc_calendar_file_name_valid(row->id) ||
             snprintf(path, sizeof(path), "%s/calendar-import/%s", APP_ROOT, row->id) >= (int)sizeof(path) ||
             !ui->client.storage->vtable->read_text(ui->client.storage, path, text,
@@ -302,7 +320,6 @@ done:
 void calendar_manager_refresh(UiState *ui)
 {
     PtcUiModel *model = &ui->model;
-    if (model->calendar_manager_tab == 2) return;
     PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
     PtcCalendarIndex *active = malloc(sizeof(*active));
     size_t i, count = 0;
@@ -314,7 +331,21 @@ void calendar_manager_refresh(UiState *ui)
         !ptc_calendar_index_load(ui->client.storage, APP_ROOT, false, catalog, NULL) ||
         !ptc_calendar_index_load(ui->client.storage, APP_ROOT, true, active, NULL)) goto done;
     loaded = true;
-    if (model->calendar_manager_tab == 0) {
+    if (model->calendar_manager_tab == 2) {
+        snprintf(directory, sizeof(directory), "%s/calendar-import", APP_ROOT);
+        if (ui->client.storage->vtable->exists(ui->client.storage, directory) &&
+            ui->client.storage->vtable->list_json(ui->client.storage, directory, names, 95, &count)) {
+            for (i = 0; i < count && model->calendar_manager_count < 96; ++i) {
+                PtcUiCalendarRow *row;
+                if (!ptc_calendar_file_name_valid(names[i])) continue;
+                row = &model->calendar_manager_rows[model->calendar_manager_count++];
+                snprintf(row->id, sizeof(row->id), "%.80s", names[i]);
+                snprintf(row->title, sizeof(row->title), "%.95s", names[i]);
+                snprintf(row->detail, sizeof(row->detail), "%s",
+                    ptc_ui_text(PTC_UI_T_CALENDAR_USER_IMPORT));
+            }
+        }
+    } else {
         PtcUiCalendarRow *row = &model->calendar_manager_rows[model->calendar_manager_count++];
         snprintf(row->id, sizeof(row->id), "builtin-cn");
         snprintf(row->title, sizeof(row->title), "%s", ptc_ui_text(PTC_UI_T_CALENDAR_BUILTIN_CHINA));
@@ -353,20 +384,6 @@ void calendar_manager_refresh(UiState *ui)
             } else snprintf(candidate->detail, sizeof(candidate->detail), "%s",
                 ptc_ui_text(PTC_UI_T_CALENDAR_USER_IMPORT));
         }
-    } else {
-        snprintf(directory, sizeof(directory), "%s/calendar-import", APP_ROOT);
-        if (ui->client.storage->vtable->exists(ui->client.storage, directory) &&
-            ui->client.storage->vtable->list_json(ui->client.storage, directory, names, 95, &count)) {
-            for (i = 0; i < count && model->calendar_manager_count < 96; ++i) {
-                PtcUiCalendarRow *row;
-                if (!ptc_calendar_file_name_valid(names[i])) continue;
-                row = &model->calendar_manager_rows[model->calendar_manager_count++];
-                snprintf(row->id, sizeof(row->id), "%.80s", names[i]);
-                snprintf(row->title, sizeof(row->title), "%.95s", names[i]);
-                snprintf(row->detail, sizeof(row->detail), "%s",
-                    ptc_ui_text(PTC_UI_T_CALENDAR_USER_IMPORT));
-            }
-        }
     }
 done:
     free(active);
@@ -388,8 +405,10 @@ done:
 void open_calendar_manager(UiState *ui)
 {
     if (!ui || ui->waiting) return;
+    init_calendar_view_data(ui);
     ui->model.calendar_manager_tab = 0;
     ui->model.calendar_manager_selected = 0;
+    ui->model.calendar_sources_subpanel = 0;
     ui->model.overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
         ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER));
@@ -404,13 +423,15 @@ void calendar_manager_select_tab(UiState *ui, int tab)
     ptc_audio_play(PTC_SE_TAB);
     ui->model.calendar_manager_tab = tab;
     ui->model.calendar_manager_selected = 0;
+    ui->model.calendar_sources_subpanel = 0;
+    if (tab == 0) load_calendar_view_year(ui);
     calendar_manager_refresh(ui);
 }
 
 void calendar_manager_select_row(UiState *ui, int row)
 {
     int index;
-    if (!ui || ui->model.calendar_manager_tab == 2 || row < 0 || row >= 6) return;
+    if (!ui || row < 0 || row >= 6) return;
     index = ui->model.calendar_manager_page * 6 + row;
     if (index >= ui->model.calendar_manager_count) return;
     ptc_audio_play(PTC_SE_FOCUS);
@@ -428,17 +449,6 @@ void calendar_manager_nav(UiState *ui, int action)
         ptc_ui_cancel_overlay(model);
         return;
     }
-    if (model->calendar_manager_tab == 2) {
-        if (!ptc_ui_calendar_update_action_enabled(model, action)) return;
-        ptc_audio_play(PTC_SE_CONFIRM);
-        if (action == 2) check_calendar_update(ui);
-        else if (action == 4) {
-            model->calendar_check_on_startup = !model->calendar_check_on_startup;
-            if (!save_ui_preferences(ui))
-                model->calendar_check_on_startup = !model->calendar_check_on_startup;
-        }
-        return;
-    }
     if (action == 3) {
         ptc_audio_play(PTC_SE_POPUP);
         model->overlay = PTC_UI_OVERLAY_CALENDAR_FORMAT;
@@ -448,6 +458,48 @@ void calendar_manager_nav(UiState *ui, int action)
         return;
     }
     if (ui->waiting) return;
+    if (model->calendar_manager_tab == 0) {
+        if (action == 0) holiday_calendar_view_step(ui, -1);
+        else if (action == 1) holiday_calendar_view_step(ui, 1);
+        return;
+    }
+    if (model->calendar_manager_tab == 2) {
+        if (model->calendar_sources_subpanel == 0) {
+            if (!ptc_ui_calendar_update_action_enabled(model, action)) return;
+            ptc_audio_play(PTC_SE_CONFIRM);
+            if (action == 2) check_calendar_update(ui);
+            else if (action == 4) {
+                model->calendar_check_on_startup = !model->calendar_check_on_startup;
+                if (!save_ui_preferences(ui))
+                    model->calendar_check_on_startup = !model->calendar_check_on_startup;
+            }
+            return;
+        } else {
+            if (action == 4) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                calendar_manager_refresh(ui);
+                submit_status(ui);
+                return;
+            }
+            if (action == 0 || action == 1) {
+                int page = model->calendar_manager_page + (action == 0 ? -1 : 1);
+                if (page < 0 || page * 6 >= model->calendar_manager_count) return;
+                ptc_audio_play(PTC_SE_STEP);
+                model->calendar_manager_page = page;
+                model->calendar_manager_selected = page * 6;
+                calendar_preview(ui);
+                return;
+            }
+            if (action == 2 && model->calendar_pending_file[0]) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                open_confirm_overlay(ui, PTC_UI_OPERATION_IMPORT_CALENDAR,
+                    ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_ACTION),
+                    ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM));
+            }
+            return;
+        }
+    }
+    // Tab 1: Region Library
     if (action == 4) {
         ptc_audio_play(PTC_SE_CONFIRM);
         calendar_manager_refresh(ui);
@@ -465,11 +517,7 @@ void calendar_manager_nav(UiState *ui, int action)
     }
     if (action != 2 || model->calendar_manager_selected < 0) return;
     ptc_audio_play(PTC_SE_CONFIRM);
-    if (model->calendar_manager_tab == 1 && model->calendar_pending_file[0]) {
-        open_confirm_overlay(ui, PTC_UI_OPERATION_IMPORT_CALENDAR,
-            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_ACTION),
-            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM));
-    } else if (model->calendar_manager_tab == 0 && model->calendar_pending_option_id[0]) {
+    if (model->calendar_pending_option_id[0]) {
         if (!ptc_ui_status_is_fresh(model, (int64_t)time(NULL))) {
             submit_status(ui);
             return;

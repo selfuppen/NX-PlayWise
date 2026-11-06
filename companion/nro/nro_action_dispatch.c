@@ -355,28 +355,7 @@ void handle_parent_action(UiState *ui)
         case 4:
             discard_holiday_draft(ui);
             break;
-        case 6: {
-            char holiday_rule[48];
-            char makeup_rule[48];
-            if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(holiday_rule, sizeof(holiday_rule), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
-            } else {
-                snprintf(holiday_rule, sizeof(holiday_rule), ptc_ui_text(PTC_UI_T_U_MIN),
-                         (unsigned int)ui->model.draft_holiday_rule.minutes);
-            }
-            if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(makeup_rule, sizeof(makeup_rule), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
-            } else {
-                snprintf(makeup_rule, sizeof(makeup_rule), ptc_ui_text(PTC_UI_T_U_MIN),
-                         (unsigned int)ui->model.draft_makeup_workday_rule.minutes);
-            }
-            open_holiday_calendar_view(ui);
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     ptc_ui_text(PTC_UI_T_CURRENT_S_STATUTORY_HOLIDAY_S_MAKEUP_WORKDAY),
-                     ui->model.draft_holiday_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_NOT_ENABLED),
-                     holiday_rule, makeup_rule);
-            break;
-        }
+        case 6:
         case 7:
             open_calendar_manager(ui);
             break;

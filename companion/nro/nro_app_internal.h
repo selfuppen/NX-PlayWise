@@ -277,6 +277,7 @@ void open_weekly_page(UiState *ui);
 void open_calendar_manager(UiState *ui);
 void open_holiday_calendar_view(UiState *ui);
 void holiday_calendar_view_step(UiState *ui, int direction);
+void holiday_calendar_view_year_step(UiState *ui, int direction);
 int holiday_calendar_view_pages(const PtcUiModel *model);
 void calendar_manager_select_tab(UiState *ui, int tab);
 void calendar_manager_select_row(UiState *ui, int row);

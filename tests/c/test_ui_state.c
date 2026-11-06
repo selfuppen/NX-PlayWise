@@ -1581,8 +1581,8 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday mode action");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday discard action");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday save action");
-    check_hit(hit_center(&model, ptc_ui_holiday_calendar_rect()), PTC_UI_HIT_HOLIDAY_CALENDAR, 0,
-              "holiday calendar viewer is in the status column");
+    check_hit(hit_center(&model, ptc_ui_holiday_manage_rect()), PTC_UI_HIT_CALENDAR_MANAGER, 0,
+              "holiday calendar manager is in the status column");
     {
         PtcUiRect footer = ptc_ui_parent_subpage_footer_rect(0);
         for (int index = 0; index < 6; ++index) {
@@ -3917,7 +3917,7 @@ static void test_calendar_manager_surface(void)
     check_true(ptc_ui_status_is_fresh(&model, 1120) &&
         !ptc_ui_status_is_fresh(&model, 1121),
         "calendar confirmation requires a fresh status at the 120-second boundary");
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < 3; ++i)
         check_hit(hit_center(&model, ptc_ui_calendar_manager_tab_rect(i)),
             PTC_UI_HIT_CALENDAR_MANAGER_TAB, i, "calendar tab touch target");
     for (int i = 0; i < 6; ++i)
