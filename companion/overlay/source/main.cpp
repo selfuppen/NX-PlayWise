@@ -508,6 +508,37 @@ public:
         return true;
     }
 
+    bool should_refresh_on_nav(u64 threshold_ns = 5000000000ULL) const
+    {
+        if (!bridge_ || bridge_->waiting) return false;
+        if (!has_status_snapshot_ || last_refresh_tick_ == 0 || status_is_stale()) return true;
+        const u64 tick = armGetSystemTick();
+        return tick < last_refresh_tick_ ||
+            armTicksToNs(tick - last_refresh_tick_) >= threshold_ns;
+    }
+
+    bool maybe_refresh_on_nav(PtcUiStatusOrigin origin = PTC_UI_STATUS_OTHER,
+                              u64 threshold_ns = 5000000000ULL)
+    {
+        if (should_refresh_on_nav(threshold_ns)) {
+            return begin_status_refresh(origin);
+        }
+        return false;
+    }
+
+    void open_status_details()
+    {
+        status_expanded_ = true;
+        (void)maybe_refresh_on_nav(PTC_UI_STATUS_OTHER);
+    }
+
+    void close_status_details()
+    {
+        status_expanded_ = false;
+        reset_page_scroll();
+        (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
+    }
+
     bool begin_overlay_ready()
     {
         char boot_id[32];
@@ -586,8 +617,7 @@ public:
             (void)ptc_ui_text_format(PTC_UI_T_PIN_COOLDOWN,
                 pin_message_, sizeof(pin_message_), args, 1);
         }
-        if ((!has_status_snapshot_ || status_is_stale()) && !bridge_->waiting)
-            (void)begin_status_refresh();
+        (void)maybe_refresh_on_nav(PTC_UI_STATUS_OTHER);
     }
 
     bool submit_parent_action()
@@ -860,6 +890,7 @@ public:
                 parent_view_ = ParentView::Child;
                 std::memset(pin_, 0, sizeof(pin_));
                 pin_length_ = 0;
+                (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
             } else if (keysDown & HidNpadButton_Plus) {
                 int64_t cooldown_retry = 0;
                 PtcAuthStatus cooldown_status = ptc_companion_auth_check_cooldown_now(&auth_, &cooldown_retry);
@@ -887,8 +918,7 @@ public:
                     parent_view_ = ParentView::Actions;
                     pin_message_[0] = '\0';
                     action_repeat_ = {};
-                    if ((!has_status_snapshot_ || status_is_stale()) && !bridge_->waiting)
-                        (void)begin_status_refresh();
+                    (void)maybe_refresh_on_nav(PTC_UI_STATUS_OTHER);
                 } else if (auth_status == PTC_AUTH_COOLDOWN) {
                     PtcUiTextArg args[] = {{"seconds", nullptr, retry_after, true}};
                     (void)ptc_ui_text_format(PTC_UI_T_PIN_COOLDOWN,
@@ -960,11 +990,13 @@ public:
                     parent_authorized_ = false;
                     parent_view_ = ParentView::Child;
                     ptc_overlay_hold_reset(&confirm_hold_);
+                    (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
                 }
             } else if (keysDown & HidNpadButton_B) {
                 parent_authorized_ = false;
                 parent_view_ = ParentView::Child;
                 ptc_overlay_hold_reset(&confirm_hold_);
+                (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        !parent_action_requires_hold(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        (keysDown & HidNpadButton_A)) {
@@ -1038,10 +1070,12 @@ public:
         if (keysDown & HidNpadButton_B) {
             parent_view_ = ParentView::Child;
             error_ = false;
+            (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
         } else if (keysDown & HidNpadButton_A) {
             if (result_focus_ == 0) {
                 parent_view_ = ParentView::Child;
                 error_ = false;
+                (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
             } else if (result_focus_ == 1 && can_reverify && !bridge_->waiting) {
                 open_parent_pin();
             }
@@ -1049,6 +1083,7 @@ public:
             if (!can_reverify) {
                 parent_view_ = ParentView::Child;
                 error_ = false;
+                (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
             } else {
                 open_parent_pin();
             }
