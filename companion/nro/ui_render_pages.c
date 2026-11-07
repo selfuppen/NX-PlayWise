@@ -1,4 +1,5 @@
 #include "ui_render_internal.h"
+#include "../../common/update/update.h"
 
 static const UiAction TODAY_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SET_TODAY_LIMIT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONTROLLED_BY_RULES), UI_ACCENT, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},

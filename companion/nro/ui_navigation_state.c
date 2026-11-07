@@ -10,6 +10,7 @@
 #include "../../common/protocol/error_code.h"
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
+#include "../../common/update/update.h"
 
 void ptc_ui_open_support_guide(PtcUiModel *model)
 {

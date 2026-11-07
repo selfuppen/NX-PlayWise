@@ -170,7 +170,7 @@ static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, con
 static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect details;
-    char value[128];
+    char value[256];
     const char *status = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
     uint32_t status_color = UI_MUTED;
     bool pending = model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only;
