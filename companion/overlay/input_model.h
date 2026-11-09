@@ -56,6 +56,10 @@ unsigned int ptc_overlay_direction_step(
     int elapsed_ms);
 
 void ptc_overlay_input_init(PtcOverlayInput *input);
+/* Code-page focus: -1 uses input->cursor (0..9); 10/11 delete/clear,
+   12 cancel, 13 submit, 14 parent. Includes the fourth row [delete, 0, clear]. */
+bool ptc_overlay_keypad_navigate(PtcOverlayInput *input, int *nav_focus,
+    unsigned int buttons_down, unsigned int buttons_held, int elapsed_ms);
 bool ptc_overlay_input_handle(
     PtcOverlayInput *input,
     unsigned int buttons_down,

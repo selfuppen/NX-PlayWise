@@ -354,9 +354,22 @@
         bool normal;
     };
 
+    bool control_disabled() const
+    {
+        return has_status_snapshot_ && displayed_summary_.valid && displayed_summary_.disable_flag_present;
+    }
+
     OverlayCurrentState current_state_line(bool stale) const
     {
         const auto &pal = current_palette();
+        if (control_disabled()) {
+            // Control status is independent of console-usage availability. Old
+            // or failed refreshes retain only the last confirmed disabled state.
+            const bool old = !last_refresh_tick_ || status_snapshot_is_stale() ||
+                (error_ && last_request_kind_ == OverlayRequestKind::Status);
+            return {ptc_ui_text(old ? PTC_UI_T_OVERLAY_DISABLED_LAST_KNOWN :
+                PTC_UI_T_OVERLAY_CONTROL_DISABLED), pal.warning, false};
+        }
         if (stale) return {ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH), pal.warning, false};
         if (bedtime_restricted()) return {ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_3), pal.danger, false};
         if (displayed_summary_.daily_restriction_active)

@@ -449,38 +449,11 @@
             return true;
         }
 
+        if (ptc_overlay_keypad_navigate(input_, &keypad_nav_focus_,
+                to_overlay_buttons(keysDown), to_overlay_buttons(keysHeld), elapsed_ms)) return true;
         if (keypad_nav_focus_ == -1) {
-            if ((keysDown & HidNpadButton_Down) && input_->cursor >= 5) {
-                keypad_nav_focus_ = input_->cursor <= 6 ? 10 : 11;
-                return true;
-            }
             return ptc_overlay_input_handle(input_, to_overlay_buttons(keysDown), to_overlay_buttons(keysHeld), elapsed_ms);
         } else {
-            if (keysDown & HidNpadButton_Up) {
-                if (keypad_nav_focus_ == 10) {
-                    keypad_nav_focus_ = -1;
-                    input_->cursor = 6;
-                } else if (keypad_nav_focus_ == 11) {
-                    keypad_nav_focus_ = -1;
-                    input_->cursor = 8;
-                } else if (keypad_nav_focus_ == 13) {
-                    keypad_nav_focus_ = 10;
-                } else if (keypad_nav_focus_ == 12 || keypad_nav_focus_ == 14) {
-                    keypad_nav_focus_ = 13;
-                }
-            } else if (keysDown & HidNpadButton_Down) {
-                if (keypad_nav_focus_ == 10 || keypad_nav_focus_ == 11) {
-                    keypad_nav_focus_ = 13;
-                } else if (keypad_nav_focus_ == 13) {
-                    keypad_nav_focus_ = 12;
-                }
-            } else if (keysDown & HidNpadButton_Left) {
-                if (keypad_nav_focus_ == 11) keypad_nav_focus_ = 10;
-                else if (keypad_nav_focus_ == 14) keypad_nav_focus_ = 12;
-            } else if (keysDown & HidNpadButton_Right) {
-                if (keypad_nav_focus_ == 10) keypad_nav_focus_ = 11;
-                else if (keypad_nav_focus_ == 12) keypad_nav_focus_ = 14;
-            }
             if (keysDown & HidNpadButton_A) {
                 if (keypad_nav_focus_ == 10) {
                     (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_X, 0, 0);

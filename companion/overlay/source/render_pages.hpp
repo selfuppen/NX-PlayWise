@@ -877,6 +877,9 @@
             format_refresh_age(age, sizeof(age));
             dashboard_panel(renderer, {{state.text, PTC_OVERLAY_FONT_DISPLAY, state.color},
                 {age, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary}}, state.color, state.normal);
+            if (control_disabled())
+                flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_DISABLED_HELP),
+                    PTC_OVERLAY_FONT_CAPTION, pal.warning, 6);
 
             char label[128], value[128], note[128];
             int day, second;
@@ -952,7 +955,9 @@
         char line[128], age[64], date[64];
         begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE),
             PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE)}, 2}, true);
-        if (ptc_overlay_remaining_refresh_pending(bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode))
+        if (control_disabled())
+            std::snprintf(line, sizeof(line), "%s", current_state_line(false).text);
+        else if (ptc_overlay_remaining_refresh_pending(bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode))
             std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING));
         else if (summary.valid && summary.unrestricted_today == 1) std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         else if (summary.valid && summary.remaining_available) ptc_ui_format_minutes(summary.remaining_minutes, line, sizeof(line));
@@ -968,7 +973,8 @@
         const int status_y = default_scheme ? 84 : 100;
         const int meta_y = default_scheme ? 192 : 208;
         const int date_y = default_scheme ? 218 : 234;
-        draw_localized(renderer, line, false, cx + 14, cy + status_y, PTC_OVERLAY_FONT_BODY, renderer->a(pal.success));
+        draw_localized(renderer, line, false, cx + 14, cy + status_y, PTC_OVERLAY_FONT_BODY,
+            renderer->a(control_disabled() ? pal.warning : pal.success));
         const int left_width = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
         if (left_width + static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_SECONDARY).first) + 40 <= cw)
             draw_localized_right(renderer, age, cx + cw - 14, cy + status_y, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
@@ -1164,7 +1170,12 @@
         const char *num = nullptr; int num_size = PTC_OVERLAY_FONT_HERO; tsl::Color num_color = pal.text_primary;
         const char *num_label = nullptr;
         const char *sub = nullptr; const char *note = nullptr;
-        if (bedtime) {
+        if (control_disabled()) {
+            const auto state = current_state_line(false);
+            head = state.text;
+            tone = state.color;
+            note = ptc_ui_text(PTC_UI_T_OVERLAY_DISABLED_HELP);
+        } else if (bedtime) {
             head = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_TITLE); tone = pal.night;
             sub = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_HERO);
             std::snprintf(window, sizeof(window), ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_WINDOW),
@@ -1348,7 +1359,8 @@
         int count = 0;
         for (int i = 0; i < 3; ++i) {
             // The rule that caused the restriction is already the banner.
-            if ((bedtime && i == 1) || (eye_restricted && i == 0) || (dock_restricted && i == 2)) continue;
+            if (!control_disabled() && ((bedtime && i == 1) ||
+                (eye_restricted && i == 0) || (dock_restricted && i == 2))) continue;
             rows[count++] = all_rows[i];
         }
         if (restricted) {

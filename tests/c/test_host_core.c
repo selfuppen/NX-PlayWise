@@ -1301,6 +1301,83 @@ static void test_overlay_parent_actions_and_input(void)
         "diagonal stick movement cannot jump focus");
 }
 
+static void test_overlay_keypad_navigation(void)
+{
+    PtcOverlayInput input;
+    int focus = -1;
+    char code[PTC_OVERLAY_CODE_SYMBOLS + 1];
+    const unsigned int down = PTC_OVERLAY_BUTTON_DOWN;
+    const unsigned int right = PTC_OVERLAY_BUTTON_RIGHT;
+    const unsigned int left = PTC_OVERLAY_BUTTON_LEFT;
+    const unsigned int up = PTC_OVERLAY_BUTTON_UP;
+    ptc_overlay_input_init(&input);
+    (void)ptc_overlay_keypad_navigate(&input, &focus, right, 0, 0);
+    for (int i = 0; i < 3; ++i)
+        (void)ptc_overlay_keypad_navigate(&input, &focus, down, 0, 0);
+    check_true(focus == -1 && input.cursor == 0,
+        "code page reaches zero from 2 via 5 and 8 without entering the footer");
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_A, 0, 0);
+    check_true(ptc_overlay_input_format(&input, code, sizeof(code)) && strcmp(code, "0") == 0,
+        "controller confirmation enters the selected zero");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, left, 0, 0);
+    check_int(focus, 10, "zero moves left to adjacent backspace");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, up, 0, 0);
+    check_true(focus == -1 && input.cursor == 7, "backspace returns to seven above it");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, down, 0, 0);
+    check_int(focus, 10, "seven reaches backspace only after the third numeric row");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, right, 0, 0);
+    check_true(focus == -1 && input.cursor == 0, "backspace moves right to zero");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, right, 0, 0);
+    check_int(focus, 11, "zero moves right to clear");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, up, 0, 0);
+    check_true(focus == -1 && input.cursor == 9, "clear returns to nine above it");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, down, 0, 0);
+    check_int(focus, 11, "nine reaches clear");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, down, 0, 0);
+    check_int(focus, 13, "fourth row reaches submit");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, up, 0, 0);
+    check_true(focus == -1 && input.cursor == 0, "submit returns to zero above it");
+
+    input.cursor = 2;
+    (void)ptc_overlay_keypad_navigate(&input, &focus, down, down, 0);
+    (void)ptc_overlay_keypad_navigate(&input, &focus, 0, down, 399);
+    check_int(input.cursor, 5, "held direction waits before repeating");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, 0, down, 1);
+    check_int(input.cursor, 8, "first repeat stays on third numeric row");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, 0, down, 180);
+    check_true(focus == -1 && input.cursor == 0, "held direction also reaches zero");
+    check_true(ptc_overlay_keypad_navigate(&input, &focus, down | right, down | right, 1000),
+        "ambiguous directions are consumed before confirm handling");
+    check_true(focus == -1 && input.cursor == 0 && input.length == 1,
+        "diagonal input changes neither focus nor code");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, 0, 0, 0);
+    (void)ptc_overlay_keypad_navigate(&input, &focus, 0, down, 180);
+    check_true(focus == -1 && input.cursor == 0, "release resets the repeat delay");
+
+    /* Traverse the production focus graph; every digit and visible action must
+       be reachable without touch (including television output). */
+    bool seen[15] = {false};
+    int queue[15], count = 1;
+    queue[0] = 1;
+    seen[1] = true;
+    const unsigned int directions[] = {up, down, left, right};
+    for (int next = 0; next < count; ++next) {
+        for (unsigned int i = 0; i < 4; ++i) {
+            ptc_overlay_input_init(&input);
+            focus = queue[next] < 10 ? -1 : queue[next];
+            if (focus == -1) input.cursor = (unsigned int)queue[next];
+            (void)ptc_overlay_keypad_navigate(&input, &focus, directions[i], 0, 0);
+            int target = focus == -1 ? (int)input.cursor : focus;
+            check_true(target >= 0 && target < 15, "keypad navigation stays inside visible focus targets");
+            if (target >= 0 && target < 15 && !seen[target]) {
+                seen[target] = true;
+                queue[count++] = target;
+            }
+        }
+    }
+    check_int(count, 15, "all ten digits and five actions are controller reachable");
+}
+
 static void test_pending_redemption_recovery_marker(void)
 {
     PtcMemStorage mem;
@@ -4485,6 +4562,7 @@ int main(void)
     test_overlay_request_action_gate();
     test_overlay_hold_progress();
     test_overlay_parent_actions_and_input();
+    test_overlay_keypad_navigation();
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_overlay_child_quota_and_restriction_details();

@@ -124,6 +124,91 @@ static void test_child_policy_freshness()
     std::puts("PASS: Overlay policy freshness is independent of console usage");
 }
 
+static void test_disabled_status(const char *font_path)
+{
+    const auto saved_language = ptc_ui_language_get_resolved();
+    const auto dir = std::filesystem::path("build/host/ui-regression-previews/overlay-disabled");
+    std::filesystem::create_directories(dir);
+    for (const auto language : {PTC_UI_LANGUAGE_SIMPLIFIED, PTC_UI_LANGUAGE_ENGLISH,
+             PTC_UI_LANGUAGE_TRADITIONAL}) {
+        ptc_ui_language_set_resolved(language);
+        for (int scenario = 0; scenario < 5; ++scenario) {
+            PtcOverlayBridge bridge{};
+            PtcOverlayInput input{};
+            ptc_overlay_input_init(&input);
+            PreviewView view;
+            view.bridge_ = &bridge;
+            view.input_ = &input;
+            auto &s = view.displayed_summary_;
+            s.valid = s.disable_flag_present = s.remaining_available = true;
+            s.remaining_minutes = 25;
+            s.day_index = 2469;
+            s.bedtime_available = s.dock_policy_available = s.eye_care_available = true;
+            std::snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "off");
+            if (scenario == 1) s.usage_present = true; // No console usage, but control state is fresh.
+            if (scenario == 2) view.last_refresh_tick_ -= 31ULL * 1000000000ULL;
+            if (scenario == 3) {
+                view.error_ = true;
+                view.last_request_kind_ = OverlayRequestKind::Status;
+            }
+            if (scenario == 4) {
+                s.bedtime_active = s.bedtime_enabled = true;
+                s.bedtime_start_minute = 21 * 60;
+                s.bedtime_end_minute = 7 * 60;
+            }
+            const auto title = scenario == 2 || scenario == 3 ?
+                PTC_UI_T_OVERLAY_DISABLED_LAST_KNOWN : PTC_UI_T_OVERLAY_CONTROL_DISABLED;
+            const auto state = view.current_state_line(view.status_is_stale());
+            require(std::strcmp(state.text, ptc_ui_text(title)) == 0 && !state.normal &&
+                view.same_color(state.color, DARK_OVERLAY_PALETTE.warning),
+                "disabled control outranks quota and restrictions, independently of usage freshness");
+            for (int page = 0; page < 4; ++page) {
+                // The error-details page owns its failure message; its state
+                // projection and the child banner still retain last-known status.
+                if (scenario == 3 && page == 1) continue;
+                tsl::gfx::Renderer renderer(font_path);
+                view.status_expanded_ = page == 1;
+                view.parent_view_ = page == 2 ? ParentView::Actions : ParentView::Child;
+                view.keypad_active_ = page == 3;
+                view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+                    PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+                const bool keypad = page == 3 && !view.child_is_restricted();
+                const int font = keypad ? PTC_OVERLAY_FONT_BODY : PTC_OVERLAY_FONT_DISPLAY;
+                for (const auto &line : overlay_wrap(&renderer, ptc_ui_text(title), font, 380)) {
+                    bool found = false;
+                    for (const auto &run : renderer.text_runs) {
+                        if (run.text == line && run.size == font) {
+                            found = true;
+                            require(run.x >= 16 && run.x + static_cast<int>(
+                                measure_localized(&renderer, run.text.c_str(), run.size).first) <= 432,
+                                "disabled state title stays inside the sidebar in every language");
+                        }
+                    }
+                    require(found, "disabled state is visibly drawn on overview, details, parent and code pages");
+                }
+                if (page == 0) {
+                    require(view.page_layout_.viewport.h > 0 && view.page_layout_.scroll_max == 0,
+                        "disabled overview retains its rule chain on one screen");
+                    renderer.save((dir / ("disabled-" + std::to_string(language) + "-" +
+                        std::to_string(scenario) + ".ppm")).string());
+                }
+            }
+            view.error_ = false;
+            s.bedtime_active = false;
+            s.disable_flag_present = false;
+            require(view.current_state_line(false).normal, "fresh re-enabled status removes the disabled banner");
+            s.disable_flag_present = true;
+            s.valid = false;
+            require(!view.control_disabled(), "invalid result cannot assert that control is disabled");
+            s.valid = true;
+            view.has_status_snapshot_ = false;
+            require(!view.control_disabled(), "missing snapshot cannot assert that control is disabled");
+        }
+    }
+    ptc_ui_language_set_resolved(saved_language);
+    std::puts("PASS: Overlay disabled state, stale/failed refresh and three-language page rendering");
+}
+
 static void test_text_layout(tsl::gfx::Renderer &renderer)
 {
     const auto explicit_lines = overlay_wrap(&renderer, "first\n\nlast", 32, 380);
@@ -513,6 +598,7 @@ int main(int argc, char **argv) {
     try {
         tsl::gfx::Renderer renderer(argv[1]);
         test_child_policy_freshness();
+        test_disabled_status(argv[1]);
         test_child_cards(renderer);
         test_parent_cards(renderer);
         test_surface_outline(renderer);
