@@ -38,8 +38,15 @@ static inline int FT_New_Memory_Face(FT_Library lib, const FT_Byte *data, FT_Lon
     (*out)->glyph = &(*out)->slot;
     return !stbtt_InitFont(&(*out)->info, data, stbtt_GetFontOffsetForIndex(data, (int)index));
 }
+#ifdef PTC_RESOURCE_TEST
+extern unsigned ptc_resource_font_sizes, ptc_resource_font_loads;
+#endif
 static inline int FT_Set_Pixel_Sizes(FT_Face face, unsigned int w, unsigned int h)
-{ (void)w; face->scale = stbtt_ScaleForMappingEmToPixels(&face->info, (float)h); return 0; }
+{
+#ifdef PTC_RESOURCE_TEST
+    ++ptc_resource_font_sizes;
+#endif
+    (void)w; face->scale = stbtt_ScaleForMappingEmToPixels(&face->info, (float)h); return 0; }
 static inline unsigned long preview_map_pua(stbtt_fontinfo *info, unsigned long code)
 {
     if (stbtt_FindGlyphIndex(info, (int)code) != 0) return code;
@@ -61,6 +68,9 @@ static inline FT_UInt FT_Get_Char_Index(FT_Face face, unsigned long code)
 { return (FT_UInt)stbtt_FindGlyphIndex(&face->info, (int)preview_map_pua(&face->info, code)); }
 static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
 {
+#ifdef PTC_RESOURCE_TEST
+    ++ptc_resource_font_loads;
+#endif
     unsigned long mapped = preview_map_pua(&face->info, code);
     int advance, bearing, w, h, x, y;
     free(face->slot.bitmap.buffer);

@@ -326,19 +326,22 @@ int ptc_calendar_import_published(PtcStorage *storage, const char *root, const c
     return failed ? -2 : imported;
 }
 
-bool ptc_calendar_runtime_from_selection(PtcStorage *storage, const char *root,
-                                         const PtcCalendarIndex *selected,
-                                         uint16_t day_index, PtcCalendarRuntime *out)
+static bool calendar_runtime_from_selection(PtcStorage *storage, const char *root,
+    const PtcCalendarIndex *selected, uint16_t day_index, PtcCalendarRuntime *out, bool validate_all)
 {
     char path[320], actual_hash[65];
     char *text = NULL;
+    PtcImportedCalendarYear *scratch = NULL;
     uint16_t year;
     uint8_t month, day;
     size_t i;
     bool ok = false;
     if (!out || !ptc_date_from_day_index(day_index, &year, &month, &day)) return false;
     memset(out, 0, sizeof(*out));
-    if (!selected) goto done;
+    if (!storage || !root || !selected) goto done;
+    if (validate_all && (selected->count > PTC_CALENDAR_MAX_INDEX_ENTRIES ||
+        (strcmp(selected->option_id, "builtin-cn") == 0 ? selected->count != 0 :
+         !ptc_calendar_region_id_valid(selected->option_id) || selected->count == 0))) goto done;
     snprintf(out->option_id, sizeof(out->option_id), "%s", selected->option_id);
     if (strcmp(selected->option_id, "builtin-cn") == 0) {
         out->builtin = true;
@@ -357,26 +360,41 @@ bool ptc_calendar_runtime_from_selection(PtcStorage *storage, const char *root,
     for (i = 0; i < selected->count; ++i) {
         const PtcCalendarIndexEntry *entry = &selected->entries[i];
         PtcImportedCalendarYear *calendar;
-        if (entry->year + 1u < year || entry->year > year + 1u) continue;
-        if (out->set.count >= 3u || !library_path(path, sizeof(path), root, entry) ||
+        bool nearby = entry->year + 1u >= year && entry->year <= year + 1u;
+        if (!nearby && !validate_all) continue;
+        if ((nearby && out->set.count >= 3u) || !library_path(path, sizeof(path), root, entry) ||
             !storage->vtable->read_text(storage, path, text, PTC_CALENDAR_IMPORT_MAX_BYTES + 1u)) goto done;
         ptc_calendar_sha256_hex(text, strlen(text), actual_hash);
-        calendar = &out->years[out->set.count];
+        if (nearby) calendar = &out->years[out->set.count];
+        else {
+            if (!scratch) scratch = malloc(sizeof(*scratch));
+            if (!scratch) goto done;
+            calendar = scratch;
+        }
         if (strcmp(actual_hash, entry->sha256) != 0 ||
             !ptc_holiday_calendar_parse_import(text, strlen(text), calendar) ||
             calendar->year != entry->year ||
             strcmp(calendar->region_id, entry->region_id) != 0 ||
             strcmp(calendar->region_name, entry->region_name) != 0) goto done;
-        out->set.years[out->set.count++] = calendar;
-        snprintf(out->region_name, sizeof(out->region_name), "%s", entry->region_name);
+        if (nearby) {
+            out->set.years[out->set.count++] = calendar;
+            snprintf(out->region_name, sizeof(out->region_name), "%s", entry->region_name);
+        }
     }
     if (out->region_name[0] == '\0' && selected->count > 0)
         snprintf(out->region_name, sizeof(out->region_name), "%s", selected->entries[0].region_name);
     ok = true;
 done:
+    free(scratch);
     free(text);
     if (!ok) memset(out, 0, sizeof(*out));
     return ok;
+}
+
+bool ptc_calendar_runtime_from_selection(PtcStorage *storage, const char *root,
+    const PtcCalendarIndex *selected, uint16_t day_index, PtcCalendarRuntime *out)
+{
+    return calendar_runtime_from_selection(storage, root, selected, day_index, out, false);
 }
 
 bool ptc_calendar_runtime_load(PtcStorage *storage, const char *root,
@@ -384,11 +402,14 @@ bool ptc_calendar_runtime_load(PtcStorage *storage, const char *root,
 {
     PtcCalendarIndex *selected;
     bool ok;
+    if (!out) return false;
+    memset(out, 0, sizeof(*out));
     selected = (PtcCalendarIndex *)malloc(sizeof(*selected));
     if (!selected) return false;
     ok = ptc_calendar_index_load(storage, root, true, selected, NULL) &&
-        ptc_calendar_selection_validate(storage, root, selected) &&
-        ptc_calendar_runtime_from_selection(storage, root, selected, day_index, out);
+        /* Validate every selected year, retaining nearby years in the same pass.
+           Do not cache across calls: library corruption must still fail closed. */
+        calendar_runtime_from_selection(storage, root, selected, day_index, out, true);
     free(selected);
     return ok;
 }

@@ -1,5 +1,11 @@
 #include "ui_render_internal.h"
 #include "../ui_language.h"
+#ifdef PTC_RESOURCE_TEST
+void *ptc_resource_bitmap_malloc(size_t size);
+void *ptc_resource_bitmap_calloc(size_t count, size_t size);
+#define malloc ptc_resource_bitmap_malloc
+#define calloc ptc_resource_bitmap_calloc
+#endif
 
 static uint32_t ui_decode_utf8(const char **text)
 {
@@ -167,9 +173,7 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
     uint32_t size_key = (uint32_t)size | (bold ? 0x10000u : 0u);
     uint32_t slot = ui_glyph_hash(codepoint, size_key);
     UiGlyphEntry *entry;
-    if (!set_font_size(size)) {
-        return NULL;
-    }
+    if (size <= 0) return NULL;
     for (;;) {
         entry = &g_glyph_cache[slot];
         if (entry->codepoint == 0) break;
@@ -304,6 +308,8 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
             return entry;
         }
     }
+    /* Cache hits and procedural glyphs do not need mutable font state. */
+    if (!set_font_size(size)) return NULL;
     FT_Face face = g_ui.face;
     PtcUiLanguagePreference lang = ptc_ui_language_get_resolved();
     if (lang == PTC_UI_LANGUAGE_ENGLISH && g_ui.standard_face &&
@@ -388,9 +394,6 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
             }
         }
         if (!copy) {
-            /* 零尺寸（空格）或非灰度位图也占位缓存，避免每帧重复加载。 */
-            entry->codepoint = codepoint;
-            entry->size = size_key;
             entry->bearing_x = 0;
             entry->bearing_y = 0;
             entry->advance = (int16_t)(glyph->advance.x >> 6);
@@ -398,6 +401,14 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
             entry->height = 0;
             entry->is_color = false;
             entry->bitmap = NULL;
+            /* Keep this frame's advance, but leave the slot empty after an
+               allocation failure so a later draw can recover the bitmap. */
+            if (glyph->bitmap.rows > 0 && glyph->bitmap.width > 0 &&
+                (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY ||
+                 glyph->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA)) return entry;
+            /* Zero-sized/unsupported glyphs can retain their metrics. */
+            entry->codepoint = codepoint;
+            entry->size = size_key;
             ++g_glyph_cache_count;
             return entry;
         }

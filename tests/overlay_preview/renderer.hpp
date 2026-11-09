@@ -44,6 +44,9 @@ class Renderer {
         }
     }
 public:
+#ifdef PTC_RESOURCE_TEST
+    size_t measured_bytes = 0;
+#endif
     struct TextRun { std::string text; float size; int x, y; Color color; };
     std::vector<TextRun> text_runs;
     // Optional width pressure for layout tests; normal preview metrics stay 1.
@@ -113,6 +116,9 @@ public:
     }
     std::pair<u32, u32> drawString(const char *text, bool mono, int x, int y,
         float size, Color color, ssize_t max_width = 0) {
+#ifdef PTC_RESOURCE_TEST
+        if (!color.a) measured_bytes += std::strlen(text);
+#endif
         if (color.a) text_runs.push_back({text, size, x, y, color});
         int pen = x, baseline = y, max_x = x;
         float scale = stbtt_ScaleForPixelHeight(&font_, size);

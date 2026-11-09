@@ -386,74 +386,100 @@ static inline std::pair<u32, u32> measure_localized(tsl::gfx::Renderer *renderer
     return draw_localized(renderer, value, monospace, 0, 0, font_size, tsl::style::color::ColorTransparent);
 }
 
-// Word wrapping for Latin text, codepoint wrapping for CJK/long words. Measurement
-// uses the same system font and sanitization as drawing, without bitmap allocation.
-static std::vector<std::string> overlay_wrap(tsl::gfx::Renderer *renderer,
-    const char *value, int size, int width)
+// Visit slices of one sanitized buffer. libtesla advances each codepoint
+// independently (no kerning), so adding token widths preserves its rounding
+// while avoiding repeated measurement of every growing line prefix.
+template<typename Visitor>
+static int overlay_walk_lines(tsl::gfx::Renderer *renderer, const char *value,
+    int size, int width, Visitor visit)
 {
-    char localized[2048], sanitized[2048];
+    char localized[2048], text[2048];
     ptc_overlay_sanitize_utf8(ptc_ui_localize(value, localized, sizeof(localized)),
-        sanitized, sizeof(sanitized));
-    std::vector<std::string> lines;
-    std::string line;
-    const std::string text(sanitized);
-    auto measured = [&](const std::string &s) {
-        return static_cast<int>(renderer->drawString(s.c_str(), false, 0, 0,
+        text, sizeof(text));
+    const size_t length = std::strlen(text);
+    size_t first = 0, last = 0;
+    int line_width = 0, trailing_width = 0, count = 0;
+    auto measured = [&](size_t begin, size_t end) {
+        char saved = text[end];
+        text[end] = '\0';
+        int result = static_cast<int>(renderer->drawString(text + begin, false, 0, 0,
             size, tsl::style::color::ColorTransparent).first);
+        text[end] = saved;
+        return result;
     };
     auto flush = [&] {
-        while (!line.empty() && line.back() == ' ') line.pop_back();
-        lines.push_back(line);
-        line.clear();
+        size_t end = last;
+        while (end > first && text[end - 1] == ' ') --end;
+        char saved = text[end];
+        text[end] = '\0';
+        visit(text + first, end - first, line_width - trailing_width, count++);
+        text[end] = saved;
+        first = last;
+        line_width = trailing_width = 0;
     };
-    for (size_t i = 0; i < text.size();) {
-        if (text[i] == '\n') { flush(); ++i; continue; }
-        if (text[i] == ' ' && line.empty()) { ++i; continue; }
+    auto append = [&](size_t begin, size_t end, int advance) {
+        if (first == last) first = begin;
+        last = end;
+        line_width += advance;
+        if (end == begin + 1 && text[begin] == ' ') trailing_width += advance;
+        else trailing_width = 0;
+    };
+    for (size_t i = 0; i < length;) {
+        if (text[i] == '\n') { flush(); first = last = ++i; continue; }
+        if (text[i] == ' ' && first == last) { ++i; continue; }
         size_t end = i + 1;
         const auto c = static_cast<unsigned char>(text[i]);
         if (c >= 0xc0) {
-            while (end < text.size() && (static_cast<unsigned char>(text[end]) & 0xc0) == 0x80) ++end;
+            while (end < length && (static_cast<unsigned char>(text[end]) & 0xc0) == 0x80) ++end;
         } else if (c != ' ') {
-            while (end < text.size() && static_cast<unsigned char>(text[end]) < 0x80 &&
+            while (end < length && static_cast<unsigned char>(text[end]) < 0x80 &&
                 text[end] != ' ' && text[end] != '\n') ++end;
         }
-        const std::string token = text.substr(i, end - i);
-        if (!line.empty() && measured(line + token) > width) flush();
-        if (token == " " && line.empty()) { i = end; continue; }
-        if (measured(token) > width) {
-            for (size_t j = 0; j < token.size();) {
+        const int token_width = measured(i, end);
+        if (first != last && line_width + token_width > width) flush();
+        if (text[i] == ' ' && first == last) { i = end; continue; }
+        if (token_width > width) {
+            for (size_t j = i; j < end;) {
                 size_t next = j + 1;
-                while (next < token.size() && (static_cast<unsigned char>(token[next]) & 0xc0) == 0x80) ++next;
-                const std::string character = token.substr(j, next - j);
-                if (!line.empty() && measured(line + character) > width) flush();
-                line += character;
+                while (next < end && (static_cast<unsigned char>(text[next]) & 0xc0) == 0x80) ++next;
+                int advance = measured(j, next);
+                if (first != last && line_width + advance > width) flush();
+                append(j, next, advance);
                 j = next;
             }
-        } else line += token;
+        } else append(i, end, token_width);
         i = end;
     }
-    if (!line.empty() || lines.empty() || (!text.empty() && text.back() == '\n')) flush();
+    if (first != last || count == 0 || (length && text[length - 1] == '\n')) flush();
+    return count;
+}
+
+// Only fixed controls need to retain their (bounded) visible lines for ellipsis.
+[[maybe_unused]] static std::vector<std::string> overlay_wrap(tsl::gfx::Renderer *renderer,
+    const char *value, int size, int width)
+{
+    std::vector<std::string> lines;
+    overlay_walk_lines(renderer, value, size, width,
+        [&](const char *line, size_t length, int, int) { lines.emplace_back(line, length); });
     return lines;
 }
 
 static int overlay_text(tsl::gfx::Renderer *renderer, const char *value,
     int x, int top, int width, int size, tsl::Color color, bool centered = false)
 {
-    const auto lines = overlay_wrap(renderer, value, size, width);
     const int step = (size * 6 + 4) / 5;
-    for (size_t i = 0; i < lines.size(); ++i) {
-        const auto measured = renderer->drawString(lines[i].c_str(), false, 0, 0,
-            size, tsl::style::color::ColorTransparent);
-        const int left = centered ? x + (width - static_cast<int>(measured.first)) / 2 : x;
-        renderer->drawString(lines[i].c_str(), false, left, top + size + static_cast<int>(i) * step,
-            size, renderer->a(color));
-    }
-    return static_cast<int>(lines.size()) * step;
+    return overlay_walk_lines(renderer, value, size, width,
+        [&](const char *line, size_t, int measured, int index) {
+            const int left = centered ? x + (width - measured) / 2 : x;
+            renderer->drawString(line, false, left, top + size + index * step,
+                size, renderer->a(color));
+        }) * step;
 }
 
 static int overlay_text_height(tsl::gfx::Renderer *renderer, const char *value, int width, int size)
 {
-    return static_cast<int>(overlay_wrap(renderer, value, size, width).size()) * ((size * 6 + 4) / 5);
+    return overlay_walk_lines(renderer, value, size, width,
+        [](const char *, size_t, int, int) {}) * ((size * 6 + 4) / 5);
 }
 
 // Fixed controls own their text bounds. Prefer readable type, then limit the
@@ -462,15 +488,19 @@ static std::vector<std::string> overlay_button_lines(tsl::gfx::Renderer *rendere
     const char *text, int width, int height, int &size)
 {
     const int minimum = std::min(size, static_cast<int>(PTC_OVERLAY_FONT_SECONDARY));
-    auto lines = overlay_wrap(renderer, text, size, width);
-    while (size > minimum && static_cast<int>(lines.size()) * ((size * 6 + 4) / 5) > height) {
+    int line_count = overlay_text_height(renderer, text, width, size) / ((size * 6 + 4) / 5);
+    while (size > minimum && line_count * ((size * 6 + 4) / 5) > height) {
         --size;
-        lines = overlay_wrap(renderer, text, size, width);
+        line_count = overlay_text_height(renderer, text, width, size) / ((size * 6 + 4) / 5);
     }
     const int count = height / ((size * 6 + 4) / 5);
     if (count <= 0) return {};
-    if (static_cast<int>(lines.size()) > count) {
-        lines.resize(count);
+    std::vector<std::string> lines;
+    overlay_walk_lines(renderer, text, size, width,
+        [&](const char *line, size_t length, int, int index) {
+            if (index < count) lines.emplace_back(line, length);
+        });
+    if (line_count > count) {
         auto &last = lines.back();
         while (!last.empty() && static_cast<int>(measure_localized(renderer, (last + "...").c_str(), size).first) > width) {
             size_t end = last.size() - 1;

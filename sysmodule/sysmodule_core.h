@@ -9,6 +9,8 @@
 #include "../platform/time_provider.h"
 #include "../platform/calendar_store.h"
 #include "../platform/operation_mode.h"
+#include "../common/rules/rules.h"
+#include "runtime_state.h"
 
 typedef struct {
     char app_root[96];
@@ -32,8 +34,8 @@ typedef struct {
     bool quiescing;
     char boot_id[24];
     char config_cache_text[4096];
-    char rules_cache_text[6144];
-    char state_cache_text[4096];
+    PtcRules rules_cache;
+    PtcRuntimeState state_cache;
     PtcStorageMetadata config_meta;
     PtcStorageMetadata rules_meta;
     PtcStorageMetadata state_meta;

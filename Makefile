@@ -350,3 +350,21 @@ test-host: test-overlay-resources
 .PHONY: test-overlay-resources
 test-overlay-resources: $(HOST_BUILD_DIR)/test_overlay_resources
 	$(STAGE_TIMER) global test-host -- $(HOST_BUILD_DIR)/test_overlay_resources
+
+# Host-only probes. Production binaries have neither counters nor reference paths.
+RESOURCE_FLAGS := -DPTC_RESOURCE_TEST -O2 -ffunction-sections -fdata-sections
+RESOURCE_FONT := third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf
+RESOURCE_NRO_SRCS := companion/nro/ui_render_primitives.c companion/nro/ui_render_text.c companion/nro/ui_theme.c companion/ui_language.c tests/ui_preview/preview_font.c tests/runtime_resources/nro.c
+$(HOST_BUILD_DIR)/resource_backend: $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) tests/runtime_resources/backend.c $(HOST_CONFIG) $(HOST_HEADERS) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) $(filter-out -O2,$(RESOURCE_FLAGS)) -Wl,--gc-sections -o $@ $(filter %.c,$^)
+
+$(HOST_BUILD_DIR)/resource_nro: $(RESOURCE_NRO_SRCS) tests/runtime_resources/shadow_reference.inc $(HOST_CONFIG) $(HOST_HEADERS) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) $(RESOURCE_FLAGS) -D_POSIX_C_SOURCE=200809L -DPTC_UI_PREVIEW_ANIM_CLOCK_MS=1024000 -Itests/ui_preview -Wl,--gc-sections -o $@ $(RESOURCE_NRO_SRCS) -lm
+
+$(HOST_BUILD_DIR)/resource_overlay: tests/runtime_resources/overlay.cpp tests/runtime_resources/wrap_reference.inc $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_CONFIG) $(HOST_HEADERS) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -Wno-unused-function -I. $(RESOURCE_FLAGS) -Wl,--gc-sections -o $@ tests/runtime_resources/overlay.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
+
+.PHONY: test-runtime-resources
+test-runtime-resources: $(HOST_BUILD_DIR)/resource_backend $(HOST_BUILD_DIR)/resource_nro $(HOST_BUILD_DIR)/resource_overlay
+	$(STAGE_TIMER) global test-host -- python3 tests/runtime_resources/run.py $(HOST_BUILD_DIR) $(RESOURCE_FONT)
+test-host: test-runtime-resources

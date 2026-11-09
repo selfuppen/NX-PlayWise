@@ -1,6 +1,10 @@
 #include "sysmodule_internal.h"
 #include <errno.h>
 
+#ifdef PTC_RESOURCE_TEST
+unsigned ptc_resource_rules_parses, ptc_resource_state_parses;
+#endif
+
 void join_path(char *out, size_t out_size, const char *a, const char *b)
 {
     snprintf(out, out_size, "%s/%s", a, b);
@@ -46,6 +50,33 @@ static bool read_cached_text(PtcSysmodule *sysmodule, const char *relative, char
     *cache_valid = true;
     if (strlen(cache) >= out_size) return false;
     snprintf(out, out_size, "%s", cache);
+    return true;
+}
+
+/* Keep the existing metadata checks on every load. Only successful parses
+   are reusable; a failed read/parse must never expose an earlier snapshot. */
+static bool read_parsed_source(PtcSysmodule *sysmodule, const char *relative,
+    PtcStorageMetadata *cached_meta, bool *valid, char *text, size_t size, bool *hit)
+{
+    char path[320];
+    PtcStorageMetadata current;
+    *hit = false;
+    join_path(path, sizeof(path), sysmodule->app_root, relative);
+    if (!sysmodule->storage->vtable->metadata ||
+        !sysmodule->storage->vtable->metadata(sysmodule->storage, path, &current) ||
+        (current.type != PTC_STORAGE_ENTRY_FILE && current.type != PTC_STORAGE_ENTRY_MISSING)) {
+        *valid = false;
+        return false;
+    }
+    if (*valid && metadata_equal(cached_meta, &current)) {
+        *hit = true;
+        return true;
+    }
+    *valid = false;
+    text[0] = '\0';
+    if (current.type == PTC_STORAGE_ENTRY_FILE &&
+        !sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, size)) return false;
+    *cached_meta = current;
     return true;
 }
 
@@ -841,21 +872,14 @@ bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
     return true;
 }
 
-bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
+static bool parse_rules_text(const char *text, PtcRules *rules)
 {
-    char path[320];
-    char text[6144];
+#ifdef PTC_RESOURCE_TEST
+    ++ptc_resource_rules_parses;
+#endif
     char mode[24];
     int64_t version;
-    PtcClockSnapshot calendar_now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     ptc_rules_default(rules);
-    if (!ptc_calendar_runtime_load(sysmodule->storage, sysmodule->app_root,
-            calendar_now.day_index, &sysmodule->calendar_runtime)) return false;
-    rules->calendar = &sysmodule->calendar_runtime.set;
-    join_path(path, sizeof(path), sysmodule->app_root, "rules.json");
-    if (!read_cached_text(sysmodule, "rules.json", sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text),
-            &sysmodule->rules_meta, &sysmodule->rules_cache_valid, text, sizeof(text), true)) return false;
-    if (text[0] == '\0') return sysmodule->rules_meta.type == PTC_STORAGE_ENTRY_MISSING;
     if (!json_i64(text, "version", &version) || (version != 1 && version != 2)) {
         return false;
     }
@@ -940,6 +964,31 @@ bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
         (void)json_bool_value(text, "bedtime_overlay_risk_accepted", &rules->bedtime.unverified_overlay_risk_accepted);
         if (!ptc_bedtime_policy_is_valid(&rules->bedtime)) return false;
     }
+    return true;
+}
+
+bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
+{
+    char text[6144];
+    bool hit;
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    ptc_rules_default(rules);
+    if (!ptc_calendar_runtime_load(sysmodule->storage, sysmodule->app_root,
+            now.day_index, &sysmodule->calendar_runtime)) return false;
+    rules->calendar = &sysmodule->calendar_runtime.set;
+    if (!read_parsed_source(sysmodule, "rules.json", &sysmodule->rules_meta,
+            &sysmodule->rules_cache_valid, text, sizeof(text), &hit)) return false;
+    if (!hit) {
+        if (sysmodule->rules_meta.type == PTC_STORAGE_ENTRY_MISSING)
+            ptc_rules_default(&sysmodule->rules_cache);
+        else if (!parse_rules_text(text, &sysmodule->rules_cache)) return false;
+        sysmodule->rules_cache.calendar = NULL;
+        sysmodule->rules_cache_valid = true;
+    }
+    *rules = sysmodule->rules_cache;
+    /* The runtime contains self-referencing year pointers. Never cache a copy
+       of it or reuse a calendar from a previous date/load. */
+    rules->calendar = &sysmodule->calendar_runtime.set;
     return true;
 }
 
@@ -1034,8 +1083,8 @@ bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         rules->bedtime.confirmed_environment,
         rules->bedtime.unverified_overlay_risk_accepted ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
-    snprintf(sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text), "%s", text);
-    sysmodule->rules_cache_valid = sysmodule->storage->vtable->metadata &&
+    sysmodule->rules_cache_valid = parse_rules_text(text, &sysmodule->rules_cache) &&
+        sysmodule->storage->vtable->metadata &&
         sysmodule->storage->vtable->metadata(sysmodule->storage, path, &sysmodule->rules_meta);
     return true;
 }
@@ -1106,42 +1155,13 @@ static bool load_usage_counter(const char *text, const char *prefix, PtcUsageCou
     return !counter->known || (counter->source == PTC_USAGE_SOURCE_PCTL_1952 && counter->captured_at > 0);
 }
 
-bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
+static bool parse_state_text(const char *text, PtcRuntimeState *state)
 {
-    char path[320];
-    char text[4096];
+#ifdef PTC_RESOURCE_TEST
+    ++ptc_resource_state_parses;
+#endif
     int64_t version;
     memset(state, 0, sizeof(*state));
-    state->last_enforced_day_index = 0;
-    state->last_enforced_mode = 0;
-    state->last_enforced_minutes = 0;
-    state->apply_pending_confirmation = false;
-    state->apply_confirmation_deadline = 0;
-    state->pending_mode = 0;
-    state->pending_minutes = 0;
-    state->v2_failed_attempts = 0;
-    state->v2_cooldown_until = 0;
-    state->buffer_claimed = false;
-    state->buffer_claim_day_index = 0;
-    state->buffer_claimed_minutes = 0;
-    state->summary_day_index = 0;
-    state->summary_grant_minutes = 0;
-    state->bedtime_enforced = false;
-    state->bedtime_window_instance_id = 0;
-    state->bedtime_start_day_index = 0;
-    state->bedtime_skipped_instance_id = 0;
-    state->eye_care_day_index = 0;
-    state->eye_care_accumulated_minutes = 0;
-    state->eye_care_last_used_minutes = 0;
-    state->eye_care_usage_known = false;
-    state->eye_care_resting = false;
-    state->eye_care_rest_deadline = 0;
-    state->eye_care_break_id = 0;
-    state->eye_care_idle_since = 0;
-    join_path(path, sizeof(path), sysmodule->app_root, "state.json");
-    if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
-            &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true)) return false;
-    if (text[0] == '\0') return sysmodule->state_meta.type == PTC_STORAGE_ENTRY_MISSING;
     if (!json_i64(text, "version", &version) || version != 1) {
         return false;
     }
@@ -1242,6 +1262,23 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     return true;
 }
 
+bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
+{
+    char text[4096];
+    bool hit;
+    memset(state, 0, sizeof(*state));
+    if (!read_parsed_source(sysmodule, "state.json", &sysmodule->state_meta,
+            &sysmodule->state_cache_valid, text, sizeof(text), &hit)) return false;
+    if (!hit) {
+        if (sysmodule->state_meta.type == PTC_STORAGE_ENTRY_MISSING)
+            memset(&sysmodule->state_cache, 0, sizeof(sysmodule->state_cache));
+        else if (!parse_state_text(text, &sysmodule->state_cache)) return false;
+        sysmodule->state_cache_valid = true;
+    }
+    *state = sysmodule->state_cache;
+    return true;
+}
+
 bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at)
 {
     char path[320];
@@ -1318,8 +1355,8 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         (long long)updated_at);
     if (written < 0 || (size_t)written >= sizeof(text)) return false;
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
-    snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);
-    sysmodule->state_cache_valid = sysmodule->storage->vtable->metadata &&
+    sysmodule->state_cache_valid = parse_state_text(text, &sysmodule->state_cache) &&
+        sysmodule->storage->vtable->metadata &&
         sysmodule->storage->vtable->metadata(sysmodule->storage, path, &sysmodule->state_meta);
     return true;
 }

@@ -1031,8 +1031,10 @@
 
     static int text_width(tsl::gfx::Renderer *renderer, const char *text, int size)
     {
-        const auto lines = overlay_wrap(renderer, text, size, 100000);
-        return lines.empty() ? 0 : static_cast<int>(measure_localized(renderer, lines[0].c_str(), size).first);
+        int width = 0;
+        overlay_walk_lines(renderer, text, size, 100000,
+            [&](const char *, size_t, int measured, int index) { if (index == 0) width = measured; });
+        return width;
     }
 
     // Largest size that keeps a button label on one line; never below 24px.

@@ -362,8 +362,15 @@ int get_breathing_phase(void)
 }
 
 /* 圆角矩形符号距离（负值在内部）。轴对齐带状区域免开方，仅角部走 sqrt。 */
+#ifdef PTC_RESOURCE_TEST
+unsigned ptc_resource_shadow_distances;
+#endif
+
 static float round_rect_sdf(UiRect rect, int radius, float x, float y)
 {
+#ifdef PTC_RESOURCE_TEST
+    ++ptc_resource_shadow_distances;
+#endif
     float hw = rect.width * 0.5f;
     float hh = rect.height * 0.5f;
     float r = (float)radius;
@@ -438,13 +445,29 @@ static void draw_round_rect_shadow_colored(
     int y_start = y_top < 0 ? 0 : y_top;
     int y_end = y_bottom > SCREEN_HEIGHT ? SCREEN_HEIGHT : y_bottom;
 
+    if (y_start < ui_clip_top) y_start = ui_clip_top;
+    if (y_end > ui_clip_bottom) y_end = ui_clip_bottom;
+
     float inv_blur_key = 1.0f / (float)blur_key;
     float inv_blur_amb = 1.0f / (float)blur_amb;
     float outer_cutoff = (float)(max_blur + max_y_bias);
 
     for (int y = y_start; y < y_end; ++y) {
         float py = (float)y + 0.5f;
+        int skip_start = x_end, skip_end = x_end;
+        /* The central cross is wholly inside the original <= -0.5 body
+           mask, including its boundary pixels. Keep the exact SDF at corners. */
+        if (radius >= 0 && y >= rect.y && y < rect.y + rect.height) {
+            bool middle = y >= rect.y + radius && y < rect.y + rect.height - radius;
+            skip_start = rect.x + (middle ? 0 : radius);
+            skip_end = rect.x + rect.width - (middle ? 0 : radius);
+            if (skip_end > x_end) skip_end = x_end;
+        }
         for (int x = x_start; x < x_end; ++x) {
+            if (x >= skip_start && x < skip_end) {
+                x = skip_end - 1;
+                continue;
+            }
             float px = (float)x + 0.5f;
 
             /* 精准卡片本体遮罩：仅剔除完全落在卡片本体实心内部的像素（<= -0.5f），

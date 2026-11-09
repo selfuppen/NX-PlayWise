@@ -800,8 +800,16 @@ int main(int argc, char **argv) {
                     for (const auto &run : renderer.text_runs) drawn += run.text + " ";
                     require(drawn.find("60") != std::string::npos,
                         "merged dashboard must keep the business quota even when consumption exceeds it or is unknown");
-                    require(drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos,
-                        "merged dashboard must keep console usage label present");
+                    char usage_text[128];
+                    if (scene == 56)
+                        std::snprintf(usage_text, sizeof(usage_text), ptc_ui_text(PTC_UI_T_CONSOLE_USAGE_D_MIN), 69);
+                    else
+                        std::snprintf(usage_text, sizeof(usage_text), "%s %s",
+                            ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_POLICY_PENDING));
+                    // English places the counter inside "Played %d min today";
+                    // it does not contain the standalone label "Played today".
+                    require(drawn.find(usage_text) != std::string::npos,
+                        "merged dashboard must keep the localized usage caption present");
                     if (scene == 56) {
                         require(drawn.find("69") != std::string::npos,
                             "available console consumption must display played counter");
@@ -815,8 +823,14 @@ int main(int argc, char **argv) {
                 if (scene == 58 || scene == 59) {
                     std::string drawn;
                     for (const auto &run : renderer.text_runs) drawn += run.text + " ";
-                    require(drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos,
-                        "restricted status details must expose the direct console counter");
+                    char usage_text[128];
+                    if (scene == 58)
+                        std::snprintf(usage_text, sizeof(usage_text), ptc_ui_text(PTC_UI_T_CONSOLE_USAGE_D_MIN), 69);
+                    else
+                        std::snprintf(usage_text, sizeof(usage_text), "%s: %s",
+                            ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+                    require(drawn.find(usage_text) != std::string::npos,
+                        "restricted status details must expose the localized direct console counter");
                     require((drawn.find("69") != std::string::npos) == (scene == 58),
                         "unknown details must not show a fabricated counter");
                     require((drawn.find("2026-10-14 13:12:49 UTC") != std::string::npos) == (scene == 58),

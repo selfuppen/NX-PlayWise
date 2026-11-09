@@ -1,9 +1,14 @@
 {
   "schema_version": 2,
-  "reviewed_date": "2026-10-25",
+  "reviewed_date": "2026-11-09",
   "scope": "playwise/tools",
-  "script_count": 74,
+  "script_count": 75,
   "scripts": [
+    {
+      "path": "build/runtime_resource_report.py",
+      "category": "build",
+      "purpose": "Host运行资源、固定预览像素等价报告与重复离线核验"
+    },
     {
       "path": "automation/eden_dock_flow.py",
       "category": "automation",
