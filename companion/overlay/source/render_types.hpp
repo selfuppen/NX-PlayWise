@@ -251,17 +251,27 @@ inline void draw_overlay_footer_hints(tsl::gfx::Renderer *renderer, tsl::Color c
     renderer->drawString(ok_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
 }
 
+#include "../display_clock.h"
+#if defined(__SWITCH__)
+static PtcOverlayDisplayClock s_display_clock{};
+#endif
+
 inline void get_overlay_current_time(char *out, size_t size)
 {
     if (!out || size == 0) return;
     out[0] = '\0';
 #if defined(__SWITCH__)
+    if (!ptc_overlay_display_clock_due(&s_display_clock, armTicksToNs(armGetSystemTick()))) {
+        std::snprintf(out, size, "%s", s_display_clock.text);
+        return;
+    }
     u64 ts = 0;
     TimeCalendarTime cal{};
     TimeCalendarAdditionalInfo info{};
     if (R_SUCCEEDED(timeGetCurrentTime(TimeType_Default, &ts)) &&
         R_SUCCEEDED(timeToCalendarTimeWithMyRule(ts, &cal, &info))) {
-        std::snprintf(out, size, "%02u:%02u", (unsigned)cal.hour, (unsigned)cal.minute);
+        std::snprintf(s_display_clock.text, sizeof(s_display_clock.text), "%02u:%02u", (unsigned)cal.hour, (unsigned)cal.minute);
+        std::snprintf(out, size, "%s", s_display_clock.text);
         return;
     }
 #else
@@ -279,6 +289,9 @@ inline void get_overlay_current_time(char *out, size_t size)
     }
 #endif
     std::snprintf(out, size, "--:--");
+#if defined(__SWITCH__)
+    std::snprintf(s_display_clock.text, sizeof(s_display_clock.text), "--:--");
+#endif
 }
 
 inline const OverlayPalette &get_overlay_palette(PtcUiResolvedTheme theme = PTC_UI_RESOLVED_DARK)

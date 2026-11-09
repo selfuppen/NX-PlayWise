@@ -10,6 +10,7 @@
 
 #include "release_manifest.h"
 #include "../layout.h"
+#include "../resource_stats.h"
 
 extern "C" {
 #include "../bridge.h"
@@ -1303,14 +1304,17 @@ class PctcOverlay final : public tsl::Overlay {
 public:
     void onShow() override
     {
+        s_display_clock.sampled = false;
         s_owner_visible = true;
         if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) hide();
+        ptc_overlay_resource_snapshot("show", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
     }
 
     void onHide() override
     {
         s_owner_visible = false;
         ptc_input_owner_release(&s_input_owner, armTicksToNs(armGetSystemTick()));
+        ptc_overlay_resource_snapshot("hide", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
     }
 
     void initServices() override
@@ -1334,6 +1338,7 @@ public:
         onHide();
         ptc_ui_status_trace_close(&s_status_trace, armTicksToNs(armGetSystemTick()));
         ptc_overlay_bridge_exit(&bridge_);
+        ptc_overlay_resource_snapshot("exit", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
         fsdevUnmountDevice("sdmc");
 #if defined(__SWITCH__)
         timeExit();

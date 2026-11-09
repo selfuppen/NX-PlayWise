@@ -88,6 +88,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_auth_clock.py",
         "tests/devkit/test_switch_ui_glyphs.py",
         "tests/devkit/test_ui_text_catalog.py",
+        "tests/devkit/test_overlay_resources.py",
         "tests/devkit/test_ui_palette_contract.py",
         "tests/devkit/test_audio_fixtures.py",
         "tests/devkit/test_eden_bedtime.py",

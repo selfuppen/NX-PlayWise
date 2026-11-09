@@ -45,6 +45,7 @@ export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 .PHONY: all clean $(BUILD)
 all: $(BUILD)
 $(BUILD):
+	@python3 $(TOPDIR)/../../tools/build/overlay_catalog.py --check
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile
 clean:

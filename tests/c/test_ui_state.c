@@ -3209,10 +3209,9 @@ static void test_today_decision_and_plan_review(void)
     check_int(model.selected_index, 2, "calendar button moves up to makeup rule");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 7, "calendar button moves down to manage calendars");
-    model.selected_index = 7;
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused, "manage calendars moves down to footer");
+    check_int(model.selected_index, 6, "calendar button keeps its content selection on footer entry");
+    check_true(model.parent_footer_focused, "merged calendar entry moves down to footer");
+    check_int(model.parent_content_selection, 6, "footer return preserves the calendar entry");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;

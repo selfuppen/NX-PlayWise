@@ -12,6 +12,46 @@ static PtcUiLanguagePreference g_resolved_language = PTC_UI_LANGUAGE_SIMPLIFIED;
 #define PTC_UI_COMPILED_TEXT(key, value) ((key) == PTC_UI_T_EDEN_SIMULATE_TV || (key) == PTC_UI_T_EDEN_SIMULATE_NON_TV ? "" : (value))
 #endif
 
+#if defined(PTC_IPC_CLIENT_OVERLAY) && !defined(PLAYWISE_DEVICE_LAB)
+typedef struct {
+    PtcUiTextId id;
+    const char *name;
+    const char *text[3];
+} OverlayText;
+#define PTC_OVERLAY_TEXT(id, name, hans, hant, en) \
+    {id, name, {PTC_UI_COMPILED_TEXT(id, hans), PTC_UI_COMPILED_TEXT(id, hant), PTC_UI_COMPILED_TEXT(id, en)}},
+static const OverlayText OVERLAY_TEXT[] = {
+#include "overlay/ui_text_catalog.inc"
+};
+#undef PTC_OVERLAY_TEXT
+
+const char *ptc_ui_text_in_language(PtcUiTextId id, PtcUiLanguagePreference lang)
+{
+    size_t low = 0, high = sizeof(OVERLAY_TEXT) / sizeof(OVERLAY_TEXT[0]);
+    while (low < high) {
+        size_t mid = low + (high - low) / 2;
+        if (OVERLAY_TEXT[mid].id < id) low = mid + 1;
+        else high = mid;
+    }
+    if (low == sizeof(OVERLAY_TEXT) / sizeof(OVERLAY_TEXT[0]) || OVERLAY_TEXT[low].id != id)
+        return "[missing text]";
+    unsigned column = lang == PTC_UI_LANGUAGE_TRADITIONAL ? 1 : lang == PTC_UI_LANGUAGE_ENGLISH ? 2 : 0;
+    return OVERLAY_TEXT[low].text[column];
+}
+
+const char *ptc_ui_text(PtcUiTextId id)
+{
+    return ptc_ui_text_in_language(id, g_resolved_language);
+}
+
+const char *ptc_ui_text_resolve(const char *value)
+{
+    if (!value || strncmp(value, "PTC_UI_T_", 9) != 0) return value;
+    for (size_t i = 0; i < sizeof(OVERLAY_TEXT) / sizeof(OVERLAY_TEXT[0]); ++i)
+        if (strcmp(value, OVERLAY_TEXT[i].name) == 0) return ptc_ui_text(OVERLAY_TEXT[i].id);
+    return "[missing text]";
+}
+#else
 #define PTC_UI_TEXT_VALUE(key, value) [key] = PTC_UI_COMPILED_TEXT(key, value),
 static const char *const UI_TEXT_HANS[PTC_UI_TEXT_COUNT] = {
 #include "ui_text_zh_hans.inc"
@@ -56,6 +96,8 @@ const char *ptc_ui_text_resolve(const char *value)
         if (strcmp(value, UI_TEXT_NAMES[i]) == 0) return ptc_ui_text((PtcUiTextId)i);
     return "[missing text]";
 }
+
+#endif
 
 const char *ptc_ui_weekday_label(unsigned weekday)
 {

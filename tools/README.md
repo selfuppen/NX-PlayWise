@@ -199,3 +199,5 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | 文件 | 用途 |
 | --- | --- |
 | [compat/run_archived.py](compat/run_archived.py) | 显式运行已核对的离线封存脚本，保留旧导入；不自动迁移旧CLI |
+
+浮窗文案裁剪：[build/overlay_catalog.py](build/overlay_catalog.py)，源码或译文变更后运行生成，`--check` 供构建门禁核对。

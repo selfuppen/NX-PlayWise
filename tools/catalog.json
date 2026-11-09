@@ -2,7 +2,7 @@
   "schema_version": 2,
   "reviewed_date": "2026-10-25",
   "scope": "playwise/tools",
-  "script_count": 73,
+  "script_count": 74,
   "scripts": [
     {
       "path": "automation/eden_dock_flow.py",
@@ -303,11 +303,11 @@
       "category": "automation",
       "purpose": "X02真实浏览器配对发码至NRO兑换、nonce持久化旅程"
     },
-      {
-        "path": "automation/eden_plan_flow.py",
-        "category": "automation",
-        "purpose": "X01日历导入应用与X04就寝分区草稿、重开持久化"
-      },
+    {
+      "path": "automation/eden_plan_flow.py",
+      "category": "automation",
+      "purpose": "X01日历导入应用与X04就寝分区草稿、重开持久化"
+    },
     {
       "path": "automation/sys_botbase_client.py",
       "category": "automation",
@@ -419,6 +419,11 @@
       "path": "build/sync_gitee_releases.py",
       "category": "build",
       "purpose": "GitHub/Gitee发行附件镜像、摘要验证与双通道更新清单发布"
+    },
+    {
+      "path": "build/overlay_catalog.py",
+      "category": "build",
+      "purpose": "生成及核对浮窗专用三语文案集合，保留稳定消息ID"
     }
   ],
   "directories": [
