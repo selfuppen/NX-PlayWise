@@ -3,16 +3,24 @@
 #include <ctime>
 static bool record_allocations;
 static size_t allocations;
-void *operator new(std::size_t size) {
+// Keep the replacement allocator opaque: GCC 15 otherwise inlines delete and
+// misdiagnoses its matching malloc/free implementation as new/free mismatch.
+#if defined(__GNUC__)
+#define PTC_ALLOCATOR_NOINLINE __attribute__((noinline))
+#else
+#define PTC_ALLOCATOR_NOINLINE
+#endif
+PTC_ALLOCATOR_NOINLINE void *operator new(std::size_t size) {
     if (record_allocations) ++allocations;
     if (void *p = std::malloc(size ? size : 1)) return p;
     throw std::bad_alloc();
 }
-void operator delete(void *p) noexcept { std::free(p); }
-void operator delete(void *p, std::size_t) noexcept { std::free(p); }
-void *operator new[](std::size_t size) { return ::operator new(size); }
-void operator delete[](void *p) noexcept { std::free(p); }
-void operator delete[](void *p, std::size_t) noexcept { std::free(p); }
+PTC_ALLOCATOR_NOINLINE void operator delete(void *p) noexcept { std::free(p); }
+PTC_ALLOCATOR_NOINLINE void operator delete(void *p, std::size_t) noexcept { std::free(p); }
+PTC_ALLOCATOR_NOINLINE void *operator new[](std::size_t size) { return ::operator new(size); }
+PTC_ALLOCATOR_NOINLINE void operator delete[](void *p) noexcept { std::free(p); }
+PTC_ALLOCATOR_NOINLINE void operator delete[](void *p, std::size_t) noexcept { std::free(p); }
+#undef PTC_ALLOCATOR_NOINLINE
 
 #include "tests/overlay_preview/renderer.hpp"
 extern "C" {
