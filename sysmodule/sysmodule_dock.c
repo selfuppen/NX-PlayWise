@@ -169,6 +169,12 @@ void dock_rebaseline(PtcSysmodule *sysmodule, PtcRuntimeState *state, uint8_t we
 void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
     PtcRuntimeState *state, PtcClockSnapshot now)
 {
+    dock_sample_usage_observed(sysmodule, rules, state, now, NULL);
+}
+
+void dock_sample_usage_observed(PtcSysmodule *sysmodule, const PtcRules *rules,
+    PtcRuntimeState *state, PtcClockSnapshot now, PtcControlObservation *observation)
+{
     PtcOperationModeStatus mode = ptc_read_operation_mode(sysmodule);
     uint64_t used;
     bool boot_gap = !sysmodule->dock_boot_sampled;
@@ -183,8 +189,7 @@ void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
         return;
     }
     PtcPctlStatus direct_status = {0};
-    (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-        ptc_weekday_from_day_index(now.day_index), &direct_status);
+    (void)read_control_observation(sysmodule, now, observation, &direct_status);
     if (direct_status.usage_supported || state->dock_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952) {
         dock_sample_direct(state, &direct_status, usage_sample_clock(sysmodule, now), mode.mode, boot_gap);
         return;

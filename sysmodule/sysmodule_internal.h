@@ -75,6 +75,16 @@ typedef struct {
     bool dock_usage_incomplete;
 } PtcRuntimeState;
 
+/* Stack-local to one Enforce pass; never survives a control write. */
+typedef struct {
+    bool sampled;
+    PtcClockSnapshot clock;
+    PtcErrorCode error;
+    PtcPctlStatus status;
+} PtcControlObservation;
+
+PtcErrorCode read_control_observation(PtcSysmodule *sysmodule, PtcClockSnapshot now,
+    PtcControlObservation *observation, PtcPctlStatus *out);
 PtcOperationModeStatus ptc_read_operation_mode(PtcSysmodule *sysmodule);
 bool dock_policy_enabled(const PtcRules *rules);
 bool dock_policy_blocks(PtcSysmodule *sysmodule, const PtcRules *rules,
@@ -82,6 +92,8 @@ bool dock_policy_blocks(PtcSysmodule *sysmodule, const PtcRules *rules,
 bool dock_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now);
 void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
     PtcRuntimeState *state, PtcClockSnapshot now);
+void dock_sample_usage_observed(PtcSysmodule *sysmodule, const PtcRules *rules,
+    PtcRuntimeState *state, PtcClockSnapshot now, PtcControlObservation *observation);
 void dock_rebaseline(PtcSysmodule *sysmodule, PtcRuntimeState *state, uint8_t weekday);
 bool direct_usage_sample(const PtcPctlStatus *status, PtcClockSnapshot now, PtcUsageCounter *out);
 PtcClockSnapshot usage_sample_clock(PtcSysmodule *sysmodule, PtcClockSnapshot request_now);

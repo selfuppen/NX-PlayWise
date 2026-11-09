@@ -1596,6 +1596,101 @@ static void direct_sample(Fixture *f, uint64_t ns, uint32_t seconds)
         ? f->pctl.configured_minutes - f->pctl.played_minutes_today : 0;
 }
 
+static void test_control_observation_boundaries(void)
+{
+    Fixture f;
+    PtcControlObservation observation = {0};
+    PtcPctlStatus status;
+    init_fixture(&f);
+    expect(read_control_observation(&f.core, f.clock.snapshot, &observation, &status) == PTC_ERR_OK,
+        "control observation reads initial state");
+    f.pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
+    expect(read_control_observation(&f.core, f.clock.snapshot, &observation, &status) == PTC_ERR_OK &&
+        f.pctl.read_status_calls == 1, "same-second consumers share the original successful observation");
+    ++f.clock.snapshot.unix_seconds;
+    expect(read_control_observation(&f.core, f.clock.snapshot, &observation, &status) == PTC_ERR_PCTL_READ_FAILED &&
+        !status.remaining_available && !status.usage_available && f.pctl.read_status_calls == 2,
+        "next second refreshes and a failed read has no successful fields");
+    f.pctl.read_error = PTC_ERR_OK;
+    expect(read_control_observation(&f.core, f.clock.snapshot, &observation, &status) == PTC_ERR_PCTL_READ_FAILED &&
+        f.pctl.read_status_calls == 2, "one failed observation is shared without same-second retries");
+    --f.clock.snapshot.unix_seconds;
+    expect(read_control_observation(&f.core, f.clock.snapshot, &observation, &status) == PTC_ERR_OK &&
+        f.pctl.read_status_calls == 3, "backward clock invalidates the local observation");
+    ++f.clock.snapshot.day_index;
+    expect(read_control_observation(&f.core, f.clock.snapshot, &observation, &status) == PTC_ERR_OK &&
+        f.pctl.read_status_calls == 4, "day change invalidates even with unchanged seconds");
+    free(f.mem);
+}
+
+static void test_enforce_shared_observation(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state;
+    PtcOperationModeStatus mode = {PTC_OPERATION_MODE_DOCKED, true, true};
+    PtcOperationModeProvider provider = {test_operation_mode, &mode};
+    init_fixture(&f);
+    f.core.operation_mode_provider = &provider;
+    direct_sample(&f, 20 * PTC_USAGE_MINUTE_NS, 0);
+    enable_dock_fixture(&f, false, 60);
+    expect(load_rules(&f.core, &rules), "load shared observation rules");
+    rules.eye_care.enabled = true;
+    expect(save_rules(&f.core, &rules), "enable both direct consumers");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    unsigned writes = f.pctl.apply_target_calls;
+    f.pctl.read_status_calls = 0;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.read_status_calls == 1 && f.pctl.apply_target_calls == writes,
+        "dock, eye care and unchanged target share one full status read");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.read_status_calls == 2, "a separate Enforce pass never reuses the previous pass");
+    expect(load_state(&f.core, &state), "load usage before failed shared read");
+    uint64_t used = state.eye_cycle_used_ns;
+    f.pctl.read_status_calls = 0;
+    f.pctl.read_status_fail_on_call = 1;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.read_status_calls == 1 && f.pctl.apply_target_calls == writes &&
+        load_state(&f.core, &state) && state.eye_cycle_used_ns == used,
+        "failed shared read neither retries each consumer nor invents consumption or writes");
+    f.pctl.read_status_fail_on_call = 0;
+    f.pctl.read_status_calls = 0;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.read_status_calls == 1, "next pass recovers after a failed observation");
+    for (unsigned i = 0; i < 7; ++i) rules.week[i].minutes = 60;
+    expect(save_rules(&f.core, &rules), "change target after stable shared reads");
+    f.pctl.read_status_calls = 0;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.apply_target_calls == writes + 1 && f.pctl.read_status_calls >= 2 &&
+        f.pctl.configured_minutes == 60 && load_state(&f.core, &state) && !state.apply_pending_confirmation,
+        "write confirmation uses fresh target state rather than the prewrite observation");
+    rules.bedtime.enabled = true;
+    for (unsigned i = 0; i < 7; ++i) {
+        rules.bedtime.week[i].enabled = true;
+        rules.bedtime.week[i].start_minute = 900;
+        rules.bedtime.week[i].end_minute = 800;
+    }
+    expect(ptc_bedtime_policy_is_valid(&rules.bedtime) && save_rules(&f.core, &rules),
+        "enable valid overnight bedtime alongside both observation consumers");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.blocked_today, "bedtime installs a temporary blocked target");
+    writes = f.pctl.apply_target_calls;
+    f.clock.snapshot.minute_of_day = 801;
+    direct_sample(&f, 20 * PTC_USAGE_MINUTE_NS, 81 * 60);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.limited_today && f.pctl.configured_minutes == 60 &&
+        f.pctl.apply_target_calls == writes + 1,
+        "bedtime restore invalidates blocked observation without rewriting the restored target");
+    writes = f.pctl.apply_target_calls;
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/disable.flag", ""),
+        "retain user disable marker");
+    f.pctl.read_status_calls = 0;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.read_status_calls == 0 && f.pctl.apply_target_calls == writes,
+        "disabled Enforce performs no PCTL read or write");
+    free(f.mem);
+}
+
 static void test_usage_counter_epochs(void)
 {
     PtcUsageCounter baseline = {1, true, 2380, 60 * PTC_USAGE_MINUTE_NS, 1000};
@@ -2069,6 +2164,8 @@ int ptc_test_control_safety(void)
     test_snapshot_failure_stops_rule_writes();
     test_zero_limit_readback_never_starts_timer();
     test_direct_usage_projection();
+    test_control_observation_boundaries();
+    test_enforce_shared_observation();
     test_eye_rest_scheduler_deadline();
     test_direct_unlimited_lifecycle();
     test_direct_unlimited_reason_recovery();

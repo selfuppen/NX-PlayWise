@@ -111,6 +111,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     PtcBedtimeEvaluation bedtime;
     PtcPctlStatus observed_status;
     PtcPctlStatus eye_usage_status;
+    PtcControlObservation observation = {0};
     bool eye_direct;
     PtcErrorCode eye_usage_error = PTC_ERR_PCTL_READ_FAILED;
     PtcPctlTargetMode target_mode;
@@ -179,7 +180,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     bedtime_should_enforce = bedtime.active &&
         runtime_state.bedtime_skipped_instance_id != bedtime.window_instance_id;
     previous_eye_state = runtime_state;
-    dock_sample_usage(sysmodule, &rules, &runtime_state, now);
+    dock_sample_usage_observed(sysmodule, &rules, &runtime_state, now, &observation);
     /* Commit observed usage before taking a control transaction preimage: a
        failed restriction write must never roll back consumption already seen. */
     if (memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0 &&
@@ -191,8 +192,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     base_mode = ptc_compose_base_target(active_rule, &base_minutes);
     memset(&eye_usage_status, 0, sizeof(eye_usage_status));
     if (rules.eye_care.enabled && !runtime_state.eye_care_resting && !bedtime_should_enforce)
-        eye_usage_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-            ptc_weekday_from_day_index(now.day_index), &eye_usage_status);
+        eye_usage_error = read_control_observation(sysmodule, now, &observation, &eye_usage_status);
     eye_direct = eye_usage_status.usage_supported ||
         runtime_state.eye_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952;
     /* Daily usage rolls over; the eye-care cycle and rest deadline do not. */
@@ -331,6 +331,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     }
     if (runtime_state.bedtime_enforced &&
         (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id != bedtime.window_instance_id)) {
+        observation.sampled = false;
         err = restore_bedtime_base(sysmodule, request, &rules, &runtime_state, now);
         if (err != PTC_ERR_OK) {
             write_disable_flag(sysmodule, "bedtime_restore_failed\n");
@@ -354,8 +355,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
            (do not act on unknown state); if PCTL had actually lost the setting
            while reads keep failing, the next successful read re-asserts it
            through the full path below. */
-        if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-                ptc_weekday_from_day_index(now.day_index), &observed_status) != PTC_ERR_OK ||
+        if (read_control_observation(sysmodule, now, &observation, &observed_status) != PTC_ERR_OK ||
             target_settings_observed(target_mode, target_minutes, &observed_status)) {
             if (eye_state_changed && !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
                 write_disable_flag(sysmodule, "eye_care_state_failed\n");
@@ -380,8 +380,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     }
     /* Reasons can change while the composed target stays BLOCKED. Persist the
        metadata transaction without rewriting identical PCTL settings. */
-    if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-            ptc_weekday_from_day_index(now.day_index), &observed_status) == PTC_ERR_OK &&
+    if (read_control_observation(sysmodule, now, &observation, &observed_status) == PTC_ERR_OK &&
         target_settings_observed(target_mode, target_minutes, &observed_status)) {
         err = recovery_begin(sysmodule, request, now) ? PTC_ERR_OK : PTC_ERR_PCTL_BACKUP_FAILED;
     } else {

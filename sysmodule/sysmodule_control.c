@@ -1,5 +1,32 @@
 #include "sysmodule_internal.h"
 
+PtcErrorCode read_control_observation(PtcSysmodule *sysmodule, PtcClockSnapshot now,
+    PtcControlObservation *observation, PtcPctlStatus *out)
+{
+    if (!observation) return sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+        ptc_weekday_from_day_index(now.day_index), out);
+    PtcClockSnapshot before = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    if (observation->sampled && before.day_index == now.day_index &&
+        observation->clock.day_index == before.day_index &&
+        observation->clock.unix_seconds == before.unix_seconds) {
+        *out = observation->status;
+        return observation->error;
+    }
+    memset(out, 0, sizeof(*out));
+    PtcErrorCode error = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+        ptc_weekday_from_day_index(now.day_index), out);
+    /* Failed adapters may leave partial fields. Share the failure, not those
+       fields, so another policy cannot treat them as a reliable observation. */
+    if (error != PTC_ERR_OK) memset(out, 0, sizeof(*out));
+    PtcClockSnapshot after = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    observation->sampled = before.day_index == now.day_index &&
+        after.day_index == before.day_index && after.unix_seconds == before.unix_seconds;
+    observation->clock = after;
+    observation->error = error;
+    observation->status = *out;
+    return error;
+}
+
 
 bool request_file_path(char *out, size_t out_size, const PtcSysmodule *sysmodule, const char *queue, const char *name)
 {
