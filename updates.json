@@ -54,18 +54,18 @@
   ],
   "releases": [
     {
-      "notes": "## 中文\n\n- 重整日历管理页面：当前日历、可用日历、文件导入与更新分区更清楚，改善分页、放假日程和手柄导航。\n- 优化软件更新页的说明、按键分组和新版本提醒。\n- 减少后台重复状态读取、日历解析和界面绘制开销，降低浮窗常驻资源占用。\n- 浮窗进入页面和返回时自动刷新并防抖；补充停用状态说明，修复加时码输入数字 `0` 的导航。\n\n首次安装推荐下载 `playwise-complete-3.1.5.zip`，内含 Switch 安装包与离线家长网页。已有用户可下载 `playwise-3.1.5.zip` 完整合并覆盖到 SD 卡根目录，再从「支持与恢复 → 软件信息」加载新版。\n\n验证：完整 devkitPro C/Python/UI、标准包／完整交付包／Device Lab 和 Eden NRO 门禁；Eden 主流程 17 项、计划 7 项、支持恢复 6 项、非电视额度 5 项，分别绑定同一候选并完成离线复核。各专项包含必要前置，项数不代表互不重叠的功能数。\n\n本次未部署真机；包内资格状态为 `pending`。Eden 不覆盖真实 PCTL、Tesla 浮窗、后台热更新、真实休眠及底座行为；资源优化不代表此前真机卡住／崩溃已证实修复。\n\n## English\n\n- Reorganized calendar management and improved pagination, holiday details, and controller navigation.\n- Clarified the software update page, button groups, and new-version notices.\n- Reduced repeated backend reads, calendar parsing, rendering work, and overlay memory use.\n- Added debounced overlay refresh on page entry/return, clarified disabled-state messaging, and fixed navigation to digit `0` when entering a grant code.\n\nUse `playwise-complete-3.1.5.zip` for the Switch package plus the offline parent webpage, or `playwise-3.1.5.zip` for an existing installation.\n\nValidation includes the full devkitPro build/test/package gates and Eden main (17), plans (7), support/restore (6), and undocked allowance (5) suites. Hardware qualification remains `pending`; this release does not claim a verifie",
+      "notes": "家长区导航更新：五个一级页签整合为一体式分段导航栏，两端显示 L/R 按键提示；支持触控切页和肩键翻页。页头统一显示“家长控制台”，副标题随当前模块展示上下文，简体中文、繁体中文和 English 同步更新。\n\n验证：完整 clean 构建及 C/Python/UI 门禁，标准包、完整交付包、Device Lab 包和 Eden NRO 构建／校验通过；同一 clean 候选在 Eden 完成 main 17 项及 support 6 项，包含 PIN、离线码与重放拒绝、计划优先级、护眼／就寝／电视模拟限制与恢复、备份、偏好、诊断、停用和重开持久化。关键浅暗主题画面独立复核，成功批次临时数据已清理并重复离线核验。\n\n首次安装建议下载 `playwise-complete-3.1.6.zip`，内含标准安装包和备用离线家长网页。已有用户可使用 `playwise-3.1.6.zip` 完整覆盖，再在“支持与恢复 → 软件信息”按提示加载新版；升级包保留已有设置和业务数据。附件 SHA-256 见 `SHA256SUMS.txt`。\n\n本次没有部署真机。Eden 验证仅覆盖本地 UI／模拟业务，不替代真实 PCTL、Tesla 浮窗、系统阻断与解除、后台热更新、休眠或底座验收；完整真机资格继续为 `pending`。\n",
       "package": {
-        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.5/playwise-3.1.5.zip",
-        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.1.5/playwise-3.1.5.zip",
-        "md5": "85e4e9a0d07f699a3e76d8633861fad8",
-        "name": "playwise-3.1.5.zip",
-        "sha256": "10c4b88fd8564cea701aabd9bc01d4a51ca1768613d38f8d4dd0874d98dd5231",
-        "size": 3690143
+        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.1.6/playwise-3.1.6.zip",
+        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.1.6/playwise-3.1.6.zip",
+        "md5": "4df0d9f6527e461cce18fd88f85e7100",
+        "name": "playwise-3.1.6.zip",
+        "sha256": "9cb4e5feb0481ed877e4f9e056ca89abc05ff3800410da88c83282548a848d98",
+        "size": 3690249
       },
       "prerelease": false,
-      "tag": "v3.1.5",
-      "version": "3.1.5"
+      "tag": "v3.1.6",
+      "version": "3.1.6"
     },
     {
       "notes": "# 任我玩 PlayWise v3.1.3-beta.2\n\n- 补充 Gitee 原生 libnx TLS 连接所需的固定应用级 CA，保留系统信任库、证书、主机名和有效期验证。\n- 标准支持诊断保存有界网络快照，区分初始化、两来源传输及 CA 导入结果；不记录凭据、签名 URL 或响应正文。\n- 延续 beta.1 的 Gitee 附件跳转、独立配置备份与安全安装／后台交接；保留正常规则、PIN、配对、用量、nonce、账本及活动。\n\n完整构建与产物校验通过，冻结 Eden NRO 的普通主流程17/17、支持恢复6/6通过。内部 clean 6caf 标准构建已在目标机通过 Gitee HTTP200及合法元信息检查；该证据绑定内部构建。本冻结 beta.2 的真实下载、在线安装两阶段及 GitHub 备用仍待独立验证，完整资格pending。\n\n旧更新器若因TLS失败无法联网，需要先按正常手动完整安装／安全交接流程升级。v3.0.2不声明在线安装兼容。公开附件为标准包及含离线家长网页的完整包；Device Lab／Eden仅用于内部验证。已发布beta.1附件及tag保持原身份。\n",
