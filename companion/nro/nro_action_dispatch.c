@@ -395,17 +395,7 @@ void handle_parent_action(UiState *ui)
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      "%s", ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
             break;
-        case 5: {
-            bool new_state = !ptc_audio_is_enabled();
-            ptc_audio_set_enabled(new_state);
-            if (new_state) {
-                ptc_audio_play(PTC_SE_CONFIRM);
-            }
-            save_ui_preferences(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message),
-                     "%s", new_state ? ptc_ui_text(PTC_UI_T_BUTTON_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN) : ptc_ui_text(PTC_UI_T_KEYSTROKES_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN));
-            break;
-        }
+        case 5: open_notification_preferences(ui); break;
         case 7: ui->config_backup_selected_path[0] = '\0'; open_config_backup(ui); break;
         case 6:
             open_activity_history(ui);

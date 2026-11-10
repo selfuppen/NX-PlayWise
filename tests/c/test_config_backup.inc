@@ -43,6 +43,8 @@ static void test_config_backup(void)
     cJSON_AddStringToObject(preferences, "theme_style", "teal");
     cJSON_AddBoolToObject(preferences, "update_check_on_startup", false);
     cJSON_AddBoolToObject(preferences, "update_stable_only", true);
+    cJSON_AddBoolToObject(preferences, "reason_notifications_enabled", true);
+    cJSON_AddStringToObject(preferences, "reason_notification_language", "zh-Hant");
     check_true(ptc_config_write_json(&mem->storage, "app", "config.json", preferences), "save update preferences fixture");
     cJSON *invalid_preferences = cJSON_Duplicate(preferences, true);
     cJSON_ReplaceItemInObjectCaseSensitive(invalid_preferences, "update_stable_only", cJSON_CreateString("true"));
@@ -53,6 +55,17 @@ static void test_config_backup(void)
         "{\"version\":1,\"request_id\":\"backup-stage\",\"type\":\"create_config_backup\",\"created_at\":1,\"payload\":{}}", "backup-stage");
     check_true(ptc_config_stage_validate(&mem->storage, stage, NULL), "backend complete consistent snapshot");
     preferences = ptc_config_read_json(&mem->storage, stage, "config.json", 8192);
+    check_true(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(preferences, "reason_notifications_enabled")) &&
+        !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(preferences, "reason_notification_language")), "zh-Hant"),
+        "notification preference and resolved language survive archive");
+    cJSON *legacy = cJSON_Parse("{\"version\":1,\"device_id\":\"kid-switch\"}");
+    cJSON *merged = ptc_config_merge_preferences(preferences, legacy, PTC_CONFIG_PREFS);
+    check_true(merged && !cJSON_HasObjectItem(merged, "reason_notifications_enabled"), "legacy preference restore defaults off");
+    cJSON_Delete(merged); cJSON_Delete(legacy);
+    cJSON *invalid_notice = cJSON_Duplicate(preferences, true);
+    cJSON_ReplaceItemInObjectCaseSensitive(invalid_notice, "reason_notifications_enabled", cJSON_CreateString("true"));
+    check_true(!ptc_config_preferences_valid(invalid_notice), "notification preference must be boolean");
+    cJSON_Delete(invalid_notice);
     check_true(preferences && !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(preferences, "theme_style")), "teal") &&
         cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(preferences, "update_check_on_startup")) &&
         cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(preferences, "update_stable_only")), "update preferences and theme style survive archive projection");

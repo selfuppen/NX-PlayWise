@@ -1,4 +1,30 @@
 #include "nro_app_internal.h"
+#include "../../platform/ultrahand_config.h"
+
+void open_notification_preferences(UiState *ui)
+{
+    PtcUltrahandConfig external;
+    ptc_ultrahand_config_read(ui->client.storage, &external);
+    ui->model.reason_external_notifications = external.notifications;
+    snprintf(ui->model.reason_overlay_shortcut, sizeof(ui->model.reason_overlay_shortcut), "%s", external.shortcut);
+    ui->model.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
+    ui->model.overlay_selection = 0;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT));
+}
+
+bool toggle_notification_preference(UiState *ui, int index)
+{
+    if (index != 0 && index != 1) return false;
+    bool notice = ui->model.reason_notifications_enabled;
+    bool audio = ptc_audio_is_enabled();
+    if (index == 0) ui->model.reason_notifications_enabled = !notice;
+    else ptc_audio_set_enabled(!audio);
+    if (save_ui_preferences(ui)) return true;
+    ui->model.reason_notifications_enabled = notice;
+    ptc_audio_set_enabled(audio);
+    return false;
+}
 
 u64 shortcut_preset_mask(int index)
 {
@@ -121,6 +147,7 @@ void load_ui_preferences(UiState *ui)
     ui->model.calendar_check_unavailable = true;
 #endif
     ui->model.update_stable_only = false;
+    ui->model.reason_notifications_enabled = false;
     char text[RESULT_TEXT_SIZE];
     u64 mask;
     cJSON *root;
@@ -206,6 +233,8 @@ void load_ui_preferences(UiState *ui)
     item = cJSON_GetObjectItemCaseSensitive(root, "update_stable_only");
     if (cJSON_IsBool(item)) ui->model.update_stable_only = cJSON_IsTrue(item);
     item = cJSON_GetObjectItemCaseSensitive(root, "sound_effects_enabled");
+    ui->model.reason_notifications_enabled = cJSON_IsTrue(
+        cJSON_GetObjectItemCaseSensitive(root, "reason_notifications_enabled"));
     if (cJSON_IsBool(item)) {
         ptc_audio_set_enabled(cJSON_IsTrue(item));
     } else {
@@ -289,6 +318,11 @@ bool save_ui_preferences(UiState *ui)
     cJSON_AddBoolToObject(root, "update_stable_only", ui->model.update_stable_only);
     cJSON_DeleteItemFromObject(root, "sound_effects_enabled");
     cJSON_AddBoolToObject(root, "sound_effects_enabled", ptc_audio_is_enabled());
+    cJSON_DeleteItemFromObject(root, "reason_notifications_enabled");
+    cJSON_AddBoolToObject(root, "reason_notifications_enabled", ui->model.reason_notifications_enabled);
+    cJSON_DeleteItemFromObject(root, "reason_notification_language");
+    cJSON_AddStringToObject(root, "reason_notification_language", ptc_ui_language_preference_name(
+        ptc_ui_language_resolve(ui->language_preference, ui->system_language)));
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");
     cJSON_AddNumberToObject(root, "setup_wizard_step", ui->model.setup_step);
     cJSON_DeleteItemFromObject(root, "setup_wizard_version");

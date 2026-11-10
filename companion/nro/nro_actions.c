@@ -39,6 +39,8 @@ void refresh_language(UiState *ui)
     ui->system_language = read_system_language();
     ptc_ui_language_set_resolved(ptc_ui_language_resolve(
         ui->language_preference, ui->system_language));
+    if (ui->model.reason_notifications_enabled && ptc_ui_language_get_resolved() != previous)
+        (void)save_ui_preferences(ui);
     if (ptc_ui_language_get_resolved() != previous) {
         ptc_ui_graphics_language_changed();
         /* Feedback is formatted at result time; discard it after a language change. */

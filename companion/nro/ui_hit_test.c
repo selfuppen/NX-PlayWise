@@ -432,6 +432,11 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
         if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
+    case PTC_UI_OVERLAY_NOTIFICATIONS:
+        for (i = 0; i < 2; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_notification_option_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_NOTIFICATION_OPTION, i);
+        break;
     case PTC_UI_OVERLAY_THEME:
         for (i = 0; i < 3; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_theme_option_rect(i), x, y)) {

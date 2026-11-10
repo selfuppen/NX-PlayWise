@@ -132,7 +132,8 @@ typedef enum {
     PTC_UI_OVERLAY_CONFIG_BACKUP = 44,
     PTC_UI_OVERLAY_DOCK_RULES = 45,
     PTC_UI_OVERLAY_ONLINE_UPDATE = 46,
-    PTC_UI_OVERLAY_UPDATE_BACKUPS = 47
+    PTC_UI_OVERLAY_UPDATE_BACKUPS = 47,
+    PTC_UI_OVERLAY_NOTIFICATIONS = 48
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -562,6 +563,9 @@ typedef struct {
     bool shortcut_draft_show_hint;
     uint64_t captured_shortcut_mask;
     bool show_parent_shortcut_hint;
+    bool reason_notifications_enabled;
+    int reason_external_notifications;
+    char reason_overlay_shortcut[96];
     char custom_shortcut_label[96];
     char shortcut_draft_label[96];
     PtcUiOverlay overlay;

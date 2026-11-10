@@ -103,6 +103,8 @@ bool eye_care_sample_direct(const PtcRules *rules, PtcRuntimeState *state,
 
 int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request)
 {
+    ++sysmodule->reason_observation.revision;
+    sysmodule->reason_observation.reliable = false;
     PtcRuntimeConfig config;
     PtcRules rules;
     PtcRuntimeState runtime_state;
@@ -362,6 +364,8 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
                 return 0;
             }
             if (eye_exit) clear_eye_care_snapshot(sysmodule);
+            if (observation.sampled && observation.error == PTC_ERR_OK)
+                ptc_sysmodule_note_reason(sysmodule, &rules, &runtime_state, &observed_status, now);
             return 0;
         }
     }
@@ -449,6 +453,8 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     if (!dock_should_enforce) clear_dock_snapshot(sysmodule);
     append_event(sysmodule, NULL, "state_persisted", PTC_ERR_OK, "enforce");
     if (!runtime_state.apply_pending_confirmation && !request) recovery_clear(sysmodule);
+    if (err == PTC_ERR_OK && !request)
+        ptc_sysmodule_note_reason(sysmodule, &rules, &runtime_state, &observed_status, now);
     return 1;
 }
 

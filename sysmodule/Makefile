@@ -23,6 +23,7 @@ SOURCES := \
 	../common/time \
 	../common/token \
 	../common/usage \
+	../common/notification \
 	../third_party/cjson \
 	../platform \
 	../platform/switch
@@ -50,6 +51,10 @@ export VPATH := $(VPATH) $(CURDIR)/../companion
 export DEPSDIR := $(CURDIR)/$(BUILD)
 
 SYSMODULE_CFILES := \
+	input_owner.c \
+	notification_text.c \
+	reason_notification.c \
+	sysmodule_reason.c \
 	update_install.c \
 	ipc_server.c \
 	lab_session.c \

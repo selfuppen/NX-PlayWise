@@ -7,3 +7,4 @@
 #include "ui_text/keys/support.inc"
 #include "ui_text/keys/setup.inc"
 #include "ui_text/keys/overlay.inc"
+#include "ui_text/keys/notification.inc"

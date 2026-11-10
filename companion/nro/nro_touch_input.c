@@ -20,6 +20,10 @@ void handle_touch(UiState *ui, int x, int y)
         return;
     }
     switch (hit.kind) {
+    case PTC_UI_HIT_NOTIFICATION_OPTION:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
     case PTC_UI_HIT_UPDATE_BADGE:
         ptc_audio_play(PTC_SE_CONFIRM);
         open_online_update_badge(ui);

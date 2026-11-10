@@ -108,6 +108,8 @@ void clear_dock_snapshot(PtcSysmodule *sysmodule);
 bool recovery_path_exists(PtcSysmodule *sysmodule);
 bool recovery_owned_by(PtcSysmodule *sysmodule, const PtcRequest *request);
 int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request);
+void ptc_sysmodule_note_reason(PtcSysmodule *sysmodule, const PtcRules *rules,
+    const PtcRuntimeState *state, const PtcPctlStatus *status, PtcClockSnapshot now);
 bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now);
 void recovery_clear(PtcSysmodule *sysmodule);
 bool recovery_rollback(PtcSysmodule *sysmodule);

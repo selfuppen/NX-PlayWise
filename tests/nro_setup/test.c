@@ -303,6 +303,25 @@ static void test_parent_pin_error(void)
           !handle_parent_auth_error_touch(&ui, 640, 470) && ui.auth_retry_action == AUTH_RETRY_CHANGE_PIN,
           "sensitive-operation error keeps its existing handlers and retry action");
 }
+static void test_notification_preferences(void)
+{
+    static PtcMemStorage mem;
+    UiState ui, reopened;
+    init(&ui, &mem);
+    check(!ui.model.reason_notifications_enabled, "new notification preference is off");
+    check(toggle_notification_preference(&ui, 0), "notification setting saves");
+    reopened = ui;
+    load_ui_preferences(&reopened);
+    check(reopened.model.reason_notifications_enabled, "notification setting round trips");
+    mem.fail_writes = true;
+    check(!toggle_notification_preference(&ui, 0) && ui.model.reason_notifications_enabled,
+        "failed notification save restores its switch");
+    bool audio_before = ptc_audio_is_enabled();
+    check(!toggle_notification_preference(&ui, 1) && ptc_audio_is_enabled() == audio_before,
+        "failed audio save restores its switch");
+    mem.fail_writes = false;
+}
+
 static void test_bedtime_legacy_optional_windows(void)
 {
     static PtcMemStorage mem;
@@ -561,6 +580,7 @@ static void test_theme_draft_commit(void)
 
 int main(void)
 {
+    test_notification_preferences();
     static PtcMemStorage mem;
     UiState ui, reopened;
     char text[8192];

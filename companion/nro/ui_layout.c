@@ -279,6 +279,12 @@ PtcUiRect ptc_ui_settings_card_rect(int index)
     return rect;
 }
 
+PtcUiRect ptc_ui_notification_option_rect(int index)
+{
+    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    return (PtcUiRect){d.x + 34, d.y + 160 + index * 64, d.w - 68, 54};
+}
+
 /* Pairing QR page shares the standard dialog button row so the drawn button,
    the touch target and the tests always agree. */
 PtcUiRect ptc_ui_qr_export_rect(void)
@@ -847,6 +853,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 360;
         break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
+    case PTC_UI_OVERLAY_NOTIFICATIONS:
         *width = 960;
         *height = 560;
         break;

@@ -11,6 +11,7 @@
 #include "../platform/operation_mode.h"
 #include "../common/rules/rules.h"
 #include "runtime_state.h"
+#include "../common/notification/reason_event.h"
 
 typedef struct {
     char app_root[96];
@@ -33,6 +34,7 @@ typedef struct {
     bool disable_present;
     bool quiescing;
     char boot_id[24];
+    PtcReasonObservation reason_observation;
     char config_cache_text[4096];
     PtcRules rules_cache;
     PtcRuntimeState state_cache;

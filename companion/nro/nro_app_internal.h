@@ -234,6 +234,8 @@ void submit_config_backup(UiState *ui, bool restore);
 void config_backup_result(UiState *ui);
 void load_ui_preferences(UiState *ui);
 bool save_ui_preferences(UiState *ui);
+void open_notification_preferences(UiState *ui);
+bool toggle_notification_preference(UiState *ui, int index);
 bool save_setup_step(UiState *ui, int step);
 void edit_overlay_minutes(UiState *ui);
 void edit_weekly_minutes(UiState *ui);

@@ -94,6 +94,7 @@ def create_package(
             "device_id": device_id,
             "max_add_minutes": max_add_minutes,
             "default_request_timeout_ms": 60000,
+            "reason_notifications_enabled": False,
             "pairing_base_url": "https://selfuppen.github.io/NX-PlayWise/",
         },
     )

@@ -1,0 +1,7 @@
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTIFY_TITLE, "PlayWise")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTIFY_DAILY, "Daily allowance reached")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTIFY_BEDTIME, "Bedtime restriction started")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTIFY_EYE, "Eye rest started")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTIFY_DOCK, "TV mode restriction applied")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTIFY_SHORTCUT, " for current details")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTIFY_OPEN, "Open PlayWise for current details")
