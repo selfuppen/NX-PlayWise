@@ -246,9 +246,20 @@ PtcUiRect ptc_ui_parent_subpage_footer_rect(int index)
     return (PtcUiRect){0, 664, 0, 44};
 }
 
+PtcUiRect ptc_ui_parent_tab_track_rect(void)
+{
+    return (PtcUiRect){54, 116, 1172, 44};
+}
+
+PtcUiRect ptc_ui_parent_shoulder_key_rect(int key)
+{
+    if (key == 0) return (PtcUiRect){66, 124, 34, 28}; /* L */
+    return (PtcUiRect){1178, 124, 34, 28};              /* R */
+}
+
 PtcUiRect ptc_ui_parent_tab_rect(int index)
 {
-    PtcUiRect rect = {54 + index * 174, 120, 158, 38};
+    PtcUiRect rect = {118 + index * 210, 120, 196, 36};
     return rect;
 }
 

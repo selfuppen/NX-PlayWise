@@ -345,9 +345,20 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     }
 
     int index;
+    /* 贯通一体式分段轨道槽容器 */
+    UiRect track = to_uirect(ptc_ui_parent_tab_track_rect());
+    fill_round_rect(pixels, stride, track, 14, UI_SURFACE);
+    draw_rect_outline(pixels, stride, track, 14, 1, UI_BORDER);
+
+    /* 首尾嵌入式 L / R 实体肩键帽 */
+    UiRect l_key = to_uirect(ptc_ui_parent_shoulder_key_rect(0));
+    UiRect r_key = to_uirect(ptc_ui_parent_shoulder_key_rect(1));
+    draw_shoulder_key_glyph(pixels, stride, l_key.x, l_key.y, l_key.width, l_key.height, "L", false);
+    draw_shoulder_key_glyph(pixels, stride, r_key.x, r_key.y, r_key.width, r_key.height, "R", false);
+
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
-        fill_round_rect(pixels, stride, tab, 12, UI_RAISED);
+        fill_round_rect(pixels, stride, tab, 10, UI_RAISED);
     }
     /* 选中指示胶囊从上一页位置滑向当前页，页签文字保持不动。 */
     {
@@ -363,7 +374,7 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
             from.y,
             from.width + (int)((to.width - from.width) * slide_t),
             from.height};
-        fill_round_rect(pixels, stride, pill, 12, UI_ACCENT);
+        fill_round_rect(pixels, stride, pill, 10, UI_ACCENT);
     }
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
@@ -372,20 +383,19 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         if (status) {
             /* Share the tab vertically: an overlaid corner badge obscures
                the title, and fixed badge widths truncate longer translations. */
-            UiRect title = {tab.x + 8, tab.y + 3, tab.width - 16, 18};
+            UiRect title = {tab.x + 8, tab.y + 3, tab.width - 16, 16};
             int width = measure_text(status, 11) + 16;
             if (width > tab.width - 16) width = tab.width - 16;
-            UiRect badge = {tab.x + (tab.width - width) / 2, tab.y + tab.height - 18, width, 16};
+            UiRect badge = {tab.x + (tab.width - width) / 2, tab.y + tab.height - 17, width, 15};
             uint32_t color = strcmp(status, ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED)) == 0 ? UI_DANGER :
                 (strcmp(status, ptc_ui_text(PTC_UI_T_UPDATE_NEW_VERSION_BADGE)) == 0 ? UI_ACCENT : UI_WARNING);
-            draw_text_center(pixels, stride, title, LABELS[index], 16, active ? UI_ON_ACCENT : UI_INK);
+            draw_text_center(pixels, stride, title, LABELS[index], 15, active ? UI_ON_ACCENT : UI_INK);
             fill_round_rect(pixels, stride, badge, 5, color);
             draw_text_center(pixels, stride, badge, status, 11, UI_ON_ACCENT);
         } else {
-            draw_text_center(pixels, stride, tab, LABELS[index], 18, active ? UI_ON_ACCENT : UI_INK);
+            draw_text_center(pixels, stride, tab, LABELS[index], 17, active ? UI_ON_ACCENT : UI_INK);
         }
     }
-    draw_text(pixels, stride, 1038, 146, ptc_ui_text(PTC_UI_T_L_R_SWITCH), 19, UI_MUTED);
 }
 
 static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -702,21 +712,38 @@ static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcU
 
 static void draw_parent_header(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    const char *TITLES[] = {ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE), ptc_ui_text(PTC_UI_T_TIME_PLANS), ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS), ptc_ui_text(PTC_UI_T_SECURITY_PREFS), ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)};
-    const char *title = TITLES[model->parent_page >= 0 && model->parent_page < PTC_UI_PARENT_PAGE_COUNT
-        ? model->parent_page : 0];
-    if (model->parent_page == PTC_UI_PARENT_PLAN) {
+    const char *LABELS[] = {
+        ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE),
+        ptc_ui_text(PTC_UI_T_TIME_PLANS),
+        ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS),
+        ptc_ui_text(PTC_UI_T_SECURITY_PREFS),
+        ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)
+    };
+    const char *title = ptc_ui_text(PTC_UI_T_PARENT_CONSOLE);
+    const char *sub_raw =
+        model->parent_page == PTC_UI_PARENT_SUPPORT ? ptc_ui_text(PTC_UI_T_COMPATIBILITY_STATUS_DIAGNOSTICS_AND_SAFE_RECOVERY) :
+         (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_text(PTC_UI_T_CREDIT_RULES_AND_BEDTIME_PLAN) :
+         (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_ADJUSTMENT_AND_SINGLE_MEASURES) :
+         (model->parent_page == PTC_UI_PARENT_GRANT ? ptc_ui_text(PTC_UI_T_OFFLINE_GRANT_SUBTITLE) :
+          ptc_ui_text(PTC_UI_T_LOCAL_RULES_AND_DEVICE_SECURITY_SETTINGS))));
+
+    char subtitle_buf[256];
+    const char *subtitle = sub_raw;
+
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page != PTC_UI_PLAN_PAGE_ROOT) {
         if (model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) title = ptc_ui_text(PTC_UI_T_WEEKLY_PLAN);
         else if (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) title = ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAYS);
         else if (model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME) title = ptc_ui_text(PTC_UI_T_BEDTIME);
         else if (model->plan_page == PTC_UI_PLAN_PAGE_DOCK) title = ptc_ui_text(PTC_UI_T_DOCK_TITLE);
         else if (model->plan_page == PTC_UI_PLAN_PAGE_EYE_CARE) title = ptc_ui_text(PTC_UI_T_EYE_CARE);
+    } else {
+        int page_idx = (model->parent_page >= 0 && model->parent_page < PTC_UI_PARENT_PAGE_COUNT)
+            ? (int)model->parent_page : 0;
+        snprintf(subtitle_buf, sizeof(subtitle_buf), "%s / %s", LABELS[page_idx], sub_raw);
+        subtitle = subtitle_buf;
     }
-    draw_header(pixels, stride, title,
-        model->parent_page == PTC_UI_PARENT_SUPPORT ? ptc_ui_text(PTC_UI_T_COMPATIBILITY_STATUS_DIAGNOSTICS_AND_SAFE_RECOVERY) :
-         (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_text(PTC_UI_T_CREDIT_RULES_AND_BEDTIME_PLAN) :
-         (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_ADJUSTMENT_AND_SINGLE_MEASURES) :
-          ptc_ui_text(PTC_UI_T_LOCAL_RULES_AND_DEVICE_SECURITY_SETTINGS))));
+
+    draw_header(pixels, stride, title, subtitle);
     draw_time_status_bar(pixels, stride, model);
     draw_tabs(pixels, stride, model);
     if (model->parent_page == PTC_UI_PARENT_TODAY) {

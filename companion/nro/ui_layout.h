@@ -179,6 +179,8 @@ PtcUiRect ptc_ui_parent_footer_details_rect(void);
 PtcUiRect ptc_ui_parent_footer_rules_rect(void);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
+PtcUiRect ptc_ui_parent_tab_track_rect(void);
+PtcUiRect ptc_ui_parent_shoulder_key_rect(int key);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_settings_card_rect(int index);
