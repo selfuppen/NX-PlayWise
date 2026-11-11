@@ -529,7 +529,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             model->view = PTC_UI_SETUP;
         } else if (!model->setup_wizard_completed && strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
             model->view = PTC_UI_SETUP;
-        } else if (strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP &&
+        } else if (!model->setup_review_active && strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP &&
                    model->setup_step == 0) {
             model->view = PTC_UI_CHILD;
         }

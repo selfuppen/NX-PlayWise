@@ -14,6 +14,12 @@
 #include "../../common/security/credential_policy.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 
+enum {
+    PTC_UI_SETUP_OPTION_LANGUAGE, PTC_UI_SETUP_OPTION_THEME, PTC_UI_SETUP_OPTION_SHORTCUT,
+    PTC_UI_SETUP_OPTION_NOTIFICATIONS, PTC_UI_SETUP_OPTION_EYE_CARE, PTC_UI_SETUP_OPTION_BEDTIME,
+    PTC_UI_SETUP_OPTION_COUNT
+};
+
 typedef enum {
     PTC_UI_DOCK_PREVIEW_UNKNOWN = 0,
     PTC_UI_DOCK_PREVIEW_OFF,
@@ -537,6 +543,12 @@ typedef struct {
     char result_status[24];
     char result_type[48];
     int setup_step;
+    /* Local guide acknowledgements, independent of backend activation. */
+    uint32_t setup_option_versions[PTC_UI_SETUP_OPTION_COUNT];
+    unsigned setup_option_skipped;
+    bool setup_options_loaded;
+    bool setup_review_active;
+    int setup_review_selection;
     bool setup_wizard_completed;
     bool setup_completion_known;
     bool setup_legacy_completed_candidate;
@@ -565,6 +577,9 @@ typedef struct {
     bool show_parent_shortcut_hint;
     bool reason_notifications_enabled;
     int reason_external_notifications;
+    bool reason_detail_ready;
+    bool reason_overlay_installed;
+    char reason_test_message[384];
     char reason_overlay_shortcut[96];
     char custom_shortcut_label[96];
     char shortcut_draft_label[96];

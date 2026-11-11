@@ -41,6 +41,29 @@ static int setup_block(uint32_t *pixels, uint32_t stride, int x, int top,
 
 void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
+    if (model->setup_review_active) {
+        int item = ptc_ui_setup_next_option(model);
+        if (item < 0) return;
+        draw_header(pixels, stride, ptc_ui_text(PTC_UI_T_SETUP_REVIEW_TITLE), ptc_ui_text(PTC_UI_T_SETUP_REVIEW_INTRO));
+        UiRect card = {124, 156, 1032, 486};
+        fill_round_rect(pixels, stride, card, 16, UI_SURFACE);
+        draw_rect_outline(pixels, stride, card, 16, 1, UI_BORDER);
+        draw_wrapped_text(pixels, stride, card.x + 40, card.y + 58,
+            ptc_ui_text(ptc_ui_setup_option_title(item)), 28, card.width - 80, 38, 2, UI_INK);
+        draw_wrapped_text(pixels, stride, card.x + 40, card.y + 128,
+            ptc_ui_text(PTC_UI_T_SETUP_REVIEW_BODY), 18, card.width - 80, 26, 2, UI_MUTED);
+        const PtcUiTextId actions[] = {PTC_UI_T_SETUP_REVIEW_CONFIGURE, PTC_UI_T_SETUP_REVIEW_KEEP,
+            PTC_UI_T_SETUP_REVIEW_SKIP, PTC_UI_T_SETUP_REVIEW_SKIP_ALL};
+        for (int i = 0; i < 4; ++i)
+            setup_button(pixels, stride, ptc_ui_setup_review_rect(i), ptc_ui_text(actions[i]),
+                model->setup_review_selection == i, false);
+        if (model->message[0]) {
+            char fitted[256];
+            fit_text(fitted, sizeof(fitted), model->message, 15, 1032);
+            draw_text(pixels, stride, 124, 675, fitted, 15, UI_WARNING_TEXT);
+        }
+        return;
+    }
     int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_PREPARE;
     const char *labels[] = {ptc_ui_text(PTC_UI_T_SETUP_PREPARE), ptc_ui_text(PTC_UI_T_SETUP_PARENT),
         ptc_ui_text(PTC_UI_T_SETUP_CONFIRM)};

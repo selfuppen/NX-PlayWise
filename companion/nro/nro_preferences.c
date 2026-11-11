@@ -1,12 +1,55 @@
 #include "nro_app_internal.h"
 #include "../../platform/ultrahand_config.h"
+#include "../../platform/reason_detail.h"
 
-void open_notification_preferences(UiState *ui)
+static uint64_t notification_now_ms(void)
+{
+#ifdef PLAYWISE_EDEN
+    return (uint64_t)ptc_ui_anim_now_ms();
+#else
+    return armTicksToNs(armGetSystemTick()) / 1000000;
+#endif
+}
+
+void probe_notification_environment(UiState *ui)
 {
     PtcUltrahandConfig external;
+    PtcReasonDetail ready;
+    PtcStorageMetadata meta;
+    char boot[17];
     ptc_ultrahand_config_read(ui->client.storage, &external);
     ui->model.reason_external_notifications = external.notifications;
     snprintf(ui->model.reason_overlay_shortcut, sizeof(ui->model.reason_overlay_shortcut), "%s", external.shortcut);
+    ui->model.reason_overlay_installed = ui->client.storage->vtable->metadata(ui->client.storage,
+        "sdmc:/switch/.overlays/playwise.ovl", &meta) && meta.type == PTC_STORAGE_ENTRY_FILE;
+    ui->model.reason_detail_ready = ptc_reason_detail_runtime(ui->client.storage, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot) &&
+        ptc_reason_detail_read(ui->client.storage, APP_ROOT, "ready", &ready) &&
+        ptc_reason_detail_fresh(&ready, PLAYWISE_BUILD_RELEASE_ID, boot, notification_now_ms());
+}
+
+void poll_notification_test(UiState *ui)
+{
+    ptc_notification_test_poll(&ui->notification_test, ui->client.storage, APP_ROOT, notification_now_ms());
+}
+
+void test_notification(UiState *ui)
+{
+    probe_notification_environment(ui);
+    PtcUiTextId message = PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG;
+    if (ui->model.reason_external_notifications == 1) {
+        uint64_t id;
+        randomGet(&id, sizeof(id));
+        bool sent = ptc_notification_test_send(&ui->notification_test, ui->client.storage, APP_ROOT,
+            notification_now_ms(), id, ptc_ui_text(PTC_UI_T_NOTICE_TEST_TITLE), ptc_ui_text(PTC_UI_T_NOTICE_TEST_BODY));
+        message = sent ? PTC_UI_T_NOTICE_TEST_SENT : PTC_UI_T_NOTICE_TEST_FAILED;
+    }
+    snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s", ptc_ui_text(message));
+}
+
+void open_notification_preferences(UiState *ui)
+{
+    probe_notification_environment(ui);
+    ui->model.reason_test_message[0] = '\0';
     ui->model.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
     ui->model.overlay_selection = 0;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
@@ -31,6 +74,7 @@ bool toggle_notification_preference(UiState *ui, int index)
                 prepared == PTC_ULTRAHAND_PREPARE_ALREADY_ON ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
                 PTC_UI_T_REASON_NOTICE_PREPARE_FAILED));
         }
+        complete_setup_option(ui, PTC_UI_SETUP_OPTION_NOTIFICATIONS);
         return true;
     }
     ui->model.reason_notifications_enabled = notice;
@@ -174,6 +218,7 @@ void load_ui_preferences(UiState *ui)
     ui->model.setup_completion_known = false;
     ui->model.setup_wizard_completed = false;
     ui->model.setup_legacy_completed_candidate = false;
+    load_setup_options(ui);
     ui->model.setup_shortcut_index = PTC_UI_SHORTCUT_PRESET_LR;
     ui->model.setup_theme_index = PTC_UI_THEME_SYSTEM;
     ui->model.setup_eye_care_enabled = false;

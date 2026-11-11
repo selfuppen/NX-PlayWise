@@ -48,6 +48,7 @@ OBJS := \
 	$(BUILD)/nro_redemption.o \
 	$(BUILD)/nro_result_poll.o \
 	$(BUILD)/nro_setup.o \
+	$(BUILD)/nro_setup_options.o \
 	$(BUILD)/nro_security.o \
 	$(BUILD)/nro_pairing.o \
 	$(BUILD)/nro_history.o \
@@ -126,7 +127,13 @@ OBJS := \
 	$(BUILD)/config_backup.o
 
 DEPENDS = $(OBJS:.o=.d)
-OBJS += $(BUILD)/ultrahand_config.o $(BUILD)/sysmodule_reason.o
+OBJS += $(BUILD)/ultrahand_config.o $(BUILD)/sysmodule_reason.o $(BUILD)/notification_test.o $(BUILD)/reason_detail.o
+
+$(BUILD)/notification_test.o: ../../companion/notification_test.c ../../companion/notification_test.h | $(BUILD)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/reason_detail.o: ../../platform/reason_detail.c ../../platform/reason_detail.h | $(BUILD)
+	$(CC) $(CFLAGS) -c -o $@ $<
 OBJS += $(BUILD)/update.o $(BUILD)/update_install.o $(BUILD)/update_fs.o $(BUILD)/nro_online_update.o
 ifneq ($(EDEN_BUILD),1)
 OBJS += $(BUILD)/online_update.o $(BUILD)/online_update_package.o
@@ -205,6 +212,9 @@ $(BUILD)/nro_result_poll.o: nro_result_poll.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/nro_setup.o: nro_setup.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_setup_options.o: nro_setup_options.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/nro_security.o: nro_security.c nro_app_internal.h | $(BUILD)
