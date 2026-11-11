@@ -2165,6 +2165,7 @@ static void test_scheduler_idle_probe(void)
     Fixture f;
     PtcRules rules;
     PtcRuntimeState state;
+    PtcReasonObservation reason_before;
     int64_t writes_before;
     unsigned pctl_before;
     char build[256];
@@ -2179,6 +2180,7 @@ static void test_scheduler_idle_probe(void)
         f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/compatibility.json", environment),
         "seed accepted scheduler environment");
     (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    reason_before = f.core.reason_observation;
     expect(!ptc_sysmodule_tick_due(&f.core, 0), "quiet wake skips the full tick");
     writes_before = f.mem->now_unix_seconds;
     pctl_before = f.pctl.read_status_calls + f.pctl.apply_target_calls + f.pctl.start_timer_calls;
@@ -2186,6 +2188,9 @@ static void test_scheduler_idle_probe(void)
     expect(f.mem->now_unix_seconds == writes_before, "quiet full tick performs no storage write");
     expect(f.pctl.read_status_calls + f.pctl.apply_target_calls + f.pctl.start_timer_calls == pctl_before,
         "quiet full tick performs no PCTL call");
+    expect(f.core.reason_observation.revision == reason_before.revision &&
+        f.core.reason_observation.captured_at == reason_before.captured_at,
+        "quiet wakes cannot renew notification observation freshness");
 
     /* 未经 IPC 通知落入队列的请求。 */
     expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/inbox/pending/1-0001.json",
@@ -2219,7 +2224,10 @@ static void test_scheduler_idle_probe(void)
     f.clock.snapshot.unix_seconds += 60;
     f.clock.snapshot.minute_of_day += 1;
     expect(ptc_sysmodule_tick_due(&f.core, 0), "minute change requires the full tick");
+    reason_before = f.core.reason_observation;
     (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(f.core.reason_observation.revision > reason_before.revision,
+        "due policy pass still refreshes the notification observation");
     expect(!ptc_sysmodule_tick_due(&f.core, 0), "settled minute stays quiet");
     expect(ptc_sysmodule_tick_due(&f.core, ptc_sysmodule_current_scan_interval(&f.core)),
         "scan backoff expiry requires the full tick");

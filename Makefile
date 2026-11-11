@@ -50,6 +50,7 @@ test-host: test-online-network
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
+	common/notification/reason_event.c \
 	common/update/update.c \
 	common/crypto/sha256.c \
 	common/protocol/error_code.c \
@@ -72,6 +73,8 @@ THIRD_PARTY_SRCS := \
 	third_party/qrcodegen/qrcodegen.c
 
 PLATFORM_HOST_SRCS := \
+	platform/reason_detail.c \
+	platform/ultrahand_config.c \
 	platform/update_fs.c \
 	platform/install_defaults.c \
 	platform/calendar_store.c \
@@ -85,6 +88,10 @@ PLATFORM_HOST_SRCS := \
 	platform/switch/play_timer_settings_layout.c
 
 ORCH_SRCS := \
+	companion/input_owner.c \
+	companion/notification_text.c \
+	sysmodule/reason_notification.c \
+	sysmodule/sysmodule_reason.c \
 	companion/update_install.c \
     companion/ui_language.c \
 	companion/album_restriction.c \
@@ -166,7 +173,7 @@ $(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c co
 
 # Execute the real NRO orchestration with deterministic host libnx/input shims.
 SETUP_TEST_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) companion/auth.c companion/auth_clock.c companion/album_restriction.c companion/transport_client.c common/support/support_export.c common/security/credential_policy.c platform/host/mem_storage.c companion/nro/nro_runtime.c companion/nro/nro_actions.c companion/nro/nro_preferences.c companion/nro/nro_setup.c companion/nro/nro_support.c companion/nro/nro_security.c companion/nro/nro_requests.c companion/nro/nro_result_poll.c companion/nro/nro_config_backup.c platform/config_backup.c tests/nro_setup/test.c
-SETUP_TEST_SRCS += companion/nro/nro_online_update.c
+SETUP_TEST_SRCS += companion/nro/nro_online_update.c platform/ultrahand_config.c
 $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
 
@@ -237,7 +244,21 @@ test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test
 
 test-host: test-overlay-preview-save
 
+NOTICE_PREVIEW_SRCS := sysmodule/reason_notification.c common/notification/reason_event.c companion/notification_text.c companion/input_owner.c platform/reason_detail.c platform/ultrahand_config.c third_party/cjson/cJSON.c
+$(HOST_BUILD_DIR)/notice_preview_core.o: $(NOTICE_PREVIEW_SRCS) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -r -o $@ $(NOTICE_PREVIEW_SRCS)
+
+$(HOST_BUILD_DIR)/notice_preview: tests/notification_layout/test.cpp $(HOST_BUILD_DIR)/notice_preview_core.o | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -o $@ tests/notification_layout/test.cpp $(HOST_BUILD_DIR)/notice_preview_core.o -lm
+
+.PHONY: test-notice-layout
+test-notice-layout: $(HOST_BUILD_DIR)/notice_preview
+	$(STAGE_TIMER) global test-ui -- $(HOST_BUILD_DIR)/notice_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf $(HOST_BUILD_DIR)/reason-notices.html
+
+test-host: test-notice-layout
+
 HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_ONLINE_UPDATE_TEST) $(HOST_ONLINE_PACKAGE_TEST) $(HOST_ONLINE_NETWORK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
+HOST_CACHED_TARGETS += $(HOST_BUILD_DIR)/notice_preview_core.o $(HOST_BUILD_DIR)/notice_preview
 $(HOST_CACHED_TARGETS): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 $(HOST_ENVIRONMENT_TEST): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 

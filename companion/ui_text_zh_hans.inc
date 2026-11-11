@@ -7,3 +7,4 @@
 #include "ui_text/zh_hans/support.inc"
 #include "ui_text/zh_hans/setup.inc"
 #include "ui_text/zh_hans/overlay.inc"
+#include "ui_text/zh_hans/notification.inc"

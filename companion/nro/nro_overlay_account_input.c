@@ -448,6 +448,18 @@ static void handle_parent_export_result_overlay_input(UiState *ui, u64 down)
 bool handle_account_overlay_input(UiState *ui, u64 down)
 {
     switch (ui->model.overlay) {
+    case PTC_UI_OVERLAY_NOTIFICATIONS:
+        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        else if (down & (HidNpadButton_Up | HidNpadButton_Down)) ui->model.overlay_selection ^= 1;
+        else if (down & HidNpadButton_A) {
+            if (!toggle_notification_preference(ui, ui->model.overlay_selection)) {
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_SAVE_FAILED));
+            } else {
+                ui->model.message[0] = '\0';
+                ptc_audio_play(PTC_SE_TOGGLE);
+            }
+        }
+        return true;
     case PTC_UI_OVERLAY_ACTIVITY_HISTORY:
         handle_activity_history_overlay_input(ui, down);
         return true;

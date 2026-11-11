@@ -11,6 +11,7 @@
 #include "../platform/operation_mode.h"
 #include "../common/rules/rules.h"
 #include "runtime_state.h"
+#include "../common/notification/reason_event.h"
 
 typedef struct {
     char app_root[96];
@@ -41,6 +42,7 @@ typedef struct {
     /* 最近一次读到或写入的 setup 为 released 且带宽限期限时的到期秒，否则为 0。 */
     int64_t setup_activate_after_hint;
     char boot_id[24];
+    PtcReasonObservation reason_observation;
     char config_cache_text[4096];
     PtcRules rules_cache;
     PtcRuntimeState state_cache;

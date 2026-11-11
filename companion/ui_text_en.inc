@@ -7,3 +7,4 @@
 #include "ui_text/en/support.inc"
 #include "ui_text/en/setup.inc"
 #include "ui_text/en/overlay.inc"
+#include "ui_text/en/notification.inc"

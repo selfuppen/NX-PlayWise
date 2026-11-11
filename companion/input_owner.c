@@ -243,6 +243,25 @@ void ptc_input_owner_reader_init(PtcInputOwnerReader *r, PtcStorage *storage,
     (void)context_init(&r->context, storage, root, release);
 }
 
+bool ptc_input_owner_confirm(PtcStorage *storage, const char *root, const char *release,
+    const char *boot, const char *owner, uint64_t now)
+{
+    PtcInputOwnerContext c;
+    char current[17];
+    Lease leases[2];
+    if (!hex(owner, 32) || !context_init(&c, storage, root, release) ||
+        runtime(&c, current) != 1 || strcmp(current, boot) || !bind(&c, boot)) return false;
+    int results[2];
+    for (unsigned i = 0; i < 2; ++i) {
+        results[i] = read_lease(&c, i, &leases[i]);
+        if (results[i] < 0 || (results[i] == 1 && leases[i].issued > now)) return false;
+    }
+    /* A later release wins over an older still-unexpired visible slot. */
+    unsigned newest = results[1] == 1 && (results[0] != 1 || leases[1].issued >= leases[0].issued) ? 1 : 0;
+    return results[newest] == 1 && !strcmp(leases[newest].owner, owner) &&
+        leases[newest].visible && now < leases[newest].expires;
+}
+
 bool ptc_input_owner_block(PtcInputOwnerReader *r, uint64_t now, bool non_neutral)
 {
     char boot[17];

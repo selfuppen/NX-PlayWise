@@ -83,10 +83,16 @@ int main(void)
     check(!ptc_input_owner_block(&reader, START, true), "no owner leaves normal NRO input enabled");
     check(!ptc_input_owner_begin_ui(&writer), "no ready handshake before ownership");
     check(ptc_input_owner_acquire(&writer, START), "acquire both visible slots");
+    check(ptc_input_owner_confirm(&mem.storage, "app", RELEASE, "0123456789abcdef", writer.owner, START + 1),
+        "draw acknowledgement requires matching live runtime and owner");
+    check(!ptc_input_owner_confirm(&mem.storage, "app", RELEASE, "fedcba9876543210", writer.owner, START + 1),
+        "other boot cannot confirm display");
     check(ptc_input_owner_begin_ui(&writer) && !ptc_input_owner_begin_ui(&writer), "ready handshake starts once after ownership");
     check(ptc_input_owner_block(&reader, START + 1, true), "even first leaked key is blocked before any prior observation");
     check(ptc_input_owner_block(&reader, START + 2, false), "neutral input does not release a visible owner");
     ptc_input_owner_release(&writer, START + 3);
+    check(!ptc_input_owner_confirm(&mem.storage, "app", RELEASE, "0123456789abcdef", writer.owner, START + 4),
+        "released owner cannot confirm display");
     check(ptc_input_owner_block(&reader, START + 4, true), "held key is drained after hide");
     check(!ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 4, false), "neutral frame acknowledges release");
     check(!ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 5, true), "new key works after release");

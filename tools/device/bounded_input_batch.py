@@ -36,6 +36,7 @@ class BoundedInputBatch:
         self.deadline = clock() + duration_s
         self.max_actions, self.actions = max_actions, 0
         self.held: list[str] = []
+        self.sticks: set[str] = set()
         self.input_started = self.failed = self.closed = self.private = False
         self.frames: list[dict] = []
         self.event("batch_started", duration_s=duration_s, max_actions=max_actions)
@@ -125,6 +126,43 @@ class BoundedInputBatch:
         finally:
             self.private = False
 
+    def tilt(self, side: str, x: int, y: int, *, hold_ms: int = 120,
+             settle_s: float = .35) -> None:
+        """Send one bounded stick vector, returning to neutral before the barrier."""
+        if side not in ("LEFT", "RIGHT") or any(type(v) is not int or not -32767 <= v <= 32767 for v in (x, y)):
+            raise ValueError("invalid controller stick")
+        if not 50 <= hold_ms <= 3000 or not 0 <= settle_s <= 10:
+            raise ValueError("invalid input timing")
+        self.guard()
+        if self.actions >= self.max_actions:
+            self.failed = True
+            self.event("batch_stopped", reason="action_limit")
+            raise RuntimeError("batch action limit reached")
+        if self.clock() + hold_ms / 1000 + settle_s + .4 >= self.deadline:
+            self.failed = True
+            self.event("batch_stopped", reason="input_exceeds_deadline")
+            raise TimeoutError("input exceeds batch deadline")
+        self.actions += 1
+        if not self.private:
+            self.event("stick_started", side=side, x=x, y=y, hold_ms=hold_ms)
+        try:
+            self.input_started = True
+            # Own neutralization even when the first send has an unknown outcome.
+            self.sticks.add(side)
+            self.client.set_stick(side, x, y)
+            self.sleep(hold_ms / 1000)
+            self.client.set_stick(side, 0, 0)
+            self.sticks.remove(side)
+            if not self.client.get_system_language():
+                raise RuntimeError("empty sys-botbase barrier")
+            self.wait(settle_s)
+            if not self.private:
+                self.event("input_sent", acknowledgement="none")
+        except Exception:
+            self.failed = True
+            self.event("batch_stopped", reason="input_or_health_failed")
+            raise
+
     def capture(self, stage: str) -> Path:
         self.guard()
         if not stage or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for c in stage):
@@ -172,6 +210,9 @@ class BoundedInputBatch:
                 for button in reversed(self.held[:]):
                     self.client.release(button)
                     self.held.remove(button)
+                for side in sorted(self.sticks):
+                    self.client.set_stick(side, 0, 0)
+                self.sticks.clear()
                 self.client.raw("detachController")
                 if not self.client.get_system_language():
                     raise RuntimeError("empty cleanup barrier")

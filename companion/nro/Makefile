@@ -126,6 +126,7 @@ OBJS := \
 	$(BUILD)/config_backup.o
 
 DEPENDS = $(OBJS:.o=.d)
+OBJS += $(BUILD)/ultrahand_config.o $(BUILD)/sysmodule_reason.o
 OBJS += $(BUILD)/update.o $(BUILD)/update_install.o $(BUILD)/update_fs.o $(BUILD)/nro_online_update.o
 ifneq ($(EDEN_BUILD),1)
 OBJS += $(BUILD)/online_update.o $(BUILD)/online_update_package.o
@@ -509,4 +510,10 @@ $(BUILD)/nro_config_backup.o: nro_config_backup.c nro_app_internal.h | $(BUILD)
 $(BUILD)/config_backup.o: ../../platform/config_backup.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/sysmodule_config_backup.o: ../../sysmodule/sysmodule_config_backup.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ultrahand_config.o: ../../platform/ultrahand_config.c ../../platform/ultrahand_config.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_reason.o: ../../sysmodule/sysmodule_reason.c ../../sysmodule/sysmodule_core.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@

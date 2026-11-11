@@ -23,3 +23,8 @@ Local lifecycle patch (2026-10-13): atomic cross-thread flags, UI-thread-only
 hide handling, input snapshots outside IPC/SD work, and event lifetime spanning
 thread startup through join. Parse settings on the main thread before starting
 the 4KiB-stack input poller. The pinned upstream commit remains unchanged.
+Local PlayWise detail cooperation patch (2026-11-11): optional UI-thread hidden
+poll and post-render callbacks. Default overlays still wait indefinitely.
+PlayWise alone polls at 250ms; HOME/POWER blocks automatic wake until a manual
+combo. Hidden input snapshots are copied under the mutex; SD work is outside it.
+No new services, cross-process loader calls, manager replacement or HID injection.

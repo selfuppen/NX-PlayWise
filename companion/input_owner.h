@@ -57,6 +57,9 @@ void ptc_input_owner_reader_init(PtcInputOwnerReader *reader, PtcStorage *storag
     const char *root, const char *release);
 /* Call before interpreting input, including internal PIN and release actions. */
 bool ptc_input_owner_block(PtcInputOwnerReader *reader, uint64_t now_ns, bool non_neutral);
+/* Proof for a UI acknowledgement: exact runtime, owner and live visible lease. */
+bool ptc_input_owner_confirm(PtcStorage *storage, const char *root, const char *release,
+    const char *boot, const char *owner, uint64_t now_ns);
 
 #ifdef __cplusplus
 }

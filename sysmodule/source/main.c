@@ -20,6 +20,8 @@
 #include "../../common/protocol/ipc_protocol.h"
 #include "release_manifest.h"
 #include "../usage_evidence.h"
+#include "../reason_notification.h"
+#include "../../companion/input_owner.h"
 #ifdef PLAYWISE_PCTL_CAPTURE
 #include "../pctl_usage_tap.h"
 static void capture_tick(PtcSysmodule *sysmodule, const char *stage, bool force)
@@ -214,6 +216,12 @@ int main(int argc, char **argv)
     static PtcSysmodule sysmodule;
 #ifndef PLAYWISE_DEVICE_LAB
     static PtcUsageEvidence usage_evidence;
+    static PtcReasonNotification reason_notification;
+    static PtcInputOwnerReader reason_owner;
+    static char reason_config[4096];
+    uint64_t reason_config_ns = 0;
+    bool reason_enabled = false;
+    PtcUiLanguagePreference reason_language = PTC_UI_LANGUAGE_ENGLISH;
 #endif
     static PtcIpcServer ipc_server;
     PtcStorage *storage;
@@ -259,6 +267,9 @@ int main(int argc, char **argv)
     snprintf(boot_id, sizeof(boot_id), "%016llx", (unsigned long long)randomGet64());
     ptc_sysmodule_set_boot_id(&sysmodule, boot_id);
 #ifndef PLAYWISE_DEVICE_LAB
+    ptc_reason_notification_init(&reason_notification, storage, PTC_APP_ROOT,
+        PLAYWISE_BUILD_RELEASE_ID, boot_id);
+    ptc_input_owner_reader_init(&reason_owner, storage, PTC_APP_ROOT, PLAYWISE_BUILD_RELEASE_ID);
     (void)ptc_usage_evidence_init(&usage_evidence, storage, PTC_APP_ROOT, boot_id,
         PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, armTicksToNs(armGetSystemTick()),
         ptc_switch_pctl_read_evidence, &pctl);
@@ -297,6 +308,10 @@ int main(int argc, char **argv)
         bool due;
         uint64_t elapsed_ms;
         uint32_t wait_ms;
+#ifndef PLAYWISE_DEVICE_LAB
+        PtcReasonObservation reason_sample;
+        bool reason_stopping;
+#endif
         wait_ms = ptc_sysmodule_next_wait_ms(&sysmodule);
         if (wait_ms > 250U) wait_ms = 250U;
         notified = ipc_available ? ptc_ipc_server_wait(&ipc_server, wait_ms) : false;
@@ -325,8 +340,31 @@ int main(int argc, char **argv)
             exit_for_handoff = handoff_tick(&sysmodule, &ipc_server, ipc_available, &quiesce_ticks);
             if (was_quiescing && !sysmodule.quiescing) resume_tick = true;
         }
+#ifndef PLAYWISE_DEVICE_LAB
+        reason_sample = sysmodule.reason_observation;
+        reason_stopping = exit_for_handoff || sysmodule.quiescing;
+#endif
         if (ipc_available) ptc_ipc_server_unlock_storage(&ipc_server);
         if (ipc_available) ptc_ipc_server_signal_completed(&ipc_server);
+#ifndef PLAYWISE_DEVICE_LAB
+        /* Dedicated paths only, outside the control transaction/storage lock.
+           Run even when the full scheduler tick was skipped: detail ACK and
+           expiry retain their 250ms polling opportunity without a PCTL read.
+           Slow SD can still delay this serial loop. */
+        uint64_t reason_ns = armTicksToNs(armGetSystemTick());
+        if (reason_ns >= reason_config_ns) {
+            if (!storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json", reason_config, sizeof(reason_config)))
+                snprintf(reason_config, sizeof(reason_config), "{}");
+            ptc_reason_notification_preferences(reason_config, &reason_enabled, &reason_language);
+            reason_config_ns = reason_ns + 1000000000ULL;
+        }
+        PtcClockSnapshot reason_clock = time_provider.provider.vtable->now(&time_provider.provider);
+        bool reason_suppressed = reason_enabled && ptc_input_owner_block(&reason_owner, reason_ns, false);
+        ptc_reason_notification_tick(&reason_notification, &reason_sample, reason_ns / 1000000,
+            reason_clock.unix_seconds, reason_enabled, reason_suppressed, reason_stopping, reason_language);
+        uint64_t reason_io_ms = (armTicksToNs(armGetSystemTick()) - reason_ns) / 1000000;
+        if (reason_io_ms > reason_notification.io_max_ms) reason_notification.io_max_ms = reason_io_ms;
+#endif
     }
 
 #ifndef PLAYWISE_DEVICE_LAB

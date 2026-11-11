@@ -176,23 +176,27 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             model->setup_focus == 1, false);
 
         /* Security Guide Panel - perfectly balances the card height */
-        UiRect sec_guide = {94, 372, 510, 230};
+        UiRect sec_guide = {94, 382, 510, 154};
         fill_round_rect(pixels, stride, sec_guide, 10, UI_SURFACE);
         draw_rect_outline(pixels, stride, sec_guide, 10, 1, UI_BORDER);
-        draw_text(pixels, stride, 108, 396, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_TITLE), 15, UI_INK);
-        fill_round_rect(pixels, stride, (UiRect){108, 407, 482, 1}, 0, UI_BORDER);
-
-        draw_text(pixels, stride, 108, 432, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_1_TITLE), 13, UI_ACCENT);
-        draw_text(pixels, stride, 188, 432, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_1_DESC), 13, UI_MUTED);
-
-        draw_text(pixels, stride, 108, 474, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_2_TITLE), 13, UI_ACCENT);
-        draw_text(pixels, stride, 188, 474, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_2_DESC), 13, UI_MUTED);
-
-        draw_text(pixels, stride, 108, 516, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_3_TITLE), 13, UI_ACCENT);
-        draw_text(pixels, stride, 188, 516, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_3_DESC), 13, UI_MUTED);
-
-        draw_text(pixels, stride, 108, 558, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_4_TITLE), 13, UI_ACCENT);
-        draw_text(pixels, stride, 188, 558, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_4_DESC), 13, UI_MUTED);
+        draw_text(pixels, stride, 108, 406, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_TITLE), 15, UI_INK);
+        const PtcUiTextId heads[] = {PTC_UI_T_SETUP_SEC_GUIDE_1_TITLE, PTC_UI_T_SETUP_SEC_GUIDE_2_TITLE,
+            PTC_UI_T_SETUP_SEC_GUIDE_3_TITLE, PTC_UI_T_SETUP_SEC_GUIDE_4_TITLE};
+        const PtcUiTextId notes[] = {PTC_UI_T_SETUP_SEC_GUIDE_1_DESC, PTC_UI_T_SETUP_SEC_GUIDE_2_DESC,
+            PTC_UI_T_SETUP_SEC_GUIDE_3_DESC, PTC_UI_T_SETUP_SEC_GUIDE_4_DESC};
+        for (int i = 0; i < 4; ++i) {
+            const char *head = ptc_ui_text(heads[i]);
+            int baseline = 432 + i * 30;
+            int nx = 108 + measure_text(head, 13) + 16;
+            draw_text(pixels, stride, 108, baseline, head, 13, UI_ACCENT);
+            char note[256];
+            fit_text(note, sizeof(note), ptc_ui_text(notes[i]), 13, 590 - nx);
+            draw_text(pixels, stride, nx, baseline, note, 13, UI_MUTED);
+        }
+        snprintf(text, sizeof(text), "%s: %s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES),
+            ptc_ui_text(model->reason_notifications_enabled ? PTC_UI_T_ENABLED : PTC_UI_T_DISABLED_2));
+        setup_button(pixels, stride, ptc_ui_setup_notifications_rect(), text,
+            model->setup_focus == 6, false);
 
         /* Right Card: Preferences & Feature Toggles */
         UiRect pref_card = {656, 185, 550, 432};

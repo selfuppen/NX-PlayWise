@@ -864,6 +864,11 @@ static int render_setup_previews(const char *directory, const PtcUiModel *baseli
         model.setup_step = step;
         snprintf(name, sizeof(name), "setup-step-%d", step);
         failed |= save_preview(directory, "setup", name, &model, dark);
+        if (step == PTC_UI_SETUP_PARENT) {
+            model.setup_focus = 6;
+            failed |= save_preview(directory, "setup", "setup-notifications", &model, dark);
+            model.setup_focus = 0;
+        }
     }
     model.setup_step = PTC_UI_SETUP_PREPARE;
     model.setup_focus = 2;
@@ -1689,6 +1694,19 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             failed |= save_preview(directory, "settings", "settings-language", &settings_dlg, dark);
 
             settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
+            settings_dlg.reason_notifications_enabled = true;
+            settings_dlg.reason_external_notifications = 0;
+            snprintf(settings_dlg.reason_overlay_shortcut, sizeof(settings_dlg.reason_overlay_shortcut), "L＋↓");
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+            snprintf(settings_dlg.overlay_body, sizeof(settings_dlg.overlay_body), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT));
+            failed |= save_preview(directory, "settings", "settings-notifications", &settings_dlg, dark);
+            settings_dlg.reason_external_notifications = 1;
+            failed |= save_preview(directory, "settings", "settings-notifications-ready", &settings_dlg, dark);
+            settings_dlg.reason_external_notifications = -1;
+            settings_dlg.reason_overlay_shortcut[0] = '\0';
+            failed |= save_preview(directory, "settings", "settings-notifications-unknown", &settings_dlg, dark);
+            settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
             settings_dlg.setup_shortcut_index = 0;
             settings_dlg.shortcut_draft_enabled = true;
@@ -2160,6 +2178,44 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                         const char *name = operation == 0 ? "preferences-confirm" : operation == 2 ? "limit-confirm" : "bedtime-confirm";
                         failed |= save_preview(folder, "settings", name, &model, dark);
                     }
+                }
+                for (int scenario = 0; scenario < 4; ++scenario) {
+                    PtcUiModel model = *baseline;
+                    model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
+                    model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+                    model.reason_notifications_enabled = scenario != 0;
+                    model.reason_external_notifications = scenario - 1;
+                    model.overlay_selection = scenario % 2;
+                    snprintf(model.reason_overlay_shortcut, sizeof(model.reason_overlay_shortcut), "%s",
+                        scenario == 0 ? "" : scenario == 3 ? "ZL＋ZR＋↓＋−" : "L＋↓");
+                    snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+                    snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT));
+                    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+                        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                    ptc_ui_graphics_draw(&model, &theme);
+                    memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+                    draw_support_overlay_surface(preview_pixels, 1280, &model);
+                    action_trace.enabled = false;
+                    failed += check_action_text(to_uirect(ptc_ui_dialog_rect(960, 560)), ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+                    /* Every paragraph must survive wrapping without losing its
+                       end to max-lines clipping. Compare without wrap whitespace. */
+                    char all[8192] = "";
+                    size_t used = 0;
+                    for (int i = 0; i < action_trace.count; ++i)
+                        for (const char *p = action_trace.text[i]; *p && used + 1 < sizeof(all); ++p)
+                            if (*p != ' ' && *p != '\n' && *p != '\t') all[used++] = *p;
+                    all[used] = '\0';
+                    PtcUiTextId paragraphs[] = {PTC_UI_T_REASON_NOTICE_EXPERIMENT, PTC_UI_T_REASON_NOTICE_COMPAT,
+                        PTC_UI_T_REASON_NOTICE_EXPIRY, PTC_UI_T_REASON_NOTICE_TOGGLE};
+                    for (unsigned i = 0; i < sizeof(paragraphs)/sizeof(paragraphs[0]); ++i) {
+                        char required[1024]; size_t count = 0;
+                        for (const char *p = ptc_ui_text(paragraphs[i]); *p && count + 1 < sizeof(required); ++p)
+                            if (*p != ' ' && *p != '\n' && *p != '\t') required[count++] = *p;
+                        required[count] = '\0';
+                        if (!strstr(all, required)) { fprintf(stderr, "FAIL: notification paragraph clipped lang=%d key=%u\n", lang, (unsigned)paragraphs[i]); ++failed; }
+                    }
+                    if (style == 0 && scenario == 1)
+                        failed |= save_preview(folder, "settings", "notifications", &model, dark);
                 }
             }
         }

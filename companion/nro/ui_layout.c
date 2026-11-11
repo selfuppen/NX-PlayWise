@@ -110,6 +110,7 @@ PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 664, 170, 44}; }
 PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){236, 664, 280, 44}; }
 PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 320, 510, 54}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){0, 0, 0, 0}; }
+PtcUiRect ptc_ui_setup_notifications_rect(void) { return (PtcUiRect){94, 550, 510, 48}; }
 PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){676, 334, 510, 44}; }
 PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){94, 536, 1092, 76}; }
 PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){914, 452, 272, 38}; }
@@ -277,6 +278,12 @@ PtcUiRect ptc_ui_settings_card_rect(int index)
     int row = index / 2;
     PtcUiRect rect = {54 + column * 385, 176 + row * 108, 365, 96};
     return rect;
+}
+
+PtcUiRect ptc_ui_notification_option_rect(int index)
+{
+    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    return (PtcUiRect){d.x + 34, d.y + 160 + index * 64, d.w - 68, 54};
 }
 
 /* Pairing QR page shares the standard dialog button row so the drawn button,
@@ -847,6 +854,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 360;
         break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
+    case PTC_UI_OVERLAY_NOTIFICATIONS:
         *width = 960;
         *height = 560;
         break;

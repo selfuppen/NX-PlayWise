@@ -30,6 +30,7 @@ typedef enum {
     PTC_UI_HIT_SETUP_THEME_OPTION,
     PTC_UI_HIT_SETUP_EYE_CARE,
     PTC_UI_HIT_SETUP_BEDTIME,
+    PTC_UI_HIT_SETUP_NOTIFICATIONS,
     PTC_UI_HIT_PARENT_PREV_PAGE,
     PTC_UI_HIT_PARENT_NEXT_PAGE,
     PTC_UI_HIT_PARENT_REFRESH,
@@ -38,6 +39,7 @@ typedef enum {
     PTC_UI_HIT_PARENT_TAB,
     PTC_UI_HIT_PARENT_CARD,
     PTC_UI_HIT_OVERLAY_CONFIRM,
+    PTC_UI_HIT_NOTIFICATION_OPTION,
     PTC_UI_HIT_OVERLAY_CANCEL,
     PTC_UI_HIT_MINUTES_DEC,
     PTC_UI_HIT_MINUTES_INC,
@@ -150,6 +152,7 @@ PtcUiRect ptc_ui_setup_language_rect(int index);
 PtcUiRect ptc_ui_setup_time_help_rect(void);
 PtcUiRect ptc_ui_setup_pctl_help_rect(void);
 PtcUiRect ptc_ui_setup_more_rect(void);
+PtcUiRect ptc_ui_setup_notifications_rect(void);
 PtcUiRect ptc_ui_setup_shortcut_rect(void);
 PtcUiRect ptc_ui_setup_skip_rect(void);
 PtcUiRect ptc_ui_setup_primary_rect(void);
@@ -184,6 +187,7 @@ PtcUiRect ptc_ui_parent_shoulder_key_rect(int key);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_settings_card_rect(int index);
+PtcUiRect ptc_ui_notification_option_rect(int index);
 PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_qr_panel_rect(int index);
 PtcUiRect ptc_ui_qr_code_rect(void);

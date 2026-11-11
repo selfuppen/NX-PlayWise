@@ -4183,6 +4183,14 @@ static void test_dock_ui(void)
 
 static void test_config_backup_layout(void)
 {
+    PtcUiModel notifications = {0};
+    notifications.view = PTC_UI_PARENT; notifications.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
+    for(int index=0; index<2; ++index) {
+        PtcUiRect row=ptc_ui_notification_option_rect(index);
+        check_hit(hit_center(&notifications,row),PTC_UI_HIT_NOTIFICATION_OPTION,index,"notification row maps pad and touch to same choice");
+        check_true(!rects_overlap(row,ptc_ui_confirm_rect(notifications.overlay)) &&
+            !rects_overlap(row,ptc_ui_cancel_rect(notifications.overlay)),"notification switch rows separated from footer");
+    }
     for (int i = 0; i < 11; ++i) {
         int group = i < 4 ? 0 : i < 9 ? 1 : 2;
         PtcUiRect section = ptc_ui_config_backup_group_rect(group);

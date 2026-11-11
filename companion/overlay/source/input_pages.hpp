@@ -51,6 +51,12 @@
             if (s_owner_visible) tsl::Overlay::get()->hide();
             return true;
         }
+        /* Do not start PIN/edits during an unconfirmed automatic focus transfer.
+           The short offer either draws current details or hides at its deadline. */
+        if (s_automatic_detail && !s_automatic_detail_confirmed) {
+            if (keysDown & HidNpadButton_B) tsl::Overlay::get()->hide();
+            return true;
+        }
         int elapsed_ms = 0;
         if (last_input_tick_) {
             const u64 elapsed = armTicksToNs(now - last_input_tick_) / 1000000ULL;
@@ -355,7 +361,11 @@
                 else if (child_overview_focus_ == 5) open_language_confirm();
                 return true;
             }
-            if (keysDown & HidNpadButton_B) { tsl::Overlay::get()->close(); return true; }
+            if (keysDown & HidNpadButton_B) {
+                if (s_automatic_detail) tsl::Overlay::get()->hide();
+                else tsl::Overlay::get()->close();
+                return true;
+            }
             if (keysDown & HidNpadButton_Minus) { open_status_details(); return true; }
             if (keysDown & HidNpadButton_R) { open_parent_pin(); return true; }
             if (keysDown & HidNpadButton_Y) {
@@ -408,7 +418,11 @@
                 }
                 return true;
             }
-            if (keysDown & HidNpadButton_B) { tsl::Overlay::get()->close(); return true; }
+            if (keysDown & HidNpadButton_B) {
+                if (s_automatic_detail) tsl::Overlay::get()->hide();
+                else tsl::Overlay::get()->close();
+                return true;
+            }
             if (keysDown & HidNpadButton_Minus) { open_status_details(); return true; }
             if (keysDown & HidNpadButton_R) { open_parent_pin(); return true; }
             if (keysDown & HidNpadButton_L) {
