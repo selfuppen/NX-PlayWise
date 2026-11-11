@@ -449,27 +449,7 @@ bool handle_account_overlay_input(UiState *ui, u64 down)
 {
     switch (ui->model.overlay) {
     case PTC_UI_OVERLAY_NOTIFICATIONS:
-        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-        else if (down & HidNpadButton_Up) ui->model.overlay_selection = (ui->model.overlay_selection + 3) % 4;
-        else if (down & HidNpadButton_Down) ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
-        else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
-            if (ui->model.overlay_selection >= 2) ui->model.overlay_selection ^= 1;
-        }
-        else if (down & HidNpadButton_A) {
-            if (ui->model.overlay_selection == 2) {
-                probe_notification_environment(ui);
-                snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s", ptc_ui_text(PTC_UI_T_NOTICE_PROBED));
-                return true;
-            }
-            if (ui->model.overlay_selection == 3) { test_notification(ui); return true; }
-            ui->model.message[0] = '\0';
-            if (!toggle_notification_preference(ui, ui->model.overlay_selection)) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_SAVE_FAILED));
-            } else {
-                ptc_audio_play(PTC_SE_TOGGLE);
-            }
-            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s", ui->model.message);
-        }
+        handle_notification_preferences_input(ui, down);
         return true;
     case PTC_UI_OVERLAY_ACTIVITY_HISTORY:
         handle_activity_history_overlay_input(ui, down);

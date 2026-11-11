@@ -4185,11 +4185,30 @@ static void test_config_backup_layout(void)
 {
     PtcUiModel notifications = {0};
     notifications.view = PTC_UI_PARENT; notifications.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
-    for(int index=0; index<4; ++index) {
+    for(int index=0; index<PTC_UI_NOTIFICATION_OPTION_COUNT; ++index) {
         PtcUiRect row=ptc_ui_notification_option_rect(index);
         check_hit(hit_center(&notifications,row),PTC_UI_HIT_NOTIFICATION_OPTION,index,"notification row maps pad and touch to same choice");
         check_true(!rects_overlap(row,ptc_ui_confirm_rect(notifications.overlay)) &&
             !rects_overlap(row,ptc_ui_cancel_rect(notifications.overlay)),"notification switch rows separated from footer");
+        for (int other = 0; other < index; ++other)
+            check_true(!rects_overlap(row, ptc_ui_notification_option_rect(other)), "notification controls do not overlap");
+    }
+    check_true(ptc_ui_notification_option_rect(-1).w == 0 &&
+        ptc_ui_notification_option_rect(PTC_UI_NOTIFICATION_OPTION_COUNT).w == 0 &&
+        ptc_ui_confirm_rect(notifications.overlay).w == 0, "no sound row or duplicate confirmation target");
+    check_hit(hit_center(&notifications, ptc_ui_cancel_rect(notifications.overlay)),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "notification footer back target is independent");
+    PtcUiRect preview = ptc_ui_notification_preview_rect();
+    check_true(preview.w * 9 == preview.h * 16, "notification screen keeps the real 16:9 aspect ratio");
+    check_hit(hit_center(&notifications, preview), PTC_UI_HIT_NONE, 0,
+        "illustrated system buttons do not trigger real actions");
+    for (int i = 0; i < 2; ++i) {
+        PtcUiRect tab = ptc_ui_notification_preview_tab_rect(i);
+        check_hit(hit_center(&notifications, tab), PTC_UI_HIT_NOTIFICATION_PREVIEW, i, "preview tab has an independent touch target");
+        check_true(!rects_overlap(tab, preview) && !rects_overlap(tab, ptc_ui_cancel_rect(notifications.overlay)),
+            "preview tabs do not cover the screen or footer");
+        for (int j = 0; j < PTC_UI_NOTIFICATION_OPTION_COUNT; ++j)
+            check_true(!rects_overlap(tab, ptc_ui_notification_option_rect(j)), "preview tabs do not change notification controls");
     }
     for (int i = 0; i < 11; ++i) {
         int group = i < 4 ? 0 : i < 9 ? 1 : 2;

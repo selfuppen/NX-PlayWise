@@ -68,7 +68,7 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 
 The [hint setup and light/dark previews](docs/使用/USER_GUIDE.md#hint-previews-and-setup) show the setup entry, three notice configuration states, and when automatic details or short-notice fallback apply.
 
-- **Automatic restriction details with notice fallback (experimental)**: optional in setup step two and Security & Preferences → Sound and notifications, off by default. An already loaded PlayWise overlay refreshes details first; missing readiness or timeout attempts one compatible Ultrahand notice. It cannot switch from another overlay. Enabling prepares and reads back the global notice setting; this does not confirm resident reception. The new cooperation path needs device verification and is not publicly released or fully qualified. Prior notice evidence covers Ultrahand 2.5.3 / loader 2.0.2. See the [usage guide](docs/使用/USER_GUIDE.md#automatic-reason-notices-experimental).
+- **Automatic restriction details with notice fallback (experimental)**: optional in setup step two and Security & Preferences → When play stops, off by default. An already loaded PlayWise overlay refreshes details first; missing readiness or timeout attempts one compatible Ultrahand notice. It cannot switch from another overlay. Enabling prepares and reads back the global notice setting; this does not confirm resident reception. The new cooperation path needs device verification and is not publicly released or fully qualified. Prior notice evidence covers Ultrahand 2.5.3 / loader 2.0.2. See the [usage guide](docs/使用/USER_GUIDE.md#automatic-reason-notices-experimental).
 
 - **Configuration backup/import**: eleven selective groups, PIN/hold verification, transactional rollback, calendar restore and fresh pairing keys; available in Security & Preferences.
 - **TV mode rules**: require TV mode, a uniform 0–1440-minute daily non-TV ceiling within the total, and a PIN-authorized today waiver. Disabled by default; functional testing completed.
@@ -125,7 +125,7 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 | Bedtime schedule | Implemented (overnight schedules, background restriction, overlay recovery; disabled by default) | 2026-09-11 |
 | In-game overlay: child redemption & parent quick actions | Implemented (redeem grant codes, claim self-buffer, and quick unlock via overlay) | 2026-09-28 |
 | Daily dispatch dashboard & decision breakdown preview | Implemented (card grouping, temporary quota preview, decision flow drill-down) | 2026-09-29 |
-| Switch-native interactive sound effects (audout engine) | Implemented (12 Switch-style sound effects, dial audio, and sound toggle) | 2026-10-01 |
+| Switch-native interactive sound effects (audout engine) | Implemented (12 Switch-style sound effects and dial audio; existing sound preference preserved) | 2026-10-01 |
 | Multi-language internationalization (Traditional Chinese & English) | Implemented (bilingual interface & docs, language decoupling) | 2026-10-02 |
 | Destructive action long-press charge-up & safety protection | Implemented (charge-up confirmation with continuous audio feedback, instant cancel) | 2026-10-02 |
 | Configuration backup & import | Implemented; full backup, 11 selective restore groups, PIN/hold confirmation, transactional rollback, calendar restore, and pairing key rotation | 2026-10-06 |

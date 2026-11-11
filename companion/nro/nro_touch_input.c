@@ -20,6 +20,9 @@ void handle_touch(UiState *ui, int x, int y)
         return;
     }
     switch (hit.kind) {
+    case PTC_UI_HIT_NOTIFICATION_PREVIEW:
+        ui->model.notification_preview = hit.index;
+        break;
     case PTC_UI_HIT_NOTIFICATION_OPTION:
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);

@@ -52,19 +52,18 @@ void open_notification_preferences(UiState *ui)
     ui->model.reason_test_message[0] = '\0';
     ui->model.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
     ui->model.overlay_selection = 0;
+    ui->model.notification_preview = 0;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT));
 }
 
 bool toggle_notification_preference(UiState *ui, int index)
 {
-    if (index != 0 && index != 1) return false;
+    if (index != PTC_UI_NOTIFICATION_TOGGLE) return false;
     bool notice = ui->model.reason_notifications_enabled;
-    bool audio = ptc_audio_is_enabled();
-    if (index == 0) ui->model.reason_notifications_enabled = !notice;
-    else ptc_audio_set_enabled(!audio);
+    ui->model.reason_notifications_enabled = !notice;
     if (save_ui_preferences(ui)) {
-        if (index == 0 && !notice) {
+        if (!notice) {
             PtcUltrahandPrepare prepared = ptc_ultrahand_prepare_notifications(ui->client.storage);
             PtcUltrahandConfig external;
             ptc_ultrahand_config_read(ui->client.storage, &external);
@@ -78,8 +77,37 @@ bool toggle_notification_preference(UiState *ui, int index)
         return true;
     }
     ui->model.reason_notifications_enabled = notice;
-    ptc_audio_set_enabled(audio);
     return false;
+}
+
+void handle_notification_preferences_input(UiState *ui, u64 down)
+{
+    if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+    else if (down & HidNpadButton_L) ui->model.notification_preview = 0;
+    else if (down & HidNpadButton_R) ui->model.notification_preview = 1;
+    else if (down & HidNpadButton_Up) ui->model.overlay_selection = PTC_UI_NOTIFICATION_TOGGLE;
+    else if (down & HidNpadButton_Down) {
+        if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_TOGGLE)
+            ui->model.overlay_selection = PTC_UI_NOTIFICATION_PROBE;
+    } else if (down & HidNpadButton_Left) {
+        if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_TEST)
+            ui->model.overlay_selection = PTC_UI_NOTIFICATION_PROBE;
+    } else if (down & HidNpadButton_Right) {
+        if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_PROBE)
+            ui->model.overlay_selection = PTC_UI_NOTIFICATION_TEST;
+    } else if (down & HidNpadButton_A) {
+        if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_PROBE) {
+            probe_notification_environment(ui);
+            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s", ptc_ui_text(PTC_UI_T_NOTICE_PROBED));
+        } else if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_TEST) test_notification(ui);
+        else if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_TOGGLE) {
+            ui->model.message[0] = '\0';
+            if (!toggle_notification_preference(ui, PTC_UI_NOTIFICATION_TOGGLE))
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_SAVE_FAILED));
+            else ptc_audio_play(PTC_SE_TOGGLE);
+            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s", ui->model.message);
+        }
+    }
 }
 
 u64 shortcut_preset_mask(int index)

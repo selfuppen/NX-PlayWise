@@ -580,7 +580,7 @@ static int save_preview(const char *directory, const char *module, const char *n
     /* The details dialog is tall enough that the marker at y=100 would land on its
        card titles (and the child guide bar), so it moves into the scrim under the
        dialog. Shorter dialogs keep the marker in the scrim above them. */
-    if (settled.overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+    if (settled.overlay == PTC_UI_OVERLAY_HOME_DETAILS || settled.overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
         draw_text(preview_pixels, 1280, 540, 712, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
     else
         draw_text(preview_pixels, 1280, 540, 100, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
@@ -1706,6 +1706,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.reason_external_notifications = -1;
             settings_dlg.reason_overlay_shortcut[0] = '\0';
             failed |= save_preview(directory, "settings", "settings-notifications-unknown", &settings_dlg, dark);
+            settings_dlg.notification_preview = 1;
+            failed |= save_preview(directory, "settings", "settings-notifications-short", &settings_dlg, dark);
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
             settings_dlg.setup_shortcut_index = 0;
@@ -2204,7 +2206,8 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                     model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
                     model.reason_notifications_enabled = scenario != 0;
                     model.reason_external_notifications = scenario - 1;
-                    model.overlay_selection = scenario;
+                    model.overlay_selection = scenario % PTC_UI_NOTIFICATION_OPTION_COUNT;
+                    model.notification_preview = scenario % 2;
                     model.reason_overlay_installed = scenario != 0;
                     model.reason_detail_ready = scenario == 2;
                     snprintf(model.reason_test_message, sizeof(model.reason_test_message), "%s", ptc_ui_text(
@@ -2220,7 +2223,15 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                     memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
                     draw_support_overlay_surface(preview_pixels, 1280, &model);
                     action_trace.enabled = false;
-                    failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1100, 650)), ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+                    /* Native prompt text is deliberately composited beneath the
+                       35%-width overlay. Check the surrounding page independently. */
+                    PtcUiRect illustration = ptc_ui_notification_preview_rect();
+                    for (int i = 0; i < action_trace.count; ++i) {
+                        UiRect b = action_trace.bounds[i];
+                        if (ptc_ui_rect_contains(illustration, b.x, b.y))
+                            action_trace.bounds[i] = (UiRect){-2000, -2000, 0, 0};
+                    }
+                    failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1180, 680)), ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
                     /* Every paragraph must survive wrapping without losing its
                        end to max-lines clipping. Compare without wrap whitespace. */
                     char all[8192] = "";
@@ -2230,7 +2241,8 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                             if (*p != ' ' && *p != '\n' && *p != '\t') all[used++] = *p;
                     all[used] = '\0';
                     PtcUiTextId paragraphs[] = {PTC_UI_T_REASON_NOTICE_EXPERIMENT, PTC_UI_T_REASON_NOTICE_COMPAT,
-                        PTC_UI_T_REASON_NOTICE_EXPIRY, PTC_UI_T_REASON_NOTICE_TOGGLE,
+                        PTC_UI_T_REASON_NOTICE_EXPIRY, PTC_UI_T_NOTICE_PREVIEW_LABEL,
+                        PTC_UI_T_NOTICE_PREVIEW_DETAILS, PTC_UI_T_NOTICE_PREVIEW_SHORT, PTC_UI_T_NOTICE_NAV_HINT,
                         PTC_UI_T_NOTICE_PROBE, PTC_UI_T_NOTICE_TEST,
                         scenario == 0 ? PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG : scenario == 1 ? PTC_UI_T_NOTICE_TEST_SENT :
                         scenario == 2 ? PTC_UI_T_NOTICE_PROBED : PTC_UI_T_NOTICE_TEST_FAILED,
@@ -2243,6 +2255,10 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                         required[count] = '\0';
                         if (!strstr(all, required)) { fprintf(stderr, "FAIL: notification paragraph clipped lang=%d key=%u\n", lang, (unsigned)paragraphs[i]); ++failed; }
                     }
+                    for (int i = 0; i < action_trace.count; ++i)
+                        if (!strcmp(action_trace.text[i], ptc_ui_text(PTC_UI_T_SOUND_EFFECTS))) {
+                            fprintf(stderr, "FAIL: removed sound setting visible lang=%d\n", lang); ++failed;
+                        }
                     if (style == 0 && scenario == 1)
                         failed |= save_preview(folder, "settings", "notifications", &model, dark);
                 }

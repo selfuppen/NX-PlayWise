@@ -706,53 +706,158 @@ static void draw_support_guide(uint32_t *pixels, uint32_t stride, const PtcUiMod
         ptc_ui_text(PTC_UI_T_A_B_RETURN), UI_ACCENT, UI_ON_ACCENT, false);
 }
 
+/* Work in the reference screenshot's 1280x720 space. Vendored libtesla uses
+   448x720: the left panel occupies exactly 35% of a 16:9 screen, full height.
+   The dark device display stays dark inside either NRO theme. */
+static UiRect notification_scene_rect(UiRect screen, int x, int y, int w, int h)
+{
+    return (UiRect){screen.x + x * screen.width / 1280, screen.y + y * screen.height / 720,
+        w * screen.width / 1280, h * screen.height / 720};
+}
+
+static void notification_shade(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color, uint8_t alpha)
+{
+    uint32_t packed = resolve_color(color);
+    for (int y = rect.y; y < rect.y + rect.height; ++y)
+        for (int x = rect.x; x < rect.x + rect.width; ++x)
+            blend_pixel(pixels, stride, x, y, packed, alpha);
+}
+
+static void draw_notification_example(uint32_t *pixels, uint32_t stride, UiRect screen, bool detail)
+{
+    const PtcUiPalette *dark = ptc_ui_theme_palette(PTC_UI_RESOLVED_DARK);
+    uint32_t ink = UI_RGB(dark->text_primary), muted = UI_RGB(dark->text_secondary);
+    uint32_t base = UI_RGB(dark->page_bg), raised = UI_RGB(dark->surface_raised);
+    uint32_t accent = UI_RGB(dark->accent), warning = UI_RGB(dark->warning);
+    fill_round_rect(pixels, stride, screen, 10, raised);
+    /* Muted HOME tiles remain visible through the native full-screen mask. */
+    const uint32_t tiles[] = {UI_ACCENT_SOFT, UI_SUCCESS_SOFT, UI_WARNING_SOFT, UI_DANGER_SOFT, UI_NIGHT_SOFT};
+    for (int i = 0; i < 5; ++i) {
+        UiRect tile = notification_scene_rect(screen, 120 + i * 224, 210, 204, 240);
+        fill_round_rect(pixels, stride, tile, 6, tiles[i]);
+        draw_circle_outline(pixels, stride, tile.x + tile.width / 2, tile.y + tile.height / 2,
+            tile.width / 4, 4, UI_BORDER);
+    }
+    notification_shade(pixels, stride, screen, base, 222);
+    UiRect clock = notification_scene_rect(screen, 588, 100, 104, 104);
+    int cx = clock.x + clock.width / 2, cy = clock.y + clock.height / 2;
+    draw_circle_outline(pixels, stride, cx, cy, clock.width / 2, 3, ink);
+    draw_line(pixels, stride, cx, cy, cx, cy - clock.height / 3, 3, ink);
+    draw_line(pixels, stride, cx, cy, cx + clock.width / 4, cy, 3, ink);
+    draw_line(pixels, stride, clock.x + 3, clock.y + 3, clock.x + 13, clock.y - 3, 3, ink);
+    draw_line(pixels, stride, clock.x + clock.width - 13, clock.y - 3,
+        clock.x + clock.width - 3, clock.y + 3, 3, ink);
+    UiRect native_text = notification_scene_rect(screen, 460, 280, 360, 110);
+    draw_wrapped_text_centered(pixels, stride, screen.x + screen.width / 2, native_text.y + 15,
+        ptc_ui_text(PTC_UI_T_NOTICE_NATIVE_LIMIT), 14, native_text.width, 20, 2, ink);
+    UiRect sleep = notification_scene_rect(screen, 280, 450, 720, 82);
+    UiRect settings = notification_scene_rect(screen, 280, 550, 720, 60);
+    draw_rect_outline(pixels, stride, sleep, 3, 2, accent);
+    draw_text_center(pixels, stride, sleep, ptc_ui_text(PTC_UI_T_NOTICE_NATIVE_SLEEP), 14, ink);
+    draw_rect_outline(pixels, stride, settings, 3, 1, muted);
+    draw_text_center(pixels, stride, settings, ptc_ui_text(PTC_UI_T_NOTICE_NATIVE_SETTINGS), 12, ink);
+    UiRect native_footer = notification_scene_rect(screen, 30, 647, 1220, 1);
+    fill_rect(pixels, stride, native_footer, muted);
+
+    if (detail) {
+        UiRect panel = notification_scene_rect(screen, 0, 0, 448, 720);
+        notification_shade(pixels, stride, panel, base, 238); /* Production panel alpha: 0xE/0xF. */
+        draw_text(pixels, stride, panel.x + 10, panel.y + 23, ptc_ui_text(PTC_UI_T_NOTIFY_TITLE), 13, accent);
+        UiRect reason = notification_scene_rect(screen, 18, 68, 412, 230);
+        fill_round_rect(pixels, stride, reason, 4, UI_RGB(dark->warning_soft));
+        fill_rect(pixels, stride, (UiRect){reason.x, reason.y + 5, 2, reason.height - 10}, warning);
+        draw_wrapped_text(pixels, stride, reason.x + 10, reason.y + 25,
+            ptc_ui_text(PTC_UI_T_NOTIFY_EYE), 14, reason.width - 20, 20, 2, warning);
+        draw_text(pixels, stride, reason.x + 10, reason.y + 86, "05:00", 34, warning);
+        draw_wrapped_text(pixels, stride, panel.x + 10, panel.y + 170,
+            ptc_ui_text(PTC_UI_T_NOTICE_OVERLAY_HELP), 11, panel.width - 20, 16, 2, ink);
+        for (int i = 0; i < 3; ++i) {
+            UiRect row = notification_scene_rect(screen, 18, 430 + i * 58, 412, 48);
+            fill_round_rect(pixels, stride, row, 3, raised);
+            const PtcUiTextId labels[] = {PTC_UI_T_EYE_CARE, PTC_UI_T_BEDTIME, PTC_UI_T_DOCK_TV};
+            const char *value = i == 0 ? "05:00" : ptc_ui_text(PTC_UI_T_CURRENTLY_OFF);
+            int value_width = measure_text(value, 10);
+            char fitted[128];
+            fit_text(fitted, sizeof(fitted), ptc_ui_text(labels[i]), 10, row.width - value_width - 24);
+            draw_text(pixels, stride, row.x + 8, row.y + 16, fitted, 10, muted);
+            draw_text(pixels, stride, row.x + row.width - value_width - 8, row.y + 16, value, 10,
+                i == 0 ? warning : muted);
+        }
+        UiRect footer = notification_scene_rect(screen, 18, 647, 412, 1);
+        fill_rect(pixels, stride, footer, muted);
+        draw_text(pixels, stride, panel.x + 10, panel.y + panel.height - 12,
+            ptc_ui_text(PTC_UI_T_B_BACK), 11, ink);
+    } else {
+        /* Receiver placement/theme can vary; this is a labelled delivery example. */
+        UiRect notice = notification_scene_rect(screen, 808, 28, 448, 180);
+        fill_round_rect(pixels, stride, notice, 5, UI_RGB(dark->surface));
+        draw_rect_outline(pixels, stride, notice, 5, 1, UI_RGB(dark->border_control));
+        fill_rect(pixels, stride, (UiRect){notice.x + 8, notice.y + 10, 3, notice.height - 20}, warning);
+        draw_text(pixels, stride, notice.x + 20, notice.y + 21, ptc_ui_text(PTC_UI_T_NOTIFY_TITLE), 12, accent);
+        draw_wrapped_text(pixels, stride, notice.x + 20, notice.y + 43,
+            ptc_ui_text(PTC_UI_T_NOTIFY_EYE), 12, notice.width - 32, 17, 2, ink);
+        draw_text(pixels, stride, notice.x + 20, notice.y + notice.height - 12, "05:00", 13, warning);
+    }
+    draw_rect_outline(pixels, stride, screen, 10, 1, UI_CONTROL);
+}
+
 static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, const PtcUiModel *m)
 {
     UiRect dialog;
-    draw_dialog_shell(pixels, stride, m, &dialog, 1100, 650);
-    for (int i = 0; i < 2; ++i) {
-        UiRect row = to_uirect(ptc_ui_notification_option_rect(i));
-        bool enabled = i == 0 ? m->reason_notifications_enabled : ptc_audio_is_enabled();
-        bool selected = m->overlay_selection == i;
-        fill_round_rect(pixels, stride, row, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        if (selected) draw_focus_ring(pixels, stride, row, 10);
-        const char *status = ptc_ui_text(enabled ? PTC_UI_T_ENABLED : PTC_UI_T_DISABLED_2);
-        int sw = measure_text(status, 18);
-        char title[192];
-        fit_text(title, sizeof(title), ptc_ui_text(i ? PTC_UI_T_SOUND_EFFECTS : PTC_UI_T_REASON_NOTIFICATIONS),
-            20, row.width - sw - 56);
-        draw_text(pixels, stride, row.x + 18, row.y + 34, title, 20, UI_INK);
-        draw_text(pixels, stride, row.x + row.width - 18 - sw, row.y + 34, status, 18,
-            enabled ? UI_SUCCESS : UI_MUTED);
-    }
-    for (int i = 2; i < 4; ++i)
-        draw_candidate_button(pixels, stride, ptc_ui_notification_option_rect(i),
-            ptc_ui_text(i == 2 ? PTC_UI_T_NOTICE_PROBE : PTC_UI_T_NOTICE_TEST),
-            UI_RAISED, UI_ACCENT, m->overlay_selection == i, false);
-    int y = dialog.y + 365;
-    y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_COMPAT),
-        16, dialog.width - 68, 21, 3, UI_MUTED) + 6;
-    y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(
+    draw_dialog_shell(pixels, stride, m, &dialog, 1180, 680);
+    char navigation[160];
+    int navigation_width = dialog.width - 92 - measure_text(m->overlay_title, 29);
+    fit_text(navigation, sizeof(navigation), ptc_ui_text(PTC_UI_T_NOTICE_NAV_HINT), 14, navigation_width);
+    draw_text(pixels, stride, dialog.x + dialog.width - 34 - measure_text(navigation, 14),
+        dialog.y + 54, navigation, 14, UI_MUTED);
+    UiRect row = to_uirect(ptc_ui_notification_option_rect(PTC_UI_NOTIFICATION_TOGGLE));
+    bool enabled = m->reason_notifications_enabled;
+    bool selected = m->overlay_selection == PTC_UI_NOTIFICATION_TOGGLE;
+    fill_round_rect(pixels, stride, row, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
+    if (selected) draw_focus_ring(pixels, stride, row, 10);
+    const char *status = ptc_ui_text(enabled ? PTC_UI_T_ENABLED : PTC_UI_T_DISABLED_2);
+    UiRect toggle = {row.x + row.width - 66, row.y + 17, 46, 24};
+    int status_x = toggle.x - 12 - measure_text(status, 18);
+    char title[192];
+    fit_text(title, sizeof(title), ptc_ui_text(PTC_UI_T_REASON_NOTIFICATIONS), 20, status_x - row.x - 40);
+    draw_text(pixels, stride, row.x + 20, row.y + 36, title, 20, UI_INK);
+    draw_text(pixels, stride, status_x, row.y + 35, status, 18, enabled ? UI_SUCCESS : UI_MUTED);
+    draw_toggle_switch(pixels, stride, toggle, enabled, selected, false, NULL, NULL);
+
+    draw_notification_example(pixels, stride, to_uirect(ptc_ui_notification_preview_rect()), m->notification_preview == 0);
+    for (int i = 0; i < 2; ++i)
+        draw_candidate_button(pixels, stride, ptc_ui_notification_preview_tab_rect(i),
+            ptc_ui_text(i ? PTC_UI_T_NOTICE_PREVIEW_SHORT : PTC_UI_T_NOTICE_PREVIEW_DETAILS),
+            m->notification_preview == i ? UI_ACCENT_SOFT : UI_RAISED, UI_ACCENT, m->notification_preview == i, false);
+    const int info_x = dialog.x + 686;
+    const int info_width = dialog.width - 720;
+    int y = dialog.y + 216;
+    y = draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_COMPAT),
+        15, info_width, 21, 4, UI_MUTED) + 12;
+    y = draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(
         m->reason_external_notifications == 1 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
         m->reason_external_notifications == 0 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_OFF : PTC_UI_T_REASON_NOTICE_EXTERNAL_UNKNOWN),
-        16, dialog.width - 68, 21, 2, UI_WARNING) + 6;
+        15, info_width, 21, 3, UI_WARNING) + 12;
+    y = draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(
+        !m->reason_overlay_installed ? PTC_UI_T_NOTICE_OVERLAY_MISSING :
+        m->reason_detail_ready ? PTC_UI_T_NOTICE_DETAIL_READY : PTC_UI_T_NOTICE_DETAIL_UNREADY),
+        15, info_width, 21, 3, m->reason_detail_ready ? UI_ACCENT : UI_WARNING) + 12;
     char shortcut[192];
     snprintf(shortcut, sizeof(shortcut), "%s%s", m->reason_overlay_shortcut,
         ptc_ui_text(m->reason_overlay_shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT : PTC_UI_T_NOTIFY_OPEN));
-    y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, shortcut, 16, dialog.width - 68, 21, 1, UI_INK) + 6;
-    y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(
-        !m->reason_overlay_installed ? PTC_UI_T_NOTICE_OVERLAY_MISSING :
-        m->reason_detail_ready ? PTC_UI_T_NOTICE_DETAIL_READY : PTC_UI_T_NOTICE_DETAIL_UNREADY),
-        16, dialog.width - 68, 21, 1, UI_WARNING) + 6;
-    y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY),
-        15, dialog.width - 68, 20, 2, UI_MUTED);
+    y = draw_wrapped_text(pixels, stride, info_x, y, shortcut, 15, info_width, 21, 2, UI_INK) + 12;
+    draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY),
+        15, info_width, 20, 3, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 196, ptc_ui_text(PTC_UI_T_NOTICE_PREVIEW_LABEL), 12, UI_MUTED);
     if (m->reason_test_message[0])
-        draw_wrapped_text(pixels, stride, dialog.x + 34, y + 6, m->reason_test_message,
-            15, dialog.width - 68, 20, 2, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, info_x, dialog.y + 544, m->reason_test_message,
+            15, info_width, 20, 3, UI_ACCENT);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(m->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
         UI_RAISED, UI_INK, false);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(m->overlay), ptc_ui_text(PTC_UI_T_REASON_NOTICE_TOGGLE),
-        UI_ACCENT, UI_ON_ACCENT, false);
+    for (int i = PTC_UI_NOTIFICATION_PROBE; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i)
+        draw_candidate_button(pixels, stride, ptc_ui_notification_option_rect(i),
+            ptc_ui_text(i == PTC_UI_NOTIFICATION_PROBE ? PTC_UI_T_NOTICE_PROBE : PTC_UI_T_NOTICE_TEST),
+            UI_RAISED, UI_ACCENT, m->overlay_selection == i, false);
 }
 
 bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

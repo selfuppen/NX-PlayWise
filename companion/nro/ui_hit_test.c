@@ -433,7 +433,10 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
     case PTC_UI_OVERLAY_NOTIFICATIONS:
-        for (i = 0; i < 4; ++i)
+        for (i = 0; i < 2; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_notification_preview_tab_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_NOTIFICATION_PREVIEW, i);
+        for (i = 0; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i)
             if (ptc_ui_rect_contains(ptc_ui_notification_option_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_NOTIFICATION_OPTION, i);
         break;

@@ -75,6 +75,8 @@ PREVIEW_FILES = (
     "settings/settings-notifications-ready-dark.png",
     "settings/settings-notifications-dark.png",
     "settings/settings-notifications-unknown-light.png",
+    "settings/settings-notifications-short-light.png",
+    "settings/settings-notifications-short-dark.png",
     "settings/config-backup-create-light.png",
     "settings/config-backup-light.png",
     "settings/config-backup-security-dark.png",

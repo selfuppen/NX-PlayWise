@@ -325,8 +325,10 @@ static void test_notification_preferences(void)
         "failed notification save restores its switch");
     bool audio_before = ptc_audio_is_enabled();
     check(!toggle_notification_preference(&ui, 1) && ptc_audio_is_enabled() == audio_before,
-        "failed audio save restores its switch");
+        "notification page rejects removed audio option");
     mem.fail_writes = false;
+    check(!toggle_notification_preference(&ui, 1) && ptc_audio_is_enabled() == audio_before,
+        "removed audio option cannot change sound even when storage is writable");
     check(toggle_notification_preference(&ui, 0), "disable own hint preference");
     check(mem.storage.vtable->read_text(&mem.storage, "sdmc:/config/ultrahand/config.ini", external, sizeof(external)) &&
         strstr(external, "notifications=true"), "disabling hints does not disable global notices for other apps");
@@ -340,6 +342,36 @@ static void test_notification_preferences(void)
     handle_setup_input(&ui, HidNpadButton_A, 0);
     check(ui.model.overlay == PTC_UI_OVERLAY_NOTIFICATIONS && !ui.model.reason_notifications_enabled,
         "setup optional hint entry opens compatibility and global-setting disclosure without enabling");
+    handle_notification_preferences_input(&ui, HidNpadButton_R);
+    check(ui.model.notification_preview == 1 && !ui.model.reason_notifications_enabled && !ui.notification_test.pending,
+        "short-notice preview does not enable or send notifications");
+    handle_notification_preferences_input(&ui, HidNpadButton_L);
+    check(ui.model.notification_preview == 0 && !ui.waiting, "overlay preview is local and returns with L");
+    handle_notification_preferences_input(&ui, HidNpadButton_Down);
+    check(ui.model.overlay_selection == PTC_UI_NOTIFICATION_PROBE, "down reaches footer probe");
+    handle_notification_preferences_input(&ui, HidNpadButton_A);
+    check(!ui.model.reason_notifications_enabled && ui.model.reason_test_message[0],
+        "probing refreshes inline feedback without enabling notifications");
+    handle_notification_preferences_input(&ui, HidNpadButton_Right);
+    check(ui.model.overlay_selection == PTC_UI_NOTIFICATION_TEST, "right reaches footer test");
+    handle_notification_preferences_input(&ui, HidNpadButton_A);
+    check(!ui.notification_test.pending && !ui.waiting, "test without configuration stays optional");
+    handle_notification_preferences_input(&ui, HidNpadButton_Left);
+    check(ui.model.overlay_selection == PTC_UI_NOTIFICATION_PROBE, "left returns to probe");
+    handle_notification_preferences_input(&ui, HidNpadButton_Up);
+    check(ui.model.overlay_selection == PTC_UI_NOTIFICATION_TOGGLE, "up returns to toggle without a sound stop");
+    mem.fail_writes = true;
+    handle_notification_preferences_input(&ui, HidNpadButton_A);
+    check(!ui.model.reason_notifications_enabled &&
+        !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_REASON_NOTICE_SAVE_FAILED)),
+        "pad save failure restores toggle and shows inline feedback");
+    mem.fail_writes = false;
+    handle_notification_preferences_input(&ui, HidNpadButton_A);
+    check(ui.model.reason_notifications_enabled && ptc_audio_is_enabled() == audio_before,
+        "pad toggle saves notifications without changing sound");
+    handle_notification_preferences_input(&ui, HidNpadButton_B);
+    check(ui.model.overlay == PTC_UI_OVERLAY_NONE && ui.model.view == PTC_UI_SETUP,
+        "back returns to setup after optional notification actions");
     PtcUiRect entry = ptc_ui_setup_notifications_rect();
     ui.model.overlay = PTC_UI_OVERLAY_NONE;
     check(ptc_ui_hit_test(&ui.model, entry.x + entry.w / 2, entry.y + entry.h / 2).kind == PTC_UI_HIT_SETUP_NOTIFICATIONS,

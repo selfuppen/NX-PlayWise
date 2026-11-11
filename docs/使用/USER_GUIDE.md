@@ -36,11 +36,11 @@ Current release candidates qualify specifically against Nintendo Switch OLED, HO
 
 ## Initial Setup
 
-Step two includes an optional **Sound and notifications** entry on the left. Select it with the D-pad and A, or tap it; B returns to setup. Hints are off by default and can be skipped without blocking core setup. See [Hint previews and setup](#hint-previews-and-setup) for the controls and notice configuration states.
+Step two includes an optional **When play stops** entry on the left. Select it with the D-pad and A, or tap it; B returns to setup. Hints are off by default and can be skipped without blocking core setup. See [Hint previews and setup](#hint-previews-and-setup) for the controls and notice configuration states.
 
-After core setup, or when an update introduces unreviewed requirements, **Review setup options** walks through language, theme, shortcut, sound and notifications, eye rest, and bedtime. Configure an option, keep current settings, press B to skip it, or X to skip all remaining options; touch uses the same buttons. Each confirmed or skipped revision is remembered locally. Ordinary updates do not repeat resolved items. Older installs without item records get one review and may skip all. Editing keeps existing PIN and save checks; return from time plans to the child page to resume. Opening an editor or testing a notice does not confirm an option. Failed progress writes allow this session to continue and may prompt again next time. These local guide records are not transferred through preference backups.
+After core setup, or when an update introduces unreviewed requirements, **Review setup options** walks through language, theme, shortcut, when play stops, eye rest, and bedtime. Configure an option, keep current settings, press B to skip it, or X to skip all remaining options; touch uses the same buttons. Each confirmed or skipped revision is remembered locally. Ordinary updates do not repeat resolved items. Older installs without item records get one review and may skip all. Editing keeps existing PIN and save checks; return from time plans to the child page to resume. Opening an editor or testing a notice does not confirm an option. Failed progress writes allow this session to continue and may prompt again next time. These local guide records are not transferred through preference backups.
 
-In that page, **Check environment** refreshes the notice setting, shortcut, overlay file and automatic-details readiness snapshot without changing settings. **Test notification** publishes one clearly labelled test notice when the global notice setting is on; it does not enable automatic hints or change parental rules. Use the D-pad and A or tap either button. B returns to setup at any time. Missing dependencies and failed tests can be skipped. Publication does not confirm reception or display; reopen the manager normally and wait 10 seconds before retrying if needed.
+In that page, **Check again** refreshes the notice setting, shortcut, overlay file and automatic-details readiness snapshot without changing settings. **Try a notice** publishes one clearly labelled test notice when the global notice setting is on; it does not enable automatic hints or change parental rules. Use the D-pad and A or tap either button. B returns to setup at any time. Missing dependencies and failed tests can be skipped. Publication does not confirm reception or display; reopen the manager normally and wait 10 seconds before retrying if needed.
 
 The wizard has three steps. Check and save errors appear inline and never prevent continuing. Finishing the wizard does not mean controls are active. Saved progress resumes on reopening; settings that could not be saved may need to be entered again.
 
@@ -780,7 +780,7 @@ When an eligible newer version is found, a quiet Update hint appears in the uppe
 
 ### Automatic reason notices (experimental)
 
-In development candidates, open Sound and notifications from setup step two or Security & Preferences, then enable Automatic restriction hints (optional, off by default). Enabling prepares and reads back the existing Ultrahand global notice setting, affecting other apps. Missing or ambiguous settings are left untouched. Saving is not resident loading confirmation; reopen the manager if needed. PlayWise does not install, replace or restart it. “API notifications enabled.” is the manager's global toggle message, not a per-notice action. Receiver evidence covers Ultrahand 2.5.3 / loader 2.0.2. This feature has not been publicly released or fully qualified.
+In development candidates, open When play stops from setup step two or Security & Preferences, then enable Explain why play stopped (optional, off by default). Enabling prepares and reads back the existing Ultrahand global notice setting, affecting other apps. Missing or ambiguous settings are left untouched. Saving is not resident loading confirmation; reopen the manager if needed. PlayWise does not install, replace or restart it. “API notifications enabled.” is the manager's global toggle message, not a per-notice action. Receiver evidence covers Ultrahand 2.5.3 / loader 2.0.2. This feature has not been publicly released or fully qualified.
 
 Fresh restriction events first request current details from an already loaded, hidden PlayWise overlay with neutral input and no sensitive page. This path uses the loader and PlayWise itself, independently of Ultrahand notice reception. It cannot load PlayWise from another overlay or manager. Missing readiness or a bounded timeout attempts one short notice instead. Closing does not reopen the same instance. Y refreshes; B returns through the page hierarchy, then hides an automatically opened root. After HOME or POWER, manually open PlayWise before automatic details can resume. The new cooperation path requires separate device verification; old accepted screenshots do not prove it.
 
@@ -794,16 +794,16 @@ These are **HOST PREVIEW / SAMPLE DATA** images, generated by the production pag
 
 | Optional entry in setup | Enabled hint preference (light) |
 | --- | --- |
-| ![Sound and notifications selected in setup step two](../images/usage-en/setup/setup-notifications-light.png) | ![Hints enabled with notice configuration on and resident reception unconfirmed](../images/usage-en/settings/settings-notifications-ready-light.png) |
+| ![When play stops selected in setup step two](../images/usage-en/setup/setup-notifications-light.png) | ![Hints enabled with notice configuration on and resident reception unconfirmed](../images/usage-en/settings/settings-notifications-ready-light.png) |
 
 <details>
 <summary>View the dark setup entry</summary>
 
-![Sound and notifications entry in dark setup](../images/usage-en/setup/setup-notifications-dark.png)
+![When play stops entry in dark setup](../images/usage-en/setup/setup-notifications-dark.png)
 
 </details>
 
-Existing users open the same dialog from **Security & Preferences → Sound and notifications**. Select **Automatic restriction hints** with Up/Down and press A, or tap its row. Button sounds are independent. Read the global notice explanation before enabling: preparation changes Ultrahand's global setting and affects other apps. A failed preference save restores the switch. If only dependency preparation fails, the PlayWise preference can remain saved, with the dependency problem shown separately.
+Existing users open the same dialog from **Security & Preferences → When play stops**. Press A on **Explain why play stopped**, or tap its row. This page only configures notifications and preserves existing sound preferences. The large 16:9 screen shows the native restriction mask behind a full-height overlay covering the left 35%. Press L/R or tap the tabs for overlay and short-notice examples. These are not live state; receiver placement and appearance may vary. Read the actual environment snapshot on the right. Down reaches Check again, Left/Right selects Check or Test, Up returns to the toggle, and B returns. Read the global notice explanation before enabling: preparation changes Ultrahand's global setting and affects other apps. A failed preference save restores the switch. If only dependency preparation fails, the PlayWise preference can remain saved, with the dependency problem shown separately.
 
 | Notice configuration on (dark) | Notice configuration off while hints remain enabled |
 | --- | --- |
@@ -816,6 +816,10 @@ Existing users open the same dialog from **Security & Preferences → Sound and 
 | Notice setting: unknown | Configuration is missing, unreadable or ambiguous. PlayWise does not install or replace a manager; core setup can continue. |
 
 ![Unknown notice configuration with a generic manual detail entry](../images/usage-en/settings/settings-notifications-unknown-light.png)
+
+| Short notice example (light) | Short notice example (dark) |
+| --- | --- |
+| ![Short notice above the native restriction mask](../images/usage-en/settings/settings-notifications-short-light.png) | ![Short notice in dark settings](../images/usage-en/settings/settings-notifications-short-dark.png) |
 
 To try automatic details, first open PlayWise while unrestricted, check that status refresh works, then use the overlay loader's configured hide action to keep PlayWise loaded but hidden. B at a manually opened root exits to the manager, so subsequent hints use short-notice fallback. Automatic details cannot switch from another overlay or manager. HOME or POWER pauses automatic readiness until another manual PlayWise opening; HOME is not a way to hide while keeping automatic readiness.
 

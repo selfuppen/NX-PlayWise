@@ -284,11 +284,24 @@ PtcUiRect ptc_ui_settings_card_rect(int index)
 PtcUiRect ptc_ui_notification_option_rect(int index)
 {
     PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    if (index >= 2) {
-        int width = (d.w - 84) / 2;
-        return (PtcUiRect){d.x + 34 + (index - 2) * (width + 16), d.y + 292, width, 48};
-    }
-    return (PtcUiRect){d.x + 34, d.y + 160 + index * 64, d.w - 68, 54};
+    if (index < 0 || index >= PTC_UI_NOTIFICATION_OPTION_COUNT) return (PtcUiRect){0, 0, 0, 0};
+    if (index == PTC_UI_NOTIFICATION_TOGGLE)
+        return (PtcUiRect){d.x + 34, d.y + 126, d.w - 68, 56};
+    int width = (d.w - 100) / 3;
+    return (PtcUiRect){d.x + 34 + index * (width + 16), dialog_button_top(d), width, PTC_UI_DIALOG_BTN_H};
+}
+
+PtcUiRect ptc_ui_notification_preview_rect(void)
+{
+    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    return (PtcUiRect){d.x + 34, d.y + 202, 624, 351};
+}
+
+PtcUiRect ptc_ui_notification_preview_tab_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    return (PtcUiRect){d.x + 34 + index * 320, d.y + 565, 304, 32};
 }
 
 /* Pairing QR page shares the standard dialog button row so the drawn button,
@@ -859,8 +872,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 360;
         break;
     case PTC_UI_OVERLAY_NOTIFICATIONS:
-        *width = 1100;
-        *height = 650;
+        *width = 1180;
+        *height = 680;
         break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
         *width = 960;
@@ -1156,7 +1169,8 @@ PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
             return (PtcUiRect){0, 0, 0, 0};
         return ptc_ui_settings_page_primary_rect();
     }
-    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+    if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS ||
+        overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
         overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE)
         return (PtcUiRect){0, 0, 0, 0};
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
@@ -1169,6 +1183,8 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (settings_page_overlay(overlay)) return ptc_ui_settings_page_back_rect();
+    if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
+        return (PtcUiRect){dialog.x + 34, dialog_button_top(dialog), (dialog.w - 100) / 3, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
         return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)

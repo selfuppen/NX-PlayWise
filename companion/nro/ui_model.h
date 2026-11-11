@@ -20,6 +20,11 @@ enum {
     PTC_UI_SETUP_OPTION_COUNT
 };
 
+enum {
+    PTC_UI_NOTIFICATION_TOGGLE, PTC_UI_NOTIFICATION_PROBE, PTC_UI_NOTIFICATION_TEST,
+    PTC_UI_NOTIFICATION_OPTION_COUNT
+};
+
 typedef enum {
     PTC_UI_DOCK_PREVIEW_UNKNOWN = 0,
     PTC_UI_DOCK_PREVIEW_OFF,
@@ -579,6 +584,7 @@ typedef struct {
     int reason_external_notifications;
     bool reason_detail_ready;
     bool reason_overlay_installed;
+    int notification_preview;
     char reason_test_message[384];
     char reason_overlay_shortcut[96];
     char custom_shortcut_label[96];
