@@ -229,6 +229,7 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         char body[512];
         bool current = ptc_reason_notification_body(s, wall, lang, "", body, sizeof(body));
         bool confirmed = !change && current && enabled && !stopping &&
+            ms >= n->event.last_ms && wall >= n->event.last_wall &&
             ptc_reason_detail_fresh(&n->detail, n->event.release, n->event.boot, ms) &&
             ptc_reason_detail_read(n->storage, n->root, "ack", &ack) &&
             ptc_reason_detail_same(&n->detail, &ack) &&

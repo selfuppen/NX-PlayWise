@@ -152,7 +152,7 @@ static void test_reason_detail_transport(void)
     PtcMemStorage *mem = malloc(sizeof(*mem));
     check_true(mem != NULL, "detail fixture allocation"); if (!mem) return;
     PtcStorage *storage = &mem->storage;
-    for (int mode = 0; mode < 12; ++mode) {
+    for (int mode = 0; mode < 13; ++mode) {
         ptc_mem_storage_init(mem);
         storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
         storage->vtable->write_text_atomic(storage, "app/handover/runtime-ready.json",
@@ -178,16 +178,23 @@ static void test_reason_detail_transport(void)
             "loaded UI offered correct event before any short notification");
         PtcInputOwnerWriter writer;
         ptc_input_owner_writer_init(&writer, storage, "app", "release1", 900000000);
-        if (mode == 0 || mode == 1 || mode == 3 || mode == 9)
+        if (mode == 0 || mode == 1 || mode == 3 || mode == 9 || mode == 12)
             check_true(ptc_input_owner_acquire(&writer, 1100000000), "detail input lease fixture");
         ack = offer;
-        snprintf(ack.owner, sizeof(ack.owner), "%s", mode == 0 || mode == 1 || mode == 3 || mode == 9 ? writer.owner : "0123456789abcdef0123456789abcdef");
+        snprintf(ack.owner, sizeof(ack.owner), "%s", mode == 0 || mode == 1 || mode == 3 || mode == 9 || mode == 12 ? writer.owner : "0123456789abcdef0123456789abcdef");
         if (mode == 1) ++ack.ui_instance;
         if (mode == 3) ++ack.instance;
         if (mode == 9) ptc_input_owner_release(&writer, 1200000000);
         if (mode != 4 && mode != 5 && mode != 10)
             check_true(ptc_reason_detail_write(storage, "app", "ack", &ack), "write detail draw ACK fixture");
         s.revision++; s.captured_at = 101;
+        if (mode == 12) {
+            n.event.last_wall = 102;
+            notify_tick(&n, &s, 1250, 101, true);
+            check_true(!n.detail_pending && !n.pending && strcmp(n.state, "detail_drawn_confirmed"),
+                "clock rollback rejects even an otherwise valid draw ACK and lease");
+            continue;
+        }
         ptc_reason_notification_tick(&n, &s, 1250, 101, true, mode == 0, false, PTC_UI_LANGUAGE_ENGLISH);
         if (mode == 0) {
             check_true(!n.detail_pending && !n.pending && !strcmp(n.state, "detail_drawn_confirmed"),
