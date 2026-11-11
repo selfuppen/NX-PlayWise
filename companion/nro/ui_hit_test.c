@@ -433,7 +433,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
     case PTC_UI_OVERLAY_NOTIFICATIONS:
-        for (i = 0; i < 2; ++i)
+        for (i = 0; i < 4; ++i)
             if (ptc_ui_rect_contains(ptc_ui_notification_option_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_NOTIFICATION_OPTION, i);
         break;
@@ -544,6 +544,12 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->view == PTC_UI_SETUP) {
+        if (model->setup_review_active) {
+            for (i = 0; i < 4; ++i)
+                if (ptc_ui_rect_contains(ptc_ui_setup_review_rect(i), x, y))
+                    return make_hit(PTC_UI_HIT_SETUP_PRIMARY, i);
+            return make_hit(PTC_UI_HIT_NONE, 0);
+        }
         int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_PREPARE;
         if (ptc_ui_rect_contains(ptc_ui_setup_back_rect(), x, y)) return make_hit(PTC_UI_HIT_SETUP_BACK, 0);
         if (step == PTC_UI_SETUP_PREPARE) {

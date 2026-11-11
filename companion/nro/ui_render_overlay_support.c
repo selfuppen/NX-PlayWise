@@ -709,7 +709,7 @@ static void draw_support_guide(uint32_t *pixels, uint32_t stride, const PtcUiMod
 static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, const PtcUiModel *m)
 {
     UiRect dialog;
-    draw_dialog_shell(pixels, stride, m, &dialog, 960, 560);
+    draw_dialog_shell(pixels, stride, m, &dialog, 1100, 650);
     for (int i = 0; i < 2; ++i) {
         UiRect row = to_uirect(ptc_ui_notification_option_rect(i));
         bool enabled = i == 0 ? m->reason_notifications_enabled : ptc_audio_is_enabled();
@@ -725,7 +725,11 @@ static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, con
         draw_text(pixels, stride, row.x + row.width - 18 - sw, row.y + 34, status, 18,
             enabled ? UI_SUCCESS : UI_MUTED);
     }
-    int y = dialog.y + 300;
+    for (int i = 2; i < 4; ++i)
+        draw_candidate_button(pixels, stride, ptc_ui_notification_option_rect(i),
+            ptc_ui_text(i == 2 ? PTC_UI_T_NOTICE_PROBE : PTC_UI_T_NOTICE_TEST),
+            UI_RAISED, UI_ACCENT, m->overlay_selection == i, false);
+    int y = dialog.y + 365;
     y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_COMPAT),
         16, dialog.width - 68, 21, 3, UI_MUTED) + 6;
     y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(
@@ -736,8 +740,15 @@ static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, con
     snprintf(shortcut, sizeof(shortcut), "%s%s", m->reason_overlay_shortcut,
         ptc_ui_text(m->reason_overlay_shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT : PTC_UI_T_NOTIFY_OPEN));
     y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, shortcut, 16, dialog.width - 68, 21, 1, UI_INK) + 6;
-    draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY),
+    y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(
+        !m->reason_overlay_installed ? PTC_UI_T_NOTICE_OVERLAY_MISSING :
+        m->reason_detail_ready ? PTC_UI_T_NOTICE_DETAIL_READY : PTC_UI_T_NOTICE_DETAIL_UNREADY),
+        16, dialog.width - 68, 21, 1, UI_WARNING) + 6;
+    y = draw_wrapped_text(pixels, stride, dialog.x + 34, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY),
         15, dialog.width - 68, 20, 2, UI_MUTED);
+    if (m->reason_test_message[0])
+        draw_wrapped_text(pixels, stride, dialog.x + 34, y + 6, m->reason_test_message,
+            15, dialog.width - 68, 20, 2, UI_ACCENT);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(m->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
         UI_RAISED, UI_INK, false);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(m->overlay), ptc_ui_text(PTC_UI_T_REASON_NOTICE_TOGGLE),

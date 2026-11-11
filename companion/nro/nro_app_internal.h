@@ -18,6 +18,7 @@
 #include "../../companion/transport_client.h"
 #include "../../companion/ui_status_trace.h"
 #include "../../companion/input_owner.h"
+#include "../../companion/notification_test.h"
 #include "../../companion/switch_ipc_client.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/calendar_store.h"
@@ -124,6 +125,7 @@ typedef struct {
     volatile PtcUiStatusOrigin status_refresh_origin;
     PtcUiStatusTrace status_trace;
     PtcInputOwnerReader input_owner;
+    PtcNotificationTest notification_test;
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char last_result[RESULT_TEXT_SIZE];
     int elapsed_ms;
@@ -235,6 +237,12 @@ void config_backup_result(UiState *ui);
 void load_ui_preferences(UiState *ui);
 bool save_ui_preferences(UiState *ui);
 void open_notification_preferences(UiState *ui);
+void load_setup_options(UiState *ui);
+void complete_setup_option(UiState *ui, int index);
+void setup_review_action(UiState *ui, int action);
+void probe_notification_environment(UiState *ui);
+void test_notification(UiState *ui);
+void poll_notification_test(UiState *ui);
 bool toggle_notification_preference(UiState *ui, int index);
 bool save_setup_step(UiState *ui, int step);
 void edit_overlay_minutes(UiState *ui);

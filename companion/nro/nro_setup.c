@@ -3,7 +3,7 @@
 void refresh_setup_activation(UiState *ui)
 {
     int64_t now;
-    if (!ui || ui->waiting || (ui->model.view != PTC_UI_SETUP &&
+    if (!ui || ui->model.setup_review_active || ui->waiting || (ui->model.view != PTC_UI_SETUP &&
         !(ui->model.setup_wizard_completed && strcmp(ui->model.setup_phase, "released") == 0))) {
         return;
     }
@@ -143,7 +143,10 @@ bool commit_shortcut_preferences(UiState *ui)
     ui->model.custom_shortcut_enabled = ui->model.shortcut_draft_enabled;
     ui->model.show_parent_shortcut_hint = ui->model.shortcut_draft_show_hint;
     refresh_custom_shortcut_label(ui);
-    if (save_ui_preferences(ui)) return true;
+    if (save_ui_preferences(ui)) {
+        complete_setup_option(ui, PTC_UI_SETUP_OPTION_SHORTCUT);
+        return true;
+    }
     if (ui->model.view == PTC_UI_SETUP) {
         ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_SHORTCUT, PTC_ERR_STORAGE_WRITE_FAILED);
         ui->model.overlay = PTC_UI_OVERLAY_NONE;
@@ -298,6 +301,10 @@ void finish_setup(UiState *ui, bool activated)
         enter_parent_area_unlocked(ui);
     }
     else enter_support_area(ui);
+    if (activated && ptc_ui_setup_next_option(&ui->model) >= 0) {
+        ui->model.view = PTC_UI_CHILD;
+        ptc_ui_setup_sync(&ui->model);
+    }
 }
 
 void setup_previous(UiState *ui)
@@ -409,6 +416,14 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
     int max_focus;
     (void)held;
     if (!ui || ui->model.view != PTC_UI_SETUP) return;
+    if (ui->model.setup_review_active) {
+        if (down & HidNpadButton_B) setup_review_action(ui, 2);
+        else if (down & HidNpadButton_X) setup_review_action(ui, 3);
+        else if (down & HidNpadButton_Up) ui->model.setup_review_selection = (ui->model.setup_review_selection + 3) % 4;
+        else if (down & HidNpadButton_Down) ui->model.setup_review_selection = (ui->model.setup_review_selection + 1) % 4;
+        else if (down & HidNpadButton_A) setup_review_action(ui, ui->model.setup_review_selection);
+        return;
+    }
     if (down & HidNpadButton_B) { setup_previous(ui); return; }
     max_focus = ui->model.setup_step == PTC_UI_SETUP_PREPARE ? 3 :
         ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 : 6;

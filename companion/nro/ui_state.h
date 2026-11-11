@@ -91,6 +91,10 @@ PtcBedtimePolicy ptc_ui_bedtime_section_policy(const PtcUiModel *model,
     PtcUiBedtimeSection section);
 void ptc_ui_bedtime_discard_section(PtcUiModel *model, PtcUiBedtimeSection section);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
+const char *ptc_ui_setup_option_key(int index);
+PtcUiTextId ptc_ui_setup_option_title(int index);
+unsigned ptc_ui_setup_option_revision(int index);
+int ptc_ui_setup_next_option(const PtcUiModel *model);
 void ptc_ui_setup_sync(PtcUiModel *model);
 void ptc_ui_return_from_parent(PtcUiModel *model);
 void ptc_ui_setup_record_issue(PtcUiModel *model, PtcUiSetupIssueKind kind, int code);

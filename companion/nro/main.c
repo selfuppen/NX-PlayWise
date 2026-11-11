@@ -160,6 +160,7 @@ int main(int argc, char **argv)
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
     load_rule_drafts(&ui);
+    ptc_ui_setup_sync(&ui.model);
     ui.model.setup_pin_ready = ptc_companion_auth_state(&ui.auth) == PTC_AUTH_OK;
     if (!install_defaults_ready
 #ifdef PLAYWISE_EDEN
@@ -417,6 +418,7 @@ int main(int argc, char **argv)
         ptc_eden_trace_stage(PTC_EDEN_TRACE_DISPATCH_DONE, 0);
 #endif
         if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
+            poll_notification_test(&ui);
 #ifdef PLAYWISE_EDEN
             ptc_eden_trace_stage(PTC_EDEN_TRACE_TICK_BEGIN, 0);
             if (ptc_eden_runtime_tick(&eden_runtime)) eden_status_dirty = true;
@@ -434,6 +436,8 @@ int main(int argc, char **argv)
             ptc_eden_trace_stage(PTC_EDEN_TRACE_POLL_END, 0);
 #endif
             refresh_setup_activation(&ui);
+            if (ui.model.setup_review_active && ui.model.view != PTC_UI_ERROR)
+                ptc_ui_setup_sync(&ui.model);
 #ifdef PLAYWISE_EDEN
             if (eden_status_dirty && !ui.waiting && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
                 ui.model.view != PTC_UI_SETUP) {
@@ -455,6 +459,7 @@ int main(int argc, char **argv)
 #ifndef PLAYWISE_EDEN
     ptc_online_update_exit(&ui.updater);
 #endif
+    (void)ptc_notification_test_cleanup(&ui.notification_test, ui.client.storage, APP_ROOT);
     if (!ui.waiting && ui.config_stage_id[0]) config_backup_action(&ui, 15);
     appletUnhook(&hook_cookie);
     ptc_audio_exit();

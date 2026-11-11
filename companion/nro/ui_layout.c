@@ -108,6 +108,7 @@ PtcUiRect ptc_ui_setup_language_rect(int index)
 PtcUiRect ptc_ui_setup_primary_rect(void) { return (PtcUiRect){1036, 664, 190, 44}; }
 PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 664, 170, 44}; }
 PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){236, 664, 280, 44}; }
+PtcUiRect ptc_ui_setup_review_rect(int index) { return (PtcUiRect){164, 358 + index * 72, 952, 56}; }
 PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 320, 510, 54}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){0, 0, 0, 0}; }
 PtcUiRect ptc_ui_setup_notifications_rect(void) { return (PtcUiRect){94, 550, 510, 48}; }
@@ -283,6 +284,10 @@ PtcUiRect ptc_ui_settings_card_rect(int index)
 PtcUiRect ptc_ui_notification_option_rect(int index)
 {
     PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    if (index >= 2) {
+        int width = (d.w - 84) / 2;
+        return (PtcUiRect){d.x + 34 + (index - 2) * (width + 16), d.y + 292, width, 48};
+    }
     return (PtcUiRect){d.x + 34, d.y + 160 + index * 64, d.w - 68, 54};
 }
 
@@ -853,8 +858,11 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 760;
         *height = 360;
         break;
-    case PTC_UI_OVERLAY_SOFTWARE_INFO:
     case PTC_UI_OVERLAY_NOTIFICATIONS:
+        *width = 1100;
+        *height = 650;
+        break;
+    case PTC_UI_OVERLAY_SOFTWARE_INFO:
         *width = 960;
         *height = 560;
         break;

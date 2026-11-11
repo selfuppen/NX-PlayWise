@@ -54,6 +54,26 @@ int ptc_ui_migrate_setup_step(int step, int wizard_version)
     return PTC_UI_SETUP_PREPARE;
 }
 
+/* Stable keys and per-item revisions: new requirements bump only their row. */
+static const struct { const char *key; PtcUiTextId title; unsigned revision; } setup_options[] = {
+    {"language", PTC_UI_T_UI_LANGUAGE, 1},
+    {"theme", PTC_UI_T_APPEARANCE_THEME, 1},
+    {"shortcut", PTC_UI_T_SETUP_SHORTCUT_LABEL, 1},
+    {"notifications", PTC_UI_T_ALERT_PREFERENCES, 1},
+    {"eye_care", PTC_UI_T_SETUP_EYE_CARE_LABEL, 1},
+    {"bedtime", PTC_UI_T_SETUP_BEDTIME_LABEL, 1}
+};
+const char *ptc_ui_setup_option_key(int i) { return i >= 0 && i < PTC_UI_SETUP_OPTION_COUNT ? setup_options[i].key : ""; }
+PtcUiTextId ptc_ui_setup_option_title(int i) { return setup_options[i].title; }
+unsigned ptc_ui_setup_option_revision(int i) { return setup_options[i].revision; }
+int ptc_ui_setup_next_option(const PtcUiModel *m)
+{
+    if (!m || !m->setup_options_loaded) return -1;
+    for (int i = 0; i < PTC_UI_SETUP_OPTION_COUNT; ++i)
+        if (m->setup_option_versions[i] < setup_options[i].revision) return i;
+    return -1;
+}
+
 void ptc_ui_open_setup_pctl_help(PtcUiModel *model)
 {
     if (!model || model->view != PTC_UI_SETUP ||
@@ -76,7 +96,20 @@ void ptc_ui_setup_sync(PtcUiModel *model)
         model->setup_step = 0;
         if (model->view == PTC_UI_SETUP) model->view = PTC_UI_CHILD;
     }
-    if (model->setup_wizard_completed) return;
+    if (model->setup_wizard_completed) {
+        if (model->setup_review_active && ptc_ui_setup_next_option(model) < 0 &&
+            model->view != PTC_UI_PARENT && model->overlay == PTC_UI_OVERLAY_NONE) {
+            model->setup_review_active = false;
+            if (model->view == PTC_UI_SETUP) model->view = PTC_UI_CHILD;
+        }
+        if (ptc_ui_setup_next_option(model) >= 0 && model->view != PTC_UI_PARENT &&
+            model->overlay == PTC_UI_OVERLAY_NONE) {
+            if (!model->setup_review_active) model->message[0] = '\0';
+            model->setup_review_active = true;
+            model->view = PTC_UI_SETUP;
+        }
+        return;
+    }
     if (model->setup_step == 0) model->setup_step = PTC_UI_SETUP_PREPARE;
     if (model->view != PTC_UI_PARENT) model->view = PTC_UI_SETUP;
 }

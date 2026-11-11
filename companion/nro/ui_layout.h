@@ -155,6 +155,7 @@ PtcUiRect ptc_ui_setup_more_rect(void);
 PtcUiRect ptc_ui_setup_notifications_rect(void);
 PtcUiRect ptc_ui_setup_shortcut_rect(void);
 PtcUiRect ptc_ui_setup_skip_rect(void);
+PtcUiRect ptc_ui_setup_review_rect(int index);
 PtcUiRect ptc_ui_setup_primary_rect(void);
 PtcUiRect ptc_ui_setup_back_rect(void);
 PtcUiRect ptc_ui_setup_pin_rect(void);

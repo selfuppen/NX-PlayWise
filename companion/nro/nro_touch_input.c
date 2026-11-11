@@ -100,7 +100,8 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_SETUP_PRIMARY:
         ptc_audio_play(PTC_SE_CONFIRM);
-        setup_primary(ui);
+        if (ui->model.setup_review_active) setup_review_action(ui, hit.index);
+        else setup_primary(ui);
         break;
     case PTC_UI_HIT_SETUP_BACK:
         ptc_audio_play(PTC_SE_CANCEL);

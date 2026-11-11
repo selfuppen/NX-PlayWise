@@ -2179,13 +2179,37 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                         failed |= save_preview(folder, "settings", name, &model, dark);
                     }
                 }
+                for (int option = 0; option < PTC_UI_SETUP_OPTION_COUNT; ++option) {
+                    PtcUiModel review = *baseline;
+                    review.view = PTC_UI_SETUP;
+                    review.overlay = PTC_UI_OVERLAY_NONE;
+                    review.setup_options_loaded = review.setup_review_active = review.setup_wizard_completed = true;
+                    review.setup_review_selection = option % 4;
+                    memset(review.setup_option_versions, 0, sizeof(review.setup_option_versions));
+                    for (int i = 0; i < option; ++i) review.setup_option_versions[i] = ptc_ui_setup_option_revision(i);
+                    snprintf(review.message, sizeof(review.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_REVIEW_UNSAVED));
+                    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+                        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+                    ptc_ui_graphics_draw(&review, &theme);
+                    memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+                    draw_setup(preview_pixels, 1280, &review);
+                    action_trace.enabled = false;
+                    failed += check_action_text((UiRect){0, 0, 1280, 720}, ptc_ui_text(PTC_UI_T_SETUP_REVIEW_TITLE));
+                    if (style == 0 && option == PTC_UI_SETUP_OPTION_NOTIFICATIONS)
+                        failed |= save_preview(folder, "setup", "setup-review", &review, dark);
+                }
                 for (int scenario = 0; scenario < 4; ++scenario) {
                     PtcUiModel model = *baseline;
                     model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
                     model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
                     model.reason_notifications_enabled = scenario != 0;
                     model.reason_external_notifications = scenario - 1;
-                    model.overlay_selection = scenario % 2;
+                    model.overlay_selection = scenario;
+                    model.reason_overlay_installed = scenario != 0;
+                    model.reason_detail_ready = scenario == 2;
+                    snprintf(model.reason_test_message, sizeof(model.reason_test_message), "%s", ptc_ui_text(
+                        scenario == 0 ? PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG : scenario == 1 ? PTC_UI_T_NOTICE_TEST_SENT :
+                        scenario == 2 ? PTC_UI_T_NOTICE_PROBED : PTC_UI_T_NOTICE_TEST_FAILED));
                     snprintf(model.reason_overlay_shortcut, sizeof(model.reason_overlay_shortcut), "%s",
                         scenario == 0 ? "" : scenario == 3 ? "ZL＋ZR＋↓＋−" : "L＋↓");
                     snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
@@ -2196,7 +2220,7 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                     memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
                     draw_support_overlay_surface(preview_pixels, 1280, &model);
                     action_trace.enabled = false;
-                    failed += check_action_text(to_uirect(ptc_ui_dialog_rect(960, 560)), ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+                    failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1100, 650)), ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
                     /* Every paragraph must survive wrapping without losing its
                        end to max-lines clipping. Compare without wrap whitespace. */
                     char all[8192] = "";
@@ -2206,7 +2230,12 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                             if (*p != ' ' && *p != '\n' && *p != '\t') all[used++] = *p;
                     all[used] = '\0';
                     PtcUiTextId paragraphs[] = {PTC_UI_T_REASON_NOTICE_EXPERIMENT, PTC_UI_T_REASON_NOTICE_COMPAT,
-                        PTC_UI_T_REASON_NOTICE_EXPIRY, PTC_UI_T_REASON_NOTICE_TOGGLE};
+                        PTC_UI_T_REASON_NOTICE_EXPIRY, PTC_UI_T_REASON_NOTICE_TOGGLE,
+                        PTC_UI_T_NOTICE_PROBE, PTC_UI_T_NOTICE_TEST,
+                        scenario == 0 ? PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG : scenario == 1 ? PTC_UI_T_NOTICE_TEST_SENT :
+                        scenario == 2 ? PTC_UI_T_NOTICE_PROBED : PTC_UI_T_NOTICE_TEST_FAILED,
+                        scenario == 0 ? PTC_UI_T_NOTICE_OVERLAY_MISSING : scenario == 2 ? PTC_UI_T_NOTICE_DETAIL_READY :
+                        PTC_UI_T_NOTICE_DETAIL_UNREADY};
                     for (unsigned i = 0; i < sizeof(paragraphs)/sizeof(paragraphs[0]); ++i) {
                         char required[1024]; size_t count = 0;
                         for (const char *p = ptc_ui_text(paragraphs[i]); *p && count + 1 < sizeof(required); ++p)

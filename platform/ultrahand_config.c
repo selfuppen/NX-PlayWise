@@ -6,14 +6,17 @@
 static int ini(const char *text, const char *section, const char *key, char *out, size_t size)
 {
     bool inside = false, found = false;
+    unsigned sections = 0;
     const char *p = text;
     while (*p) {
         const char *end = strchr(p, '\n');
         size_t n = end ? (size_t)(end - p) : strlen(p);
         while (n && (p[n-1] == '\r' || p[n-1] == ' ' || p[n-1] == '\t')) --n;
         while (n && (*p == ' ' || *p == '\t')) { ++p; --n; }
-        if (n && *p == '[') inside = n == strlen(section) + 2 &&
-            p[n-1] == ']' && !strncmp(p+1, section, n-2);
+        if (n && *p == '[') {
+            inside = n == strlen(section) + 2 && p[n-1] == ']' && !strncmp(p+1, section, n-2);
+            if (inside && ++sections > 1) return -1;
+        }
         else if (inside && n > strlen(key) && !strncmp(p, key, strlen(key))) {
             const char *v = p + strlen(key);
             while (v < p+n && (*v == ' ' || *v == '\t')) ++v;

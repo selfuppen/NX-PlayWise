@@ -64,7 +64,13 @@ static void open_code_preview_confirm(UiState *ui, bool refreshed)
 static void sync_setup_wizard(UiState *ui)
 {
     if (!ui) return;
+    /* A normal result must not introduce a guide between closing and reopening
+       details. Startup and explicit return navigation own that transition. */
+    bool loaded = ui->model.setup_options_loaded;
+    if (ui->model.setup_wizard_completed && !ui->model.setup_review_active)
+        ui->model.setup_options_loaded = false;
     ptc_ui_setup_sync(&ui->model);
+    ui->model.setup_options_loaded = loaded;
 }
 
 #ifdef PLAYWISE_EDEN
@@ -200,6 +206,12 @@ void poll_result(UiState *ui, bool force)
         if (strcmp(ui->model.result_type, "status") == 0 && strcmp(ui->model.result_status, "ok") != 0)
             ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, ui->model.error_code);
         sync_setup_wizard(ui);
+        if (strcmp(ui->model.result_status, "ok") == 0) {
+            if (strcmp(ui->model.result_type, "set_eye_care_policy") == 0)
+                complete_setup_option(ui, PTC_UI_SETUP_OPTION_EYE_CARE);
+            else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0)
+                complete_setup_option(ui, PTC_UI_SETUP_OPTION_BEDTIME);
+        }
         load_rule_drafts(ui);
         if (preserve_autonomy_draft && strcmp(ui->model.result_type, "status") == 0)
             ui->model.draft_autonomy_policy = saved_autonomy_draft;

@@ -2,6 +2,7 @@
 #include "../../common/protocol/request_schema.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../companion/nro/eden_observe.h"
+#include "../../platform/reason_detail.h"
 
 static int failures;
 static int glyph_refreshes;
@@ -345,6 +346,151 @@ static void test_notification_preferences(void)
         "setup touch and controller share notification entry");
 }
 
+static void test_incremental_setup_options(void)
+{
+    static PtcMemStorage mem;
+    UiState ui, reopened;
+    init(&ui, &mem);
+    ui.model.setup_wizard_completed = ui.model.setup_completion_known = true;
+    ui.model.view = PTC_UI_CHILD;
+    snprintf(ui.model.setup_phase, sizeof(ui.model.setup_phase), "protection");
+    ptc_ui_setup_sync(&ui.model);
+    check(ui.model.view == PTC_UI_SETUP && ui.model.setup_review_active && ui.model.setup_wizard_completed,
+        "old completed install reviews missing choices independently of activation or protection");
+    setup_review_action(&ui, 0);
+    check(ui.model.overlay == PTC_UI_OVERLAY_LANGUAGE && ptc_ui_setup_next_option(&ui.model) == 0,
+        "opening an editor does not acknowledge an option");
+    ptc_ui_cancel_overlay(&ui.model);
+    handle_setup_input(&ui, HidNpadButton_B, 0);
+    check(ptc_ui_setup_next_option(&ui.model) == 1 && (ui.model.setup_option_skipped & 1),
+        "B explicitly skips only the current revision");
+    ui.setup_parent_authorized = false;
+    ui.model.setup_pin_ready = true;
+    pin_values[0] = NULL; pin_cursor = 0;
+    setup_review_action(&ui, 0);
+    check(!ui.setup_parent_authorized && ui.model.view == PTC_UI_SETUP && ptc_ui_setup_next_option(&ui.model) == 1,
+        "upgraded guide cannot edit parental preferences through canceled PIN");
+    ui.model.overlay = PTC_UI_OVERLAY_NONE;
+    setup_review_action(&ui, 1);
+    check(ptc_ui_setup_next_option(&ui.model) == 2 && !(ui.model.setup_option_skipped & 2),
+        "explicit keep records intentional defaults as configured");
+    memset(&reopened, 0, sizeof(reopened)); reopened.client = ui.client;
+    load_ui_preferences(&reopened);
+    check(ptc_ui_setup_next_option(&reopened.model) == 2 && (reopened.model.setup_option_skipped & 1),
+        "serialized configured and skipped revisions survive reopen without guessing from default values");
+    ui.model.overlay = PTC_UI_OVERLAY_NONE;
+    handle_setup_input(&ui, HidNpadButton_X, 0);
+    check(!ui.model.setup_review_active && ui.model.view == PTC_UI_CHILD && !ui.waiting && !ui.active_request_id[0],
+        "skip remaining completes only the UI guide without control requests");
+    load_ui_preferences(&reopened);
+    check(ptc_ui_setup_next_option(&reopened.model) == -1, "same item revisions do not prompt on ordinary updates");
+    /* An added requirement invalidates only that item's acknowledgement. */
+    reopened.model.setup_option_versions[PTC_UI_SETUP_OPTION_NOTIFICATIONS] = 0;
+    reopened.model.setup_wizard_completed = reopened.model.setup_completion_known = true;
+    reopened.model.view = PTC_UI_CHILD;
+    ptc_ui_setup_sync(&reopened.model);
+    check(ptc_ui_setup_next_option(&reopened.model) == PTC_UI_SETUP_OPTION_NOTIFICATIONS && reopened.model.setup_review_active,
+        "a new notification requirement leaves other configured items resolved");
+    PtcUiRect r = ptc_ui_setup_review_rect(2);
+    PtcUiHit hit = ptc_ui_hit_test(&reopened.model, r.x + r.w / 2, r.y + r.h / 2);
+    check(hit.kind == PTC_UI_HIT_SETUP_PRIMARY && hit.index == 2,
+        "touch skip maps to the same guide action as controller B");
+    mem.fail_writes = true;
+    setup_review_action(&reopened, 2);
+    check(ptc_ui_setup_next_option(&reopened.model) < 0 && reopened.model.view == PTC_UI_CHILD,
+        "failed acknowledgement persistence cannot trap this session");
+    mem.fail_writes = false;
+    mem.storage.vtable->write_text_atomic(&mem.storage, APP_ROOT "/setup-guide.json", "{broken");
+    load_setup_options(&reopened);
+    reopened.model.setup_review_active = true; reopened.model.view = PTC_UI_SETUP;
+    setup_review_action(&reopened, 3);
+    char original[32];
+    check(mem.storage.vtable->read_text(&mem.storage, APP_ROOT "/setup-guide.json", original, sizeof(original)) &&
+        !strcmp(original, "{broken") && reopened.model.view == PTC_UI_CHILD,
+        "malformed local progress is preserved while skip remains available");
+    load_setup_options(&reopened);
+    check(ptc_ui_setup_next_option(&reopened.model) == 0, "unpersisted choices are retried on reopening");
+    init(&ui, &mem);
+    check(apply_language_preference(&ui, PTC_UI_LANGUAGE_ENGLISH), "real language choice saves");
+    check(ui.model.setup_option_versions[PTC_UI_SETUP_OPTION_LANGUAGE] == 1,
+        "first wizard successful configuration prevents duplicate supplemental language prompt");
+}
+
+static void test_notification_environment_and_preview(void)
+{
+    static PtcMemStorage mem;
+    UiState ui;
+    init(&ui, &mem);
+    PtcStorage *s = &mem.storage;
+    const uint64_t now = (uint64_t)fixed_time * 1000;
+    open_notification_preferences(&ui);
+    check(ui.model.reason_external_notifications == -1 && !ui.model.reason_detail_ready,
+        "missing optional dependencies remain unknown without blocking setup");
+    test_notification(&ui);
+    check(!ui.notification_test.pending && !ui.waiting && ui.model.view == PTC_UI_SETUP,
+        "unknown manager refuses publishing and leaves core setup available");
+    s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/overlays.ini", "[playwise.ovl]\nkey_combo=L+DDOWN\n");
+    s->vtable->write_text_atomic(s, "sdmc:/switch/.overlays/playwise.ovl", "overlay sentinel");
+    s->vtable->write_text_atomic(s, APP_ROOT "/handover/runtime-ready.json",
+        "{\"profile\":\"release\",\"release_id\":\"host-setup-test\",\"boot_id\":\"0123456789abcdef\"}");
+    PtcReasonDetail ready = {0};
+    snprintf(ready.release, sizeof(ready.release), "%s", PLAYWISE_BUILD_RELEASE_ID);
+    snprintf(ready.boot, sizeof(ready.boot), "0123456789abcdef");
+    ready.ui_instance = 7; ready.issued_ms = now; ready.expires_ms = now + 1500;
+    check(ptc_reason_detail_write(s, APP_ROOT, "ready", &ready), "write optional ready fixture");
+    mem.fail_writes = true;
+    probe_notification_environment(&ui);
+    check(ui.model.reason_external_notifications == 1 && ui.model.reason_overlay_installed &&
+        ui.model.reason_detail_ready && !strcmp(ui.model.reason_overlay_shortcut, "L＋↓") &&
+        !ui.model.reason_notifications_enabled && !ui.waiting,
+        "read-only environment probe works without writes or enabling hints");
+    fixed_time += 2;
+    probe_notification_environment(&ui);
+    check(!ui.model.reason_detail_ready, "expired ready cannot claim current automatic details");
+    fixed_time -= 2;
+    mem.fail_writes = false;
+    test_notification(&ui);
+    check(ui.notification_test.pending && !ui.waiting && ui.model.view == PTC_UI_SETUP,
+        "one explicit test publishes without restricting setup or enabling automatic hints");
+    char published[1024], path[256];
+    snprintf(path, sizeof(path), "%s", ui.notification_test.path);
+    check(s->vtable->read_text(s, path, published, sizeof(published)) && strstr(published, "test-v1") &&
+        strstr(published, "10000"), "test payload is explicitly labelled and bounded");
+    check(!ptc_notification_test_send(&ui.notification_test, s, APP_ROOT, now + 1, 5, "test", "test"),
+        "repeated presses cannot queue test notifications");
+    ptc_notification_test_poll(&ui.notification_test, s, APP_ROOT, now + 1999);
+    check(s->vtable->exists(s, path), "test retained only inside its pending window");
+    ptc_notification_test_poll(&ui.notification_test, s, APP_ROOT, now + 2000);
+    check(!s->vtable->exists(s, path) && !ui.notification_test.pending,
+        "test expires without waiting for user confirmation or receiver");
+    check(!ptc_notification_test_send(&ui.notification_test, s, APP_ROOT, now + 9999, 5, "test", "test"),
+        "ten-second rate limit spans cleanup");
+    mem.fail_renames = true;
+    check(!ptc_notification_test_send(&ui.notification_test, s, APP_ROOT, now + 10000, 5, "test", "test"),
+        "publish failure is reported without business requests");
+    mem.fail_renames = false;
+    PtcNotificationTest restarted = {0};
+    check(ptc_notification_test_cleanup(&restarted, s, APP_ROOT) &&
+        !s->vtable->exists(s, APP_ROOT "/support/notification-test-owned.json"),
+        "new NRO recovers its own staged notification after interrupted publication");
+    memset(&ui.notification_test, 0, sizeof(ui.notification_test));
+    check(ptc_notification_test_send(&ui.notification_test, s, APP_ROOT, now + 20000, 6, "test", "test"),
+        "independent new test fixture publishes");
+    s->vtable->write_text_atomic(s, ui.notification_test.path, "changed by another writer");
+    for (unsigned i = 0; i < 5; ++i)
+        ptc_notification_test_poll(&ui.notification_test, s, APP_ROOT, now + 22000 + i * 10000);
+    check(ui.notification_test.blocked && ui.notification_test.failures == 5 &&
+        s->vtable->exists(s, ui.notification_test.path), "unknown bytes preserved with bounded cleanup failure budget");
+    s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/config.ini",
+        "[ultrahand]\nnotifications=true\n[ultrahand]\nother=true\n");
+    probe_notification_environment(&ui);
+    check(ui.model.reason_external_notifications == -1, "duplicate manager sections are ambiguous even with one value");
+    ptc_ui_cancel_overlay(&ui.model);
+    check(ui.model.overlay == PTC_UI_OVERLAY_NONE && ui.model.view == PTC_UI_SETUP && !ui.waiting,
+        "test failures never prevent returning to setup");
+}
+
 static void test_bedtime_legacy_optional_windows(void)
 {
     static PtcMemStorage mem;
@@ -604,6 +750,8 @@ static void test_theme_draft_commit(void)
 int main(void)
 {
     test_notification_preferences();
+    test_incremental_setup_options();
+    test_notification_environment_and_preview();
     static PtcMemStorage mem;
     UiState ui, reopened;
     char text[8192];

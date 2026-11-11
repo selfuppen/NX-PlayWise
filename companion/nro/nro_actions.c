@@ -128,6 +128,7 @@ bool commit_theme_draft(UiState *ui)
     previous_style = ui->theme_style;
     if (preference == previous_preference && style == previous_style) {
         discard_theme_draft(ui);
+        complete_setup_option(ui, PTC_UI_SETUP_OPTION_THEME);
         return true;
     }
     ui->theme_preference = preference;
@@ -135,6 +136,7 @@ bool commit_theme_draft(UiState *ui)
     show_theme_view(ui, preference, style);
     if (save_ui_preferences(ui)) {
         ui->model.theme_draft_valid = false;
+        complete_setup_option(ui, PTC_UI_SETUP_OPTION_THEME);
         return true;
     }
     ui->theme_preference = previous_preference;
@@ -210,7 +212,10 @@ bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
     previous = ui->theme_preference;
     ui->theme_preference = preference;
     show_theme_view(ui, preference, ui->theme_style);
-    if (save_ui_preferences(ui)) return true;
+    if (save_ui_preferences(ui)) {
+        complete_setup_option(ui, PTC_UI_SETUP_OPTION_THEME);
+        return true;
+    }
     if (ui->model.view == PTC_UI_SETUP) {
         ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_THEME, PTC_ERR_STORAGE_WRITE_FAILED);
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_SESSION_ONLY));
@@ -240,6 +245,7 @@ bool apply_language_preference(UiState *ui, PtcUiLanguagePreference preference)
         return false;
     }
     refresh_language(ui);
+    complete_setup_option(ui, PTC_UI_SETUP_OPTION_LANGUAGE);
     return true;
 }
 
