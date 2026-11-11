@@ -177,7 +177,7 @@ SETUP_TEST_SRCS += companion/nro/nro_online_update.c platform/ultrahand_config.c
 $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
 
-$(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp | $(HOST_BUILD_DIR)
+$(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp companion/overlay/vendor/libtesla/include/playwise_poll_policy.hpp | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -Wformat -Wformat-security -fno-exceptions -fno-rtti -I. -o $@ $<
 
 $(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c | $(HOST_BUILD_DIR)
@@ -364,7 +364,7 @@ pctl-capture-package: manifest
 	python3 tools/legacy/package_pctl_capture.py build
 	python3 tools/legacy/package_pctl_capture.py package
 
-$(HOST_BUILD_DIR)/test_overlay_resources: tests/overlay_memory/resources.c companion/overlay/display_clock.h companion/overlay/ui_text_catalog.inc companion/ui_language.c | $(HOST_BUILD_DIR)
+$(HOST_BUILD_DIR)/test_overlay_resources: tests/overlay_memory/resources.c companion/overlay/display_clock.h companion/overlay/ui_text_catalog.inc companion/ui_language.c sysmodule/idle_wait.h | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPTC_IPC_CLIENT_OVERLAY -o $@ tests/overlay_memory/resources.c companion/ui_language.c
 
 test-host: test-overlay-resources

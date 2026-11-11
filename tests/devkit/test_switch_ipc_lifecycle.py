@@ -101,6 +101,14 @@ def main() -> None:
     require("Overlay::get()->hide()" not in poller and "shData->hideRequested = true;" in poller,
             "the input thread must signal hide instead of modifying GUI state")
     loop = libtesla[libtesla.index("static inline int loop(int argc, char** argv)"):]
+    require("detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0)" in poller,
+            "idle input throttling must preserve visible and held-button sampling")
+    require("detail::hiddenPollNs(shData.automaticOpenBlocked.load(), overlay->hiddenPollInterval())" in loop,
+            "HOME/POWER blocked hidden UI must wait for the manual combo event")
+    require("ptc_sysmodule_idle_wait_ms(wait_ms, fast_poll)" in sysmodule and
+            "usage_evidence.active || reason_enabled" in sysmodule and
+            "reason_notification.pending || reason_notification.detail_pending" in sysmodule,
+            "idle backend must retain fast polling for capture and notification cleanup")
     require(loop.index("eventCreate(&shData.comboEvent") < loop.index("threadStart(&backgroundThread)"),
             "combo event must exist before the input thread starts")
     require(loop.index("threadWaitForExit(&backgroundThread)") < loop.index("eventClose(&shData.comboEvent)"),

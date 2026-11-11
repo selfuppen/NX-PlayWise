@@ -1332,23 +1332,33 @@ private:
 
 class PctcOverlay final : public tsl::Overlay {
 public:
-    u64 hiddenPollInterval() override { return 250000000; }
+    u64 hiddenPollInterval() override
+    {
+        if (automatic_failures_ >= 5) return UINT64_MAX;
+        return automatic_enabled_ ? 250000000 : 1000000000;
+    }
 
     bool onHiddenPoll(bool neutral) override
     {
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
         PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
         if (!neutral || automatic_failures_ >= 5 || !gui_ || !gui_->automatic_detail_allowed()) return false;
-        char boot[17], config[8192];
-        if (!ptc_reason_detail_runtime(s, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot) ||
-            !s->vtable->read_text(s, "sdmc:/switch/playwise/config.json", config, sizeof(config))) return false;
-        cJSON *j = cJSON_ParseWithOpts(config, nullptr, true);
-        bool enabled = cJSON_IsObject(j) && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "reason_notifications_enabled"));
-        for (const cJSON *a = j ? j->child : nullptr; enabled && a; a = a->next)
-            for (const cJSON *b = a->next; b; b = b->next)
-                if (!std::strcmp(a->string, b->string)) enabled = false;
-        cJSON_Delete(j);
-        if (!enabled) return false;
+        if (ms >= next_config_ms_) {
+            char config[8192];
+            automatic_enabled_ = false;
+            if (s->vtable->read_text(s, "sdmc:/switch/playwise/config.json", config, sizeof(config))) {
+                cJSON *j = cJSON_ParseWithOpts(config, nullptr, true);
+                automatic_enabled_ = cJSON_IsObject(j) && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "reason_notifications_enabled"));
+                for (const cJSON *a = j ? j->child : nullptr; automatic_enabled_ && a; a = a->next)
+                    for (const cJSON *b = a->next; b; b = b->next)
+                        if (!std::strcmp(a->string, b->string)) automatic_enabled_ = false;
+                cJSON_Delete(j);
+            }
+            next_config_ms_ = ms + 1000;
+        }
+        if (!automatic_enabled_) return false;
+        char boot[17];
+        if (!ptc_reason_detail_runtime(s, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot)) return false;
         if (ms >= next_ready_ms_) {
             PtcReasonDetail ready{};
             std::snprintf(ready.release, sizeof(ready.release), "%s", PLAYWISE_BUILD_RELEASE_ID);
@@ -1398,6 +1408,7 @@ public:
 
     void onShow() override
     {
+        next_config_ms_ = 0;
         s_display_clock.sampled = false;
         s_owner_visible = true;
         if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) hide();
@@ -1459,6 +1470,8 @@ private:
     uint64_t ui_instance_ms_ = 0, seen_sequence_ = 0, next_ready_ms_ = 0;
     unsigned automatic_failures_ = 0;
     bool automatic_ack_written_ = false;
+    bool automatic_enabled_ = false;
+    uint64_t next_config_ms_ = 0;
 };
 
 } // namespace

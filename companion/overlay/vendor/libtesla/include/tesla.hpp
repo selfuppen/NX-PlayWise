@@ -53,6 +53,7 @@
 #endif
 #include "stb_truetype.h"
 #include "playwise_glyph_cache.hpp"
+#include "playwise_poll_policy.hpp"
 
 #pragma GCC diagnostic pop
 
@@ -3553,9 +3554,10 @@ namespace tsl {
                     shData->keysDownPending |= shData->keysDown;
                 }
 
-                //20 ms
+                // Visible/held input stays fast; hidden idle avoids 50Hz wakes.
                 s32 idx = 0;
-                Result rc = waitObjects(&idx, objects, WaiterObject_Count, 20'000'000ul);
+                Result rc = waitObjects(&idx, objects, WaiterObject_Count,
+                    detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0));
                 if (R_SUCCEEDED(rc)) {
                     shData->automaticOpenBlocked = true;
                     if (shData->overlayOpen) {
@@ -3655,7 +3657,8 @@ namespace tsl {
 
         while (shData.running) {
 
-            Result wake = eventWait(&shData.comboEvent, overlay->hiddenPollInterval());
+            Result wake = eventWait(&shData.comboEvent,
+                detail::hiddenPollNs(shData.automaticOpenBlocked.load(), overlay->hiddenPollInterval()));
             if (wake == KERNELRESULT(TimedOut)) {
                 bool neutral;
                 {

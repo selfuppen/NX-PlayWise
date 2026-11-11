@@ -634,7 +634,7 @@ uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
     uint64_t date_ms;
     uint32_t wait_ms;
     if (!sysmodule) return 500;
-    /* 唤醒提示由每个调度轮次末尾刷新，轮次间隔不超过主循环上限（250ms），
+    /* 唤醒提示由每个调度轮次末尾刷新，主循环另按旁路租约限制等待上限，
        因此这里不再重复加载规则/日历与状态。 */
     if (sysmodule->wait_hint_dock_policy) return 1000u;
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);

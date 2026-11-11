@@ -672,6 +672,7 @@ def test_incremental_host_and_manifest_profiles() -> None:
             "common/nested/value.h": '#include "value.inc"\n',
             "common/nested/value.inc": '#define VALUE 0\n',
             "companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp": '// fixture\n',
+            "companion/overlay/vendor/libtesla/include/playwise_poll_policy.hpp": '// fixture\n',
         }
         for name, content in inputs.items():
             path = root / name

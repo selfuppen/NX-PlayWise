@@ -3,9 +3,14 @@
 #include <string.h>
 #include "companion/overlay/display_clock.h"
 #include "companion/ui_language.h"
+#include "sysmodule/idle_wait.h"
 
 int main(void)
 {
+    assert(ptc_sysmodule_idle_wait_ms(5000, false) == 1000);
+    assert(ptc_sysmodule_idle_wait_ms(5000, true) == 250);
+    assert(ptc_sysmodule_idle_wait_ms(100, false) == 100);
+    assert(ptc_sysmodule_idle_wait_ms(100, true) == 100);
     PtcOverlayDisplayClock clock = {0};
     assert(ptc_overlay_display_clock_due(&clock, 0));
     for (uint64_t t = 1; t < 1000000000; t += 16666666)

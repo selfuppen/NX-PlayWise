@@ -21,6 +21,7 @@
 #include "release_manifest.h"
 #include "../usage_evidence.h"
 #include "../reason_notification.h"
+#include "../idle_wait.h"
 #include "../../companion/input_owner.h"
 #ifdef PLAYWISE_PCTL_CAPTURE
 #include "../pctl_usage_tap.h"
@@ -313,15 +314,22 @@ int main(int argc, char **argv)
         bool reason_stopping;
 #endif
         wait_ms = ptc_sysmodule_next_wait_ms(&sysmodule);
-        if (wait_ms > 250U) wait_ms = 250U;
+        bool fast_poll = sysmodule.quiescing;
+#if defined(PLAYWISE_DEVICE_LAB) || defined(PLAYWISE_PCTL_CAPTURE)
+        fast_poll = true;
+#else
+        fast_poll = fast_poll || usage_evidence.active || reason_enabled ||
+            reason_notification.pending || reason_notification.detail_pending;
+#endif
+        wait_ms = ptc_sysmodule_idle_wait_ms(wait_ms, fast_poll);
         notified = ipc_available ? ptc_ipc_server_wait(&ipc_server, wait_ms) : false;
         if (!ipc_available) svcSleepThread((int64_t)wait_ms * 1000000LL);
         if (ipc_available) ptc_ipc_server_lock_storage(&ipc_server);
         elapsed_ms = armTicksToNs(armGetSystemTick() - last_full_tick) / 1000000ULL;
         if (elapsed_ms > UINT32_MAX) elapsed_ms = UINT32_MAX;
-        /* 无通知时先做一次不触碰 SD 的到期探测：队列为空、标志与分钟未变、
+        /* 无通知时先做一次轻量到期探测：队列为空、标志与分钟未变、
            未到护眼或 setup 宽限期限、也未到扫描退避间隔时，完整轮次不会产生
-           任何可观察动作，跳过它即可避免每 250ms 重读规则/日历与身份文件。
+           任何可观察动作，跳过它即可避免反复重读规则/日历与身份文件。
            交接取消后立即补一次完整轮次，恢复节奏与原来一致。 */
         due = notified || resume_tick || ptc_sysmodule_tick_due(&sysmodule, (uint32_t)elapsed_ms);
         if (due) {
@@ -352,11 +360,11 @@ int main(int argc, char **argv)
            expiry retain their 250ms polling opportunity without a PCTL read.
            Slow SD can still delay this serial loop. */
         uint64_t reason_ns = armTicksToNs(armGetSystemTick());
-        if (reason_ns >= reason_config_ns) {
+        if (notified || reason_ns >= reason_config_ns) {
             if (!storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json", reason_config, sizeof(reason_config)))
                 snprintf(reason_config, sizeof(reason_config), "{}");
             ptc_reason_notification_preferences(reason_config, &reason_enabled, &reason_language);
-            reason_config_ns = reason_ns + 1000000000ULL;
+            reason_config_ns = reason_ns + (reason_enabled ? 1000000000ULL : 5000000000ULL);
         }
         PtcClockSnapshot reason_clock = time_provider.provider.vtable->now(&time_provider.provider);
         bool reason_suppressed = reason_enabled && ptc_input_owner_block(&reason_owner, reason_ns, false);

@@ -5,6 +5,14 @@
 #include <memory>
 
 #include "companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp"
+#include "companion/overlay/vendor/libtesla/include/playwise_poll_policy.hpp"
+
+static_assert(tsl::detail::inputPollNs(true, false) == 20'000'000ULL);
+static_assert(tsl::detail::inputPollNs(false, true) == 20'000'000ULL);
+static_assert(tsl::detail::inputPollNs(false, false) == 50'000'000ULL);
+static_assert(tsl::detail::hiddenPollNs(true, 250'000'000ULL) == UINT64_MAX);
+static_assert(tsl::detail::hiddenPollNs(false, 250'000'000ULL) == 250'000'000ULL);
+static_assert(tsl::detail::hiddenPollNs(false, UINT64_MAX) == UINT64_MAX);
 
 namespace {
 std::size_t live_bytes = 0;
