@@ -31,6 +31,7 @@ typedef struct {
     bool handled_valid;
     bool dirty;
     bool enabled;
+    bool latest_accepted; /* latest was accepted while reliable and fresh */
 } PtcReasonEvent;
 
 void ptc_reason_event_init(PtcReasonEvent *event, const char *release, const char *boot);

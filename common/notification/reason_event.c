@@ -24,17 +24,36 @@ bool ptc_reason_event_update(PtcReasonEvent *e, const char *release, const char 
         wall - s->captured_at < 2;
     bool became_enabled = enabled && !e->enabled;
     if (became_enabled) e->handled_valid = false;
-    if (s->revision != e->latest.revision || became_enabled) {
-        e->dirty = !e->handled_valid || !same(s, &e->handled);
-        e->latest = *s;
-        e->observed_ms = ms;
-    }
     e->last_ms = ms;
     e->last_wall = wall;
     e->enabled = enabled;
-    if (!clock_ok || !identity_ok || !fresh) {
+    if (!enabled || suppressed) {
         e->dirty = false;
+        /* Details/disable can begin after the last policy sample aged. Consume
+           the known instance now so leaving details cannot replay its intent. */
+        if (e->latest_accepted) {
+            e->handled = e->latest;
+            e->handled_valid = true;
+        }
+    }
+    if (!clock_ok || !identity_ok || !s->reliable || s->captured_at <= 0 ||
+        wall < s->captured_at || (s->restricted &&
+        (s->reason <= PTC_REASON_NONE || s->reason > PTC_REASON_DOCK || !s->instance))) {
+        e->dirty = false;
+        e->latest_accepted = false;
         return false;
+    }
+    /* An aged sample cannot publish or replace history. Retain only the hint
+       that a handoff occurred; publication still needs a new fresh observation. */
+    if (!fresh) return false;
+    if (s->revision != e->latest.revision || became_enabled || !e->latest_accepted) {
+        bool changed = e->latest_accepted && !same(s, &e->latest);
+        /* A -> B -> A remains a handoff when B was rate-limited. Comparing only
+           with the last attempt would silently discard the fresh return to A. */
+        e->dirty = e->dirty || !e->handled_valid || !same(s, &e->handled) || changed;
+        e->latest = *s;
+        e->latest_accepted = true;
+        e->observed_ms = ms;
     }
     if (!enabled || suppressed || !s->restricted) {
         e->handled = *s;

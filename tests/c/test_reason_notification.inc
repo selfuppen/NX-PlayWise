@@ -48,6 +48,60 @@ static void test_reason_events(void)
     check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,7,103,false,false),"disabled suppresses current instance");
     s.revision++; s.instance=3;
     check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,6,102,true,false),"clock rollback suppresses");
+
+    /* A -> B -> A is a real handoff even when B could not be published inside
+       the ten-second limit. The final A must still be freshly confirmed. */
+    ptc_reason_event_init(&e, "r1", "0123456789abcdef");
+    s = reason_sample(1, PTC_REASON_DAILY, 1, 100);
+    check_true(ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,1000,100,true,false),"publish initial daily instance");
+    ptc_reason_event_attempted(&e,1000);
+    s = reason_sample(2, PTC_REASON_BEDTIME, 2, 102);
+    check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,3000,102,true,false),"intermediate bedtime waits for rate limit");
+    check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,11000,110,true,false),"expired bedtime cannot publish when rate limit ends");
+    s = reason_sample(3, PTC_REASON_DAILY, 1, 111);
+    check_true(ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,12000,111,true,false),"fresh return to same daily instance is a handoff");
+    ptc_reason_event_attempted(&e,12000);
+    s.revision++;
+    check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,12250,111,true,false),"returned instance is deduplicated after attempt");
+
+    for (int cancel = 0; cancel < 6; ++cancel) {
+        ptc_reason_event_init(&e,"r1","0123456789abcdef");
+        s = reason_sample(1,PTC_REASON_DAILY,1,100);
+        (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,1000,100,true,false);
+        ptc_reason_event_attempted(&e,1000);
+        s = reason_sample(2,PTC_REASON_BEDTIME,2,102);
+        (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,3000,102,true,false);
+        s = reason_sample(3,PTC_REASON_DAILY,1,104);
+        check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,5000,104,true,false),"return before deadline is coalesced rather than sent early");
+        if (cancel == 1) {
+            s.revision++; s.reliable=false;
+            (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,6000,105,true,false);
+        } else if (cancel == 2) {
+            (void)ptc_reason_event_update(&e,"foreign","0123456789abcdef",&s,6000,105,true,false);
+        } else if (cancel == 3) {
+            /* Entering details must discard a queued reminder even after the
+               policy sample has aged; leaving must not replay it. */
+            (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,9000,108,true,true);
+        } else if (cancel == 4) {
+            (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,4000,103,true,false);
+        } else if (cancel == 5) {
+            s.revision++; s.reason=PTC_REASON_NONE;
+            (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,6000,105,true,false);
+        } else {
+            check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,11000,110,true,false),"a coalesced return still cannot reuse an expired snapshot");
+        }
+        s = reason_sample(s.revision+1,PTC_REASON_DAILY,1,111);
+        bool ready = ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,12000,111,true,false);
+        check_true(ready == (cancel == 0),"fresh final observation preserves handoff intent unless cancelled by unknown identity or details");
+    }
+    ptc_reason_event_init(&e,"r1","0123456789abcdef");
+    s=reason_sample(1,PTC_REASON_DAILY,1,100);
+    (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,1000,100,true,false);
+    ptc_reason_event_attempted(&e,1000);
+    s=reason_sample(2,PTC_REASON_BEDTIME,2,100);
+    check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,4000,103,true,false),"stale intermediate snapshot is never accepted as a transition");
+    s=reason_sample(3,PTC_REASON_DAILY,1,110);
+    check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,11000,110,true,false),"stale intermediate cannot manufacture a return notification");
 }
 
 static void notify_tick(PtcReasonNotification *n, PtcReasonObservation *s, uint64_t ms, int64_t wall, bool on)
@@ -170,6 +224,31 @@ static void test_reason_transport(void)
     for(unsigned i=0;i<5;++i) notify_tick(&restarted,&s,240000+i*10000,340+i*10,false);
     check_true(restarted.blocked && storage->vtable->read_text(storage,n.journal,text,sizeof(text)) &&
         !strcmp(text,"unknown recovery record"),"unknown startup ownership preserved with finite retries");
+
+    ptc_mem_storage_init(mem);
+    storage->vtable->write_text_atomic(storage,"sdmc:/config/ultrahand/config.ini","[ultrahand]\nnotifications=true\n");
+    ptc_reason_notification_init(&n,storage,"app","release1","0123456789abcdef");
+    s=reason_sample(1,PTC_REASON_DAILY,1,100);
+    notify_tick(&n,&s,1000,100,true);
+    snprintf(path,sizeof(path),"%s",n.path);
+    check_true(n.pending && n.sequence==1,"handoff transport starts with one daily message");
+    s=reason_sample(2,PTC_REASON_BEDTIME,2,102);
+    notify_tick(&n,&s,3000,102,true);
+    check_true(!n.pending && !storage->vtable->exists(storage,path) && n.sequence==1,"rate-limited bedtime withdraws previous owned file");
+    notify_tick(&n,&s,11000,110,true);
+    check_true(!n.pending && n.sequence==1,"adapter cannot publish an aged intermediate reason");
+    s=reason_sample(3,PTC_REASON_DAILY,1,111);
+    notify_tick(&n,&s,12000,111,true);
+    check_true(n.pending && n.sequence==2 && strcmp(n.path,path),"fresh return publishes once with a distinct owned filename");
+    j=cJSON_Parse(n.payload);
+    check_true(j && cJSON_GetObjectItemCaseSensitive(j,"pw_reason")->valueint==PTC_REASON_DAILY &&
+        !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(j,"pw_instance")),"1"),"handoff payload describes latest daily instance, never intermediate bedtime");
+    cJSON_Delete(j);
+    s.revision++;
+    notify_tick(&n,&s,12250,111,true);
+    check_true(n.sequence==2,"status after returned instance does not republish");
+    notify_tick(&n,&s,14000,113,true);
+    check_true(!n.pending && n.sequence==2,"returned message retains original two-second pending lifetime");
     free(mem);
 }
 
