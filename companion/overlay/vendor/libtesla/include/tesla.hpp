@@ -3003,6 +3003,11 @@ namespace tsl {
          */
         virtual void onHide() {}
 
+        // PlayWise cooperation stays on the UI thread, outside the HID mutex.
+        virtual u64 hiddenPollInterval() { return UINT64_MAX; }
+        virtual bool onHiddenPoll(bool neutral) { return false; }
+        virtual void onFrameRendered() {}
+
         /**
          * @brief Loads the default Gui
          * @note This function should return the initial Gui to load using the \ref Gui::initially<T>(Args.. args) function
@@ -3433,6 +3438,7 @@ namespace tsl {
 
             std::atomic<bool> overlayOpen{false};
             std::atomic<bool> hideRequested{false};
+            std::atomic<bool> automaticOpenBlocked{false};
 
             std::mutex dataMutex;
             u64 keysDown = 0;
@@ -3538,7 +3544,10 @@ namespace tsl {
                             shData->overlayOpen = false;
                         }
                         else
+                        {
+                            shData->automaticOpenBlocked = false;
                             eventFire(&shData->comboEvent);
+                        }
                     }
 
                     shData->keysDownPending |= shData->keysDown;
@@ -3548,6 +3557,7 @@ namespace tsl {
                 s32 idx = 0;
                 Result rc = waitObjects(&idx, objects, WaiterObject_Count, 20'000'000ul);
                 if (R_SUCCEEDED(rc)) {
+                    shData->automaticOpenBlocked = true;
                     if (shData->overlayOpen) {
                         shData->hideRequested = true;
                         shData->overlayOpen = false;
@@ -3645,7 +3655,20 @@ namespace tsl {
 
         while (shData.running) {
 
-            eventWait(&shData.comboEvent, UINT64_MAX);
+            Result wake = eventWait(&shData.comboEvent, overlay->hiddenPollInterval());
+            if (wake == KERNELRESULT(TimedOut)) {
+                bool neutral;
+                {
+                    std::scoped_lock lock(shData.dataMutex);
+                    neutral = !shData.keysHeld && !shData.keysDownPending && !shData.touchState.count &&
+                        std::abs(shData.joyStickPosLeft.x) < 16000 && std::abs(shData.joyStickPosLeft.y) < 16000 &&
+                        std::abs(shData.joyStickPosRight.x) < 16000 && std::abs(shData.joyStickPosRight.y) < 16000;
+                    shData.keysDownPending = 0;
+                }
+                if (!overlay->onHiddenPoll(neutral && !shData.automaticOpenBlocked)) continue;
+            } else if (R_FAILED(wake)) {
+                ASSERT_FATAL(wake);
+            }
             eventClear(&shData.comboEvent);
             shData.hideRequested = false;
             shData.overlayOpen = true;
@@ -3661,6 +3684,7 @@ namespace tsl {
                 // Only the UI thread may mutate GUI/animation state.
                 if (shData.hideRequested.exchange(false)) overlay->hide();
                 overlay->loop();
+                overlay->onFrameRendered();
 
                 u64 keysDown, keysHeld;
                 HidTouchScreenState touchState;

@@ -13,7 +13,7 @@ def generate() -> str:
     units = re.search(r"^CFILES := (.+)$", make, re.M)[1].split()
     # Resolve exactly the production translation units, then their local headers.
     directories = [ROOT / p for p in ["companion/overlay", "companion", "common/protocol",
-                   "common/time", "common/crypto", "platform/switch", "third_party/cjson", "companion/nro"]]
+                   "common/time", "common/crypto", "platform", "platform/switch", "third_party/cjson", "companion/nro"]]
     pending = [next(d / name for d in directories if (d / name).exists()) for name in units]
     pending += list((ROOT / "companion/overlay/source").glob("*.cpp"))
     seen: set[Path] = set()

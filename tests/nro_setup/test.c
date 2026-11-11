@@ -309,7 +309,13 @@ static void test_notification_preferences(void)
     UiState ui, reopened;
     init(&ui, &mem);
     check(!ui.model.reason_notifications_enabled, "new notification preference is off");
+    mem.storage.vtable->write_text_atomic(&mem.storage, "sdmc:/config/ultrahand/config.ini",
+        "[ultrahand]\nnotifications=false\nother=retained\n");
     check(toggle_notification_preference(&ui, 0), "notification setting saves");
+    char external[256];
+    check(mem.storage.vtable->read_text(&mem.storage, "sdmc:/config/ultrahand/config.ini", external, sizeof(external)) &&
+        !strcmp(external, "[ultrahand]\nnotifications=true\nother=retained\n") && ui.model.reason_external_notifications == 1,
+        "enabling prepares manager setting with readback and preserves unrelated keys");
     reopened = ui;
     load_ui_preferences(&reopened);
     check(reopened.model.reason_notifications_enabled, "notification setting round trips");
@@ -320,6 +326,23 @@ static void test_notification_preferences(void)
     check(!toggle_notification_preference(&ui, 1) && ptc_audio_is_enabled() == audio_before,
         "failed audio save restores its switch");
     mem.fail_writes = false;
+    check(toggle_notification_preference(&ui, 0), "disable own hint preference");
+    check(mem.storage.vtable->read_text(&mem.storage, "sdmc:/config/ultrahand/config.ini", external, sizeof(external)) &&
+        strstr(external, "notifications=true"), "disabling hints does not disable global notices for other apps");
+    mem.storage.vtable->write_text_atomic(&mem.storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=false\n");
+    mem.fail_writes = true;
+    check(!toggle_notification_preference(&ui, 0), "failed own enable never prepares third-party setting");
+    mem.fail_writes = false;
+    check(mem.storage.vtable->read_text(&mem.storage, "sdmc:/config/ultrahand/config.ini", external, sizeof(external)) &&
+        strstr(external, "notifications=false"), "manager unchanged when preference save fails");
+    ui.model.view = PTC_UI_SETUP; ui.model.setup_step = PTC_UI_SETUP_PARENT; ui.model.setup_focus = 6;
+    handle_setup_input(&ui, HidNpadButton_A, 0);
+    check(ui.model.overlay == PTC_UI_OVERLAY_NOTIFICATIONS && !ui.model.reason_notifications_enabled,
+        "setup optional hint entry opens compatibility and global-setting disclosure without enabling");
+    PtcUiRect entry = ptc_ui_setup_notifications_rect();
+    ui.model.overlay = PTC_UI_OVERLAY_NONE;
+    check(ptc_ui_hit_test(&ui.model, entry.x + entry.w / 2, entry.y + entry.h / 2).kind == PTC_UI_HIT_SETUP_NOTIFICATIONS,
+        "setup touch and controller share notification entry");
 }
 
 static void test_bedtime_legacy_optional_windows(void)

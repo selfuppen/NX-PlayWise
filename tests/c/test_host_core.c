@@ -4536,6 +4536,8 @@ static void test_quiescing_scheduler(void)
 int main(void)
 {
     test_reason_events();
+    test_notification_dependency();
+    test_reason_detail_transport();
     test_reason_transport();
     test_reason_policy_observation();
     test_reason_snapshot_text();

@@ -66,7 +66,7 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 
 ## Key Features
 
-- **Automatic reason notices (experimental)**: disabled by default under Security & Preferences → Sound and notifications. Child-friendly notices show the main restriction, time left at the notice, and the saved shortcut for manual details. The receiver grows the box at the same readable font size. Compatible receiver required; evidence covers Ultrahand 2.5.3 / loader 2.0.2. Implemented in source; the new layout still needs device acceptance and is not publicly released. See the [usage guide](docs/使用/USER_GUIDE.md#automatic-reason-notices-experimental).
+- **Automatic restriction details with notice fallback (experimental)**: optional in setup step two and Security & Preferences → Sound and notifications, off by default. An already loaded PlayWise overlay refreshes details first; missing readiness or timeout attempts one compatible Ultrahand notice. It cannot switch from another overlay. Enabling prepares and reads back the global notice setting; this does not confirm resident reception. The new cooperation path needs device verification and is not publicly released or fully qualified. Prior notice evidence covers Ultrahand 2.5.3 / loader 2.0.2. See the [usage guide](docs/使用/USER_GUIDE.md#automatic-reason-notices-experimental).
 
 - **Configuration backup/import**: eleven selective groups, PIN/hold verification, transactional rollback, calendar restore and fresh pairing keys; available in Security & Preferences.
 - **TV mode rules**: require TV mode, a uniform 0–1440-minute daily non-TV ceiling within the total, and a PIN-authorized today waiver. Disabled by default; functional testing completed.

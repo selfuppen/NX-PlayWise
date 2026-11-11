@@ -79,3 +79,51 @@ void ptc_ultrahand_config_read(PtcStorage *s, PtcUltrahandConfig *out)
             (void)ptc_ultrahand_combo(value, out->shortcut, sizeof(out->shortcut));
     }
 }
+
+PtcUltrahandPrepare ptc_ultrahand_prepare_notifications(PtcStorage *s)
+{
+    static const char *file = "sdmc:/config/ultrahand/config.ini";
+    char text[16384], check[16384], value[128];
+    if (!s->vtable->read_text(s, file, text, sizeof(text)) ||
+        ini(text, "ultrahand", "notifications", value, sizeof(value)) != 1 ||
+        (strcmp(value, "true") && strcmp(value, "false"))) return PTC_ULTRAHAND_PREPARE_UNAVAILABLE;
+    /* Reject duplicated sections even if just one has the key. Preserve every
+       byte outside the boolean value, including CRLF, comments and other keys. */
+    const char *p = text, *target = NULL;
+    unsigned sections = 0;
+    bool inside = false;
+    while (*p) {
+        const char *end = strchr(p, '\n');
+        if (!end) end = p + strlen(p);
+        const char *start = p, *trim = end;
+        while (start < trim && (*start == ' ' || *start == '\t')) ++start;
+        while (trim > start && (trim[-1] == '\r' || trim[-1] == ' ' || trim[-1] == '\t')) --trim;
+        if (start < trim && *start == '[') {
+            inside = trim - start == 11 && !strncmp(start, "[ultrahand]", 11);
+            if (inside) ++sections;
+        } else if (inside && trim - start > 13 && !strncmp(start, "notifications", 13)) {
+            const char *v = start + 13;
+            while (v < trim && (*v == ' ' || *v == '\t')) ++v;
+            if (v < trim && *v++ == '=') {
+                while (v < trim && (*v == ' ' || *v == '\t')) ++v;
+                target = v;
+            }
+        }
+        p = *end ? end + 1 : end;
+    }
+    if (sections != 1 || !target) return PTC_ULTRAHAND_PREPARE_UNAVAILABLE;
+    if (!strcmp(value, "true")) return PTC_ULTRAHAND_PREPARE_ALREADY_ON;
+    size_t offset = (size_t)(target - text);
+    memcpy(check, text, offset);
+    memcpy(check + offset, "true", 4);
+    strcpy(check + offset + 4, target + 5);
+    /* No manager reload or fabricated input. A concurrent change aborts before
+       replacement; the storage adapter supplies the atomic rename. */
+    char current[16384];
+    if (!s->vtable->read_text(s, file, current, sizeof(current)) || strcmp(current, text))
+        return PTC_ULTRAHAND_PREPARE_FAILED;
+    if (!s->vtable->write_text_atomic(s, file, check) ||
+        !s->vtable->read_text(s, file, current, sizeof(current)) || strcmp(current, check))
+        return PTC_ULTRAHAND_PREPARE_FAILED;
+    return PTC_ULTRAHAND_PREPARE_SAVED;
+}

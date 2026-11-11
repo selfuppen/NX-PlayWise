@@ -351,6 +351,9 @@ void setup_action(UiState *ui, int action, int index)
 {
     if (!ui) return;
     switch (action) {
+    case PTC_UI_HIT_SETUP_NOTIFICATIONS:
+        open_notification_preferences(ui);
+        break;
     case PTC_UI_HIT_SETUP_PCTL_HELP:
         ptc_ui_open_setup_pctl_help(&ui->model);
         break;
@@ -408,7 +411,7 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
     if (!ui || ui->model.view != PTC_UI_SETUP) return;
     if (down & HidNpadButton_B) { setup_previous(ui); return; }
     max_focus = ui->model.setup_step == PTC_UI_SETUP_PREPARE ? 3 :
-        ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 : 5;
+        ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 : 6;
     if (down & HidNpadButton_Down) ui->model.setup_focus = (ui->model.setup_focus + 1) % (max_focus + 1);
     else if (down & HidNpadButton_Up) ui->model.setup_focus = (ui->model.setup_focus + max_focus) % (max_focus + 1);
     else if (down & HidNpadButton_X) {
@@ -445,6 +448,7 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
             else if (focus == 3) setup_action(ui, PTC_UI_HIT_SETUP_SHORTCUT, 0);
             else if (focus == 4) setup_action(ui, PTC_UI_HIT_SETUP_EYE_CARE, 0);
             else if (focus == 5) setup_action(ui, PTC_UI_HIT_SETUP_BEDTIME, 0);
+            else if (focus == 6) setup_action(ui, PTC_UI_HIT_SETUP_NOTIFICATIONS, 0);
         } else finish_setup(ui, false);
     }
 }

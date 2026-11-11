@@ -14,6 +14,7 @@
 
 extern "C" {
 #include "../bridge.h"
+#include "../detail_status.h"
 #include "../../auth.h"
 #include "../../auth_clock.h"
 #include "../input_model.h"
@@ -37,6 +38,8 @@ static PtcUiResolvedTheme s_overlay_theme = PTC_UI_RESOLVED_DARK;
 static PtcUiStatusTrace s_status_trace;
 static PtcInputOwnerWriter s_input_owner;
 static bool s_owner_visible = false;
+static bool s_automatic_detail = false;
+static bool s_automatic_detail_confirmed = false;
 
 static bool save_overlay_language_setting(PtcStorage *storage, PtcOverlayLanguageSetting setting)
 {
@@ -248,6 +251,33 @@ public:
         const uint64_t age = usage_snapshot_tick_ != 0 && tick >= usage_snapshot_tick_
             ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
         ptc_companion_result_summary_expire_usage_elapsed(&displayed_summary_, age);
+    }
+
+    bool automatic_detail_allowed() const
+    {
+        return has_status_snapshot_ && !error_ && !bridge_->waiting && parent_view_ == ParentView::Child &&
+            !language_confirm_active_ && !is_keypad_mode() && !recovery_active_ &&
+            !preview_ready_ && !success_visible_ && !result_pending_ && !access_recovery_visible();
+    }
+
+    void open_automatic_detail()
+    {
+        status_expanded_ = true;
+        has_status_snapshot_ = false;
+        displayed_summary_ = {};
+        reset_page_scroll();
+        (void)begin_status_refresh();
+    }
+
+    bool automatic_detail_drawn(const PtcReasonDetail &offer) const
+    {
+        const uint64_t now_ms = armTicksToNs(armGetSystemTick()) / 1000000;
+        return s_owner_visible && status_expanded_ && parent_view_ == ParentView::Child &&
+            !language_confirm_active_ && !is_keypad_mode() && !bridge_->waiting && !error_ &&
+            has_status_snapshot_ && last_refresh_tick_ >= request_started_tick_ &&
+            armTicksToNs(request_started_tick_) / 1000000 >= offer.issued_ms &&
+            ptc_reason_detail_fresh(&offer, PLAYWISE_BUILD_RELEASE_ID, s_input_owner.context.boot, now_ms) &&
+            ptc_overlay_detail_matches(&offer, &displayed_summary_);
     }
 
     void update() override
@@ -1302,17 +1332,84 @@ private:
 
 class PctcOverlay final : public tsl::Overlay {
 public:
+    u64 hiddenPollInterval() override { return 250000000; }
+
+    bool onHiddenPoll(bool neutral) override
+    {
+        uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
+        PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
+        if (!neutral || automatic_failures_ >= 5 || !gui_ || !gui_->automatic_detail_allowed()) return false;
+        char boot[17], config[8192];
+        if (!ptc_reason_detail_runtime(s, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot) ||
+            !s->vtable->read_text(s, "sdmc:/switch/playwise/config.json", config, sizeof(config))) return false;
+        cJSON *j = cJSON_ParseWithOpts(config, nullptr, true);
+        bool enabled = cJSON_IsObject(j) && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "reason_notifications_enabled"));
+        for (const cJSON *a = j ? j->child : nullptr; enabled && a; a = a->next)
+            for (const cJSON *b = a->next; b; b = b->next)
+                if (!std::strcmp(a->string, b->string)) enabled = false;
+        cJSON_Delete(j);
+        if (!enabled) return false;
+        if (ms >= next_ready_ms_) {
+            PtcReasonDetail ready{};
+            std::snprintf(ready.release, sizeof(ready.release), "%s", PLAYWISE_BUILD_RELEASE_ID);
+            std::snprintf(ready.boot, sizeof(ready.boot), "%s", boot);
+            ready.ui_instance = ui_instance_ms_;
+            ready.issued_ms = ms; ready.expires_ms = ms + 1500;
+            next_ready_ms_ = ms + 1000;
+            if (!ptc_reason_detail_write(s, APP_ROOT, "ready", &ready)) { ++automatic_failures_; return false; }
+        }
+        PtcReasonDetail offer{};
+        if (!ptc_reason_detail_read(s, APP_ROOT, "request", &offer) ||
+            !ptc_reason_detail_fresh(&offer, PLAYWISE_BUILD_RELEASE_ID, boot, ms) ||
+            offer.ui_instance != ui_instance_ms_ || offer.sequence <= seen_sequence_) return false;
+        seen_sequence_ = offer.sequence;
+        automatic_offer_ = offer;
+        s_automatic_detail = true;
+        s_automatic_detail_confirmed = false;
+        automatic_ack_written_ = false;
+        return true;
+    }
+
+    void onFrameRendered() override
+    {
+        uint64_t ns = armTicksToNs(armGetSystemTick());
+        if (s_automatic_detail && !automatic_ack_written_ &&
+            (ns / 1000000 < automatic_offer_.issued_ms || ns / 1000000 >= automatic_offer_.expires_ms)) {
+            hide();
+            return;
+        }
+        if (!s_automatic_detail || automatic_ack_written_ || !gui_ ||
+            fadeAnimationPlaying() || !gui_->automatic_detail_drawn(automatic_offer_)) return;
+        PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
+        PtcReasonDetail current{};
+        if (!ptc_input_owner_accept(&s_input_owner, ns) ||
+            !ptc_reason_detail_read(s, APP_ROOT, "request", &current) ||
+            !ptc_reason_detail_same(&current, &automatic_offer_)) return;
+        std::snprintf(automatic_offer_.owner, sizeof(automatic_offer_.owner), "%s", s_input_owner.owner);
+        /* A rendered fresh correct page and a live input lease, not file deletion. */
+        if (ptc_reason_detail_write(s, APP_ROOT, "ack", &automatic_offer_)) {
+            automatic_ack_written_ = true;
+            s_automatic_detail_confirmed = true;
+        } else {
+            ++automatic_failures_;
+            hide();
+        }
+    }
+
     void onShow() override
     {
         s_display_clock.sampled = false;
         s_owner_visible = true;
         if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) hide();
+        if (s_owner_visible && s_automatic_detail && gui_) gui_->open_automatic_detail();
         ptc_overlay_resource_snapshot("show", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
     }
 
     void onHide() override
     {
         s_owner_visible = false;
+        s_automatic_detail = false;
+        s_automatic_detail_confirmed = false;
         ptc_input_owner_release(&s_input_owner, armTicksToNs(armGetSystemTick()));
         ptc_overlay_resource_snapshot("hide", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
     }
@@ -1331,6 +1428,7 @@ public:
         ptc_ui_status_trace_init(&s_status_trace, ptc_fs_storage_as_storage(&storage_), APP_ROOT,
             PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, "overlay", armTicksToNs(armGetSystemTick()));
         ptc_overlay_input_init(&input_);
+        ui_instance_ms_ = armTicksToNs(armGetSystemTick()) / 1000000;
     }
 
     void exitServices() override
@@ -1345,12 +1443,22 @@ public:
 #endif
     }
 
-    std::unique_ptr<tsl::Gui> loadInitialGui() override { return initially<PctcGui>(&bridge_, &input_, s_overlay_theme); }
+    std::unique_ptr<tsl::Gui> loadInitialGui() override
+    {
+        auto gui = initially<PctcGui>(&bridge_, &input_, s_overlay_theme);
+        gui_ = static_cast<PctcGui *>(gui.get());
+        return gui;
+    }
 
 private:
     PtcFsStorage storage_{};
     PtcOverlayBridge bridge_{};
     PtcOverlayInput input_{};
+    PctcGui *gui_ = nullptr;
+    PtcReasonDetail automatic_offer_{};
+    uint64_t ui_instance_ms_ = 0, seen_sequence_ = 0, next_ready_ms_ = 0;
+    unsigned automatic_failures_ = 0;
+    bool automatic_ack_written_ = false;
 };
 
 } // namespace

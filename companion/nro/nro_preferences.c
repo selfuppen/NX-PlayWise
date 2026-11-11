@@ -20,7 +20,19 @@ bool toggle_notification_preference(UiState *ui, int index)
     bool audio = ptc_audio_is_enabled();
     if (index == 0) ui->model.reason_notifications_enabled = !notice;
     else ptc_audio_set_enabled(!audio);
-    if (save_ui_preferences(ui)) return true;
+    if (save_ui_preferences(ui)) {
+        if (index == 0 && !notice) {
+            PtcUltrahandPrepare prepared = ptc_ultrahand_prepare_notifications(ui->client.storage);
+            PtcUltrahandConfig external;
+            ptc_ultrahand_config_read(ui->client.storage, &external);
+            ui->model.reason_external_notifications = external.notifications;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(
+                prepared == PTC_ULTRAHAND_PREPARE_SAVED ? PTC_UI_T_REASON_NOTICE_PREPARED :
+                prepared == PTC_ULTRAHAND_PREPARE_ALREADY_ON ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
+                PTC_UI_T_REASON_NOTICE_PREPARE_FAILED));
+        }
+        return true;
+    }
     ui->model.reason_notifications_enabled = notice;
     ptc_audio_set_enabled(audio);
     return false;

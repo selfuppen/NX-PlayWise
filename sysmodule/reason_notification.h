@@ -3,6 +3,7 @@
 #include "../common/notification/reason_event.h"
 #include "../platform/storage.h"
 #include "../platform/ultrahand_config.h"
+#include "../platform/reason_detail.h"
 #include "../companion/ui_language.h"
 
 typedef struct {
@@ -21,6 +22,10 @@ typedef struct {
     bool initialized;
     bool blocked;
     bool pending;
+    bool detail_pending;
+    uint64_t detail_sequence;
+    unsigned detail_failures;
+    PtcReasonDetail detail;
     PtcUltrahandConfig external;
     char state[40];
 } PtcReasonNotification;

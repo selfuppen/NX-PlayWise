@@ -93,6 +93,7 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SETUP_SHORTCUT:
     case PTC_UI_HIT_SETUP_EYE_CARE:
     case PTC_UI_HIT_SETUP_BEDTIME:
+    case PTC_UI_HIT_SETUP_NOTIFICATIONS:
     case PTC_UI_HIT_SETUP_SKIP:
         ptc_audio_play(PTC_SE_CONFIRM);
         setup_action(ui, hit.kind, hit.index);

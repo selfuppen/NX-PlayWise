@@ -73,6 +73,7 @@ THIRD_PARTY_SRCS := \
 	third_party/qrcodegen/qrcodegen.c
 
 PLATFORM_HOST_SRCS := \
+	platform/reason_detail.c \
 	platform/ultrahand_config.c \
 	platform/update_fs.c \
 	platform/install_defaults.c \
@@ -87,6 +88,7 @@ PLATFORM_HOST_SRCS := \
 	platform/switch/play_timer_settings_layout.c
 
 ORCH_SRCS := \
+	companion/input_owner.c \
 	companion/notification_text.c \
 	sysmodule/reason_notification.c \
 	sysmodule/sysmodule_reason.c \
@@ -242,7 +244,7 @@ test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test
 
 test-host: test-overlay-preview-save
 
-NOTICE_PREVIEW_SRCS := sysmodule/reason_notification.c common/notification/reason_event.c companion/notification_text.c platform/ultrahand_config.c third_party/cjson/cJSON.c
+NOTICE_PREVIEW_SRCS := sysmodule/reason_notification.c common/notification/reason_event.c companion/notification_text.c companion/input_owner.c platform/reason_detail.c platform/ultrahand_config.c third_party/cjson/cJSON.c
 $(HOST_BUILD_DIR)/notice_preview_core.o: $(NOTICE_PREVIEW_SRCS) | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -r -o $@ $(NOTICE_PREVIEW_SRCS)
 

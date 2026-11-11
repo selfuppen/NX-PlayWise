@@ -296,6 +296,8 @@ The child hero uses four compact 56px cards for quota, eye care, bedtime and TV,
 
 The global status bar adapts to eye-care and policy rows, with its bottom no lower than y=104. Bedtime and TV summaries share two columns when both are enabled. The Overlay displays policies in individual large overview cards and complete scrollable status details. Input, submit, parent access and the Tesla footer must remain unobstructed. Boundary confirmation uses warning colors; active backend restrictions use danger colors. An empty non-TV balance on TV uses warning colors. Existing measured multilingual layouts, overflow handling, NRO themes and the Overlay dark baseline remain mandatory.
 
+Setup step two and Security & Preferences share the optional Sound and notifications dialog. Automatic restriction hints and button sounds have independent switches. Before enabling hints, explain preparation of Ultrahand's global notice setting and its effect on other apps. Saved configuration, resident loading and physical visibility remain separate states. Loaded PlayWise details take priority using the existing detail page and input lease; short notices are the fallback. Preserve measured multilingual light/dark layouts, semantic colors, neutral-input and sensitive-page gates. The setting is off by default and cannot block core setup.
+
 Overlay policy freshness uses the backend civil clock and the bound request's monotonic age. Missing console usage keeps that reading's refresh warning but does not hide valid bedtime or TV rule states. TV allowance still requires its own usage reading. The thirty-second freshness limit, failed-refresh checks and unknown clock or request-origin handling remain in effect.
 
 ### Online updates and pre-update backups

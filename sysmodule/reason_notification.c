@@ -1,5 +1,6 @@
 #include "reason_notification.h"
 #include "../companion/notification_text.h"
+#include "../companion/input_owner.h"
 #include "../third_party/cjson/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -217,10 +218,36 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         if (!startup(n)) goto failed;
         n->initialized = true;
     }
-    bool change = n->pending && (s->reason != n->event.latest.reason || s->instance != n->event.latest.instance ||
+    bool change = (n->pending || n->detail_pending) && (s->reason != n->event.latest.reason || s->instance != n->event.latest.instance ||
         s->day != n->event.latest.day);
     bool cancel = stopping || !enabled || suppressed || !s->reliable || !s->restricted ||
         ms < n->event.last_ms || wall < n->event.last_wall || change;
+    bool fallback = false;
+    bool detail_confirmed = false;
+    if (n->detail_pending) {
+        PtcReasonDetail ack;
+        char body[512];
+        bool current = ptc_reason_notification_body(s, wall, lang, "", body, sizeof(body));
+        bool confirmed = !change && current && enabled && !stopping &&
+            ptc_reason_detail_fresh(&n->detail, n->event.release, n->event.boot, ms) &&
+            ptc_reason_detail_read(n->storage, n->root, "ack", &ack) &&
+            ptc_reason_detail_same(&n->detail, &ack) &&
+            ptc_input_owner_confirm(n->storage, n->root, n->event.release, n->event.boot,
+                ack.owner, ms * UINT64_C(1000000));
+        detail_confirmed = confirmed;
+        bool detail_cancel = stopping || !enabled || !s->reliable || !s->restricted || change ||
+            ms < n->event.last_ms || wall < n->event.last_wall;
+        /* The reader may cache the UI's release for one 250ms poll. Give that
+           release at most 500ms to drain; the UI offer itself still expires at 2s. */
+        bool timed_out = ms >= n->detail.expires_ms &&
+            (!suppressed || ms - n->detail.expires_ms >= 500);
+        if (confirmed || detail_cancel || !current || timed_out) {
+            if (!ptc_reason_detail_clear(n->storage, n->root, &n->detail)) goto failed;
+            n->detail_pending = false;
+            fallback = !confirmed && !cancel && current;
+            state(n, confirmed ? "detail_drawn_confirmed" : detail_cancel ? "detail_cancelled" : "detail_timeout");
+        }
+    }
     if (n->path[0] && (cancel || !n->pending || ms >= n->expires_ms)) {
         if (!clear(n)) goto failed;
         state(n, cancel ? "suppressed" : "expired_display_unknown");
@@ -231,10 +258,31 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         n->config_ms = ms + 2000;
     }
     bool ready = ptc_reason_event_update(&n->event, n->event.release, n->event.boot, s, ms, wall,
-        enabled, suppressed || n->external.notifications != 1);
-    if (!enabled || suppressed) state(n, "suppressed");
-    if (!ready || n->pending) return;
-    ptc_reason_event_attempted(&n->event, ms);
+        enabled, suppressed);
+    if ((!enabled || suppressed) && !detail_confirmed) state(n, "suppressed");
+    if ((!ready && !fallback) || n->pending || n->detail_pending) return;
+    if (!fallback) {
+        ptc_reason_event_attempted(&n->event, ms);
+        PtcReasonDetail detail;
+        if (n->detail_failures < 5 && ptc_reason_detail_read(n->storage, n->root, "ready", &detail) &&
+            ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, ms) &&
+            ms <= UINT64_MAX - 2000 && n->detail_sequence != UINT64_MAX) {
+            detail.sequence = ++n->detail_sequence;
+            detail.issued_ms = ms; detail.expires_ms = ms + 2000;
+            detail.day = s->day; detail.reason = s->reason; detail.instance = s->instance;
+            n->detail = detail; n->detail_pending = true;
+            if (ptc_reason_detail_write(n->storage, n->root, "request", &detail)) {
+                state(n, "detail_requested");
+                return;
+            }
+            /* A failed write may already have renamed. Wait out its same lease
+               before fallback, rather than race a late accepted offer. */
+            ++n->detail_failures;
+            state(n, "detail_write_unknown");
+            return;
+        }
+    }
+    if (n->external.notifications != 1) { state(n, "fallback_receiver_unavailable"); return; }
     if (!publish(n, lang, wall)) goto failed;
     n->pending = true;
     n->expires_ms = ms + 2000;

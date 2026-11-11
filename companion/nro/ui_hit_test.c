@@ -556,6 +556,8 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             if (ptc_ui_rect_contains(ptc_ui_setup_time_help_rect(), x, y))
                 return make_hit(PTC_UI_HIT_SETUP_TIME_HELP, 0);
         } else if (step == PTC_UI_SETUP_PARENT) {
+            if (ptc_ui_rect_contains(ptc_ui_setup_notifications_rect(), x, y))
+                return make_hit(PTC_UI_HIT_SETUP_NOTIFICATIONS, 0);
             if (ptc_ui_rect_contains(ptc_ui_setup_pin_rect(), x, y)) return make_hit(PTC_UI_HIT_SETUP_PIN, 0);
             for (i = 0; i < 3; ++i) {
                 if (ptc_ui_rect_contains(ptc_ui_setup_theme_rect(i), x, y))

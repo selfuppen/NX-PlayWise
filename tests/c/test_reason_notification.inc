@@ -1,5 +1,43 @@
 #include "../../sysmodule/reason_notification.h"
 #include "../../companion/notification_text.h"
+#include "../../companion/input_owner.h"
+#include "../../companion/overlay/detail_status.h"
+
+static void test_notification_dependency(void)
+{
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    check_true(mem != NULL, "dependency fixture allocation"); if (!mem) return;
+    ptc_mem_storage_init(mem);
+    PtcStorage *s = &mem->storage;
+    const char *path = "sdmc:/config/ultrahand/config.ini";
+    char text[1024];
+    check_true(ptc_ultrahand_prepare_notifications(s) == PTC_ULTRAHAND_PREPARE_UNAVAILABLE &&
+        !s->vtable->exists(s, path), "missing manager is not installed or fabricated");
+    const char *before = "; retained\r\n[ultrahand]\r\n notifications = false \r\nfoo=bar\r\n[other]\r\nnotifications=false\r\n";
+    s->vtable->write_text_atomic(s, path, before);
+    check_true(ptc_ultrahand_prepare_notifications(s) == PTC_ULTRAHAND_PREPARE_SAVED &&
+        s->vtable->read_text(s, path, text, sizeof(text)) &&
+        !strcmp(text, "; retained\r\n[ultrahand]\r\n notifications = true \r\nfoo=bar\r\n[other]\r\nnotifications=false\r\n"),
+        "enable changes only owned boolean with byte-preserved CRLF and other settings");
+    check_true(ptc_ultrahand_prepare_notifications(s) == PTC_ULTRAHAND_PREPARE_ALREADY_ON,
+        "repeat preparation reads saved on without claiming resident ACK");
+    const char *invalid[] = {"[ultrahand]\n", "[ultrahand]\nnotifications=yes\n",
+        "[ultrahand]\nnotifications=false\nnotifications=true\n",
+        "[ultrahand]\nnotifications=false\n[ultrahand]\nother=true\n"};
+    for (unsigned i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+        s->vtable->write_text_atomic(s, path, invalid[i]);
+        check_true(ptc_ultrahand_prepare_notifications(s) == PTC_ULTRAHAND_PREPARE_UNAVAILABLE &&
+            s->vtable->read_text(s, path, text, sizeof(text)) && !strcmp(text, invalid[i]),
+            "ambiguous or unsupported manager settings preserved");
+    }
+    s->vtable->write_text_atomic(s, path, before);
+    mem->fail_writes = true;
+    check_true(ptc_ultrahand_prepare_notifications(s) == PTC_ULTRAHAND_PREPARE_FAILED,
+        "manager write failure is not successful preparation");
+    mem->fail_writes = false;
+    check_true(s->vtable->read_text(s, path, text, sizeof(text)) && !strcmp(text, before), "failed preparation preserves preimage");
+    free(mem);
+}
 
 static PtcReasonObservation reason_sample(uint64_t rev, PtcRestrictionReason reason, uint64_t instance, int64_t wall)
 {
@@ -107,6 +145,91 @@ static void test_reason_events(void)
 static void notify_tick(PtcReasonNotification *n, PtcReasonObservation *s, uint64_t ms, int64_t wall, bool on)
 {
     ptc_reason_notification_tick(n, s, ms, wall, on, false, false, PTC_UI_LANGUAGE_SIMPLIFIED);
+}
+
+static void test_reason_detail_transport(void)
+{
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    check_true(mem != NULL, "detail fixture allocation"); if (!mem) return;
+    PtcStorage *storage = &mem->storage;
+    for (int mode = 0; mode < 12; ++mode) {
+        ptc_mem_storage_init(mem);
+        storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+        storage->vtable->write_text_atomic(storage, "app/handover/runtime-ready.json",
+            "{\"profile\":\"release\",\"release_id\":\"release1\",\"boot_id\":\"0123456789abcdef\"}");
+        PtcReasonNotification n;
+        PtcReasonObservation s = reason_sample(1, PTC_REASON_EYE, 7, 100);
+        PtcReasonDetail ready = {0}, offer, ack;
+        snprintf(ready.release, sizeof(ready.release), "release1");
+        snprintf(ready.boot, sizeof(ready.boot), "0123456789abcdef");
+        ready.ui_instance = 900; ready.issued_ms = 1000; ready.expires_ms = 2500;
+        if (mode == 6) snprintf(ready.release, sizeof(ready.release), "foreign");
+        if (mode == 7) ready.expires_ms = 1000;
+        if (mode == 8) snprintf(ready.boot, sizeof(ready.boot), "fedcba9876543210");
+        check_true(ptc_reason_detail_write(storage, "app", "ready", &ready), "write loaded UI readiness");
+        ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+        notify_tick(&n, &s, 1000, 100, true);
+        if (mode >= 6 && mode <= 8) {
+            check_true(!n.detail_pending && n.pending, "wrong identity or expired loaded UI falls back without wake");
+            continue;
+        }
+        check_true(n.detail_pending && !n.pending && n.sequence == 0 &&
+            ptc_reason_detail_read(storage, "app", "request", &offer) && offer.instance == 7,
+            "loaded UI offered correct event before any short notification");
+        PtcInputOwnerWriter writer;
+        ptc_input_owner_writer_init(&writer, storage, "app", "release1", 900000000);
+        if (mode == 0 || mode == 1 || mode == 3 || mode == 9)
+            check_true(ptc_input_owner_acquire(&writer, 1100000000), "detail input lease fixture");
+        ack = offer;
+        snprintf(ack.owner, sizeof(ack.owner), "%s", mode == 0 || mode == 1 || mode == 3 || mode == 9 ? writer.owner : "0123456789abcdef0123456789abcdef");
+        if (mode == 1) ++ack.ui_instance;
+        if (mode == 3) ++ack.instance;
+        if (mode == 9) ptc_input_owner_release(&writer, 1200000000);
+        if (mode != 4 && mode != 5 && mode != 10)
+            check_true(ptc_reason_detail_write(storage, "app", "ack", &ack), "write detail draw ACK fixture");
+        s.revision++; s.captured_at = 101;
+        ptc_reason_notification_tick(&n, &s, 1250, 101, true, mode == 0, false, PTC_UI_LANGUAGE_ENGLISH);
+        if (mode == 0) {
+            check_true(!n.detail_pending && !n.pending && !strcmp(n.state, "detail_drawn_confirmed"),
+                "exact draw ACK plus live matching input lease succeeds even during own owner suppression");
+            notify_tick(&n, &s, 3500, 102, true);
+            s.revision++; s.captured_at = 120;
+            notify_tick(&n, &s, 21000, 120, true);
+            check_true(n.detail_sequence == 1 && n.sequence == 0, "closing detail never replays same instance or fallback");
+        } else if (mode == 5) {
+            s.reliable = false;
+            notify_tick(&n, &s, 1500, 101, true);
+            check_true(!n.detail_pending && !n.pending, "unknown status cancels detail without fallback");
+        } else if (mode == 10) {
+            ptc_reason_notification_tick(&n, &s, 1500, 101, true, false, true, PTC_UI_LANGUAGE_ENGLISH);
+            check_true(!n.detail_pending && !n.pending, "handover withdraws detail before exit");
+        } else {
+            check_true(n.detail_pending && !n.pending, "missing, wrong-instance or unowned ACK cannot claim display");
+            s.revision++; s.captured_at = 102;
+            if (mode == 11) {
+                ptc_reason_notification_tick(&n, &s, 3000, 102, true, true, false, PTC_UI_LANGUAGE_ENGLISH);
+                check_true(n.detail_pending && !n.pending, "expired offer waits briefly for cached owner release");
+            }
+            notify_tick(&n, &s, 3000, 102, true);
+            check_true(!n.detail_pending && n.pending && n.sequence == 1,
+                "exact timeout issues one fresh short fallback without retrying wake");
+            notify_tick(&n, &s, 3250, 102, true);
+            check_true(n.sequence == 1 && n.detail_sequence == 1, "fallback does not multiply under status storm");
+        }
+    }
+    PtcReasonDetail detail = {0};
+    PtcCompanionResultSummary summary = {0};
+    detail.day = 2380; detail.reason = PTC_REASON_DAILY; detail.instance = 2381;
+    summary.valid = summary.ok = summary.temporary_unlocked_available = true;
+    summary.day_index = 2380; summary.restricted_now = 1; summary.daily_restriction_active = true;
+    check_true(ptc_overlay_detail_matches(&detail, &summary), "fresh daily page matches offered restriction");
+    summary.bedtime_available = summary.bedtime_active = true; summary.bedtime_window_instance_id = 77;
+    check_true(!ptc_overlay_detail_matches(&detail, &summary), "higher-priority bedtime cannot ACK a daily offer");
+    detail.reason = PTC_REASON_BEDTIME; detail.instance = 77;
+    check_true(ptc_overlay_detail_matches(&detail, &summary), "matching bedtime instance matches correct detail");
+    summary.temporary_unlocked = true;
+    check_true(!ptc_overlay_detail_matches(&detail, &summary), "official unlock cannot ACK restricted details");
+    free(mem);
 }
 
 static void test_reason_transport(void)

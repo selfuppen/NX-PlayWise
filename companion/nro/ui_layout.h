@@ -30,6 +30,7 @@ typedef enum {
     PTC_UI_HIT_SETUP_THEME_OPTION,
     PTC_UI_HIT_SETUP_EYE_CARE,
     PTC_UI_HIT_SETUP_BEDTIME,
+    PTC_UI_HIT_SETUP_NOTIFICATIONS,
     PTC_UI_HIT_PARENT_PREV_PAGE,
     PTC_UI_HIT_PARENT_NEXT_PAGE,
     PTC_UI_HIT_PARENT_REFRESH,
@@ -151,6 +152,7 @@ PtcUiRect ptc_ui_setup_language_rect(int index);
 PtcUiRect ptc_ui_setup_time_help_rect(void);
 PtcUiRect ptc_ui_setup_pctl_help_rect(void);
 PtcUiRect ptc_ui_setup_more_rect(void);
+PtcUiRect ptc_ui_setup_notifications_rect(void);
 PtcUiRect ptc_ui_setup_shortcut_rect(void);
 PtcUiRect ptc_ui_setup_skip_rect(void);
 PtcUiRect ptc_ui_setup_primary_rect(void);
