@@ -1,0 +1,1803 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PlayWise 页面重构真机模拟器 | Switch UI Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Studio Chrome */
+      --studio-bg: #090d16;
+      --studio-panel: #131a29;
+      --studio-border: #232e45;
+      --studio-text: #f0f4fc;
+      --studio-muted: #8b9bb4;
+      --studio-accent: #3b82f6;
+      --studio-accent-hover: #60a5fa;
+
+      /* PlayWise Palette - Light (Graphite default) */
+      --pw-light-page-bg: #F3F4F6;
+      --pw-light-surface: #FCFCFD;
+      --pw-light-surface-raised: #E9EBEF;
+      --pw-light-border: #DDE0E5;
+      --pw-light-border-control: #7D8593;
+      --pw-light-text-primary: #171A20;
+      --pw-light-text-secondary: #545B68;
+      --pw-light-text-muted: #7E8592;
+      --pw-light-accent: #2F5FD0;
+      --pw-light-accent-soft: #E6ECFB;
+      --pw-light-focus: #1C46AC;
+      --pw-light-success: #2C7A4B;
+      --pw-light-success-soft: #EAF5EE;
+      --pw-light-success-border: #9AD2AE;
+      --pw-light-warning: #9A6114;
+      --pw-light-warning-soft: #FBF2E1;
+      --pw-light-warning-border: #E4C17B;
+      --pw-light-danger: #B53A45;
+      --pw-light-danger-soft: #FAEBEC;
+      --pw-light-danger-border: #E2A2A8;
+
+      /* PlayWise Palette - Dark */
+      --pw-dark-page-bg: #111111;
+      --pw-dark-surface: #222222;
+      --pw-dark-surface-raised: #333333;
+      --pw-dark-border: #444444;
+      --pw-dark-border-control: #888888;
+      --pw-dark-text-primary: #EEEEEE;
+      --pw-dark-text-secondary: #BBBBBB;
+      --pw-dark-text-muted: #777777;
+      --pw-dark-accent: #88AAEE;
+      --pw-dark-accent-soft: #223344;
+      --pw-dark-focus: #BBDDFF;
+      --pw-dark-success: #77CC99;
+      --pw-dark-success-soft: #113322;
+      --pw-dark-success-border: #336644;
+      --pw-dark-warning: #EEBB66;
+      --pw-dark-warning-soft: #332211;
+      --pw-dark-warning-border: #775522;
+      --pw-dark-danger: #EE8899;
+      --pw-dark-danger-soft: #441122;
+      --pw-dark-danger-border: #882233;
+
+      /* Dynamic Screen Tokens */
+      --page-bg: var(--pw-light-page-bg);
+      --surface: var(--pw-light-surface);
+      --surface-raised: var(--pw-light-surface-raised);
+      --border: var(--pw-light-border);
+      --border-control: var(--pw-light-border-control);
+      --text-primary: var(--pw-light-text-primary);
+      --text-secondary: var(--pw-light-text-secondary);
+      --text-muted: var(--pw-light-text-muted);
+      --accent: var(--pw-light-accent);
+      --accent-soft: var(--pw-light-accent-soft);
+      --focus: var(--pw-light-focus);
+      --success: var(--pw-light-success);
+      --success-soft: var(--pw-light-success-soft);
+      --success-border: var(--pw-light-success-border);
+      --warning: var(--pw-light-warning);
+      --warning-soft: var(--pw-light-warning-soft);
+      --warning-border: var(--pw-light-warning-border);
+      --danger: var(--pw-light-danger);
+      --danger-soft: var(--pw-light-danger-soft);
+      --danger-border: var(--pw-light-danger-border);
+    }
+
+    [data-theme="dark"] {
+      --page-bg: var(--pw-dark-page-bg);
+      --surface: var(--pw-dark-surface);
+      --surface-raised: var(--pw-dark-surface-raised);
+      --border: var(--pw-dark-border);
+      --border-control: var(--pw-dark-border-control);
+      --text-primary: var(--pw-dark-text-primary);
+      --text-secondary: var(--pw-dark-text-secondary);
+      --text-muted: var(--pw-dark-text-muted);
+      --accent: var(--pw-dark-accent);
+      --accent-soft: var(--pw-dark-accent-soft);
+      --focus: var(--pw-dark-focus);
+      --success: var(--pw-dark-success);
+      --success-soft: var(--pw-dark-success-soft);
+      --success-border: var(--pw-dark-success-border);
+      --warning: var(--pw-dark-warning);
+      --warning-soft: var(--pw-dark-warning-soft);
+      --warning-border: var(--pw-dark-warning-border);
+      --danger: var(--pw-dark-danger);
+      --danger-soft: var(--pw-dark-danger-soft);
+      --danger-border: var(--pw-dark-danger-border);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--studio-bg);
+      color: var(--studio-text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* Top Studio Header */
+    .studio-header {
+      background: rgba(19, 26, 41, 0.95);
+      border-bottom: 1px solid var(--studio-border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(10px);
+      z-index: 50;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-tag {
+      background: linear-gradient(135deg, #2563eb, #10b981);
+      color: #fff;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .brand-sub {
+      color: var(--studio-muted);
+      font-size: 13px;
+    }
+
+    .studio-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .ctrl-group {
+      display: flex;
+      background: #090d16;
+      border: 1px solid var(--studio-border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .ctrl-btn {
+      background: transparent;
+      border: none;
+      color: var(--studio-muted);
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ctrl-btn:hover { color: #fff; }
+    .ctrl-btn.active {
+      background: #1e293b;
+      color: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .ctrl-btn.scheme-1.active { background: #1d4ed8; color: #fff; }
+    .ctrl-btn.scheme-2.active { background: #0284c7; color: #fff; }
+    .ctrl-btn.scheme-3.active { background: #7c3aed; color: #fff; }
+    .ctrl-btn.scheme-0.active { background: #475569; color: #fff; }
+
+    /* Main Simulator Stage */
+    .simulator-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      gap: 18px;
+    }
+
+    /* Switch Device Container */
+    .switch-chassis {
+      display: flex;
+      align-items: center;
+      background: #18191c;
+      border-radius: 46px;
+      padding: 18px;
+      box-shadow: 0 25px 60px -15px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06);
+      position: relative;
+    }
+
+    /* Joy-Cons */
+    .joycon {
+      width: 90px;
+      height: 480px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 10px;
+      position: relative;
+    }
+    .joycon.left {
+      background: linear-gradient(135deg, #00A6F5, #0088CC);
+      border-radius: 36px 0 0 36px;
+      border-right: 2px solid #111;
+      box-shadow: inset 2px 2px 5px rgba(255,255,255,0.25), inset -2px -2px 5px rgba(0,0,0,0.4);
+    }
+    .joycon.right {
+      background: linear-gradient(135deg, #FF3D4C, #E02534);
+      border-radius: 0 36px 36px 0;
+      border-left: 2px solid #111;
+      box-shadow: inset 2px 2px 5px rgba(255,255,255,0.25), inset -2px -2px 5px rgba(0,0,0,0.4);
+    }
+
+    /* Joycon Controls */
+    .stick {
+      width: 48px;
+      height: 48px;
+      background: #2b2e38;
+      border-radius: 50%;
+      border: 3px solid #1a1b22;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.6), inset 0 2px 4px rgba(255,255,255,0.15);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stick::after {
+      content: "";
+      width: 22px;
+      height: 22px;
+      background: #1d1e26;
+      border-radius: 50%;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
+    }
+    .dpad-cluster {
+      display: grid;
+      grid-template-columns: repeat(3, 20px);
+      grid-template-rows: repeat(3, 20px);
+      gap: 2px;
+      align-items: center;
+      justify-items: center;
+    }
+    .btn-circle {
+      width: 20px;
+      height: 20px;
+      background: #2b2e38;
+      border-radius: 50%;
+      color: #94a3b8;
+      font-size: 9px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      transition: transform 0.05s ease;
+    }
+    .btn-circle:active {
+      transform: scale(0.9);
+      background: #1e2028;
+    }
+    .bumper-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.85);
+      background: rgba(0,0,0,0.25);
+      padding: 3px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .btn-meta {
+      width: 16px;
+      height: 16px;
+      background: #2b2e38;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .home-ring {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .home-ring::after {
+      content: "⌂";
+      font-size: 12px;
+      color: #fff;
+    }
+
+    /* Screen Bezel (16:9 1280x720 Scaled) */
+    .screen-bezel {
+      width: 960px;
+      height: 540px; /* 0.75x of 1280x720 */
+      background: #000;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: inset 0 0 0 2px #111, 0 0 20px rgba(0,0,0,0.8);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* The Real Switch Canvas (Scaled 0.75x) */
+    .screen-viewport {
+      width: 1280px;
+      height: 720px;
+      transform: scale(0.73125); /* 936 / 1280 */
+      transform-origin: top left;
+      background: var(--page-bg);
+      color: var(--text-primary);
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* UI Header Bar (Y=0..104) */
+    .ui-header {
+      height: 104px;
+      padding: 22px 54px 0;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .ui-title-area {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ui-app-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ui-app-badge {
+      font-size: 13px;
+      font-weight: 700;
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 2px 10px;
+      border-radius: 6px;
+    }
+    .ui-app-sub {
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+    .ui-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+    .ui-status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot-live {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* Navigation Tabs Bar (Y=120..156) */
+    .ui-tabs-bar {
+      height: 52px;
+      padding: 8px 54px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--page-bg);
+      position: relative;
+    }
+    .ui-tab {
+      height: 36px;
+      padding: 0 22px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      background: var(--surface-raised);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .ui-tab.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(47, 95, 208, 0.35);
+    }
+    .ui-tab-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: var(--danger);
+      color: #fff;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 10px;
+      font-weight: 800;
+    }
+    .ui-tabs-hint {
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .key-badge {
+      background: var(--surface-raised);
+      border: 1px solid var(--border-control);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    /* Main Content Stage (Y=176..651) */
+    .ui-stage {
+      flex: 1;
+      padding: 16px 54px;
+      display: grid;
+      grid-template-columns: 755px 384px;
+      gap: 33px;
+    }
+
+    /* Left Card Grid */
+    .card-grid {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .card-grid.layout-6 {
+      grid-template-columns: repeat(2, 365px);
+      grid-auto-rows: 120px;
+    }
+    .card-grid.layout-8 {
+      grid-template-columns: repeat(2, 365px);
+      grid-auto-rows: 96px;
+    }
+    .card-grid.layout-4 {
+      grid-template-columns: repeat(2, 365px);
+      grid-auto-rows: 188px;
+    }
+
+    /* Card Item (遵循原生贴边宽框 & 微立体) */
+    .action-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .action-card:hover, .action-card.focused {
+      background: var(--accent-soft);
+      border: 2px solid var(--accent);
+      outline: 2px solid var(--focus);
+      outline-offset: 1px;
+      box-shadow: 0 6px 18px rgba(47, 95, 208, 0.22);
+      transform: translateY(-2px);
+    }
+    .action-card.highlight-promoted {
+      border: 2px solid #10b981;
+    }
+    .action-card.highlight-promoted::after {
+      content: "★ 核心提权";
+      position: absolute;
+      top: -10px;
+      left: 14px;
+      background: #10b981;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 1px 8px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--surface-raised);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.25;
+    }
+    .action-card.layout-8 .card-title {
+      font-size: 16px;
+    }
+    .action-card.layout-4 .card-title {
+      font-size: 21px;
+    }
+
+    /* Badges */
+    .card-badge {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .badge-success {
+      background: var(--success-soft);
+      color: var(--success);
+      border-color: var(--success-border);
+    }
+    .badge-accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .badge-warning {
+      background: var(--warning-soft);
+      color: var(--warning);
+      border-color: var(--warning-border);
+    }
+    .badge-muted {
+      background: var(--surface-raised);
+      color: var(--text-muted);
+      border-color: var(--border);
+    }
+    .badge-danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: var(--danger-border);
+    }
+
+    .card-sub {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.35;
+      margin-top: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .action-card.layout-4 .card-sub {
+      white-space: normal;
+      font-size: 15px;
+    }
+
+    .card-quick-hint {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: 6px;
+    }
+
+    /* Right Inspector / Status Panel (Y=176..628) */
+    .inspector-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      height: 452px;
+      padding: 26px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+    .inspector-tag {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .inspector-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 8px 0 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .inspector-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+    .inspector-desc-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .inspector-desc-item {
+      display: flex;
+      gap: 8px;
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+    .inspector-desc-item::before {
+      content: "•";
+      color: var(--accent);
+      font-weight: 800;
+    }
+    .inspector-action-bar {
+      background: var(--surface-raised);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* Footer Bar (Y=652..720) */
+    .ui-footer {
+      height: 68px;
+      border-top: 1px solid var(--border);
+      background: var(--surface-raised);
+      padding: 0 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .footer-hints {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+    .hint-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hint-btn {
+      width: 24px;
+      height: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border-control);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+
+    /* Switch Toast Alert */
+    .switch-toast {
+      position: absolute;
+      top: 36px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-30px);
+      background: rgba(23, 26, 32, 0.95);
+      color: #fff;
+      padding: 14px 26px;
+      border-radius: 30px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.15);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 200;
+    }
+    .switch-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Modal Dialog Simulation */
+    .modal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-shell {
+      width: 960px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+    .modal-title { font-size: 24px; font-weight: 800; }
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+    .modal-option-row {
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+    .modal-option-row:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Diff Comparison Bar at bottom */
+    .diff-drawer {
+      max-width: 1240px;
+      width: 100%;
+      background: var(--studio-panel);
+      border: 1px solid var(--studio-border);
+      border-radius: 14px;
+      padding: 18px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .diff-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .diff-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .diff-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .diff-table th {
+      text-align: left;
+      padding: 8px 12px;
+      color: var(--studio-muted);
+      border-bottom: 1px solid var(--studio-border);
+    }
+    .diff-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      color: var(--studio-text);
+    }
+    .diff-tag-new {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .diff-tag-old {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+      text-decoration: line-through;
+    }
+  </style>
+</head>
+<body data-theme="light">
+
+  <!-- Top Studio Bar -->
+  <header class="studio-header">
+    <div class="brand">
+      <span class="brand-tag">SWITCH 1:1</span>
+      <h1 class="brand-title">PlayWise 页面重构全景模拟器</h1>
+      <span class="brand-sub">“安全与偏好” & “支持与恢复” 交互方案对比</span>
+    </div>
+
+    <div class="studio-controls">
+      <!-- 方案选择 -->
+      <div class="ctrl-group">
+        <button class="ctrl-btn scheme-1 active" onclick="switchScheme(1)">
+          <span>🌟 方案一：分层聚焦 (推荐·6卡)</span>
+        </button>
+        <button class="ctrl-btn scheme-2" onclick="switchScheme(2)">
+          <span>🔄 方案二：稳健演进 (8卡重排)</span>
+        </button>
+        <button class="ctrl-btn scheme-3" onclick="switchScheme(3)">
+          <span>⚡ 方案三：极简大卡 (4卡)</span>
+        </button>
+        <button class="ctrl-btn scheme-0" onclick="switchScheme(0)">
+          <span>📜 当前现状 (原版8卡)</span>
+        </button>
+      </div>
+
+      <!-- 页面 Tab 快速切换 -->
+      <div class="ctrl-group">
+        <button class="ctrl-btn page-settings active" onclick="switchPage('settings')">
+          <span>🛡️ 安全与偏好</span>
+        </button>
+        <button class="ctrl-btn page-support" onclick="switchPage('support')">
+          <span>🩺 支持与恢复</span>
+        </button>
+      </div>
+
+      <!-- 双主题切换 -->
+      <div class="ctrl-group">
+        <button class="ctrl-btn theme-light active" onclick="setTheme('light')">☀️ 浅色</button>
+        <button class="ctrl-btn theme-dark" onclick="setTheme('dark')">🌙 深色</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Simulator Main Stage -->
+  <main class="simulator-stage">
+    
+    <!-- Switch Chassis Simulation -->
+    <div class="switch-chassis">
+      
+      <!-- Left Joy-Con -->
+      <div class="joycon left">
+        <span class="bumper-label" onclick="triggerLR(-1)">[ L ]</span>
+        <div class="btn-meta" onclick="triggerMinus()">-</div>
+        <div class="stick" onclick="focusCard(0)"></div>
+        <div class="dpad-cluster">
+          <div></div>
+          <div class="btn-circle" onclick="navigate(0, -1)">▲</div>
+          <div></div>
+          <div class="btn-circle" onclick="navigate(-1, 0)">◀</div>
+          <div></div>
+          <div class="btn-circle" onclick="navigate(1, 0)">▶</div>
+          <div></div>
+          <div class="btn-circle" onclick="navigate(0, 1)">▼</div>
+          <div></div>
+        </div>
+        <div class="btn-meta" style="border-radius:2px;">■</div>
+      </div>
+
+      <!-- Screen Bezel -->
+      <div class="screen-bezel">
+        <div class="screen-viewport" id="screen">
+          
+          <!-- UI Header Bar -->
+          <div class="ui-header">
+            <div class="ui-title-area">
+              <div class="ui-app-title">
+                <span>PlayWise 家长控制台</span>
+                <span class="ui-app-badge" id="hdr-scheme-badge">方案一：分层聚焦</span>
+              </div>
+              <div class="ui-app-sub" id="hdr-subtitle">安全与偏好 / 本地规则与设备安全设置</div>
+            </div>
+            <div class="ui-status-bar">
+              <div class="ui-status-item">
+                <span class="dot-live"></span>
+                <span>今日还可玩: <strong>51分钟</strong></span>
+              </div>
+              <div class="ui-status-item">14:35</div>
+              <div class="ui-status-item">🔋 92%</div>
+            </div>
+          </div>
+
+          <!-- Tabs Bar -->
+          <div class="ui-tabs-bar">
+            <div class="ui-tab" onclick="alert('今日安排')">今日安排</div>
+            <div class="ui-tab" onclick="alert('时间计划')">时间计划</div>
+            <div class="ui-tab" onclick="alert('离线加时')">离线加时</div>
+            <div class="ui-tab active" id="tab-settings" onclick="switchPage('settings')">安全与偏好</div>
+            <div class="ui-tab" id="tab-support" onclick="switchPage('support')">
+              <span>支持与恢复</span>
+              <span class="ui-tab-badge" id="tab-support-badge" style="display:none">1</span>
+            </div>
+            <div class="ui-tabs-hint">
+              <span class="key-badge">L</span>
+              <span class="key-badge">R</span>
+              <span>切换页签</span>
+            </div>
+          </div>
+
+          <!-- Main Stage -->
+          <div class="ui-stage">
+            
+            <!-- Left Cards Grid -->
+            <div class="card-grid layout-6" id="card-container">
+              <!-- Dynamically Populated by JavaScript -->
+            </div>
+
+            <!-- Right Inspector Panel -->
+            <div class="inspector-panel" id="inspector-panel">
+              <div>
+                <div class="inspector-tag" id="ins-tag">核心安全</div>
+                <div class="inspector-head">
+                  <h2 class="inspector-title" id="ins-title">修改家长密码</h2>
+                  <span class="card-badge badge-success" id="ins-badge">已启用</span>
+                </div>
+                <div class="inspector-desc-wrap" id="ins-descs">
+                  <div class="inspector-desc-item">用于保护家长区管理权限与离线加时码敏感操作。</div>
+                  <div class="inspector-desc-item">支持 1~64 位数字 PIN，输错 5 次启动冷却倒计时。</div>
+                  <div class="inspector-desc-item">修改密码需先验证原密码，保障主机防篡改安全。</div>
+                </div>
+              </div>
+
+              <div class="inspector-action-bar">
+                <span id="ins-hint">按 A 打开设置</span>
+                <span class="key-badge">A 确认</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Footer Bar -->
+          <div class="ui-footer">
+            <div class="footer-hints">
+              <div class="hint-item"><span class="hint-btn">L</span><span class="hint-btn">R</span><span>切换页签</span></div>
+              <div class="hint-item"><span class="hint-btn">▲</span><span class="hint-btn">▼</span><span class="hint-btn">◀</span><span class="hint-btn">▶</span><span>移动选择</span></div>
+            </div>
+            <div class="footer-hints" id="footer-dynamic-hints">
+              <div class="hint-item" id="hint-x-toggle" style="display:none">
+                <span class="hint-btn" style="color:#10b981">X</span><span>快速开/关</span>
+              </div>
+              <div class="hint-item"><span class="hint-btn">A</span><span>打开配置</span></div>
+              <div class="hint-item"><span class="hint-btn">B</span><span>返回孩子端</span></div>
+            </div>
+          </div>
+
+          <!-- Toast Notification -->
+          <div class="switch-toast" id="toast">
+            <span style="font-size:20px;">🔔</span>
+            <span id="toast-text">已切换自动原因通知开关</span>
+          </div>
+
+          <!-- Modal Simulation -->
+          <div class="modal-overlay" id="modal">
+            <div class="modal-shell">
+              <div class="modal-header">
+                <div class="modal-title" id="modal-title">受限原因与通知偏好</div>
+                <button class="ctrl-btn" onclick="closeModal()">✕</button>
+              </div>
+              <div class="modal-body" id="modal-content">
+                <!-- Dynamically populated -->
+              </div>
+              <div class="modal-footer">
+                <button class="ctrl-btn" onclick="closeModal()">B 返回</button>
+                <button class="ctrl-btn active" onclick="saveModal()">A 确认保存</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right Joy-Con -->
+      <div class="joycon right">
+        <span class="bumper-label" onclick="triggerLR(1)">[ R ]</span>
+        <div class="btn-meta" onclick="triggerPlus()">+</div>
+        <div class="dpad-cluster">
+          <div></div>
+          <div class="btn-circle" onclick="pressButton('X')">X</div>
+          <div></div>
+          <div class="btn-circle" onclick="pressButton('Y')">Y</div>
+          <div></div>
+          <div class="btn-circle" onclick="pressButton('A')">A</div>
+          <div></div>
+          <div class="btn-circle" onclick="pressButton('B')">B</div>
+          <div></div>
+        </div>
+        <div class="stick" onclick="pressButton('A')"></div>
+        <div class="home-ring" onclick="alert('HOME 键：返回 Switch 桌面')"></div>
+      </div>
+
+    </div>
+
+    <!-- Live Diff & Decision Assistant -->
+    <div class="diff-drawer">
+      <div class="diff-header">
+        <div class="diff-title">
+          <span>📋 方案重构对比与决策指引</span>
+          <span style="font-size:12px; font-weight:normal; color:var(--studio-muted);">(点击上方方案按钮可实时无缝切换视图，亦可点击手柄按钮互动)</span>
+        </div>
+        <div style="font-size:12px; color:#10b981; font-weight:700;">★ 键盘快捷键：W/A/S/D 或 方向键移动，A 键打开，X 键快切通知，B 键返回</div>
+      </div>
+
+      <table class="diff-table">
+        <thead>
+          <tr>
+            <th style="width:180px;">功能项</th>
+            <th style="width:200px;">当前原版命名与归属</th>
+            <th style="width:220px;">方案一重构（推荐）</th>
+            <th>重构核心理由与家长体验收益</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>受限原因通知</strong></td>
+            <td><span class="diff-tag-old">声音与通知 (第5卡)</span></td>
+            <td><span class="diff-tag-new">【受限原因与通知】(第1卡)</span></td>
+            <td><strong>核心提权</strong>：原版藏在喇叭图标后，用户误以为是静音。新版直显“浮窗已就绪”，支持 <strong>X 键一键快切</strong>，消除孩子受限时的沟通矛盾！</td>
+          </tr>
+          <tr>
+            <td><strong>自制程序高级入口</strong></td>
+            <td><span class="diff-tag-old">自制程序高级入口</span></td>
+            <td><span class="diff-tag-new">【相册防绕过保护】</span></td>
+            <td><strong>去极客黑话</strong>：原名家长以为是开启破解外挂，实为“防止孩子通过相册绕过时间管控”的安全保护机制，更名后意图一目了然。</td>
+          </tr>
+          <tr>
+            <td><strong>低频设置 (语言/主题)</strong></td>
+            <td><span class="diff-tag-old">占 2 个顶级黄金卡位</span></td>
+            <td><span class="diff-tag-new">收纳为【界面偏好与个性化】</span></td>
+            <td><strong>空间释放</strong>：语言与外观初次设置后几乎不再更改，合并为二级整页后，主界面由拥挤的 8 卡恢复为 <strong>6 张 120px 舒适大卡</strong>。</td>
+          </tr>
+          <tr>
+            <td><strong>配置备份与导入</strong></td>
+            <td><span class="diff-tag-old">位于“安全与偏好”</span></td>
+            <td><span class="diff-tag-new">迁移至“支持与恢复”</span></td>
+            <td><strong>权责闭环</strong>：备份、导出、选择性恢复与系统急救放在同一页，再也不用在两个 Tab 之间来回找数据恢复。</td>
+          </tr>
+          <tr>
+            <td><strong>在线更新入口</strong></td>
+            <td><span class="diff-tag-old">隐蔽在“软件信息”里</span></td>
+            <td><span class="diff-tag-new">【检查更新与版本】显要外显</span></td>
+            <td>有新版本时红点闪烁，家长无需四处寻找“在哪里升级新版”。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <script>
+    // State Store
+    let currentScheme = 1;
+    let currentPage = 'settings';
+    let currentFocus = 0;
+    let reasonNoticeEnabled = true;
+    let soundEnabled = true;
+
+    // Schemes Data Definition
+    const SCHEMES = {
+      // 方案一：分层聚焦 (推荐·6卡布局)
+      1: {
+        name: "方案一：分层聚焦 (强烈推荐)",
+        badge: "方案一 · 6卡舒展大卡流",
+        settings: [
+          {
+            id: 'pin',
+            title: '家长管理密码',
+            icon: '🔑',
+            badge: '已设防',
+            badgeClass: 'badge-success',
+            sub: '用于进出家长区与敏感权限验证',
+            tag: '管理权限',
+            descs: [
+              '保护家长区设置与离线加时码管理。',
+              '支持 1~64 位数字 PIN，输错 5 次启动冷却倒计时。',
+              '修改需先验证原密码，防孩子越权。'
+            ],
+            hint: '按 A 修改管理密码'
+          },
+          {
+            id: 'notice',
+            title: '受限原因与通知',
+            icon: '🔔',
+            badge: '已开启 · 浮窗就绪',
+            badgeClass: 'badge-success',
+            sub: '达到限额时自动弹出原因详情与短通知',
+            tag: '核心交互 · 重点提权',
+            isNotice: true,
+            isPromoted: true,
+            descs: [
+              '【核心体验】当今日额度用完、就寝或休息时，自动在屏幕上显示明确原因。',
+              '优先唤起任我玩已就绪浮窗，超时自动由 Ultrahand 系统短通知兜底。',
+              '支持在光标聚焦此卡时，直接按 [X] 键极速切换开关状态！'
+            ],
+            hint: '按 A 打开浮窗配置 · 按 X 快速切换'
+          },
+          {
+            id: 'shortcut',
+            title: '家长区呼出按键',
+            icon: '🎮',
+            badge: '长按 - 减号键',
+            badgeClass: 'badge-accent',
+            sub: '在孩子游玩时快速长按呼出家长区',
+            tag: '快捷交互',
+            descs: [
+              '孩子玩游戏时，长按配置的按键即可呼出 PIN 验证弹窗。',
+              '支持自定义映射为 Minus、Capture、或 L+R 组合键。',
+              '可根据手柄习惯灵活调整。'
+            ],
+            hint: '按 A 修改呼出按键'
+          },
+          {
+            id: 'activity',
+            title: '家庭活动记录',
+            icon: '📜',
+            badge: '最近 200 条',
+            badgeClass: 'badge-muted',
+            sub: '审计时间变更、离线加时与保护拦截日志',
+            tag: '活动审计 · 前移',
+            descs: [
+              '本地审计日志，完整记录加时码兑换、手动调整、就寝跳过等动作。',
+              '仅保存在 SD 卡本地，不向任何云端上传隐私。',
+              '支持 L/R 翻页快速查阅。'
+            ],
+            hint: '按 A 查阅审计日志'
+          },
+          {
+            id: 'album',
+            title: '相册防绕过保护',
+            icon: '🛡️',
+            badge: '已启用保护',
+            badgeClass: 'badge-success',
+            sub: '防止通过桌面相册启动自制软件绕过限时',
+            tag: '防绕过安全 · 正名',
+            descs: [
+              '彻底告别晦涩的“自制程序高级入口”用词，明确安全属性。',
+              '开启后，相册恢复为官方相册，hbmenu 自制程序菜单重定向至“手柄设置”按住 X 再按 A。',
+              '有效防止孩子利用注入手段绕过 PlayWise 管控。'
+            ],
+            hint: '按 A 查看与管理相册防绕过'
+          },
+          {
+            id: 'preferences',
+            title: '界面偏好与个性化',
+            icon: '🎨',
+            badge: '主题 / 语言 / 音效',
+            badgeClass: 'badge-accent',
+            sub: '当前：浅色 · 石墨 · 简体中文 · 音效开',
+            tag: '通用偏好 · 二级收纳',
+            descs: [
+              '二级菜单收纳极低频项，大幅净化一级页面空间。',
+              '内含外观主题（浅/深/跟随系统 + 4套调色风格）。',
+              '内含界面语言切换与手柄按键交互音效开关。'
+            ],
+            hint: '按 A 进入个性化设置'
+          }
+        ],
+        support: [
+          {
+            id: 'control',
+            title: '恢复系统管控',
+            icon: '⚡',
+            badge: '管控运行中',
+            badgeClass: 'badge-success',
+            sub: '核验运行环境与 PCTL 会话并恢复限时管控',
+            tag: '系统状态',
+            descs: [
+              '当系统环境变动、指纹需要重核、或紧急停用解除后，点击此处恢复管控。',
+              '正常运行时显示健康绿标，异常时高亮推荐操作。'
+            ],
+            hint: '按 A 确认恢复管控'
+          },
+          {
+            id: 'update',
+            title: '检查更新与版本',
+            icon: '🚀',
+            badge: 'v0.9.2 (最新)',
+            badgeClass: 'badge-accent',
+            sub: '在线检查 PlayWise 最新固件与热更新支持',
+            tag: '在线更新 · 提权',
+            isPromoted: true,
+            descs: [
+              '将原先埋在“软件信息”深处的更新功能提到显要位置。',
+              '支持一键在线检测 GitHub Release 并安全覆盖安装。',
+              '有新版本时闪烁红点提示。'
+            ],
+            hint: '按 A 检查在线更新'
+          },
+          {
+            id: 'backup',
+            title: '配置备份与迁移恢复',
+            icon: '💾',
+            badge: '本地已备份',
+            badgeClass: 'badge-muted',
+            sub: '备份/还原全部规则、PIN、密钥与日历计划',
+            tag: '数据维护 · 迁入闭环',
+            isPromoted: true,
+            descs: [
+              '从设置页迁入支持页，与系统恢复形成生命周期大团圆！',
+              '生成安全备份 json，支持 11 组细项选择性还原。',
+              '换机或重新安装时轻松一键还原。'
+            ],
+            hint: '按 A 打开备份与恢复中心'
+          },
+          {
+            id: 'repair',
+            title: '系统自检与修复',
+            icon: '🩺',
+            badge: '自检正常',
+            badgeClass: 'badge-success',
+            sub: '重新检测 Atmosphere/PCTL 依赖与时间同步',
+            tag: '故障排查',
+            descs: [
+              '原“重试修复”，更名更通俗亲切。',
+              '核验 Switch 系统时间是否同步、PCTL 官方服务通信是否畅通。'
+            ],
+            hint: '按 A 启动自检修复'
+          },
+          {
+            id: 'emergency',
+            title: '紧急停用 (临时放行)',
+            icon: '🛑',
+            badge: '未停用',
+            badgeClass: 'badge-muted',
+            sub: '写入 disable.flag 阻止控制，用于排障放行',
+            tag: '应急逃生',
+            descs: [
+              '当遇到未知死锁或临时急需游玩时，一键暂停一切控制写入。',
+              '不会丢失已保存的周计划或加时码资产。'
+            ],
+            hint: '按 A 确认紧急停用'
+          },
+          {
+            id: 'diagnostics',
+            title: '导出排障诊断包',
+            icon: '📦',
+            badge: '就绪',
+            badgeClass: 'badge-muted',
+            sub: '一键打包脱敏日志，自动排除密钥与密码',
+            tag: '排障支持',
+            descs: [
+              '自动脱敏打包系统日志、PCTL dump 与 crash 信息至 SD 卡。',
+              '严密保护家庭隐私，供在 GitHub 发 issue 求助。'
+            ],
+            hint: '按 A 导出诊断 Zip 包'
+          }
+        ]
+      },
+
+      // 方案二：稳健演进 (8卡重排)
+      2: {
+        name: "方案二：稳健演进 (8卡重排)",
+        badge: "方案二 · 8卡平铺科学重排",
+        settings: [
+          {
+            id: 'pin',
+            title: '家长管理密码',
+            icon: '🔑',
+            badge: '已设防',
+            badgeClass: 'badge-success',
+            sub: '用于进出家长区与敏感权限验证',
+            tag: 'Row 1 · 核心安全',
+            descs: ['保护家长区权限，支持 1~64 位 PIN。'],
+            hint: '按 A 修改密码'
+          },
+          {
+            id: 'notice',
+            title: '受限原因与通知',
+            icon: '🔔',
+            badge: '已开启',
+            badgeClass: 'badge-success',
+            sub: '受限时自动弹出原因提示与短通知',
+            tag: 'Row 1 · 提权黄金位',
+            isPromoted: true,
+            isNotice: true,
+            descs: ['【提权】由原卡片 5 提前至卡片 1，状态外显，按 X 快速开关。'],
+            hint: '按 A 打开配置 · 按 X 快速切换'
+          },
+          {
+            id: 'shortcut',
+            title: '家长区呼出按键',
+            icon: '🎮',
+            badge: '当前：-',
+            badgeClass: 'badge-accent',
+            sub: '孩子端长按呼出家长区快捷键',
+            tag: 'Row 2 · 高频交互',
+            descs: ['支持自定义映射按键。'],
+            hint: '按 A 修改按键'
+          },
+          {
+            id: 'activity',
+            title: '家庭活动记录',
+            icon: '📜',
+            badge: '最近 200 条',
+            badgeClass: 'badge-muted',
+            sub: '审计时间调整与拦截事件',
+            tag: 'Row 2 · 前移高频',
+            descs: ['原第 6 卡前移至第 3 卡，方便随时查看。'],
+            hint: '按 A 查阅日志'
+          },
+          {
+            id: 'album',
+            title: '相册防绕过保护',
+            icon: '🛡️',
+            badge: '已开启',
+            badgeClass: 'badge-success',
+            sub: '防止利用相册启动自制程序绕过管控',
+            tag: 'Row 3 · 安全进阶',
+            descs: ['原“自制程序高级入口”去极客化命名。'],
+            hint: '按 A 设置保护'
+          },
+          {
+            id: 'backup',
+            title: '配置备份与导入',
+            icon: '💾',
+            badge: '已备份',
+            badgeClass: 'badge-muted',
+            sub: '备份/恢复规则与加时密钥',
+            tag: 'Row 3 · 数据维护',
+            descs: ['完整备份规则，支持部分选择性恢复。'],
+            hint: '按 A 备份恢复'
+          },
+          {
+            id: 'theme',
+            title: '外观主题',
+            icon: '🎨',
+            badge: '浅色 · 石墨',
+            badgeClass: 'badge-accent',
+            sub: '单选模式与设计调色风格',
+            tag: 'Row 4 · 低频沉底',
+            descs: ['原第 1 卡沉底至低频区，不占核心位。'],
+            hint: '按 A 更改外观'
+          },
+          {
+            id: 'language',
+            title: '界面语言',
+            icon: '🌐',
+            badge: '简体中文',
+            badgeClass: 'badge-accent',
+            sub: '选择主机控制台界面显示语言',
+            tag: 'Row 4 · 低频沉底',
+            descs: ['原第 3 卡沉底至低频区。'],
+            hint: '按 A 切换语言'
+          }
+        ],
+        support: [
+          /* Same 6 cards with improved names */
+          { id: 'c1', title: '恢复系统管控', icon: '⚡', badge: '运行中', badgeClass: 'badge-success', sub: '核验环境并恢复管控', tag: '状态恢复', descs: ['原“启用额度管理”。'], hint: '按 A 恢复' },
+          { id: 'c2', title: '检查更新与版本', icon: '🚀', badge: 'v0.9.2', badgeClass: 'badge-accent', sub: '在线检查新版固件', tag: '在线更新', isPromoted: true, descs: ['原“软件信息”，突出在线升级。'], hint: '按 A 检查更新' },
+          { id: 'c3', title: '系统自检与修复', icon: '🩺', badge: '正常', badgeClass: 'badge-success', sub: '重新核验运行环境', tag: '自检修复', descs: ['原“重试修复”。'], hint: '按 A 自检' },
+          { id: 'c4', title: '导出排障诊断包', icon: '📦', badge: '就绪', badgeClass: 'badge-muted', sub: '脱敏打包日志供求助', tag: '诊断', descs: ['自动排除密钥安全导出。'], hint: '按 A 导出' },
+          { id: 'c5', title: '紧急停用 (临时放行)', icon: '🛑', badge: '未停用', badgeClass: 'badge-muted', sub: '暂停写入以便排障', tag: '逃生放行', descs: ['临时解除限制。'], hint: '按 A 停用' },
+          { id: 'c6', title: '还原安装前官方状态', icon: '🔄', badge: '慎用', badgeClass: 'badge-danger', sub: '还原初始快照并停用', tag: '卸载前还原', descs: ['终极逃生舱。'], hint: '按 A 还原' }
+        ]
+      },
+
+      // 方案三：极简大卡 (4卡)
+      3: {
+        name: "方案三：极简大卡 (任务导向)",
+        badge: "方案三 · 4张超大任务卡",
+        settings: [
+          {
+            id: 'sec',
+            title: '管理密码与防绕过安全',
+            icon: '🛡️',
+            badge: '双重防护',
+            badgeClass: 'badge-success',
+            sub: '修改家长 PIN 密码 · 开启相册防绕过保护，杜绝越权',
+            tag: '安全中心',
+            descs: ['聚合家长密码与相册启动防护，一体化管理。'],
+            hint: '按 A 进入安全设置'
+          },
+          {
+            id: 'notice-center',
+            title: '受限原因提醒中心',
+            icon: '🔔',
+            badge: '已开启 · 浮窗优先',
+            badgeClass: 'badge-success',
+            sub: '受限时自动弹出浮窗或短通知说明原因 · 包含按键交互音效',
+            tag: '提醒中心 · 重点大卡',
+            isNotice: true,
+            isPromoted: true,
+            descs: [
+              '【核心体验大卡】大字展示当前浮窗就绪状态与通知机制。',
+              '支持 X 键直接一键切换通知开关！'
+            ],
+            hint: '按 A 打开详细配置 · 按 X 快速切换'
+          },
+          {
+            id: 'shortcut-act',
+            title: '呼出按键与活动审计',
+            icon: '📜',
+            badge: '长按 - 键 · 200条',
+            badgeClass: 'badge-accent',
+            sub: '定制家长区唤醒按键 · 查阅家庭游玩限额与违规审计记录',
+            tag: '交互与审计',
+            descs: ['长按快速呼出设置 + 查看历史加时与拦截事件。'],
+            hint: '按 A 查阅与设置'
+          },
+          {
+            id: 'prefs-backup',
+            title: '显示风格、语言与备份',
+            icon: '🎨',
+            badge: '浅色 · 中文 · 已备份',
+            badgeClass: 'badge-muted',
+            sub: '外观深浅模式与设计风格 · 界面语言 · 规则备份与迁移',
+            tag: '偏好与数据',
+            descs: ['二级页管理主题、语言和配置数据备份。'],
+            hint: '按 A 进入管理'
+          }
+        ],
+        support: [
+          { id: 's1', title: '软件更新与版本', icon: '🚀', badge: 'v0.9.2 (最新)', badgeClass: 'badge-accent', sub: '检查最新 Release · 一键安全在线升级与热重载', tag: '在线更新', isPromoted: true, descs: ['直观在线更新大卡。'], hint: '按 A 检查更新' },
+          { id: 's2', title: '管控状态与恢复接管', icon: '⚡', badge: '健康运行中', badgeClass: 'badge-success', sub: 'PCTL 服务与时间同步检测 · 异常时一键自检并重新接管', tag: '状态与修复', descs: ['智能自检与恢复接管。'], hint: '按 A 启动自检' },
+          { id: 's3', title: '数据备份与诊断导出', icon: '💾', badge: '已就绪', badgeClass: 'badge-muted', sub: '完整配置备份恢复 · 一键生成脱敏诊断日志 Zip', tag: '数据与求助', descs: ['备份与诊断合并大卡。'], hint: '按 A 进入中心' },
+          { id: 's4', title: '应急停用与还原中心', icon: '🛑', badge: '未停用', badgeClass: 'badge-danger', sub: '临时写入 disable.flag 放行 · 还原安装前官方初始状态', tag: '急救逃生', descs: ['应急逃生与初始还原。'], hint: '按 A 打开应急中心' }
+        ]
+      },
+
+      // 方案0：原版现状对照
+      0: {
+        name: "当前原版现状 (8卡紧凑原貌)",
+        badge: "原版 · 8卡高密度紧凑流",
+        settings: [
+          { id: 'o0', title: '修改家长密码', icon: '🔑', badge: '已启用', badgeClass: 'badge-success', sub: '修改用于进入家长区与授权敏感操作的密码', tag: '安全设置', descs: ['当前原版卡片 0。'], hint: '按 A 修改' },
+          { id: 'o1', title: '外观主题', icon: '🎨', badge: '跟随系统', badgeClass: 'badge-accent', sub: '跟随系统 / 浅色 / 深色', tag: '极低频 · 占黄金位', descs: ['设置一次后极少使用。'], hint: '按 A 更改' },
+          { id: 'o2', title: '家长区快捷键', icon: '🎮', badge: '当前：-', badgeClass: 'badge-accent', sub: '长按此键呼出家长区', tag: '交互快捷', descs: ['长按呼出。'], hint: '按 A 更改' },
+          { id: 'o3', title: '界面语言', icon: '🌐', badge: '简体中文', badgeClass: 'badge-accent', sub: '简体中文 / 繁體中文 / English', tag: '极低频 · 占第二行', descs: ['设置一次后极少使用。'], hint: '按 A 更改' },
+          { id: 'o4', title: '自制程序高级入口', icon: '📦', badge: '未启用', badgeClass: 'badge-muted', sub: '相册启动定向到手柄设置 X+A', tag: '极客黑话 · 易误解', descs: ['很多家长以为是开启破解外挂，实为防绕过。'], hint: '按 A 设置' },
+          { id: 'o5', title: '声音与通知', icon: '🔊', badge: '已开启', badgeClass: 'badge-success', sub: '按键音效与实验限制提示', tag: '核心被埋没 · 喇叭图标', descs: ['自动原因通知被藏在弹层里，被误以为只是音效。'], hint: '按 A 打开' },
+          { id: 'o6', title: '家庭活动记录', icon: '📜', badge: '最近 200 条', badgeClass: 'badge-muted', sub: '审计额度调整与加时', tag: '偏远位置', descs: ['高频审计被排在最后。'], hint: '按 A 查阅' },
+          { id: 'o7', title: '配置备份与导入', icon: '💾', badge: '未备份', badgeClass: 'badge-muted', sub: '备份全部规则与密钥', tag: '与支持页割裂', descs: ['和支持页的还原分离。'], hint: '按 A 备份' }
+        ],
+        support: [
+          { id: 'so0', title: '启用额度管理', icon: '🛡️', badge: '可用', badgeClass: 'badge-accent', sub: '通过安全检查后启用', tag: '抽象工程用词', descs: ['原版卡片 0。'], hint: '按 A 启用' },
+          { id: 'so1', title: '重试修复', icon: '🔧', badge: '不可用', badgeClass: 'badge-muted', sub: '重新检测是否可安全启用', tag: '正常时长期置灰', descs: ['原版卡片 1。'], hint: '按 A 重试' },
+          { id: 'so2', title: '紧急停用', icon: '🛑', badge: '未停用', badgeClass: 'badge-muted', sub: '停止新的控制写入', tag: '应急', descs: ['原版卡片 2。'], hint: '按 A 停用' },
+          { id: 'so3', title: '恢复安装前状态', icon: '🔄', badge: '就绪', badgeClass: 'badge-danger', sub: '还原原版 PCTL 设置并停用', tag: '高危终极操作', descs: ['原版卡片 3。'], hint: '按 A 恢复' },
+          { id: 'so4', title: '导出诊断', icon: '📤', badge: '可用', badgeClass: 'badge-muted', sub: '自动排除加时码与密码', tag: '诊断', descs: ['原版卡片 4。'], hint: '按 A 导出' },
+          { id: 'so5', title: '软件信息', icon: 'ℹ️', badge: 'v0.9.2', badgeClass: 'badge-accent', sub: '版本、仓库与在线更新', tag: '更新被隐藏', descs: ['很多用户不知道按 X 能更新。'], hint: '按 A 打开' }
+        ]
+      }
+    };
+
+    // Render Function
+    function renderScreen() {
+      const schemeData = SCHEMES[currentScheme];
+      const items = schemeData[currentPage];
+
+      // Update header
+      document.getElementById('hdr-scheme-badge').textContent = schemeData.badge;
+      document.getElementById('hdr-subtitle').textContent = currentPage === 'settings' 
+        ? '安全与偏好 / 本地规则与设备安全设置'
+        : '支持与恢复 / 兼容状态、环境诊断与安全接管';
+
+      // Update tabs style
+      document.getElementById('tab-settings').className = 'ui-tab' + (currentPage === 'settings' ? ' active' : '');
+      document.getElementById('tab-support').className = 'ui-tab' + (currentPage === 'support' ? ' active' : '');
+
+      // Grid Layout Class
+      const container = document.getElementById('card-container');
+      const layoutClass = currentScheme === 1 ? 'layout-6' : (currentScheme === 2 ? 'layout-8' : (currentScheme === 3 ? 'layout-4' : 'layout-8'));
+      container.className = 'card-grid ' + layoutClass;
+      container.innerHTML = '';
+
+      if (currentFocus >= items.length) currentFocus = 0;
+
+      items.forEach((item, index) => {
+        const card = document.createElement('div');
+        const isFocused = (index === currentFocus);
+        card.className = 'action-card ' + layoutClass + (isFocused ? ' focused' : '') + (item.isPromoted ? ' highlight-promoted' : '');
+        
+        let dynamicBadge = item.badge;
+        let dynamicBadgeClass = item.badgeClass;
+        let dynamicSub = item.sub;
+
+        // Dynamic State for Reason Notification
+        if (item.isNotice) {
+          dynamicBadge = reasonNoticeEnabled ? '已开启 · 浮窗优先' : '未开启';
+          dynamicBadgeClass = reasonNoticeEnabled ? 'badge-success' : 'badge-muted';
+          dynamicSub = reasonNoticeEnabled 
+            ? '受限时自动弹出详情；浮窗优先，短通知兜底' 
+            : '已关闭受限自动提醒；官方仅展示默认限制';
+        }
+
+        card.innerHTML = `
+          <div class="card-top">
+            <div class="card-title-wrap">
+              <span class="card-icon">${item.icon}</span>
+              <span class="card-title">${item.title}</span>
+            </div>
+            <span class="card-badge ${dynamicBadgeClass}">${dynamicBadge}</span>
+          </div>
+          <div class="card-sub">${dynamicSub}</div>
+          ${item.isNotice ? '<div class="card-quick-hint"><span>[X] 快速开/关</span> · <span>[A] 浮窗配置</span></div>' : ''}
+        `;
+
+        card.onclick = () => {
+          focusCard(index);
+          openCardDetail(item);
+        };
+        card.onmouseenter = () => {
+          focusCard(index);
+        };
+
+        container.appendChild(card);
+      });
+
+      // Update Inspector
+      const activeItem = items[currentFocus];
+      if (activeItem) {
+        document.getElementById('ins-tag').textContent = activeItem.tag;
+        document.getElementById('ins-title').textContent = activeItem.title;
+        
+        let insBadge = activeItem.badge;
+        let insBadgeClass = activeItem.badgeClass;
+        if (activeItem.isNotice) {
+          insBadge = reasonNoticeEnabled ? '已开启 · 浮窗就绪' : '未开启';
+          insBadgeClass = reasonNoticeEnabled ? 'badge-success' : 'badge-muted';
+        }
+        const bEl = document.getElementById('ins-badge');
+        bEl.textContent = insBadge;
+        bEl.className = 'card-badge ' + insBadgeClass;
+
+        const dWrap = document.getElementById('ins-descs');
+        dWrap.innerHTML = '';
+        activeItem.descs.forEach(d => {
+          const row = document.createElement('div');
+          row.className = 'inspector-desc-item';
+          row.textContent = d;
+          dWrap.appendChild(row);
+        });
+
+        document.getElementById('ins-hint').textContent = activeItem.hint;
+        document.getElementById('hint-x-toggle').style.display = activeItem.isNotice ? 'flex' : 'none';
+      }
+    }
+
+    // Switch Scheme
+    function switchScheme(s) {
+      currentScheme = s;
+      currentFocus = 0;
+      document.querySelectorAll('.ctrl-btn[class*="scheme-"]').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.querySelector(`.scheme-${s}`);
+      if (activeBtn) activeBtn.classList.add('active');
+      renderScreen();
+      showToast(`已切换至：${SCHEMES[s].name}`);
+    }
+
+    // Switch Page
+    function switchPage(p) {
+      currentPage = p;
+      currentFocus = 0;
+      document.querySelectorAll('.ctrl-btn[class*="page-"]').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`.page-${p}`).classList.add('active');
+      renderScreen();
+    }
+
+    // Theme Switch
+    function setTheme(t) {
+      document.body.setAttribute('data-theme', t);
+      document.querySelectorAll('.ctrl-btn[class*="theme-"]').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`.theme-${t}`).classList.add('active');
+    }
+
+    // Focus Card
+    function focusCard(idx) {
+      currentFocus = idx;
+      renderScreen();
+    }
+
+    // Navigate Grid (D-Pad)
+    function navigate(dx, dy) {
+      const items = SCHEMES[currentScheme][currentPage];
+      const count = items.length;
+      const cols = 2;
+      let row = Math.floor(currentFocus / cols);
+      let col = currentFocus % cols;
+      let rowCount = Math.ceil(count / cols);
+
+      if (dx !== 0) {
+        col = (col + dx + cols) % cols;
+      }
+      if (dy !== 0) {
+        row = (row + dy + rowCount) % rowCount;
+      }
+      let target = row * cols + col;
+      if (target >= count) target = count - 1;
+      currentFocus = target;
+      renderScreen();
+    }
+
+    // L/R Trigger
+    function triggerLR(dir) {
+      if (currentPage === 'settings') switchPage('support');
+      else switchPage('settings');
+    }
+
+    // Hardware Button Press
+    function pressButton(btn) {
+      const activeItem = SCHEMES[currentScheme][currentPage][currentFocus];
+      if (btn === 'A') {
+        openCardDetail(activeItem);
+      } else if (btn === 'X') {
+        if (activeItem && activeItem.isNotice) {
+          reasonNoticeEnabled = !reasonNoticeEnabled;
+          renderScreen();
+          showToast(reasonNoticeEnabled ? '🔔 自动受限原因通知：已开启 (浮窗就绪)' : '🔕 自动受限原因通知：已关闭');
+        } else {
+          showToast(`按键 [X] 被按下`);
+        }
+      } else if (btn === 'B') {
+        closeModal();
+      } else if (btn === 'Y') {
+        showToast('🔄 状态已刷新 (PCTL 1952 正常)');
+      }
+    }
+
+    function triggerMinus() {
+      showToast('[-] 长按减号键：呼出家长管理密码弹层');
+    }
+    function triggerPlus() {
+      showToast('[+] 选项菜单');
+    }
+
+    // Modal Operations
+    function openCardDetail(item) {
+      if (!item) return;
+      const modal = document.getElementById('modal');
+      const title = document.getElementById('modal-title');
+      const body = document.getElementById('modal-content');
+
+      title.textContent = item.title;
+      body.innerHTML = '';
+
+      if (item.isNotice) {
+        body.innerHTML = `
+          <div style="font-size:15px; color:var(--text-secondary); line-height:1.5;">
+            当时间额度用尽、就寝时间锁定、护眼休息触发或处于电视底座限时时，自动在屏幕上呈现明确的受限原因，避免孩子因屏幕突然锁定产生困惑。
+          </div>
+          <div class="modal-option-row" onclick="reasonNoticeEnabled = !reasonNoticeEnabled; openCardDetail(item);">
+            <div>
+              <div style="font-size:17px; font-weight:700;">自动限制原因提示 (浮窗与通知)</div>
+              <div style="font-size:13px; color:var(--text-secondary);">已加载任我玩浮窗优先弹出；未就绪时由 Ultrahand 全局短通知兜底</div>
+            </div>
+            <span class="card-badge ${reasonNoticeEnabled ? 'badge-success' : 'badge-muted'}">
+              ${reasonNoticeEnabled ? '✓ 已开启' : '✕ 已关闭'}
+            </span>
+          </div>
+          <div class="modal-option-row" onclick="soundEnabled = !soundEnabled; openCardDetail(item);">
+            <div>
+              <div style="font-size:17px; font-weight:700;">按键与交互操作音效</div>
+              <div style="font-size:13px; color:var(--text-secondary);">PlayWise 应用内的手柄按键与选择柔和音效</div>
+            </div>
+            <span class="card-badge ${soundEnabled ? 'badge-success' : 'badge-muted'}">
+              ${soundEnabled ? '✓ 已开启' : '✕ 已静音'}
+            </span>
+          </div>
+          <div style="background:var(--surface-raised); border-radius:10px; padding:14px; font-size:13px; color:var(--text-secondary); line-height:1.4;">
+            ℹ️ <strong>浮窗协作说明</strong>：若已安装 Ultrahand 覆盖层管理，呼出快捷键通常为 [L + R + Down]；开启后 PlayWise 将自动准备全局通知配置文件。
+          </div>
+        `;
+      } else {
+        body.innerHTML = `
+          <div style="font-size:16px; font-weight:700; color:var(--accent);">
+            已进入【${item.title}】的二级设置页壳
+          </div>
+          <div style="font-size:14px; color:var(--text-secondary); line-height:1.5;">
+            ${item.descs.join('<br>')}
+          </div>
+          <div style="margin-top:20px; padding:20px; background:var(--surface-raised); border-radius:12px; text-align:center; color:var(--text-muted); font-size:14px;">
+            (此处模拟整页二级子页，按 B 返回主菜单)
+          </div>
+        `;
+      }
+      modal.classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('modal').classList.remove('active');
+      renderScreen();
+    }
+    function saveModal() {
+      closeModal();
+      showToast('✓ 设置已保存生效');
+    }
+
+    // Toast
+    let toastTimer = null;
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').textContent = text;
+      toast.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2200);
+    }
+
+    // Keyboard Handler
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { e.preventDefault(); navigate(0, -1); }
+      else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { e.preventDefault(); navigate(0, 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { e.preventDefault(); navigate(-1, 0); }
+      else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { e.preventDefault(); navigate(1, 0); }
+      else if (e.key === 'x' || e.key === 'X') { e.preventDefault(); pressButton('X'); }
+      else if (e.key === 'Enter') { e.preventDefault(); pressButton('A'); }
+      else if (e.key === 'Escape' || e.key === 'b' || e.key === 'B') { e.preventDefault(); pressButton('B'); }
+    });
+
+    // Initial Render
+    renderScreen();
+  </script>
+</body>
+</html>

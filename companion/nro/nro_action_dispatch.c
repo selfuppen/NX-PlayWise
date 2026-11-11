@@ -380,26 +380,18 @@ void handle_parent_action(UiState *ui)
     if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
         switch (index) {
         case 0: change_parent_pin(ui); break;
-        case 1:
-            open_theme_overlay(ui);
-            break;
+        case 1: open_notification_preferences(ui); break;
         case 2: open_shortcut_manager(ui); break;
-        case 3:
-            open_language_overlay(ui);
-            break;
+        case 3: open_activity_history(ui); break;
         case 4:
             refresh_album_restriction(ui);
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      "%s", ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
             break;
-        case 5: open_notification_preferences(ui); break;
-        case 7: ui->config_backup_selected_path[0] = '\0'; open_config_backup(ui); break;
-        case 6:
-            open_activity_history(ui);
-            break;
+        case 5: open_theme_overlay(ui); break;
         default: break;
         }
         return;
@@ -438,8 +430,8 @@ void handle_parent_action(UiState *ui)
         }
         break;
     case 3:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT, ptc_ui_text(PTC_UI_T_RESTORE_ORIGINAL_STATE),
-                             ptc_ui_text(PTC_UI_T_RESTORES_ORIGINAL_PARENTAL_CONTROL_SETTINGS_AND_TIMERS));
+        ui->config_backup_selected_path[0] = '\0';
+        open_config_backup(ui);
         break;
     case 4:
         open_confirm_overlay(ui, PTC_UI_OPERATION_EXPORT_DIAGNOSTICS, ptc_ui_text(PTC_UI_T_EXPORT_DIAGNOSTIC_PACKAGE),

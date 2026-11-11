@@ -380,8 +380,8 @@ static void test_config_backup_ui(void)
     mem.storage.vtable->write_text_atomic(&mem.storage,APP_ROOT "/rules.json",
         "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60}],\"today_override_day_index\":2}");
-    ui.model.view = PTC_UI_PARENT; ui.model.parent_page = PTC_UI_PARENT_SETTINGS;
-    ui.model.selected_index = 7; ui.model.day_index = 1; ui.model.status_loaded = true;
+    ui.model.view = PTC_UI_PARENT; ui.model.parent_page = PTC_UI_PARENT_SUPPORT;
+    ui.model.selected_index = 3; ui.model.day_index = 1; ui.model.status_loaded = true;
     ui.model.status_updated_at = fixed_time;
     check(ptc_config_stage_path(stage,sizeof(stage),APP_ROOT,"ui-backup") && ptc_config_stage_create(&mem.storage,APP_ROOT,stage,fixed_time) &&
         ptc_config_archive_save(&mem.storage,stage,APP_ROOT "/backups/config-backup.json"),"UI backup fixture");
@@ -429,7 +429,7 @@ static void test_config_backup_ui(void)
     check(mem.storage.vtable->read_text(&mem.storage,path,text,sizeof(text)) && ptc_request_parse(text,&request) == PTC_ERR_OK &&
         request.type == PTC_REQUEST_RESTORE_CONFIG_BACKUP && !strstr(text,"1234") && !strstr(text,"pin_hash") && !strstr(text,"theme"),"NRO submits only valid metadata IPC");
     ui.waiting=false; ui.model.waiting=false; config_backup_action(&ui,15);
-    check(ui.model.overlay == PTC_UI_OVERLAY_NONE && ui.model.selected_index == 7,"backup back restores settings card focus");
+    check(ui.model.overlay == PTC_UI_OVERLAY_NONE && ui.model.selected_index == 3,"backup back restores support card focus");
 
     snprintf(ui.active_request_id,sizeof(ui.active_request_id),"ui-create-failed");
     check(ptc_config_stage_path(stage,sizeof(stage),APP_ROOT,ui.active_request_id) &&

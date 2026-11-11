@@ -532,6 +532,10 @@ static void handle_parent_page_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_CONFIRM);
         refresh_disable_flag(ui);
         submit_status(ui);
+    } else if (down & HidNpadButton_X && ui->model.parent_page == PTC_UI_PARENT_SETTINGS &&
+               ui->model.selected_index == 1 && !ui->model.parent_footer_focused) {
+        ptc_audio_play(PTC_SE_TOGGLE);
+        toggle_notification_preference(ui, 0);
     } else if (down & HidNpadButton_X && ui->model.parent_page == PTC_UI_PARENT_PLAN &&
                ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
         if (ui->model.disable_flag_present) {

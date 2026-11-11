@@ -209,7 +209,7 @@ static void test_release_navigation(void)
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 8, "today exposes quota, bedtime, buffer, eye care and TV waiver cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 7, "time plan root exposes seven direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 8, "settings page exposes language, audio and security");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 6, "settings page exposes six action cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support is a top-level six-action page");
 
     ptc_audio_set_enabled(true);
@@ -2524,11 +2524,11 @@ static void test_home_redesign(void)
                 }
             }
         }
-        for (int index = 0; index < 7; ++index) {
+        for (int index = 0; index < 6; ++index) {
             PtcUiRect rect = ptc_ui_settings_card_rect(index);
-            check_true(rect.h == 96 && rect.y + rect.h < ptc_ui_notice_rect().y,
-                       "settings cards use 96px height and clear status capsule");
-            for (int next = index + 1; next < 7; ++next) {
+            check_true(rect.h == 120 && rect.y + rect.h < ptc_ui_notice_rect().y,
+                       "settings cards use 120px height and clear status capsule");
+            for (int next = index + 1; next < 6; ++next) {
                 PtcUiRect other = ptc_ui_settings_card_rect(next);
                 check_true(!rects_overlap(rect, other), "settings action cards keep separate hit areas");
             }
@@ -4227,7 +4227,9 @@ static void test_config_backup_layout(void)
         }
     }
     model.overlay = PTC_UI_OVERLAY_NONE; model.parent_page = PTC_UI_PARENT_SETTINGS;
-    check_hit(hit_center(&model, ptc_ui_settings_card_rect(7)), PTC_UI_HIT_PARENT_CARD, 7, "eighth settings card has matching hit area");
+    check_hit(hit_center(&model, ptc_ui_settings_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "sixth settings card has matching hit area");
+    model.parent_page = PTC_UI_PARENT_SUPPORT;
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "support backup card has matching hit area");
 }
 
 static void test_today_settings_links(void)

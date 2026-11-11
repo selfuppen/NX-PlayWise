@@ -31,13 +31,11 @@ static const UiAction GRANT_ACTIONS[] = {
 
 static const UiAction SETTINGS_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CHANGE_PIN), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_ENABLED), UI_ACCENT, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_APPEARANCE_THEME), "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_PARENT_SHORTCUT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CURRENT_MINUS_2), UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_UI_LANGUAGE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_FOLLOW_SYSTEM), UI_ACCENT, UI_ACTION_ICON_LANGUAGE, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOMEBREW_ACCESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NOT_ENABLED), UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_ALERT_PREFERENCES), "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_PARENT_SHORTCUT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CURRENT_MINUS_2), UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_FAMILY_ACTIVITIES), PTC_UI_TEXT_REFERENCE(PTC_UI_T_LAST_200), UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONFIG_BACKUP_TITLE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE), UI_ACCENT, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOMEBREW_ACCESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NOT_ENABLED), UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_APPEARANCE_THEME), "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
 };
 
 const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -52,7 +50,7 @@ static const UiAction SUPPORT_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_ENABLE_QUOTA_CONTROL), PTC_UI_TEXT_REFERENCE(PTC_UI_T_ENABLED_AFTER_SECURITY_CHECK), UI_ACCENT, UI_ACTION_ICON_SHIELD, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_RETRY_REPAIR), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RECHECK_IF_IT_IS_SAFE_TO_ENABLE), UI_SUCCESS, UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EMERGENCY_DEACTIVATION), PTC_UI_TEXT_REFERENCE(PTC_UI_T_STOP_NEW_CONTROL_WRITES), UI_DANGER, UI_ACTION_ICON_STOP, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESTORE_ORIGINAL_STATE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESTORE_ORIGINAL_SETTINGS_AND_DEACTIVATE), UI_DANGER, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONFIG_BACKUP_TITLE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE), UI_ACCENT, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EXPORT_DIAGNOSTICS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NO_KEY_PIN_OR_OFFLINE_CODE), UI_MUTED, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SOFTWARE_INFO), PTC_UI_TEXT_REFERENCE(PTC_UI_T_VERSION_PROJECT_REPOSITORY_AND_PARENT_PAGE), UI_ACCENT, UI_ACTION_ICON_INFO, UI_ACTION_VISUAL_NONE},
 };
@@ -840,13 +838,9 @@ static UiRect parent_action_badge(uint32_t *pixels, uint32_t stride, const PtcUi
         fill_round_rect(pixels, stride, badge, 6, st_bg);
         draw_rect_outline(pixels, stride, badge, 6, 1, st_bd);
         draw_text_center(pixels, stride, badge, state_label, 12, state_color);
-    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-        UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
-        if (!paint) return badge;
-        draw_language_switcher_badge(pixels, stride, badge, false);
-    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
-        bool enabled = ptc_audio_is_enabled();
-        const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 1) {
+        bool enabled = model->reason_notifications_enabled;
+        const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2);
         uint32_t state_color = enabled ? UI_SUCCESS : UI_MUTED;
         int au_width = measure_text(state_label, 12) + 16;
         if (au_width < 62) au_width = 62;
@@ -993,12 +987,11 @@ static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const Ptc
         action = &dynamic_action;
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 1) {
-        static char theme_subtitle[96];
         dynamic_action = *action;
-        snprintf(theme_subtitle, sizeof(theme_subtitle), "%s / %s",
-                 ptc_ui_theme_preference_label(g_theme.preference),
-                 ptc_ui_theme_style_label(ptc_ui_theme_get_style()));
-        dynamic_action.subtitle = theme_subtitle;
+        dynamic_action.subtitle = model->reason_notifications_enabled
+            ? ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXTERNAL_ON)
+            : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED);
+        dynamic_action.accent = model->reason_notifications_enabled ? UI_SUCCESS : UI_MUTED;
         action = &dynamic_action;
     } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 2) {
         static char shortcut_detail[112];
@@ -1011,17 +1004,13 @@ static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const Ptc
         }
         dynamic_action.subtitle = shortcut_detail;
         action = &dynamic_action;
-    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-        dynamic_action = *action;
-        dynamic_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
-        action = &dynamic_action;
-    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-        UiRect badge = {card.x + card.width - 98 - 14, card.y + 8, 98, 24};
-        draw_language_switcher_badge(pixels, stride, badge, false);
     } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
+        static char theme_subtitle[96];
         dynamic_action = *action;
-        dynamic_action.subtitle = ptc_audio_is_enabled() ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_MUTED));
-        dynamic_action.accent = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
+        snprintf(theme_subtitle, sizeof(theme_subtitle), "%s / %s",
+                 ptc_ui_theme_preference_label(g_theme.preference),
+                 ptc_ui_theme_style_label(ptc_ui_theme_get_style()));
+        dynamic_action.subtitle = theme_subtitle;
         action = &dynamic_action;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN &&
@@ -1133,15 +1122,15 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
         desc3 = ptc_ui_text(PTC_UI_T_PIN_COOLDOWN_FROM_FIFTH_FAILURE);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_THE_MANAGEMENT_PASSWORD);
         break;
-    case 1: /* 外观主题 */
+    case 1: /* 受限原因与通知 */
         tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
-        title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
-        status_text = ptc_ui_theme_preference_label(g_theme.preference);
-        status_color = UI_ACCENT;
-        desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_THREE_THEME_MODES_LIGHT_DARK_AND);
-        desc2 = ptc_ui_text(PTC_UI_T_DARK_MODE_OPTIMIZES_OLED_SCREEN_POWER_SAVING);
-        desc3 = ptc_ui_text(PTC_UI_T_THEME_SELECTION_SAVED_ON_CONFIRM);
-        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_THEME_SWITCHING);
+        title = ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES);
+        status_text = model->reason_notifications_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2);
+        status_color = model->reason_notifications_enabled ? UI_SUCCESS : UI_MUTED;
+        desc1 = ptc_ui_text(PTC_UI_T_REASON_NOTIFICATIONS);
+        desc2 = ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT);
+        desc3 = ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY);
+        action_hint = ptc_ui_text(PTC_UI_T_REASON_NOTICE_TOGGLE);
         break;
     case 2: /* 家长区快捷键 */
         tag = ptc_ui_text(PTC_UI_T_SYSTEM_CONTROL);
@@ -1154,17 +1143,17 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
         desc3 = ptc_ui_text(PTC_UI_T_IT_IS_CONVENIENT_FOR_PARENTS_TO_QUICKLY);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_SHORTCUT_KEY_BINDINGS);
         break;
-    case 3: /* 界面语言 */
-        tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
-        title = ptc_ui_text(PTC_UI_T_UI_LANGUAGE);
-        status_text = ptc_ui_language_preference_label(model->language_preference);
-        status_color = UI_ACCENT;
-        desc1 = ptc_ui_text(PTC_UI_T_SET_THE_LANGUAGE_FOR_PLAYWISE_CONSOLE_MANAGEMENT);
-        desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_SIMPLIFIED_CHINESE_TRADITIONAL_CHINESE_ENGLISH_AND);
-        desc3 = ptc_ui_text(PTC_UI_T_PREFERENCES_ARE_PERSISTED_IN_THE_SD_CARD);
-        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_LANGUAGE_SELECTION);
+    case 3: /* 家庭活动记录 */
+        tag = ptc_ui_text(PTC_UI_T_SECURITY_AUDIT);
+        title = ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD);
+        status_text = ptc_ui_text(PTC_UI_T_UP_TO_200_ITEMS);
+        status_color = UI_MUTED;
+        desc1 = ptc_ui_text(PTC_UI_T_RECORDS_CREDIT_ADJUSTMENT_OFFLINE_GRANT_BEDTIME_SKIP);
+        desc2 = ptc_ui_text(PTC_UI_T_ONLY_SAVE_LOCAL_SECURITY_AUDIT_LOGS_AND);
+        desc3 = ptc_ui_text(PTC_UI_T_SUPPORTS_HANDLE_L_R_FOR_QUICK_PAGE);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_SEE_FULL_ACTIVITY_LOG);
         break;
-    case 4: /* 自制程序高级入口 */
+    case 4: /* 自制程序高级入口 / 相册防绕过 */
         tag = ptc_ui_text(PTC_UI_T_ADVANCED_SECURITY);
         title = ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS);
         if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
@@ -1188,33 +1177,15 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
         desc3 = ptc_ui_text(PTC_UI_T_PREVENT_CHILDREN_FROM_BYPASSING_PARENTAL_CONTROL_RESTRICTIONS);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
         break;
-    case 5: /* 按键与交互音效 */
+    case 5: /* 外观主题与偏好 */
         tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
-        title = ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES);
-        status_text = ptc_audio_is_enabled() ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
-        status_color = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
-        desc1 = ptc_ui_text(PTC_UI_T_REASON_NOTIFICATIONS);
-        desc2 = ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT);
-        desc3 = ptc_ui_text(PTC_UI_T_MUTE_DOES_NOT_AFFECT_THE_SWITCH_SYSTEM);
-        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
-        break;
-    case 6: /* 家庭活动记录 */
-        tag = ptc_ui_text(PTC_UI_T_SECURITY_AUDIT);
-        title = ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD);
-        status_text = ptc_ui_text(PTC_UI_T_UP_TO_200_ITEMS);
-        status_color = UI_MUTED;
-        desc1 = ptc_ui_text(PTC_UI_T_RECORDS_CREDIT_ADJUSTMENT_OFFLINE_GRANT_BEDTIME_SKIP);
-        desc2 = ptc_ui_text(PTC_UI_T_ONLY_SAVE_LOCAL_SECURITY_AUDIT_LOGS_AND);
-        desc3 = ptc_ui_text(PTC_UI_T_SUPPORTS_HANDLE_L_R_FOR_QUICK_PAGE);
-        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_SEE_FULL_ACTIVITY_LOG);
-        break;
-    case 7:
-        tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
-        title = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_TITLE);
-        status_text = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SELECTION);
-        desc1 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE);
-        desc2 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NOTE);
-        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
+        title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
+        status_text = ptc_ui_theme_preference_label(g_theme.preference);
+        status_color = UI_ACCENT;
+        desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_THREE_THEME_MODES_LIGHT_DARK_AND);
+        desc2 = ptc_ui_text(PTC_UI_T_DARK_MODE_OPTIMIZES_OLED_SCREEN_POWER_SAVING);
+        desc3 = ptc_ui_text(PTC_UI_T_THEME_SELECTION_SAVED_ON_CONFIRM);
+        action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_THEME_SWITCHING);
         break;
     default:
         break;
@@ -1230,13 +1201,9 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
 
     /* Render Status Badge */
     UiRect badge = {help.x + help.width - 130, help.y + 24, 106, 26};
-    if (sel == 3) {
-        draw_language_switcher_badge(pixels, stride, badge, true);
-    } else {
-        fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
-        draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
-        draw_text_center(pixels, stride, badge, status_text, 12, status_color);
-    }
+    fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+    draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
+    draw_text_center(pixels, stride, badge, status_text, 12, status_color);
 
     /* Divider line */
     UiRect div = {help.x + 24, help.y + 92, help.width - 48, 1};

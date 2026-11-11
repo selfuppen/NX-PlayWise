@@ -429,7 +429,7 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
             strcmp(model->setup_phase, "restored") != 0
             ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
     case 3:
-        return model->setup_snapshot_available ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
+        return PTC_UI_ACTION_AVAILABLE;
     case 4:
         return PTC_UI_ACTION_AVAILABLE;
     case 5:
@@ -461,7 +461,7 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
             ? ptc_ui_text(PTC_UI_T_NEW_CONTROL_WRITES_ARE_NOT_ALLOWED_UNTIL)
             : ptc_ui_text(PTC_UI_T_MESSAGE_5);
     case 3:
-        return model->setup_snapshot_available ? ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALLATION_SETTINGS) : ptc_ui_text(PTC_UI_T_THERE_ARE_NO_RESTOREABLE_PRE_INSTALLATION_SETTINGS);
+        return ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE);
     case 4:
         return ptc_ui_text(PTC_UI_T_AUTOMATICALLY_EXCLUDE_SECRETS_PINS_OFFLINE_CODES_AND);
     case 5:

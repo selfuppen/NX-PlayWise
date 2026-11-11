@@ -2051,8 +2051,8 @@ static int render_config_backup_previews(const char *directory, const PtcUiModel
     int failed = 0;
     for (int dark = 0; dark < 2; ++dark) {
         PtcUiModel model = *baseline;
-        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;
-        model.overlay = PTC_UI_OVERLAY_NONE; model.selected_index = 7;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SUPPORT;
+        model.overlay = PTC_UI_OVERLAY_NONE; model.selected_index = 3;
         failed |= save_preview(directory, "settings", "settings-backup-entry", &model, dark);
         model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
         model.config_backup_tab = 0; model.overlay_selection = 13;

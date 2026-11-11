@@ -276,7 +276,7 @@ PtcUiRect ptc_ui_settings_card_rect(int index)
 {
     int column = index % 2;
     int row = index / 2;
-    PtcUiRect rect = {54 + column * 385, 176 + row * 108, 365, 96};
+    PtcUiRect rect = {54 + column * 385, 176 + row * 136, 365, 120};
     return rect;
 }
 
