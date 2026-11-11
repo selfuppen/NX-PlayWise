@@ -629,7 +629,7 @@ int main(int argc, char **argv) {
             "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown",
             "overlay-console-usage", "overlay-console-unknown",
             "overlay-console-details", "overlay-console-details-unknown", "overlay-parent-pin-clock-unavailable",
-            "overlay-language-confirm"};
+            "overlay-language-confirm", "overlay-auto-detail-eye"};
         auto run_language_pass = [&](int language) -> int {
             int child_overflows = 0;
             ptc_ui_language_set_resolved(languages[language]);
@@ -877,6 +877,19 @@ int main(int argc, char **argv) {
                     view.parent_view_ = ParentView::Pin;
                     view.pin_length_ = 0;
                     std::snprintf(view.pin_message_, sizeof(view.pin_message_), "%s", ptc_ui_text(PTC_UI_T_PIN_CLOCK_UNAVAILABLE));
+                }
+                // Static sample of the page automatic detail requests open.
+                // Rendering this scene does not exercise hidden wake or its ACK.
+                if (std::strcmp(scenes[scene], "overlay-auto-detail-eye") == 0) {
+                    view.status_expanded_ = true;
+                    view.details_tech_expanded_ = false;
+                    status.bedtime_active = status.bedtime_enabled = status.bedtime_next_available = false;
+                    status.dock_restriction_active = status.undocked_limit_enabled = false;
+                    status.restricted_now = 1;
+                    status.eye_care_enabled = true;
+                    status.eye_care_break_id = 123;
+                    status.eye_care_rest_remaining_seconds = 300;
+                    std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "resting");
                 }
                 renderer.text_runs.clear();
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,

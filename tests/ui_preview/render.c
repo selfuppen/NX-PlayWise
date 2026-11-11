@@ -864,6 +864,11 @@ static int render_setup_previews(const char *directory, const PtcUiModel *baseli
         model.setup_step = step;
         snprintf(name, sizeof(name), "setup-step-%d", step);
         failed |= save_preview(directory, "setup", name, &model, dark);
+        if (step == PTC_UI_SETUP_PARENT) {
+            model.setup_focus = 6;
+            failed |= save_preview(directory, "setup", "setup-notifications", &model, dark);
+            model.setup_focus = 0;
+        }
     }
     model.setup_step = PTC_UI_SETUP_PREPARE;
     model.setup_focus = 2;
@@ -1696,6 +1701,11 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
             snprintf(settings_dlg.overlay_body, sizeof(settings_dlg.overlay_body), "%s", ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT));
             failed |= save_preview(directory, "settings", "settings-notifications", &settings_dlg, dark);
+            settings_dlg.reason_external_notifications = 1;
+            failed |= save_preview(directory, "settings", "settings-notifications-ready", &settings_dlg, dark);
+            settings_dlg.reason_external_notifications = -1;
+            settings_dlg.reason_overlay_shortcut[0] = '\0';
+            failed |= save_preview(directory, "settings", "settings-notifications-unknown", &settings_dlg, dark);
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
             settings_dlg.setup_shortcut_index = 0;
