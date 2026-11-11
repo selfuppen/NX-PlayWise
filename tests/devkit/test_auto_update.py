@@ -205,6 +205,11 @@ class Input:
                 del self.bot.files[update.APP + "/flags/disable.flag"]
                 self.bot.acknowledge({"version": 1, "request_id": "reconfirm", "type": "complete_setup", "payload": {}})
 
+    def tilt(self, side, x, y):
+        require(self.private and self.bot.parent_pin_open, "stick PIN requires the private parent PIN page")
+        require(side == "LEFT" and abs(x) == abs(y) == 24000, "diagonal normal PIN sector")
+        self.bot.private_sticks.append((x, y))
+
 
 def fixture(root):
     manifest = {"profile": "release", "release_id": "new", "hot_reload_events_version": 1,
@@ -256,6 +261,32 @@ def test_success_and_offline_report():
             pass
         else:
             raise AssertionError("changed sealed evidence must fail")
+
+
+def test_diagonal_pin_and_invalid_input():
+    with tempfile.TemporaryDirectory() as temporary:
+        out = prepared(Path(temporary))
+        console, clock = Console(), Clock()
+        console.private_sticks = []
+        with mock.patch.object(update, "verify_package_zip"):
+            result = update.Updater(out, console, clock=clock, sleep=clock.sleep, input_factory=Input).run("2468")
+        require(result["phase"] == "ready_for_tests", "all four diagonal digits reach the normal authorization flow")
+        require(console.private_sticks == [(24000, 24000), (24000, -24000),
+                                           (-24000, -24000), (-24000, 24000)], "NRO stick sector order")
+        require("2468" not in (out / "run.json").read_text(), "diagonal PIN absent from report")
+    for pin in ("", "1" * 17, "a", "１２", "1\n"):
+        with tempfile.TemporaryDirectory() as temporary:
+            out = prepared(Path(temporary))
+            console, clock = Console(), Clock()
+            try:
+                with mock.patch.object(update, "verify_package_zip"):
+                    update.Updater(out, console, clock=clock, sleep=clock.sleep, input_factory=Input).run(pin)
+            except update.UpdateError:
+                pass
+            else:
+                raise AssertionError("invalid PIN accepted")
+            require(not console.writes and not console.requests and not (out / "run.json").exists(),
+                    "invalid PIN rejected before any device activity")
 
 
 def test_missing_ack_never_replays():
@@ -734,6 +765,7 @@ def main():
     test_update_recovery_without_host_target()
     test_capture_stop_proof()
     test_success_and_offline_report()
+    test_diagonal_pin_and_invalid_input()
     test_missing_ack_never_replays()
     test_preflight_and_partial_failure()
     test_package_boundary()

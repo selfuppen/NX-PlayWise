@@ -24,6 +24,12 @@ class FakeClient:
     def release(self, button: str) -> None:
         self.commands.append("release " + button)
 
+    def set_stick(self, side: str, x: int, y: int) -> None:
+        self.commands.append(f"setStick {side} {x} {y}")
+        if self.fail_press:
+            self.fail_press = False
+            raise OSError("ambiguous send")
+
     def raw(self, command: str) -> None:
         self.commands.append(command)
 
@@ -110,6 +116,61 @@ def main() -> None:
             pass
         else:
             raise AssertionError("deadline ignored")
+        assert client.commands == []
+
+        client = FakeClient()
+        healthy = True
+        def fail_after_stick(_: float) -> None:
+            nonlocal healthy
+            healthy = False
+            raise OSError("connection lost after vector")
+        try:
+            with BoundedInputBatch(client, root / "stick-fatal", health=health,
+                                   sleep=fail_after_stick) as batch:
+                batch.tilt("LEFT", 24000, 24000)
+        except OSError:
+            pass
+        assert client.commands == ["setStick LEFT 24000 24000"]
+        assert json.loads((root / "stick-fatal/summary.json").read_text())["cleanup"] == "unknown_stop_device_operations"
+
+        client = FakeClient()
+        with BoundedInputBatch(client, root / "stick-private", health=lambda: None,
+                               sleep=lambda _: None) as batch:
+            with batch.sensitive_input():
+                batch.tilt("LEFT", -24000, 24000)
+        assert client.commands[:3] == ["setStick LEFT -24000 24000", "setStick LEFT 0 0", "getSystemLanguage"]
+        journal = (root / "stick-private/events.jsonl").read_text()
+        assert "24000" not in journal and "LEFT" not in journal and "hold_ms" not in journal
+
+        client = FakeClient(fail_press=True)
+        try:
+            with BoundedInputBatch(client, root / "stick-unknown", health=lambda: None,
+                                   sleep=lambda _: None) as batch:
+                batch.tilt("RIGHT", 24000, -24000)
+        except OSError:
+            pass
+        else:
+            raise AssertionError("ambiguous stick send continued")
+        assert client.commands.count("setStick RIGHT 24000 -24000") == 1
+        assert client.commands[-3:] == ["setStick RIGHT 0 0", "detachController", "getSystemLanguage"]
+
+        client = FakeClient()
+        now = [0.0]
+        with BoundedInputBatch(client, root / "stick-gates", health=lambda: None,
+                               clock=lambda: now[0], duration_s=1) as batch:
+            for args in (("LEFT", True, 1), ("LEFT", 32768, 1), ("UNKNOWN", 1, 1)):
+                try:
+                    batch.tilt(*args)
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError("malformed stick accepted")
+            try:
+                batch.tilt("LEFT", 24000, 24000, settle_s=1)
+            except TimeoutError:
+                pass
+            else:
+                raise AssertionError("stick deadline ignored")
         assert client.commands == []
     print("PASS: bounded input, no replay, secret suppression, fatal stop and cleanup")
 

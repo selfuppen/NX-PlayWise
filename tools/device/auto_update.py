@@ -42,6 +42,9 @@ ALLOWED = set(COMPONENTS) | {"switch/playwise/build.json", "switch/playwise/pack
     "switch/playwise/defaults/" + name + ".json" for name in
     ("auth", "compatibility", "config", "rules", "setup", "state")}
 PIN_KEYS = {"0": "X", "1": "DUP", "3": "DRIGHT", "5": "DDOWN", "7": "DLEFT", "9": "Y"}
+# The NRO reads diagonal stick sectors, not simultaneous D-pad buttons.
+PIN_STICKS = {"2": (24000, 24000), "4": (24000, -24000),
+              "6": (-24000, -24000), "8": (-24000, 24000)}
 CAPTURE_EVENTS = ("prepared", "capture_request_claimed", "quiesce_ready", "boot_disabled",
                   "source_absent", "boot_restored", "target_launched", "runtime_ready", "status_submitted")
 
@@ -678,7 +681,8 @@ class Updater:
         raise UpdateError("reconfirmation outcome unknown; do not press confirm again")
 
     def run(self, pin: str) -> dict:
-        require(1 <= len(pin) <= 16 and all(digit in PIN_KEYS for digit in pin), "PIN is outside this verified input mapping")
+        require(1 <= len(pin) <= 16 and all(digit in PIN_KEYS or digit in PIN_STICKS for digit in pin),
+                "PIN must contain 1-16 ASCII digits")
         require(not (self.out / "run.json").exists(), "run already started; inspect/report, never replay")
         require(digest((self.out / "candidate.zip").read_bytes()) == self.plan["package_sha256"], "frozen candidate changed")
         manifest, files = package_files(self.out / "candidate.zip")
@@ -720,7 +724,10 @@ class Updater:
                     batch.hold(["MINUS"], settle_s=1)
                     with batch.sensitive_input():
                         for digit in pin:
-                            batch.hold([PIN_KEYS[digit]])
+                            if digit in PIN_KEYS:
+                                batch.hold([PIN_KEYS[digit]])
+                            else:
+                                batch.tilt("LEFT", *PIN_STICKS[digit])
                         batch.hold(["PLUS"], settle_s=2)
                 del pin
                 self.picture("authorized-prompt")
