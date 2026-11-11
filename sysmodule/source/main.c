@@ -283,6 +283,8 @@ int main(int argc, char **argv)
     ptc_switch_operation_mode_init(&operation_mode_provider);
     sysmodule.operation_mode_provider = &operation_mode_provider;
     (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
+    uint64_t last_full_tick = armGetSystemTick();
+    bool resume_tick = false;
     ipc_available = ptc_ipc_server_start(&ipc_server, &sysmodule);
     if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");
     write_runtime_ready(&sysmodule, ipc_available);
@@ -292,20 +294,37 @@ int main(int argc, char **argv)
 
     while (!exit_for_handoff) {
         bool notified;
+        bool due;
+        uint64_t elapsed_ms;
         uint32_t wait_ms;
         wait_ms = ptc_sysmodule_next_wait_ms(&sysmodule);
         if (wait_ms > 250U) wait_ms = 250U;
         notified = ipc_available ? ptc_ipc_server_wait(&ipc_server, wait_ms) : false;
         if (!ipc_available) svcSleepThread((int64_t)wait_ms * 1000000LL);
         if (ipc_available) ptc_ipc_server_lock_storage(&ipc_server);
-        (void)ptc_sysmodule_scheduler_tick(&sysmodule, notified);
+        elapsed_ms = armTicksToNs(armGetSystemTick() - last_full_tick) / 1000000ULL;
+        if (elapsed_ms > UINT32_MAX) elapsed_ms = UINT32_MAX;
+        /* 无通知时先做一次不触碰 SD 的到期探测：队列为空、标志与分钟未变、
+           未到护眼或 setup 宽限期限、也未到扫描退避间隔时，完整轮次不会产生
+           任何可观察动作，跳过它即可避免每 250ms 重读规则/日历与身份文件。
+           交接取消后立即补一次完整轮次，恢复节奏与原来一致。 */
+        due = notified || resume_tick || ptc_sysmodule_tick_due(&sysmodule, (uint32_t)elapsed_ms);
+        if (due) {
+            (void)ptc_sysmodule_scheduler_tick(&sysmodule, notified);
+            last_full_tick = armGetSystemTick();
+            resume_tick = false;
+        }
 #ifndef PLAYWISE_DEVICE_LAB
         ptc_usage_evidence_tick(&usage_evidence, armTicksToNs(armGetSystemTick()));
 #endif
 #ifdef PLAYWISE_PCTL_CAPTURE
         capture_tick(&sysmodule,"standard_running",false);
 #endif
-        exit_for_handoff = handoff_tick(&sysmodule, &ipc_server, ipc_available, &quiesce_ticks);
+        {
+            bool was_quiescing = sysmodule.quiescing;
+            exit_for_handoff = handoff_tick(&sysmodule, &ipc_server, ipc_available, &quiesce_ticks);
+            if (was_quiescing && !sysmodule.quiescing) resume_tick = true;
+        }
         if (ipc_available) ptc_ipc_server_unlock_storage(&ipc_server);
         if (ipc_available) ptc_ipc_server_signal_completed(&ipc_server);
     }

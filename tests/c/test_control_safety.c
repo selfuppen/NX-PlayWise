@@ -2158,6 +2158,113 @@ static void test_eye_rest_scheduler_deadline(void)
     }
 }
 
+/* 调度到期探测：只有确实会产生可观察动作的唤醒才要求完整轮次；被跳过的轮次
+   不得产生任何存储写入或 PCTL 调用。 */
+static void test_scheduler_idle_probe(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state;
+    int64_t writes_before;
+    unsigned pctl_before;
+    char build[256];
+    const char *environment = "{\"read_ok\":true,\"hos\":\"22.5.0\","
+        "\"model\":\"mariko-oled\",\"firmware_hash\":\"fixture\","
+        "\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\",\"release_id\":\"fixture\"}";
+    init_fixture(&f);
+    snprintf(build, sizeof(build), "{\"profile\":\"%s\",\"playwise_version\":\"%s\","
+        "\"release_id\":\"fixture\"}", PLAYWISE_PROFILE_NAME, PLAYWISE_VERSION);
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/build.json", build) &&
+        f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/environment.json", environment) &&
+        f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/compatibility.json", environment),
+        "seed accepted scheduler environment");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!ptc_sysmodule_tick_due(&f.core, 0), "quiet wake skips the full tick");
+    writes_before = f.mem->now_unix_seconds;
+    pctl_before = f.pctl.read_status_calls + f.pctl.apply_target_calls + f.pctl.start_timer_calls;
+    expect(ptc_sysmodule_scheduler_tick(&f.core, false) == 0, "quiet full tick reports no actions");
+    expect(f.mem->now_unix_seconds == writes_before, "quiet full tick performs no storage write");
+    expect(f.pctl.read_status_calls + f.pctl.apply_target_calls + f.pctl.start_timer_calls == pctl_before,
+        "quiet full tick performs no PCTL call");
+
+    /* 未经 IPC 通知落入队列的请求。 */
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/inbox/pending/1-0001.json",
+        "{\"version\":1,\"request_id\":\"1-0001\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+        "queue one pending request");
+    expect(ptc_sysmodule_tick_due(&f.core, 0), "pending request requires the full tick");
+
+    /* 停用标志出现与移除。 */
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/disable.flag", "probe\n"),
+        "create disable flag");
+    expect(ptc_sysmodule_tick_due(&f.core, 0), "disable flag appearance requires the full tick");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!ptc_sysmodule_tick_due(&f.core, 0), "settled disable flag stays quiet");
+    expect(f.mem->storage.vtable->remove_path(&f.mem->storage, "app/flags/disable.flag"), "remove disable flag");
+    expect(ptc_sysmodule_tick_due(&f.core, 0), "disable flag removal requires the full tick");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+
+    /* reload 与两个恢复标志。 */
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/reload.flag", "probe\n"),
+        "create reload flag");
+    expect(ptc_sysmodule_tick_due(&f.core, 0), "reload flag requires the full tick");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/retry_setup_release.flag", "probe\n"),
+        "create retry flag");
+    expect(ptc_sysmodule_tick_due(&f.core, 0), "retry flag requires the full tick");
+    (void)f.mem->storage.vtable->remove_path(&f.mem->storage, "app/flags/retry_setup_release.flag");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!ptc_sysmodule_tick_due(&f.core, 0), "flags settle after the full tick");
+
+    /* 分钟与扫描退避。 */
+    f.clock.snapshot.unix_seconds += 60;
+    f.clock.snapshot.minute_of_day += 1;
+    expect(ptc_sysmodule_tick_due(&f.core, 0), "minute change requires the full tick");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!ptc_sysmodule_tick_due(&f.core, 0), "settled minute stays quiet");
+    expect(ptc_sysmodule_tick_due(&f.core, ptc_sysmodule_current_scan_interval(&f.core)),
+        "scan backoff expiry requires the full tick");
+
+    /* 护眼休息期限。 */
+    expect(load_rules(&f.core, &rules), "load eye rules for the probe");
+    rules.eye_care.enabled = true;
+    rules.eye_care.play_minutes = 40;
+    rules.eye_care.rest_minutes = 2;
+    expect(save_rules(&f.core, &rules) && load_state(&f.core, &state), "seed eye policy for the probe");
+    state.eye_care_resting = true;
+    state.eye_care_rest_deadline = f.clock.snapshot.unix_seconds + 30;
+    expect(save_state(&f.core, &state, f.clock.snapshot.unix_seconds), "persist resting state for the probe");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!ptc_sysmodule_tick_due(&f.core, 0), "resting before the deadline stays quiet");
+    f.clock.snapshot.unix_seconds = state.eye_care_rest_deadline;
+    expect(ptc_sysmodule_tick_due(&f.core, 0), "expired rest requires the full tick");
+
+    /* 收回休息状态：过期期限已由上面的断言覆盖，这里需要一个已结算的基线。 */
+    expect(load_state(&f.core, &state), "reload state before the grace probe");
+    state.eye_care_resting = false;
+    state.eye_care_rest_deadline = 0;
+    expect(save_state(&f.core, &state, f.clock.snapshot.unix_seconds), "clear rest before the grace probe");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!ptc_sysmodule_tick_due(&f.core, 0), "cleared rest stays quiet");
+
+    /* released 宽限到期。 */
+    {
+        PtcSetupState setup;
+        expect(load_setup_state(&f.core, &setup), "load setup for the grace probe");
+        snprintf(setup.phase, sizeof(setup.phase), "released");
+        setup.activate_after = f.clock.snapshot.unix_seconds + 5;
+        expect(save_setup_state(&f.core, &setup), "seed released grace for the probe");
+        expect(!ptc_sysmodule_tick_due(&f.core, 0), "unexpired grace stays quiet");
+        f.clock.snapshot.unix_seconds = setup.activate_after;
+        expect(ptc_sysmodule_tick_due(&f.core, 0), "expired grace requires the full tick");
+    }
+
+    /* 静默期间不执行完整轮次。 */
+    f.core.quiescing = true;
+    expect(!ptc_sysmodule_tick_due(&f.core, 60000), "quiescing suspends the full tick");
+    f.core.quiescing = false;
+    free(f.mem);
+}
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
@@ -2167,6 +2274,7 @@ int ptc_test_control_safety(void)
     test_control_observation_boundaries();
     test_enforce_shared_observation();
     test_eye_rest_scheduler_deadline();
+    test_scheduler_idle_probe();
     test_direct_unlimited_lifecycle();
     test_direct_unlimited_reason_recovery();
     test_eden_direct_unlimited_counter();

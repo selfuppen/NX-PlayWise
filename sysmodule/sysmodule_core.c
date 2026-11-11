@@ -1,5 +1,11 @@
 #include "sysmodule_internal.h"
 
+#ifndef PLAYWISE_DEVICE_LAB
+static bool pending_eye_rest_deadline(PtcSysmodule *sysmodule, const PtcRules *rules, int64_t *deadline);
+#endif
+/* 轮末刷新唤醒提示；规则/日历由调用者每个轮次只加载一次后传入。 */
+static void refresh_wait_hints(PtcSysmodule *sysmodule, const PtcRules *rules, bool rules_ok);
+
 void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index)
 {
     state->eye_care_day_index = day_index;
@@ -480,9 +486,18 @@ void ptc_sysmodule_init(
     sysmodule->disable_initialized = false;
     sysmodule->disable_present = false;
     sysmodule->quiescing = false;
+    sysmodule->wait_hint_dock_policy = false;
+    sysmodule->wait_hint_eye_valid = false;
+    sysmodule->wait_hint_eye_deadline = 0;
+    sysmodule->setup_activate_after_hint = 0;
     snprintf(sysmodule->boot_id, sizeof(sysmodule->boot_id), "host-boot");
     invalidate_all_caches(sysmodule);
     (void)ptc_sysmodule_refresh_caches(sysmodule);
+    /* 首轮提示与轮末刷新同源：第一轮 next_wait 不再单独加载规则/日历。 */
+    {
+        PtcRules rules;
+        refresh_wait_hints(sysmodule, &rules, load_rules(sysmodule, &rules));
+    }
 }
 
 void ptc_sysmodule_set_boot_id(PtcSysmodule *sysmodule, const char *boot_id)
@@ -578,27 +593,44 @@ uint32_t ptc_sysmodule_current_scan_interval(const PtcSysmodule *sysmodule)
 }
 
 #ifndef PLAYWISE_DEVICE_LAB
-static bool pending_eye_rest_deadline(PtcSysmodule *sysmodule, int64_t *deadline)
+static bool pending_eye_rest_deadline(PtcSysmodule *sysmodule, const PtcRules *rules, int64_t *deadline)
 {
-    PtcRules rules;
     PtcRuntimeState state;
-    if (sysmodule->quiescing || !load_rules(sysmodule, &rules) || !rules.eye_care.enabled ||
-        !load_state(sysmodule, &state) || !state.eye_care_resting) return false;
+    /* 规则已由调用者在本轮次加载并校验；这里只补状态读取。 */
+    if (!rules->eye_care.enabled || !load_state(sysmodule, &state) || !state.eye_care_resting) return false;
     *deadline = state.eye_care_rest_deadline;
     return true;
 }
 #endif
 
+static void store_wait_hints(PtcSysmodule *sysmodule, bool dock_policy, bool eye_pending, int64_t eye_deadline)
+{
+    sysmodule->wait_hint_dock_policy = dock_policy;
+    sysmodule->wait_hint_eye_valid = eye_pending;
+    sysmodule->wait_hint_eye_deadline = eye_pending ? eye_deadline : 0;
+}
+
+static void refresh_wait_hints(PtcSysmodule *sysmodule, const PtcRules *rules, bool rules_ok)
+{
+    bool eye_pending = false;
+    int64_t eye_deadline = 0;
+#ifndef PLAYWISE_DEVICE_LAB
+    eye_pending = rules_ok && pending_eye_rest_deadline(sysmodule, rules, &eye_deadline);
+#endif
+    store_wait_hints(sysmodule, rules_ok && dock_policy_enabled(rules), eye_pending, eye_deadline);
+}
+
 uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
 {
-    PtcRules dock_rules;
-    if (load_rules(sysmodule, &dock_rules) && dock_policy_enabled(&dock_rules)) return 1000u;
     PtcClockSnapshot now;
     int64_t second_of_day;
     uint32_t minute_ms;
     uint64_t date_ms;
     uint32_t wait_ms;
     if (!sysmodule) return 500;
+    /* 唤醒提示由每个调度轮次末尾刷新，轮次间隔不超过主循环上限（250ms），
+       因此这里不再重复加载规则/日历与状态。 */
+    if (sysmodule->wait_hint_dock_policy) return 1000u;
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     second_of_day = (int64_t)now.minute_of_day * 60 + now.unix_seconds % 60;
     if (second_of_day < 0) second_of_day += 60;
@@ -608,11 +640,11 @@ uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
     if (minute_ms < wait_ms) wait_ms = minute_ms;
     if (date_ms < wait_ms) wait_ms = date_ms;
 #ifndef PLAYWISE_DEVICE_LAB
-    int64_t eye_deadline;
     /* Overdue recovery retains normal scan backoff if Enforce was blocked or
        failed; a past deadline must not turn recovery into a busy loop. */
-    if (pending_eye_rest_deadline(sysmodule, &eye_deadline) && eye_deadline > now.unix_seconds) {
-        uint64_t seconds = (uint64_t)eye_deadline - (uint64_t)now.unix_seconds;
+    if (!sysmodule->quiescing && sysmodule->wait_hint_eye_valid &&
+        sysmodule->wait_hint_eye_deadline > now.unix_seconds) {
+        uint64_t seconds = (uint64_t)sysmodule->wait_hint_eye_deadline - (uint64_t)now.unix_seconds;
         if (seconds <= wait_ms / 1000U) wait_ms = (uint32_t)seconds * 1000U;
     }
 #endif
@@ -766,18 +798,25 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     actions += processed;
     minute_changed = !sysmodule->minute_initialized || sysmodule->last_minute_day_index != now.day_index ||
         sysmodule->last_minute_of_day != now.minute_of_day;
-    PtcRules dock_rules;
-    bool dock_tick = load_rules(sysmodule, &dock_rules) && dock_policy_enabled(&dock_rules) &&
+    /* 规则/日历每个轮次只加载一次：电视策略采样、护眼到期判断与轮末唤醒提示
+       共用这一份。请求已在上面处理完，此后本轮只有 Enforce 可能改写状态。 */
+    PtcRules tick_rules;
+    bool rules_ok = load_rules(sysmodule, &tick_rules);
+    bool dock_tick = rules_ok && dock_policy_enabled(&tick_rules) &&
         (sysmodule->dock_last_sample_at != now.unix_seconds);
+    bool eye_pending = false;
     bool eye_deadline_due = false;
+    bool enforce_ran = false;
+    int64_t eye_deadline = 0;
 #ifndef PLAYWISE_DEVICE_LAB
-    int64_t eye_deadline;
-    eye_deadline_due = pending_eye_rest_deadline(sysmodule, &eye_deadline) && now.unix_seconds >= eye_deadline;
+    eye_pending = rules_ok && pending_eye_rest_deadline(sysmodule, &tick_rules, &eye_deadline);
+    eye_deadline_due = eye_pending && now.unix_seconds >= eye_deadline;
 #endif
     /* A completed setup grace changes whether Enforce may run, even when the
        minute and disable flag stayed unchanged. An expired persisted rest also
        needs Enforce without a request: waking alone must not wait for a minute. */
     if (setup_changed || minute_changed || reload || storage_notified || disable_changed || processed > 0 || dock_tick || eye_deadline_due) {
+        enforce_ran = true;
         sysmodule->dock_last_sample_at = now.unix_seconds;
 #ifndef PLAYWISE_DEVICE_LAB
         if (sysmodule->minute_initialized) {
@@ -803,5 +842,60 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     if (!sysmodule->cleanup_initialized || sysmodule->last_cleanup_day_index != now.day_index) {
         actions += ptc_sysmodule_cleanup(sysmodule);
     }
+#ifndef PLAYWISE_DEVICE_LAB
+    /* 只有 Enforce 可能在上面的判断之后改写护眼状态；未运行时沿用同一次读取。 */
+    if (enforce_ran) eye_pending = rules_ok && pending_eye_rest_deadline(sysmodule, &tick_rules, &eye_deadline);
+#else
+    (void)enforce_ran;
+#endif
+    store_wait_hints(sysmodule, rules_ok && dock_policy_enabled(&tick_rules), eye_pending, eye_deadline);
     return actions;
+}
+
+bool ptc_sysmodule_tick_due(PtcSysmodule *sysmodule, uint32_t elapsed_ms)
+{
+    if (!sysmodule || sysmodule->quiescing) return false;
+#ifdef PLAYWISE_DEVICE_LAB
+    /* Device Lab 会话有自己的采样节奏，保持每次唤醒都执行完整轮次。 */
+    (void)elapsed_ms;
+    return true;
+#else
+    char path[320];
+    char names[1][128];
+    size_t count = 0;
+    PtcClockSnapshot now;
+    static const char *const ACTION_FLAGS[] = {
+        "flags/reload.flag", "flags/restore_install_snapshot.flag", "flags/retry_setup_release.flag"
+    };
+    size_t i;
+    /* 尚无完整轮次基线，或已到队列扫描退避间隔：执行完整轮次兜底，
+       同时重新校验可能被外部改写的 setup 与构建身份文件。 */
+    if (!sysmodule->minute_initialized || !sysmodule->disable_initialized || !sysmodule->cleanup_initialized ||
+        elapsed_ms >= ptc_sysmodule_current_scan_interval(sysmodule)) return true;
+    now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    /* 以下条件逐项对应完整轮次中会产生可观察动作的触发器。 */
+    if (sysmodule->last_minute_day_index != now.day_index ||
+        sysmodule->last_minute_of_day != now.minute_of_day) return true;
+    if (sysmodule->wait_hint_dock_policy && sysmodule->dock_last_sample_at != now.unix_seconds) return true;
+    if (sysmodule->wait_hint_eye_valid && now.unix_seconds >= sysmodule->wait_hint_eye_deadline) return true;
+    if (sysmodule->setup_activate_after_hint > 0 &&
+        now.unix_seconds >= sysmodule->setup_activate_after_hint) return true;
+    if (!sysmodule->storage->vtable->exists) return true;
+    snprintf(path, sizeof(path), "%s/flags/disable.flag", sysmodule->app_root);
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, path) != sysmodule->disable_present) return true;
+    for (i = 0; i < sizeof(ACTION_FLAGS) / sizeof(ACTION_FLAGS[0]); ++i) {
+        snprintf(path, sizeof(path), "%s/%s", sysmodule->app_root, ACTION_FLAGS[i]);
+        if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) return true;
+    }
+#ifndef PLAYWISE_EDEN
+    /* 未经 IPC 通知直接写入 SD 队列的请求仍按每次唤醒的节奏被发现。 */
+    if (!sysmodule->storage->vtable->list_json) return true;
+    snprintf(path, sizeof(path), "%s/inbox/pending", sysmodule->app_root);
+    if (sysmodule->storage->vtable->list_json(sysmodule->storage, path, names, 1, &count) && count > 0) return true;
+#else
+    (void)names;
+    (void)count;
+#endif
+    return false;
+#endif
 }

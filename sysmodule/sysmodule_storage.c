@@ -204,12 +204,21 @@ static void setup_state_default(PtcSetupState *setup)
     snprintf(setup->compatibility_status, sizeof(setup->compatibility_status), "pending");
 }
 
+/* 轮次到期探测只需知道 released 宽限何时到期；每次成功读写 setup 时同步。 */
+static void note_setup_activation(PtcSysmodule *sysmodule, const PtcSetupState *setup)
+{
+    sysmodule->setup_activate_after_hint =
+        strcmp(setup->phase, "released") == 0 && setup->activate_after > 0 ? setup->activate_after : 0;
+}
+
 bool load_setup_state(PtcSysmodule *sysmodule, PtcSetupState *setup)
 {
     char path[320];
     char text[4096];
     int64_t version;
+    bool valid;
     setup_state_default(setup);
+    sysmodule->setup_activate_after_hint = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "setup.json");
     if (!sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
         return true;
@@ -233,10 +242,12 @@ bool load_setup_state(PtcSysmodule *sysmodule, PtcSetupState *setup)
     (void)json_bool_value(text, "handover_remaining_available", &setup->handover_remaining_available);
     (void)json_u16(text, "handover_remaining_minutes", &setup->handover_remaining_minutes);
     (void)json_string(text, "last_error", setup->last_error, sizeof(setup->last_error));
-    return strcmp(setup->phase, "unconfigured") == 0 || strcmp(setup->phase, "compatibility_pending") == 0 ||
+    valid = strcmp(setup->phase, "unconfigured") == 0 || strcmp(setup->phase, "compatibility_pending") == 0 ||
         strcmp(setup->phase, "protection") == 0 || strcmp(setup->phase, "pending") == 0 || strcmp(setup->phase, "released") == 0 ||
         strcmp(setup->phase, "active") == 0 || strcmp(setup->phase, "failed") == 0 ||
         strcmp(setup->phase, "restored") == 0;
+    if (valid) note_setup_activation(sysmodule, setup);
+    return valid;
 }
 
 bool save_setup_state(PtcSysmodule *sysmodule, const PtcSetupState *setup)
@@ -261,7 +272,9 @@ bool save_setup_state(PtcSysmodule *sysmodule, const PtcSetupState *setup)
         setup->handover_remaining_available ? "true" : "false",
         (unsigned int)setup->handover_remaining_minutes,
         setup->last_error);
-    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
+    note_setup_activation(sysmodule, setup);
+    return true;
 }
 
 static void bytes_hex(char *out, size_t out_size, const uint8_t *data, size_t size)
