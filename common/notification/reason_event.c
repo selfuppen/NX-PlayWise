@@ -22,6 +22,10 @@ bool ptc_reason_event_update(PtcReasonEvent *e, const char *release, const char 
     bool identity_ok = !strcmp(release, e->release) && !strcmp(boot, e->boot);
     bool fresh = s->reliable && s->captured_at > 0 && wall >= s->captured_at &&
         wall - s->captured_at < 2;
+    /* A one-second-old observation can already belong to yesterday. */
+    if (s->local_clock_available && (s->local_second_of_day >= 86400 ||
+        (wall >= s->captured_at && wall - s->captured_at >= 86400 - s->local_second_of_day)))
+        fresh = false;
     bool became_enabled = enabled && !e->enabled;
     if (became_enabled) e->handled_valid = false;
     e->last_ms = ms;

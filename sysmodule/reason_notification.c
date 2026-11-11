@@ -130,20 +130,54 @@ void ptc_reason_notification_init(PtcReasonNotification *n, PtcStorage *s,
         if (!((boot[i] >= '0' && boot[i] <= '9') || (boot[i] >= 'a' && boot[i] <= 'f'))) n->blocked = true;
 }
 
-static bool publish(PtcReasonNotification *n, PtcUiLanguagePreference lang)
+bool ptc_reason_notification_body(const PtcReasonObservation *s, int64_t wall,
+    PtcUiLanguagePreference lang, const char *shortcut, char *out, size_t size)
 {
     static const PtcUiTextId reasons[] = {PTC_UI_T_NOTIFY_DAILY, PTC_UI_T_NOTIFY_DAILY,
         PTC_UI_T_NOTIFY_BEDTIME, PTC_UI_T_NOTIFY_EYE, PTC_UI_T_NOTIFY_DOCK};
+    char time[256], duration[96];
+    if (!size) return false;
+    out[0] = '\0';
+    if (!s->reliable || !s->restricted || s->reason <= PTC_REASON_NONE || s->reason > PTC_REASON_DOCK ||
+        wall < s->captured_at || wall - s->captured_at >= 2 ||
+        (s->local_clock_available && (s->local_second_of_day >= 86400 ||
+            wall - s->captured_at >= 86400 - s->local_second_of_day))) return false;
+    PtcUiTextId time_id = PTC_UI_T_NOTIFY_TIME_UNKNOWN;
+    if (s->reason == PTC_REASON_DAILY && s->time_kind == PTC_REASON_TIME_DAILY_ZERO)
+        time_id = PTC_UI_T_NOTIFY_DAILY_ZERO;
+    else if (s->reason == PTC_REASON_DOCK) {
+        if (s->time_kind == PTC_REASON_TIME_DOCK_ZERO) time_id = PTC_UI_T_NOTIFY_DOCK_ZERO;
+        if (s->time_kind == PTC_REASON_TIME_CONNECT_TV) time_id = PTC_UI_T_NOTIFY_CONNECT_TV;
+    }
+    uint32_t age = (uint32_t)(wall - s->captured_at);
+    uint32_t max_seconds = s->reason == PTC_REASON_EYE ? 3600 : 86400;
+    if ((s->reason == PTC_REASON_EYE || s->reason == PTC_REASON_BEDTIME) &&
+        s->time_kind == PTC_REASON_TIME_REMAINING && s->remaining_seconds > age &&
+        s->remaining_seconds <= max_seconds) {
+        uint32_t seconds = s->remaining_seconds - age;
+        unsigned minutes = (seconds + 59) / 60;
+        if (seconds < 60) snprintf(duration, sizeof(duration), "%s", ptc_notification_text(PTC_UI_T_NOTIFY_UNDER_MINUTE, lang));
+        else if (minutes < 60) snprintf(duration, sizeof(duration), ptc_notification_text(PTC_UI_T_NOTIFY_MINUTES, lang), minutes);
+        else if (minutes % 60) snprintf(duration, sizeof(duration), ptc_notification_text(PTC_UI_T_NOTIFY_HOURS_MINUTES, lang), minutes / 60, minutes % 60);
+        else snprintf(duration, sizeof(duration), ptc_notification_text(PTC_UI_T_NOTIFY_HOURS, lang), minutes / 60);
+        snprintf(time, sizeof(time), ptc_notification_text(s->reason == PTC_REASON_EYE ?
+            PTC_UI_T_NOTIFY_REST_TIME : PTC_UI_T_NOTIFY_BED_TIME, lang), duration);
+    } else snprintf(time, sizeof(time), "%s", ptc_notification_text(time_id, lang));
+    const char *hint = ptc_notification_text(shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT : PTC_UI_T_NOTIFY_OPEN, lang);
+    int length = snprintf(out, size, "%s\n%s\n%s%s", ptc_notification_text(reasons[s->reason], lang), time, shortcut, hint);
+    if (length < 0 || (size_t)length >= size) { out[0] = '\0'; return false; }
+    return true;
+}
+
+static bool publish(PtcReasonNotification *n, PtcUiLanguagePreference lang, int64_t wall)
+{
     char name[96], stage[280], body[512];
+    if (!ptc_reason_notification_body(&n->event.latest, wall, lang, n->external.shortcut, body, sizeof(body))) return false;
     if (++n->sequence == 0) return false;
     snprintf(name, sizeof(name), "playwise-reason-%s-%016llx.notify", n->event.boot,
         (unsigned long long)n->sequence);
     snprintf(n->path, sizeof(n->path), NOTIFICATION_DIR "%s", name);
     snprintf(stage, sizeof(stage), "%s.stage", n->path);
-    const char *hint = ptc_notification_text(n->external.shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT :
-        PTC_UI_T_NOTIFY_OPEN, lang);
-    snprintf(body, sizeof(body), "%s\n%s%s", ptc_notification_text(reasons[n->event.latest.reason], lang),
-        n->external.shortcut, hint);
     cJSON *p = cJSON_CreateObject();
     if (!p) return false;
     bool ok = cJSON_AddStringToObject(p, "title", ptc_notification_text(PTC_UI_T_NOTIFY_TITLE, lang)) &&
@@ -201,7 +235,7 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
     if (!enabled || suppressed) state(n, "suppressed");
     if (!ready || n->pending) return;
     ptc_reason_event_attempted(&n->event, ms);
-    if (!publish(n, lang)) goto failed;
+    if (!publish(n, lang, wall)) goto failed;
     n->pending = true;
     n->expires_ms = ms + 2000;
     state(n, "pending_display_unknown");

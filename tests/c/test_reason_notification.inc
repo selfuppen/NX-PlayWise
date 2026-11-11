@@ -266,7 +266,12 @@ static void test_reason_policy_observation(void)
     status.restricted_now = true; status.temporary_unlocked = false;
     status.limited_today = status.remaining_available = true; status.remaining_minutes = 0;
     ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
-    check_true(core.reason_observation.reliable && core.reason_observation.reason==PTC_REASON_DAILY,"daily cause observed without guessing");
+    check_true(core.reason_observation.reliable && core.reason_observation.reason==PTC_REASON_DAILY &&
+        core.reason_observation.time_kind==PTC_REASON_TIME_DAILY_ZERO,"daily cause and zero observed without guessing");
+    status.signed_remaining_ns_available=true; status.signed_remaining_ns=-123;
+    ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
+    check_true(core.reason_observation.time_kind==PTC_REASON_TIME_DAILY_ZERO,"negative daily balance displays zero");
+    status.signed_remaining_ns_available=false;
     status.remaining_available=false;
     ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
     check_true(!core.reason_observation.reliable,"restricted without known reason stays unknown");
@@ -275,7 +280,12 @@ static void test_reason_policy_observation(void)
     runtime.eye_care_rest_deadline=clock.snapshot.unix_seconds+60; runtime.eye_care_break_id=17;
     ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
     check_true(core.reason_observation.reliable && core.reason_observation.reason==PTC_REASON_EYE &&
-        core.reason_observation.instance==17,"rest instance masks daily consistently");
+        core.reason_observation.instance==17 && core.reason_observation.time_kind==PTC_REASON_TIME_REMAINING &&
+        core.reason_observation.remaining_seconds==60,"rest instance and same-pass time mask daily consistently");
+    runtime.eye_care_rest_deadline=clock.snapshot.unix_seconds+3601;
+    ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
+    check_true(core.reason_observation.reliable && core.reason_observation.time_kind==PTC_REASON_TIME_UNKNOWN,
+        "reliable rest cause with impossible deadline keeps time unknown");
     rules.bedtime.enabled=true;
     for(int i=0;i<7;++i) rules.bedtime.week[i]=(PtcBedtimeWindow){true,1200,780};
     PtcBedtimeEvaluation bed=ptc_bedtime_evaluate(&rules,clock.snapshot.day_index,
@@ -283,9 +293,31 @@ static void test_reason_policy_observation(void)
     runtime.bedtime_enforced=true; runtime.bedtime_window_instance_id=bed.window_instance_id;
     ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
     check_true(bed.active && core.reason_observation.reliable && core.reason_observation.reason==PTC_REASON_BEDTIME,"bedtime instance masks rest");
+    PtcClockSnapshot saved_clock=clock.snapshot;
+    for (int next_day=0;next_day<2;++next_day) {
+        clock.snapshot=saved_clock; clock.snapshot.day_index=(uint16_t)(saved_clock.day_index+next_day);
+        clock.snapshot.minute_of_day=next_day ? 60 : 1439; clock.snapshot.second_of_minute=59;
+        bed=ptc_bedtime_evaluate(&rules,clock.snapshot.day_index,
+            ptc_weekday_from_day_index(clock.snapshot.day_index),clock.snapshot.minute_of_day);
+        runtime.bedtime_window_instance_id=bed.window_instance_id;
+        ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
+        check_true(core.reason_observation.time_kind==PTC_REASON_TIME_REMAINING &&
+            core.reason_observation.remaining_seconds==(next_day ? 43141u : 46801u),
+            "cross-night bedtime uses instance end date and exact seconds");
+    }
+    clock.snapshot=saved_clock;
     rules.bedtime.enabled=false; runtime.bedtime_enforced=false; runtime.eye_care_resting=false; runtime.dock_enforced=true;
     ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
     check_true(core.reason_observation.reliable && core.reason_observation.reason==PTC_REASON_DOCK,"existing dock enforcement reason");
+    check_true(core.reason_observation.time_kind==PTC_REASON_TIME_CONNECT_TV,"TV requirement invents no countdown");
+    rules.dock_policy.undocked_limit_enabled=true; rules.dock_policy.undocked_daily_minutes=1;
+    runtime.dock_usage_known=true; runtime.dock_day_index=clock.snapshot.day_index;
+    runtime.dock_last_mode=PTC_OPERATION_MODE_UNDOCKED; runtime.undocked_used_ns=UINT64_C(60000000000);
+    ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
+    check_true(core.reason_observation.time_kind==PTC_REASON_TIME_DOCK_ZERO,"known non-TV exhaustion displays zero");
+    runtime.dock_day_index--;
+    ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
+    check_true(core.reason_observation.time_kind==PTC_REASON_TIME_CONNECT_TV,"yesterday's non-TV usage cannot supply zero");
     status.temporary_unlocked=true;
     ptc_sysmodule_note_reason(&core,&rules,&runtime,&status,clock.snapshot);
     check_true(core.reason_observation.reliable && !core.reason_observation.restricted && core.reason_observation.reason==PTC_REASON_NONE,"temporary official unlock emits no restriction");
@@ -300,4 +332,42 @@ static void test_reason_policy_observation(void)
     check_true(!core.reason_observation.reliable,"handover suppressed");
     check_true(pctl.read_status_calls==0 && pctl.apply_target_calls==0 && pctl.start_timer_calls==0,"reason projection never reads or writes PCTL");
     free(mem);
+}
+
+static void test_reason_snapshot_text(void)
+{
+    PtcReasonObservation s=reason_sample(1,PTC_REASON_EYE,17,100);
+    char body[512], small[8];
+    const unsigned seconds[]={1,59,60,61,3599,3600};
+    for (int lang=PTC_UI_LANGUAGE_SIMPLIFIED;lang<=PTC_UI_LANGUAGE_ENGLISH;++lang) {
+        s.time_kind=PTC_REASON_TIME_REMAINING;
+        for (unsigned i=0;i<sizeof(seconds)/sizeof(seconds[0]);++i) {
+            s.remaining_seconds=seconds[i];
+            check_true(ptc_reason_notification_body(&s,100,(PtcUiLanguagePreference)lang,"L＋↓",body,sizeof(body)),"three-language duration fits payload buffer");
+            check_true(strstr(body,ptc_notification_text(PTC_UI_T_NOTIFY_EYE,(PtcUiLanguagePreference)lang)) &&
+                strstr(body,"L＋↓"),"duration retains child state and actual shortcut");
+            if(seconds[i]<60) check_true(strstr(body,ptc_notification_text(PTC_UI_T_NOTIFY_UNDER_MINUTE,(PtcUiLanguagePreference)lang)),"sub-minute time stays below one minute");
+        }
+    }
+    s.remaining_seconds=61;
+    check_true(ptc_reason_notification_body(&s,100,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)) && strstr(body,"~2 min"),"positive seconds round minutes upward");
+    check_true(ptc_reason_notification_body(&s,101,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)) && strstr(body,"~1 min"),"publication deducts observation age");
+    s.remaining_seconds=1;
+    check_true(ptc_reason_notification_body(&s,101,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)) && strstr(body,"Time left unknown"),"deadline requires confirmation instead of zero or release promise");
+    s.time_kind=PTC_REASON_TIME_UNKNOWN;
+    check_true(ptc_reason_notification_body(&s,100,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)) && strstr(body,"Time left unknown"),"unknown time cannot inherit an earlier duration");
+    check_true(!ptc_reason_notification_body(&s,102,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)) && !body[0],"aged sample cannot format a current notice");
+    check_true(!ptc_reason_notification_body(&s,99,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)),"future capture rejected");
+    s.local_clock_available=true; s.local_second_of_day=86399;
+    check_true(!ptc_reason_notification_body(&s,101,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)),"midnight rejects yesterday even inside two-second freshness");
+    PtcReasonEvent e; ptc_reason_event_init(&e,"r","b");
+    check_true(!ptc_reason_event_update(&e,"r","b",&s,1000,101,true,false),"event gate also rejects cross-day snapshot");
+    s.local_second_of_day=0;
+    check_true(!ptc_reason_notification_body(&s,100,PTC_UI_LANGUAGE_ENGLISH,"",small,sizeof(small)) && !small[0],"small output refuses truncation");
+    s.reason=PTC_REASON_BEDTIME; s.time_kind=PTC_REASON_TIME_REMAINING; s.remaining_seconds=86340;
+    check_true(ptc_reason_notification_body(&s,100,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)) && strstr(body,"23 hr 59 min"),"long bedtime duration is explicit");
+    s.remaining_seconds=86400;
+    check_true(ptc_reason_notification_body(&s,100,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)) && strstr(body,"24 hr"),"full day duration fits");
+    s.reliable=false;
+    check_true(!ptc_reason_notification_body(&s,100,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)),"unknown cause publishes nothing");
 }

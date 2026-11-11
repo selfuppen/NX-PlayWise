@@ -242,7 +242,21 @@ test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test
 
 test-host: test-overlay-preview-save
 
+NOTICE_PREVIEW_SRCS := sysmodule/reason_notification.c common/notification/reason_event.c companion/notification_text.c platform/ultrahand_config.c third_party/cjson/cJSON.c
+$(HOST_BUILD_DIR)/notice_preview_core.o: $(NOTICE_PREVIEW_SRCS) | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -r -o $@ $(NOTICE_PREVIEW_SRCS)
+
+$(HOST_BUILD_DIR)/notice_preview: tests/notification_layout/test.cpp $(HOST_BUILD_DIR)/notice_preview_core.o | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -o $@ tests/notification_layout/test.cpp $(HOST_BUILD_DIR)/notice_preview_core.o -lm
+
+.PHONY: test-notice-layout
+test-notice-layout: $(HOST_BUILD_DIR)/notice_preview
+	$(STAGE_TIMER) global test-ui -- $(HOST_BUILD_DIR)/notice_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf $(HOST_BUILD_DIR)/reason-notices.html
+
+test-host: test-notice-layout
+
 HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_ONLINE_UPDATE_TEST) $(HOST_ONLINE_PACKAGE_TEST) $(HOST_ONLINE_NETWORK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
+HOST_CACHED_TARGETS += $(HOST_BUILD_DIR)/notice_preview_core.o $(HOST_BUILD_DIR)/notice_preview
 $(HOST_CACHED_TARGETS): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 $(HOST_ENVIRONMENT_TEST): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 

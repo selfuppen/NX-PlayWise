@@ -771,3 +771,11 @@ Pre-update backups reuse selective restoration. Restoring pairing information ro
 Press Y or tap release notes to read the complete bounded description; use L/R or footer controls to page and B to return. Pre-update backups show verification, date and source, with touch paging and deletion controls.
 
 When an eligible newer version is found, a quiet Update hint appears in the upper-right status card. Tap it to open update details; children must pass the existing parent PIN first. Offline checks and failures show no update hint. Pending work and unsaved edits keep their current page.
+
+### Automatic reason notices (experimental)
+
+In development candidates, enable Automatic reason notices in Security & Preferences → Sound and notifications (off by default), and confirm that your compatible manager has its global notifications enabled. Current receiver evidence covers Ultrahand 2.5.3 / loader 2.0.2; PlayWise does not install or modify the manager. This feature has not been publicly released or fully qualified.
+
+Notices use child-friendly wording for daily time, bedtime, eye rest or TV mode. They show time left **at the notice**, not a live countdown: known daily exhaustion is zero; rest and bedtime use their own remaining duration; under one minute stays explicit. Unknown time stays unknown. TV requirements do not invent a countdown, and the end of one restriction does not promise play is available. The receiver expands the box at the same readable font size; the new layout awaits device acceptance.
+
+Use the saved shortcut shown in the notice to open current details manually, Y to refresh and B to return. Missing or invalid shortcut settings show Open PlayWise for details. Saved settings do not prove the resident manager has loaded them. Notices do not take input focus. Repeated status reads do not repeat the same notice; rapid changes coalesce with a ten-second attempt limit and still require fresh policy data. The requested display duration is ten seconds; cleanup of unconsumed owned files targets two seconds. The receiver may retain a consumed notice, so disappearance or continued visibility does not prove restriction or recovery.

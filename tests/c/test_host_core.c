@@ -4538,6 +4538,7 @@ int main(void)
     test_reason_events();
     test_reason_transport();
     test_reason_policy_observation();
+    test_reason_snapshot_text();
     test_result_capacity_and_complete_recent_events();
     test_result_builder_refuses_small_receipts();
     test_config_backup();

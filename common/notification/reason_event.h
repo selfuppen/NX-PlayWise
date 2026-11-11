@@ -8,6 +8,12 @@ typedef enum {
     PTC_REASON_EYE, PTC_REASON_DOCK
 } PtcRestrictionReason;
 
+typedef enum {
+    PTC_REASON_TIME_UNKNOWN, PTC_REASON_TIME_DAILY_ZERO,
+    PTC_REASON_TIME_REMAINING, PTC_REASON_TIME_DOCK_ZERO,
+    PTC_REASON_TIME_CONNECT_TV
+} PtcReasonTime;
+
 /* Produced only after the original policy pass has observed and committed. */
 typedef struct {
     uint64_t revision;
@@ -17,6 +23,10 @@ typedef struct {
     int64_t captured_at;
     PtcRestrictionReason reason;
     uint64_t instance;
+    bool local_clock_available;
+    uint32_t local_second_of_day;
+    PtcReasonTime time_kind;
+    uint32_t remaining_seconds; /* same successful observation, never a UI cache */
 } PtcReasonObservation;
 
 typedef struct {
