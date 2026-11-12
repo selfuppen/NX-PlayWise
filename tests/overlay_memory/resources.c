@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "companion/overlay/display_clock.h"
+#include "companion/overlay/hidden_poll.h"
 #include "companion/ui_language.h"
 #include "sysmodule/idle_wait.h"
 
@@ -11,6 +12,17 @@ int main(void)
     assert(ptc_sysmodule_idle_wait_ms(5000, true) == 250);
     assert(ptc_sysmodule_idle_wait_ms(100, false) == 100);
     assert(ptc_sysmodule_idle_wait_ms(100, true) == 100);
+    /* Hidden overlay UI thread: five seconds while reason notifications are off,
+       250ms cooperation while on, never again after five write failures. */
+    assert(ptc_overlay_hidden_poll_ns(false, 0) == UINT64_C(5000000000));
+    assert(ptc_overlay_hidden_poll_ns(true, 0) == UINT64_C(250000000));
+    assert(ptc_overlay_hidden_poll_ns(true, PTC_OVERLAY_HIDDEN_FAILURE_LIMIT - 1) == UINT64_C(250000000));
+    assert(ptc_overlay_hidden_poll_ns(true, PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) == UINT64_MAX);
+    assert(ptc_overlay_hidden_poll_ns(false, PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) == UINT64_MAX);
+    assert(PTC_OVERLAY_HIDDEN_CONFIG_MS == 5000);
+    assert(ptc_overlay_hidden_runtime_next_ms(1000, true) == 11000);
+    assert(ptc_overlay_hidden_runtime_next_ms(1000, false) == 2000);
+    assert(ptc_overlay_hidden_runtime_next_ms(UINT64_MAX - 5, true) == UINT64_MAX);
     PtcOverlayDisplayClock clock = {0};
     assert(ptc_overlay_display_clock_due(&clock, 0));
     for (uint64_t t = 1; t < 1000000000; t += 16666666)

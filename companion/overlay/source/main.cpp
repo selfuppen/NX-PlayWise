@@ -15,6 +15,7 @@
 extern "C" {
 #include "../bridge.h"
 #include "../detail_status.h"
+#include "../hidden_poll.h"
 #include "../../auth.h"
 #include "../../auth_clock.h"
 #include "../input_model.h"
@@ -1334,15 +1335,18 @@ class PctcOverlay final : public tsl::Overlay {
 public:
     u64 hiddenPollInterval() override
     {
-        if (automatic_failures_ >= 5) return UINT64_MAX;
-        return automatic_enabled_ ? 250000000 : 1000000000;
+        return ptc_overlay_hidden_poll_ns(automatic_enabled_, automatic_failures_);
     }
 
     bool onHiddenPoll(bool neutral) override
     {
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
         PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
-        if (!neutral || automatic_failures_ >= 5 || !gui_ || !gui_->automatic_detail_allowed()) return false;
+        if (automatic_failures_ >= PTC_OVERLAY_HIDDEN_FAILURE_LIMIT || !gui_ ||
+            !gui_->automatic_detail_allowed()) return false;
+        /* The preference check does not depend on input: with the five second
+           disabled cadence a window without any key is rare during play, and the
+           check itself is one bounded read. Cooperation below still needs neutral input. */
         if (ms >= next_config_ms_) {
             char config[8192];
             automatic_enabled_ = false;
@@ -1354,23 +1358,43 @@ public:
                         if (!std::strcmp(a->string, b->string)) automatic_enabled_ = false;
                 cJSON_Delete(j);
             }
-            next_config_ms_ = ms + 1000;
+            next_config_ms_ = ms + PTC_OVERLAY_HIDDEN_CONFIG_MS;
         }
-        if (!automatic_enabled_) return false;
-        char boot[17];
-        if (!ptc_reason_detail_runtime(s, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot)) return false;
+        if (!automatic_enabled_ || !neutral) return false;
+        /* The backend identity changes only on boot or handoff: cache it instead
+           of re-reading and re-parsing runtime-ready.json on every 250ms poll. */
+        if (ms >= next_runtime_ms_) {
+            char boot[17] = {0};
+            runtime_known_ = ptc_reason_detail_runtime(s, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot);
+            if (runtime_known_ && std::strcmp(boot, runtime_boot_) != 0) {
+                std::snprintf(runtime_boot_, sizeof(runtime_boot_), "%s", boot);
+                next_ready_ms_ = 0; /* a lease bound to the previous backend is useless */
+            }
+            next_runtime_ms_ = ptc_overlay_hidden_runtime_next_ms(ms, runtime_known_);
+        }
+        if (!runtime_known_) return false;
         if (ms >= next_ready_ms_) {
             PtcReasonDetail ready{};
             std::snprintf(ready.release, sizeof(ready.release), "%s", PLAYWISE_BUILD_RELEASE_ID);
-            std::snprintf(ready.boot, sizeof(ready.boot), "%s", boot);
+            std::snprintf(ready.boot, sizeof(ready.boot), "%s", runtime_boot_);
             ready.ui_instance = ui_instance_ms_;
+            /* The lease stays short on purpose: an offer nobody answers is dropped
+               once its observation ages, so the backend must only see a lease from
+               a UI that was neutral within the last second and a half. */
             ready.issued_ms = ms; ready.expires_ms = ms + 1500;
             next_ready_ms_ = ms + 1000;
             if (!ptc_reason_detail_write(s, APP_ROOT, "ready", &ready)) { ++automatic_failures_; return false; }
         }
         PtcReasonDetail offer{};
-        if (!ptc_reason_detail_read(s, APP_ROOT, "request", &offer) ||
-            !ptc_reason_detail_fresh(&offer, PLAYWISE_BUILD_RELEASE_ID, boot, ms) ||
+        if (!ptc_reason_detail_read(s, APP_ROOT, "request", &offer)) return false;
+        if (std::strcmp(offer.boot, runtime_boot_) != 0) {
+            /* An offer from another backend boot: refresh the identity soon, but
+               at most once per second while a stale offer file lingers. */
+            uint64_t retry = ptc_overlay_hidden_runtime_next_ms(ms, false);
+            if (next_runtime_ms_ > retry) next_runtime_ms_ = retry;
+            return false;
+        }
+        if (!ptc_reason_detail_fresh(&offer, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, ms) ||
             offer.ui_instance != ui_instance_ms_ || offer.sequence <= seen_sequence_) return false;
         seen_sequence_ = offer.sequence;
         automatic_offer_ = offer;
@@ -1472,6 +1496,9 @@ private:
     bool automatic_ack_written_ = false;
     bool automatic_enabled_ = false;
     uint64_t next_config_ms_ = 0;
+    uint64_t next_runtime_ms_ = 0;
+    bool runtime_known_ = false;
+    char runtime_boot_[17] = {0};
 };
 
 } // namespace

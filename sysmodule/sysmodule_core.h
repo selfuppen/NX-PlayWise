@@ -52,6 +52,16 @@ typedef struct {
     bool config_cache_valid;
     bool rules_cache_valid;
     bool state_cache_valid;
+    /* 采样合并落盘：0 表示每次都立即写入（Host 回归与 Device Lab 的默认值）。
+       大于 0 时，仅用量采样字段单调前进的变化先留在 state_cache，距上次落盘满
+       该秒数、出现任何控制相关变化、开始恢复事务、交接或退出时才写 state.json。
+       state_persisted 是磁盘上最近一次成功写入或读回的内容。 */
+    uint32_t state_persist_interval_s;
+    bool state_dirty;
+    bool state_persisted_valid;
+    int64_t state_dirty_at;
+    int64_t state_persisted_at;
+    PtcRuntimeState state_persisted;
     PtcCalendarRuntime calendar_runtime;
 } PtcSysmodule;
 
@@ -78,6 +88,9 @@ bool ptc_sysmodule_tick_due(PtcSysmodule *sysmodule, uint32_t elapsed_ms);
 int ptc_sysmodule_cleanup(PtcSysmodule *sysmodule);
 int ptc_sysmodule_rollover_legacy_logs(PtcSysmodule *sysmodule);
 bool ptc_sysmodule_refresh_caches(PtcSysmodule *sysmodule);
+/* 把尚未落盘的采样状态写入 state.json。没有待写内容时直接返回 true；写入失败
+   返回 false 并保留待写内容，下次调用重试。交接静默前与进程退出前必须调用。 */
+bool ptc_sysmodule_flush_state(PtcSysmodule *sysmodule);
 #ifdef PLAYWISE_EDEN
 /* Emulator-only synchronous bridge. Eden's host-backed SD filesystem cannot
    reliably rename open queue files across directories. */

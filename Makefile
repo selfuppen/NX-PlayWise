@@ -365,7 +365,7 @@ pctl-capture-package: manifest
 	python3 tools/legacy/package_pctl_capture.py build
 	python3 tools/legacy/package_pctl_capture.py package
 
-$(HOST_BUILD_DIR)/test_overlay_resources: tests/overlay_memory/resources.c companion/overlay/display_clock.h companion/overlay/ui_text_catalog.inc companion/ui_language.c sysmodule/idle_wait.h | $(HOST_BUILD_DIR)
+$(HOST_BUILD_DIR)/test_overlay_resources: tests/overlay_memory/resources.c companion/overlay/display_clock.h companion/overlay/hidden_poll.h companion/overlay/ui_text_catalog.inc companion/ui_language.c sysmodule/idle_wait.h | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPTC_IPC_CLIENT_OVERLAY -o $@ tests/overlay_memory/resources.c companion/ui_language.c
 
 test-host: test-overlay-resources

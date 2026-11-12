@@ -147,6 +147,76 @@ static void notify_tick(PtcReasonNotification *n, PtcReasonObservation *s, uint6
     ptc_reason_notification_tick(n, s, ms, wall, on, false, false, PTC_UI_LANGUAGE_SIMPLIFIED);
 }
 
+/* Merely enabling reason notifications must not cost fast polling or periodic
+   SD reads; only work that actually has a deadline may. */
+static void test_reason_idle_cost(void)
+{
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcReasonNotification n;
+    PtcReasonObservation s = reason_sample(1, PTC_REASON_NONE, 0, 100);
+    PtcReasonDetail lease = {0};
+    check_true(mem != NULL, "idle cost fixture allocation"); if (!mem) return;
+    ptc_mem_storage_init(mem);
+    PtcStorage *storage = &mem->storage;
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    for (unsigned i = 0; i < 8; ++i) {
+        s.revision++; s.captured_at = 100 + i;
+        notify_tick(&n, &s, 1000 + i * 1000, 100 + i, true);
+        check_true(!ptc_reason_notification_busy(&n), "enabled but unrestricted rounds need no fast polling");
+    }
+    check_true(n.external.notifications == -1, "idle rounds never read the receiver configuration");
+    s = reason_sample(20, PTC_REASON_DAILY, 5, 120);
+    notify_tick(&n, &s, 20000, 120, true);
+    check_true(n.pending && n.sequence == 1 && n.external.notifications == 1 && ptc_reason_notification_busy(&n),
+        "a pending toast reads the receiver once and keeps fast polling");
+    notify_tick(&n, &s, 22000, 122, true);
+    check_true(!n.pending && !ptc_reason_notification_busy(&n), "expiry returns to the idle cadence");
+    s = reason_sample(21, PTC_REASON_EYE, 6, 123);
+    notify_tick(&n, &s, 23000, 123, true);
+    check_true(!n.pending && n.sequence == 1 && ptc_reason_notification_busy(&n),
+        "a rate-limited change stays busy until it is handled");
+    s.revision++; s.captured_at = 131;
+    notify_tick(&n, &s, 31000, 131, true);
+    check_true(n.pending && n.sequence == 2, "the deferred change publishes on the next fresh observation");
+    n.blocked = true;
+    check_true(!ptc_reason_notification_busy(&n), "a latched failure never forces fast polling");
+
+    /* The presence lease keeps its short bound: an unanswered offer is dropped
+       once its observation ages, so a stale lease must never reach the backend. */
+    snprintf(lease.release, sizeof(lease.release), "release1");
+    snprintf(lease.boot, sizeof(lease.boot), "0123456789abcdef");
+    lease.ui_instance = 900; lease.issued_ms = 1000; lease.expires_ms = 2500;
+    check_true(ptc_reason_detail_fresh(&lease, "release1", "0123456789abcdef", 2499) &&
+        !ptc_reason_detail_fresh(&lease, "release1", "0123456789abcdef", 2500),
+        "a presence lease is usable for one and a half seconds only");
+    lease.expires_ms = 3001;
+    check_true(!ptc_reason_detail_fresh(&lease, "release1", "0123456789abcdef", 2000),
+        "a lease longer than two seconds is rejected");
+
+    ptc_mem_storage_init(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    storage->vtable->write_text_atomic(storage, "app/handover/runtime-ready.json",
+        "{\"profile\":\"release\",\"release_id\":\"release1\",\"boot_id\":\"0123456789abcdef\"}");
+    memset(&lease, 0, sizeof(lease));
+    snprintf(lease.release, sizeof(lease.release), "release1");
+    snprintf(lease.boot, sizeof(lease.boot), "0123456789abcdef");
+    lease.ui_instance = 900; lease.issued_ms = 1000; lease.expires_ms = 2500;
+    check_true(ptc_reason_detail_write(storage, "app", "ready", &lease), "write a fresh presence lease");
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    s = reason_sample(1, PTC_REASON_EYE, 7, 100);
+    notify_tick(&n, &s, 1200, 100, true);
+    check_true(n.detail_pending && !n.pending && ptc_reason_notification_busy(&n) &&
+        n.external.notifications == -1,
+        "a detail offer keeps fast polling and never needs the receiver configuration");
+    /* No answer and no fresh observation: the existing contract drops the offer
+       without a fallback toast. This is why the lease must stay short. */
+    notify_tick(&n, &s, 3300, 103, true);
+    check_true(!n.detail_pending && !n.pending && n.sequence == 0 && !ptc_reason_notification_busy(&n),
+        "an unanswered offer with an aged observation ends without any toast");
+    free(mem);
+}
+
 static void test_reason_detail_transport(void)
 {
     PtcMemStorage *mem = malloc(sizeof(*mem));

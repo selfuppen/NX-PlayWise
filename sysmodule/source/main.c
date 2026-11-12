@@ -22,6 +22,7 @@
 #include "../usage_evidence.h"
 #include "../reason_notification.h"
 #include "../idle_wait.h"
+#include "../power_ledger.h"
 #include "../../companion/input_owner.h"
 #ifdef PLAYWISE_PCTL_CAPTURE
 #include "../pctl_usage_tap.h"
@@ -177,6 +178,9 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
     }
     if (ipc_available) ipc_server->accepting = false;
     if (sysmodule->storage->vtable->exists(sysmodule->storage, recovery_path)) return false;
+    /* Coalesced usage samples must reach state.json before autonomous writes
+       freeze. A failed flush leaves the handoff unacknowledged for a retry. */
+    if (!sysmodule->quiescing && !ptc_sysmodule_flush_state(sysmodule)) return false;
     /* The current serial transaction has finished. Freeze both SD consumption
        and autonomous writes until this handoff exits or its intent is removed. */
     sysmodule->quiescing = true;
@@ -220,6 +224,8 @@ int main(int argc, char **argv)
     static PtcReasonNotification reason_notification;
     static PtcInputOwnerReader reason_owner;
     static char reason_config[4096];
+    static PtcPowerLedger power_ledger;
+    static char power_ledger_text[3072];
     uint64_t reason_config_ns = 0;
     bool reason_enabled = false;
     PtcUiLanguagePreference reason_language = PTC_UI_LANGUAGE_ENGLISH;
@@ -267,6 +273,12 @@ int main(int argc, char **argv)
         ptc_switch_time_provider_as_provider(&time_provider));
     snprintf(boot_id, sizeof(boot_id), "%016llx", (unsigned long long)randomGet64());
     ptc_sysmodule_set_boot_id(&sysmodule, boot_id);
+#ifndef PLAYWISE_DEVICE_LAB
+    /* 用量采样合并落盘：电视模式策略每秒采样一次，逐秒原子重写 state.json 会让
+       SD 卡持续处于写入状态。仅采样字段前进时最多 30 秒写一次；任何控制相关
+       变化、恢复事务开始、交接静默与退出仍立即落盘。Device Lab 保持逐次写入。 */
+    sysmodule.state_persist_interval_s = 30;
+#endif
 #ifndef PLAYWISE_DEVICE_LAB
     ptc_reason_notification_init(&reason_notification, storage, PTC_APP_ROOT,
         PLAYWISE_BUILD_RELEASE_ID, boot_id);
@@ -318,8 +330,10 @@ int main(int argc, char **argv)
 #if defined(PLAYWISE_DEVICE_LAB) || defined(PLAYWISE_PCTL_CAPTURE)
         fast_poll = true;
 #else
-        fast_poll = fast_poll || usage_evidence.active || reason_enabled ||
-            reason_notification.pending || reason_notification.detail_pending;
+        /* 仅开启原因通知不再强制 250ms：受限观察由完整轮次产生并在同一轮次处理，
+           只有待撤回、待确认或尚未处理完的受限变化才需要快速轮询。 */
+        fast_poll = fast_poll || usage_evidence.active ||
+            ptc_reason_notification_busy(&reason_notification);
 #endif
         wait_ms = ptc_sysmodule_idle_wait_ms(wait_ms, fast_poll);
         notified = ipc_available ? ptc_ipc_server_wait(&ipc_server, wait_ms) : false;
@@ -372,9 +386,23 @@ int main(int argc, char **argv)
             reason_clock.unix_seconds, reason_enabled, reason_suppressed, reason_stopping, reason_language);
         uint64_t reason_io_ms = (armTicksToNs(armGetSystemTick()) - reason_ns) / 1000000;
         if (reason_io_ms > reason_notification.io_max_ms) reason_notification.io_max_ms = reason_io_ms;
+        /* 冻结账本复用本轮已取得的单调与墙钟读数，不增加任何周期 I/O。写出只在
+           出现过冻结且主机已连续运行两分钟之后进行一次，交接静默期间不写。 */
+        ptc_power_ledger_observe(&power_ledger, reason_ns, reason_clock.unix_seconds, wait_ms, due);
+        if (!reason_stopping && ptc_power_ledger_due(&power_ledger)) {
+            if (ptc_power_ledger_format(&power_ledger, PLAYWISE_BUILD_RELEASE_ID, boot_id,
+                    reason_clock.unix_seconds, power_ledger_text, sizeof(power_ledger_text)) &&
+                storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/support/power-ledger.json",
+                    power_ledger_text)) ptc_power_ledger_saved(&power_ledger);
+            else ptc_power_ledger_failed(&power_ledger);
+        }
 #endif
     }
 
+    /* Nothing may stay only in memory once the control loop has ended. */
+    if (ipc_available) ptc_ipc_server_lock_storage(&ipc_server);
+    (void)ptc_sysmodule_flush_state(&sysmodule);
+    if (ipc_available) ptc_ipc_server_unlock_storage(&ipc_server);
 #ifndef PLAYWISE_DEVICE_LAB
     ptc_usage_evidence_stop(&usage_evidence, "process_handoff");
 #endif

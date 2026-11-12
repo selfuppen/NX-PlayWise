@@ -42,4 +42,11 @@ bool ptc_reason_notification_body(const PtcReasonObservation *sample, int64_t wa
 void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObservation *sample,
     uint64_t ms, int64_t wall, bool enabled, bool suppressed, bool stopping,
     PtcUiLanguagePreference language);
+/* 主循环据此决定是否保留 250ms 轮询。受限观察由完整调度轮次产生，并在同一轮次
+   交给 tick，因此仅仅开启功能不需要加速；只有待撤回的通知、等待确认的详情提议，
+   或尚未处理完的受限变化（例如仍在限频窗口内）才需要及时的到期与确认判断。 */
+static inline bool ptc_reason_notification_busy(const PtcReasonNotification *n)
+{
+    return !n->blocked && (n->pending || n->detail_pending || n->event.dirty);
+}
 #endif

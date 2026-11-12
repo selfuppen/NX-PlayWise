@@ -856,15 +856,18 @@ static void test_daily_summary_and_read_only_stats_boundary(void)
 static void test_support_redaction(void)
 {
     size_t index;
-    check_int((long)ptc_support_export_file_count(), 8, "support export uses a fixed allowlist");
+    check_int((long)ptc_support_export_file_count(), 9, "support export uses a fixed allowlist");
     bool network_report_seen = false;
+    bool power_ledger_seen = false;
     for (index = 0; index < ptc_support_export_file_count(); ++index) {
         const char *name = ptc_support_export_file(index);
         if (name && !strcmp(name, "support/update-network.json")) network_report_seen = true;
+        if (name && !strcmp(name, "support/power-ledger.json")) power_ledger_seen = true;
         check_true(name && strcmp(name, "credentials.json") != 0 && strcmp(name, "auth.json") != 0,
             "support allowlist excludes credential files");
     }
     check_true(network_report_seen, "support export includes the bounded network worker snapshot");
+    check_true(power_ledger_seen, "support export includes the backend freeze ledger");
     check_true(ptc_support_export_text_safe("{\"kind\":\"online_update_network\",\"tls_backend\":\"libnx\",\"curl_result_available\":false}"),
         "network result availability exports without credential material");
     check_true(ptc_support_export_text_safe("{\"version\":1,\"device_id\":\"kid-switch\"}"),
@@ -4533,11 +4536,96 @@ static void test_quiescing_scheduler(void)
 
 #include "test_reason_notification.inc"
 
+#include "../../sysmodule/power_ledger.h"
+
+/* The ledger replays the 2026-10-20 physical POWER sleep capture shape: five
+   second rounds, then one 138 second freeze during which no round ran. */
+static void test_power_ledger(void)
+{
+    PtcPowerLedger ledger;
+    char text[2560], small[64];
+    uint64_t ns = UINT64_C(5000000000);
+    int64_t wall = 1000;
+    unsigned i;
+    memset(&ledger, 0, sizeof(ledger));
+    ptc_power_ledger_observe(&ledger, ns, wall, 1000, true);
+    check_true(ledger.started && ledger.started_at == 1000 && ledger.loops == 0 && !ledger.unsaved,
+        "first observation only establishes the baseline");
+    for (i = 0; i < 60; ++i) {
+        ns += UINT64_C(1000000000); ++wall;
+        ptc_power_ledger_observe(&ledger, ns, wall, 1000, i % 5 == 0);
+    }
+    check_true(ledger.gaps == 0 && ledger.loops == 60 && ledger.ticks == 12 &&
+        ptc_power_ledger_seconds(ledger.awake_ns) == 60 && !ptc_power_ledger_due(&ledger),
+        "ordinary one second rounds accumulate awake time and no gap");
+    /* A slow round below the threshold (long SD stall, effect wait) is not a freeze. */
+    ns += UINT64_C(15000000000); wall += 15;
+    ptc_power_ledger_observe(&ledger, ns, wall, 1000, true);
+    check_true(ledger.gaps == 0 && ptc_power_ledger_seconds(ledger.awake_ns) == 75,
+        "a round fourteen seconds late stays below the freeze threshold");
+    ns += UINT64_C(139000000000); wall += 139;
+    ptc_power_ledger_observe(&ledger, ns, wall, 1000, true);
+    check_true(ledger.gaps == 1 && ledger.count == 1 && ledger.unsaved &&
+        ledger.episodes[0].suspended_s == 138 && ledger.episodes[0].awake_s == 76 &&
+        ledger.episodes[0].wall_s == 139 && ledger.episodes[0].resumed_at == wall &&
+        ptc_power_ledger_seconds(ledger.suspended_ns) == 138 && ledger.run_ns == 0,
+        "a 138 second freeze is recorded with the awake stretch that preceded it");
+    check_true(!ptc_power_ledger_due(&ledger), "nothing is written right after resume");
+    for (i = 0; i < 119; ++i) {
+        ns += UINT64_C(1000000000); ++wall;
+        ptc_power_ledger_observe(&ledger, ns, wall, 1000, false);
+    }
+    check_true(!ptc_power_ledger_due(&ledger), "a short wake never reaches the write threshold");
+    ns += UINT64_C(1000000000); ++wall;
+    ptc_power_ledger_observe(&ledger, ns, wall, 1000, false);
+    check_true(ptc_power_ledger_due(&ledger), "two continuous awake minutes make the ledger due");
+    ptc_power_ledger_failed(&ledger);
+    check_true(!ptc_power_ledger_due(&ledger), "a failed write is not retried on every round");
+    for (i = 0; i < 60; ++i) {
+        ns += UINT64_C(1000000000); ++wall;
+        ptc_power_ledger_observe(&ledger, ns, wall, 1000, false);
+    }
+    check_true(ptc_power_ledger_due(&ledger), "the retry becomes due one minute later");
+    check_true(ptc_power_ledger_format(&ledger, "release1", "0123456789abcdef", wall, text, sizeof(text)) &&
+        strstr(text, "\"release_id\":\"release1\"") && strstr(text, "\"backend_boot_id\":\"0123456789abcdef\"") &&
+        strstr(text, "\"gaps\":1") && strstr(text, "\"suspended_s\":138") &&
+        strstr(text, "\"episodes\":[{\"resumed_at\":1214,\"awake_s\":76,\"suspended_s\":138,\"wall_s\":139}]}"),
+        "the exported ledger carries the totals and each freeze");
+    {
+        cJSON *parsed = cJSON_Parse(text);
+        check_true(cJSON_IsObject(parsed) && ptc_support_export_text_safe(text),
+            "the ledger is one valid JSON object that passes support redaction");
+        cJSON_Delete(parsed);
+    }
+    check_true(!ptc_power_ledger_format(&ledger, "release1", "0123456789abcdef", wall, small, sizeof(small)),
+        "a truncated ledger is rejected instead of written");
+    ptc_power_ledger_saved(&ledger);
+    check_true(!ptc_power_ledger_due(&ledger), "a saved ledger waits for the next freeze");
+    /* A clock change during the freeze shows up as a wall/monotonic mismatch. */
+    ns += UINT64_C(601000000000); wall += 4201;
+    ptc_power_ledger_observe(&ledger, ns, wall, 1000, true);
+    check_true(ledger.gaps == 2 && ledger.episodes[1].suspended_s == 600 && ledger.episodes[1].wall_s == 4201,
+        "wall and monotonic spans are both retained");
+    /* The ring keeps the newest episodes; totals keep counting. */
+    for (i = 0; i < PTC_POWER_LEDGER_EPISODES + 3; ++i) {
+        ns += UINT64_C(31000000000); wall += 31;
+        ptc_power_ledger_observe(&ledger, ns, wall, 1000, false);
+    }
+    check_true(ledger.count == PTC_POWER_LEDGER_EPISODES && ledger.gaps == PTC_POWER_LEDGER_EPISODES + 5 &&
+        ptc_power_ledger_format(&ledger, "release1", "0123456789abcdef", wall, text, sizeof(text)),
+        "a night of many short wakes stays bounded and still fits the buffer");
+    ptc_power_ledger_observe(&ledger, ns - 1, wall, 1000, false);
+    check_true(ledger.gaps == PTC_POWER_LEDGER_EPISODES + 5 && ledger.last_ns == ns - 1,
+        "a monotonic regression only rebuilds the baseline");
+}
+
 int main(void)
 {
     test_reason_events();
     test_notification_dependency();
     test_reason_detail_transport();
+    test_reason_idle_cost();
+    test_power_ledger();
     test_reason_transport();
     test_reason_policy_observation();
     test_reason_snapshot_text();

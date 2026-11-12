@@ -2273,6 +2273,152 @@ static void test_scheduler_idle_probe(void)
     free(f.mem);
 }
 
+static unsigned state_json_changes(Fixture *f, char *last, size_t size)
+{
+    char text[4096];
+    if (!f->mem->storage.vtable->read_text(&f->mem->storage, "app/state.json", text, sizeof(text))) return 0;
+    if (strcmp(text, last) == 0) return 0;
+    snprintf(last, size, "%s", text);
+    return 1;
+}
+
+static void sample_second(Fixture *f, unsigned seconds_used)
+{
+    direct_sample(f, 20 * PTC_USAGE_MINUTE_NS + (uint64_t)seconds_used * UINT64_C(1000000000), 1);
+}
+
+/* Sampling-only progress may be coalesced; nothing else may be. The dock policy
+   samples once per second, so without coalescing state.json is rewritten with an
+   SD commit every second the console is not suspended. */
+static void test_sampled_state_persistence(void)
+{
+    Fixture f;
+    PtcSysmodule reopened;
+    PtcRuntimeState state;
+    PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+    PtcOperationModeProvider provider = {test_operation_mode, &mode};
+    char disk[4096] = "";
+    char preimage[4096];
+    char needle[96];
+    char build[256];
+    const char *environment = "{\"read_ok\":true,\"hos\":\"22.5.0\","
+        "\"model\":\"mariko-oled\",\"firmware_hash\":\"fixture\","
+        "\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\",\"release_id\":\"fixture\"}";
+    unsigned used = 0, changes = 0;
+    uint64_t live = 0;
+    init_fixture(&f);
+    snprintf(build, sizeof(build), "{\"profile\":\"%s\",\"playwise_version\":\"%s\","
+        "\"release_id\":\"fixture\"}", PLAYWISE_PROFILE_NAME, PLAYWISE_VERSION);
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/build.json", build) &&
+        f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/environment.json", environment) &&
+        f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/compatibility.json", environment),
+        "seed accepted scheduler environment");
+    f.core.operation_mode_provider = &provider;
+    direct_sample(&f, 20 * PTC_USAGE_MINUTE_NS, 0);
+    enable_dock_fixture(&f, false, 60);
+    f.core.dock_boot_sampled = true;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 0, "dock baseline starts empty");
+    (void)state_json_changes(&f, disk, sizeof(disk));
+
+    for (used = 1; used <= 5; ++used) {
+        sample_second(&f, used);
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        changes += state_json_changes(&f, disk, sizeof(disk));
+    }
+    expect(changes == 5, "without coalescing every sampled second reaches state.json");
+
+    f.core.state_persist_interval_s = 30;
+    changes = 0;
+    for (used = 6; used <= 34; ++used) {
+        sample_second(&f, used);
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        changes += state_json_changes(&f, disk, sizeof(disk));
+        expect(load_state(&f.core, &state) &&
+            state.undocked_used_ns == (uint64_t)used * UINT64_C(1000000000),
+            "coalesced samples stay live for every in-process reader");
+    }
+    expect(changes == 0 && f.core.state_dirty, "twenty-nine sampled seconds stay in memory");
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    changes += state_json_changes(&f, disk, sizeof(disk));
+    expect(changes == 1 && !f.core.state_dirty, "the interval boundary writes exactly once");
+
+    mode.mode = PTC_OPERATION_MODE_DOCKED;
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    changes += state_json_changes(&f, disk, sizeof(disk));
+    expect(changes == 2 && !f.core.state_dirty, "a mode change is persisted immediately instead of coalesced");
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    changes += state_json_changes(&f, disk, sizeof(disk));
+    expect(changes == 3 && !f.core.state_dirty, "returning to handheld is persisted immediately as well");
+
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.core.state_dirty && !state_json_changes(&f, disk, sizeof(disk)),
+        "sampling-only progress defers again after the immediate write");
+    expect(load_state(&f.core, &state), "read the deferred state before the transaction");
+    live = state.undocked_used_ns;
+    expect(recovery_begin(&f.core, NULL, f.clock.snapshot), "recovery preimage is taken");
+    expect(!f.core.state_dirty && f.mem->storage.vtable->read_text(&f.mem->storage,
+        "app/recovery/active/state.before", preimage, sizeof(preimage)),
+        "taking a preimage flushes deferred consumption first");
+    snprintf(needle, sizeof(needle), "\"undocked_used_ns\":%llu", (unsigned long long)live);
+    expect(strstr(preimage, needle) != NULL, "the preimage carries the latest sampled usage");
+    expect(recovery_rollback(&f.core) && load_state(&f.core, &state) && state.undocked_used_ns == live &&
+        !f.core.state_dirty, "rollback restores the preimage instead of refunding observed consumption");
+
+    f.core.state_persist_interval_s = 30;
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.core.state_dirty, "a post-rollback sample defers again");
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/reload.flag", ""),
+        "write the reload marker");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!f.core.state_dirty && load_state(&f.core, &state) &&
+        state.undocked_used_ns == live + UINT64_C(1000000000),
+        "a reload flushes deferred samples before dropping the caches");
+
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.core.state_dirty, "sampling continues to defer after the reload");
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/disable.flag", ""),
+        "write the disable marker");
+    f.clock.snapshot.unix_seconds += 31;
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(!f.core.state_dirty && load_state(&f.core, &state) &&
+        state.undocked_used_ns == live + UINT64_C(2000000000),
+        "an overdue interval is flushed even when Enforce no longer samples");
+    expect(f.mem->storage.vtable->remove_path(&f.mem->storage, "app/flags/disable.flag"),
+        "clear the disable marker");
+
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    f.mem->fail_write_path_contains = "app/state.json";
+    expect(!ptc_sysmodule_flush_state(&f.core) && f.core.state_dirty,
+        "a failed flush retains the deferred state");
+    f.mem->fail_write_path_contains = NULL;
+    expect(ptc_sysmodule_flush_state(&f.core) && !f.core.state_dirty &&
+        ptc_sysmodule_flush_state(&f.core), "a retried flush writes once and then reports clean");
+
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.core.state_dirty && load_state(&f.core, &state), "leave one second unflushed before restart");
+    live = state.undocked_used_ns;
+    /* A crash or power cut loses at most the deferred seconds; the counters and
+       the accumulations come from one consistent snapshot, so the next sample
+       re-attributes the difference conservatively instead of losing usage. */
+    ptc_sysmodule_init(&reopened, "app", &f.mem->storage, &f.pctl.pctl, &f.clock.provider);
+    reopened.operation_mode_provider = &provider;
+    sample_second(&f, ++used);
+    (void)ptc_sysmodule_enforce_tick(&reopened);
+    expect(load_state(&reopened, &state) && state.undocked_used_ns == live + UINT64_C(1000000000),
+        "a restart re-attributes the deferred interval without losing consumption");
+    free(f.mem);
+}
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
@@ -2283,6 +2429,7 @@ int ptc_test_control_safety(void)
     test_enforce_shared_observation();
     test_eye_rest_scheduler_deadline();
     test_scheduler_idle_probe();
+    test_sampled_state_persistence();
     test_direct_unlimited_lifecycle();
     test_direct_unlimited_reason_recovery();
     test_eden_direct_unlimited_counter();

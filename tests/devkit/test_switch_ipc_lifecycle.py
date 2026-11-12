@@ -24,6 +24,9 @@ def main() -> None:
     overlay_makefile = (ROOT / "companion/overlay/Makefile").read_text(encoding="utf-8")
     hot_reload = (ROOT / "companion/nro/hot_reload.c").read_text(encoding="utf-8")
     sysmodule = (ROOT / "sysmodule/source/main.c").read_text(encoding="utf-8")
+    reason_notification = (ROOT / "sysmodule/reason_notification.h").read_text(encoding="utf-8")
+    hidden_poll = (ROOT / "companion/overlay/hidden_poll.h").read_text(encoding="utf-8")
+    power_ledger = (ROOT / "sysmodule/power_ledger.h").read_text(encoding="utf-8")
     nro_main = (ROOT / "companion/nro/main.c").read_text(encoding="utf-8")
     nro_source = "\n".join(
         (ROOT / "companion/nro" / name).read_text(encoding="utf-8")
@@ -106,9 +109,46 @@ def main() -> None:
     require("detail::hiddenPollNs(shData.automaticOpenBlocked.load(), overlay->hiddenPollInterval())" in loop,
             "HOME/POWER blocked hidden UI must wait for the manual combo event")
     require("ptc_sysmodule_idle_wait_ms(wait_ms, fast_poll)" in sysmodule and
-            "usage_evidence.active || reason_enabled" in sysmodule and
-            "reason_notification.pending || reason_notification.detail_pending" in sysmodule,
-            "idle backend must retain fast polling for capture and notification cleanup")
+            "usage_evidence.active ||" in sysmodule and
+            "ptc_reason_notification_busy(&reason_notification)" in sysmodule and
+            "reason_enabled ||" not in sysmodule,
+            "only capture, pending material and unhandled restriction changes may force fast polling")
+    require("!n->blocked && (n->pending || n->detail_pending || n->event.dirty)" in reason_notification,
+            "notification fast polling must cover pending toasts, detail offers and unhandled changes only")
+    # Switch-only wiring that Host C tests cannot compile: the production loop must
+    # enable sampled-state coalescing, flush it before the handoff freezes writes and
+    # after the loop ends, and keep the freeze ledger free of periodic I/O.
+    require("sysmodule.state_persist_interval_s = 30;" in sysmodule,
+            "standard backend must coalesce sampling-only state writes")
+    quiesce_pos = sysmodule.index("sysmodule->quiescing = true;")
+    require(sysmodule.rfind("ptc_sysmodule_flush_state(sysmodule)", 0, quiesce_pos) != -1 and
+            sysmodule.index("ptc_sysmodule_flush_state(&sysmodule)") > sysmodule.index("while (!exit_for_handoff)"),
+            "coalesced samples must be flushed before quiescing and after the control loop")
+    lab_guard = sysmodule.rfind("#ifndef PLAYWISE_DEVICE_LAB", 0, sysmodule.index("sysmodule.state_persist_interval_s = 30;"))
+    require(lab_guard != -1 and "#endif" not in sysmodule[lab_guard:sysmodule.index("sysmodule.state_persist_interval_s = 30;")],
+            "Device Lab must keep immediate state persistence")
+    require("ptc_power_ledger_observe(&power_ledger, reason_ns, reason_clock.unix_seconds, wait_ms, due)" in sysmodule and
+            "!reason_stopping && ptc_power_ledger_due(&power_ledger)" in sysmodule and
+            '"/support/power-ledger.json"' in sysmodule and
+            "ptc_power_ledger_failed(&power_ledger)" in sysmodule,
+            "freeze ledger must reuse the loop clocks, stay silent while quiescing and bound write retries")
+    require("PTC_POWER_LEDGER_GAP_NS UINT64_C(15000000000)" in power_ledger and
+            "PTC_POWER_LEDGER_SETTLE_NS UINT64_C(120000000000)" in power_ledger,
+            "freeze ledger thresholds are part of the documented diagnostic contract")
+    require("ptc_overlay_hidden_poll_ns(automatic_enabled_, automatic_failures_)" in overlay and
+            "ms + PTC_OVERLAY_HIDDEN_CONFIG_MS" in overlay and
+            "ptc_overlay_hidden_runtime_next_ms(ms, runtime_known_)" in overlay,
+            "hidden Overlay must use the shared cadence and cache the backend identity")
+    # An unanswered detail offer is dropped once its observation ages, so the
+    # presence lease must stay short and be renewed only from neutral input.
+    hidden = overlay[overlay.index("bool onHiddenPoll(bool neutral) override"):overlay.index("void onFrameRendered() override")]
+    require("ready.expires_ms = ms + 1500;" in hidden and "next_ready_ms_ = ms + 1000;" in hidden,
+            "hidden Overlay must keep the 1.5s presence lease renewed every second")
+    require(hidden.index("ms >= next_config_ms_") < hidden.index("!automatic_enabled_ || !neutral") <
+            hidden.index("ptc_reason_detail_runtime(") < hidden.index('ptc_reason_detail_write(s, APP_ROOT, "ready"'),
+            "preference checks ignore input, but identity reads and the lease need neutral input")
+    require("UINT64_C(250000000) : UINT64_C(5000000000)" in hidden_poll,
+            "hidden Overlay polls every five seconds while reason notifications are off")
     require(loop.index("eventCreate(&shData.comboEvent") < loop.index("threadStart(&backgroundThread)"),
             "combo event must exist before the input thread starts")
     require(loop.index("threadWaitForExit(&backgroundThread)") < loop.index("eventClose(&shData.comboEvent)"),

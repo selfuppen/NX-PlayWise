@@ -121,6 +121,9 @@ bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules);
 bool restore_rules(PtcSysmodule *sysmodule, const PtcRules *rules, bool existed);
 bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state);
 bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at);
+/* Enforce 的用量采样提交点专用：只有采样字段单调前进时允许按
+   state_persist_interval_s 合并落盘，其余变化与 save_state 完全相同。 */
+bool save_state_sampled(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at);
 void append_event(PtcSysmodule *sysmodule, const PtcRequest *request, const char *event, PtcErrorCode error, const char *detail);
 void take_pctl_debug_snapshot(PtcSysmodule *sysmodule, PtcPctlDebugSnapshot *out);
 uint32_t last_pctl_ipc_result(PtcSysmodule *sysmodule);

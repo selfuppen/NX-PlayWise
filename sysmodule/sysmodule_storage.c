@@ -85,6 +85,10 @@ void invalidate_all_caches(PtcSysmodule *sysmodule)
     sysmodule->config_cache_valid = false;
     sysmodule->rules_cache_valid = false;
     sysmodule->state_cache_valid = false;
+    /* 失效之后磁盘内容才是权威来源（回滚刚写回前像，或外部要求重载）。尚未落盘
+       的采样随之丢弃：下一次读数会把这段差值重新按保守口径计入，不会凭空退还。 */
+    sysmodule->state_dirty = false;
+    sysmodule->state_persisted_valid = false;
 }
 
 static const char *skip_ws(const char *p)
@@ -552,6 +556,9 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
     bool dock_snapshot_existed;
     bool config_existed, auth_existed, credentials_existed, catalog_existed;
     if (recovery_path_exists(sysmodule)) return recovery_owned_by(sysmodule, request);
+    /* 事务前像与回滚都以磁盘上的 state.json 为准：合并落盘尚未写入的用量必须先
+       提交，失败的控制写入才不会连同已观察到的消耗一起回滚。 */
+    if (!ptc_sysmodule_flush_state(sysmodule)) return false;
     if (compact_nonce_ledger(sysmodule, now.day_index) != PTC_ERR_OK) return false;
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) != PTC_ERR_OK ||
@@ -1287,6 +1294,13 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
             memset(&sysmodule->state_cache, 0, sizeof(sysmodule->state_cache));
         else if (!parse_state_text(text, &sysmodule->state_cache)) return false;
         sysmodule->state_cache_valid = true;
+        /* 刚读回的磁盘内容与内存一致：合并间隔从此刻起算，未落盘的采样仍不会
+           超过一个间隔。 */
+        sysmodule->state_persisted = sysmodule->state_cache;
+        sysmodule->state_persisted_valid = true;
+        sysmodule->state_persisted_at = sysmodule->time_provider
+            ? sysmodule->time_provider->vtable->now(sysmodule->time_provider).unix_seconds : 0;
+        sysmodule->state_dirty = false;
     }
     *state = sysmodule->state_cache;
     return true;
@@ -1371,6 +1385,81 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
     sysmodule->state_cache_valid = parse_state_text(text, &sysmodule->state_cache) &&
         sysmodule->storage->vtable->metadata &&
         sysmodule->storage->vtable->metadata(sysmodule->storage, path, &sysmodule->state_meta);
+    /* 写入成功即不再有待写内容；缓存无法确认时停用合并，直到下一次读回。 */
+    sysmodule->state_dirty = false;
+    sysmodule->state_persisted_valid = sysmodule->state_cache_valid;
+    if (sysmodule->state_persisted_valid) {
+        sysmodule->state_persisted = sysmodule->state_cache;
+        sysmodule->state_persisted_at = updated_at;
+    }
+    return true;
+}
+
+/* 采样字段：每次用量读数都会前进，但本身不改变任何控制决策。跨过额度或周期的
+   那一次读数会同时改变限制状态，由下面的逐字段比较归为立即落盘。 */
+static void state_copy_sampling(PtcRuntimeState *state, const PtcRuntimeState *from)
+{
+    state->eye_usage_counter.total_ns = from->eye_usage_counter.total_ns;
+    state->eye_usage_counter.captured_at = from->eye_usage_counter.captured_at;
+    state->eye_cycle_used_ns = from->eye_cycle_used_ns;
+    state->eye_care_accumulated_minutes = from->eye_care_accumulated_minutes;
+    state->eye_care_last_used_minutes = from->eye_care_last_used_minutes;
+    state->eye_care_idle_since = from->eye_care_idle_since;
+    state->dock_usage_counter.total_ns = from->dock_usage_counter.total_ns;
+    state->dock_usage_counter.captured_at = from->dock_usage_counter.captured_at;
+    state->undocked_used_ns = from->undocked_used_ns;
+    state->dock_last_used_ns = from->dock_last_used_ns;
+}
+
+/* 任何采样字段回退（周期清零、基线重建、时钟回拨）都不是普通采样，立即落盘。 */
+static bool state_sampling_advanced(const PtcRuntimeState *state, const PtcRuntimeState *persisted)
+{
+    return state->eye_usage_counter.total_ns >= persisted->eye_usage_counter.total_ns &&
+        state->eye_usage_counter.captured_at >= persisted->eye_usage_counter.captured_at &&
+        state->eye_cycle_used_ns >= persisted->eye_cycle_used_ns &&
+        state->eye_care_accumulated_minutes >= persisted->eye_care_accumulated_minutes &&
+        state->eye_care_last_used_minutes >= persisted->eye_care_last_used_minutes &&
+        state->eye_care_idle_since >= persisted->eye_care_idle_since &&
+        state->dock_usage_counter.total_ns >= persisted->dock_usage_counter.total_ns &&
+        state->dock_usage_counter.captured_at >= persisted->dock_usage_counter.captured_at &&
+        state->undocked_used_ns >= persisted->undocked_used_ns &&
+        state->dock_last_used_ns >= persisted->dock_last_used_ns;
+}
+
+bool save_state_sampled(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at)
+{
+    PtcRuntimeState probe;
+    if (!sysmodule->state_persist_interval_s || !sysmodule->state_cache_valid ||
+        !sysmodule->state_persisted_valid) return save_state(sysmodule, state, updated_at);
+    /* 与内存中的最新状态完全相同：没有新的内容需要提交。 */
+    if (memcmp(state, &sysmodule->state_cache, sizeof(*state)) == 0) return true;
+    probe = *state;
+    state_copy_sampling(&probe, &sysmodule->state_persisted);
+    if (memcmp(&probe, &sysmodule->state_persisted, sizeof(probe)) != 0 ||
+        !state_sampling_advanced(state, &sysmodule->state_persisted) ||
+        updated_at < sysmodule->state_persisted_at ||
+        (uint64_t)(updated_at - sysmodule->state_persisted_at) >= sysmodule->state_persist_interval_s)
+        return save_state(sysmodule, state, updated_at);
+    /* 只留在缓存：load_state 的元数据校验仍然命中，后续读取看到的是最新采样。
+       掉电只丢失不超过一个间隔的采样，计数器与累计值来自同一时刻，重启后的
+       差值按既有保守规则重新计入。 */
+    sysmodule->state_cache = *state;
+    sysmodule->state_dirty = true;
+    sysmodule->state_dirty_at = updated_at;
+    return true;
+}
+
+bool ptc_sysmodule_flush_state(PtcSysmodule *sysmodule)
+{
+    PtcRuntimeState pending;
+    int64_t now;
+    if (!sysmodule || !sysmodule->state_dirty) return true;
+    pending = sysmodule->state_cache;
+    if (!save_state(sysmodule, &pending, sysmodule->state_dirty_at)) return false;
+    /* updated_at 记录的是这份采样的时刻；合并间隔按实际写入时刻起算。 */
+    now = sysmodule->time_provider
+        ? sysmodule->time_provider->vtable->now(sysmodule->time_provider).unix_seconds : 0;
+    if (now > sysmodule->state_persisted_at) sysmodule->state_persisted_at = now;
     return true;
 }
 

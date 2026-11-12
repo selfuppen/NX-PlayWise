@@ -254,10 +254,6 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         state(n, cancel ? "suppressed" : "expired_display_unknown");
     }
     if (stopping) return;
-    if (enabled && ms >= n->config_ms) {
-        ptc_ultrahand_config_read(n->storage, &n->external);
-        n->config_ms = ms + 2000;
-    }
     bool ready = ptc_reason_event_update(&n->event, n->event.release, n->event.boot, s, ms, wall,
         enabled, suppressed);
     if ((!enabled || suppressed) && !detail_confirmed) state(n, "suppressed");
@@ -282,6 +278,13 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
             state(n, "detail_write_unknown");
             return;
         }
+    }
+    /* The receiver switch and shortcut label matter only when a fallback toast
+       is about to be published. Read them here, at most once per two seconds,
+       instead of re-reading two SD files on every idle round. */
+    if (ms >= n->config_ms) {
+        ptc_ultrahand_config_read(n->storage, &n->external);
+        n->config_ms = ms > UINT64_MAX - 2000 ? UINT64_MAX : ms + 2000;
     }
     if (n->external.notifications != 1) { state(n, "fallback_receiver_unavailable"); return; }
     if (!publish(n, lang, wall)) goto failed;

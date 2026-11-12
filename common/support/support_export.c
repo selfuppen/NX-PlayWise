@@ -11,6 +11,8 @@ static const char *const PTC_SUPPORT_FILES[] = {
     "compatibility.json",
     "environment.json",
     "support/update-network.json",
+    /* 后台冻结账本：休眠／唤醒区间与主循环轮次，不含任何凭据。 */
+    "support/power-ledger.json",
 };
 
 static const char *const PTC_SENSITIVE_MARKERS[] = {

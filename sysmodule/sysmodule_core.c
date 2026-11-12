@@ -190,9 +190,10 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     previous_eye_state = runtime_state;
     dock_sample_usage_observed(sysmodule, &rules, &runtime_state, now, &observation);
     /* Commit observed usage before taking a control transaction preimage: a
-       failed restriction write must never roll back consumption already seen. */
+       failed restriction write must never roll back consumption already seen.
+       Sampling-only progress may be coalesced; recovery_begin flushes it. */
     if (memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0 &&
-        !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+        !save_state_sampled(sysmodule, &runtime_state, now.unix_seconds)) {
         write_disable_flag(sysmodule, "dock_usage_save_failed\n");
         return 0;
     }
@@ -239,7 +240,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         /* Commit consumption before the control transaction preimage. A failed
            rest write may undo the rest, never the observed consumption. */
         if (memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0 &&
-            !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+            !save_state_sampled(sysmodule, &runtime_state, now.unix_seconds)) {
             write_disable_flag(sysmodule, "eye_care_usage_save_failed\n");
             return 0;
         }
@@ -365,7 +366,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
            through the full path below. */
         if (read_control_observation(sysmodule, now, &observation, &observed_status) != PTC_ERR_OK ||
             target_settings_observed(target_mode, target_minutes, &observed_status)) {
-            if (eye_state_changed && !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+            if (eye_state_changed && !save_state_sampled(sysmodule, &runtime_state, now.unix_seconds)) {
                 write_disable_flag(sysmodule, "eye_care_state_failed\n");
                 return 0;
             }
@@ -496,6 +497,12 @@ void ptc_sysmodule_init(
     sysmodule->wait_hint_eye_valid = false;
     sysmodule->wait_hint_eye_deadline = 0;
     sysmodule->setup_activate_after_hint = 0;
+    sysmodule->state_persist_interval_s = 0;
+    sysmodule->state_dirty = false;
+    sysmodule->state_persisted_valid = false;
+    sysmodule->state_dirty_at = 0;
+    sysmodule->state_persisted_at = 0;
+    memset(&sysmodule->state_persisted, 0, sizeof(sysmodule->state_persisted));
     snprintf(sysmodule->boot_id, sizeof(sysmodule->boot_id), "host-boot");
     invalidate_all_caches(sysmodule);
     (void)ptc_sysmodule_refresh_caches(sysmodule);
@@ -788,6 +795,8 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     disable_changed = !sysmodule->disable_initialized || sysmodule->disable_present != disable_present;
     reload = sysmodule->storage->vtable->exists(sysmodule->storage, reload_path);
     if (reload) {
+        /* 重载会丢弃缓存：先把合并落盘尚未写入的采样提交到磁盘。 */
+        (void)ptc_sysmodule_flush_state(sysmodule);
         invalidate_all_caches(sysmodule);
         (void)ptc_sysmodule_refresh_caches(sysmodule);
     }
@@ -855,6 +864,11 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     (void)enforce_ran;
 #endif
     store_wait_hints(sysmodule, rules_ok && dock_policy_enabled(&tick_rules), eye_pending, eye_deadline);
+    /* 合并落盘的到期补写不依赖下一次采样：采样停止后最迟一个间隔内仍会写入。
+       写入失败时保留待写内容，下一个完整轮次重试。 */
+    if (sysmodule->state_dirty && (now.unix_seconds < sysmodule->state_dirty_at ||
+        (uint64_t)(now.unix_seconds - sysmodule->state_dirty_at) >= sysmodule->state_persist_interval_s))
+        (void)ptc_sysmodule_flush_state(sysmodule);
     return actions;
 }
 
