@@ -4234,7 +4234,9 @@ static void test_config_backup_layout(void)
         }
     }
     model.config_backup_tab = 0;
-    int tab0_indices[] = {13, 15, 16, 17};
+    check_true(!rects_overlap(ptc_ui_config_backup_group_rect(3), ptc_ui_config_backup_field_rect(18)),
+        "installation restore button stays outside the snapshot status card");
+    int tab0_indices[] = {13, 15, 16, 17, 18};
     int n_tab0 = sizeof(tab0_indices) / sizeof(tab0_indices[0]);
     for (int idx = 0; idx < n_tab0; ++idx) {
         int i = tab0_indices[idx];

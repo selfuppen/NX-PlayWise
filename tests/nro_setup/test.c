@@ -566,6 +566,23 @@ static void test_config_backup_ui(void)
     open_config_backup(&ui);
     check(ui.model.config_backup_tab == 0 && ui.model.overlay_selection == 13,
           "backup entry defaults to create tab and create action");
+    config_backup_action(&ui,18);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,
+          "installation restore with no snapshot creates no confirmation or request");
+    ui.model.setup_snapshot_available = true;
+    config_backup_action(&ui,18);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM &&
+          ui.model.operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT && ui.model.confirm_hold_required,
+          "installation restore opens the existing held confirmation");
+    ptc_ui_cancel_overlay(&ui.model);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,
+          "cancel installation restore returns to backup without submission");
+    ui.model.recovery_active = true;
+    config_backup_action(&ui,18);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,
+          "active recovery blocks installation restore action");
+    ui.model.recovery_active = false;
+    ui.model.overlay_selection = 13;
     check(ui.model.config_backup_ready && ui.model.config_groups == 507 && !ui.model.config_today_available,"ordinary defaults exclude expired today and security");
     config_backup_action(&ui,2); check(ui.model.config_groups == 507,"expired today cannot toggle");
     config_backup_action(&ui,11); check(ui.model.config_groups == 2043,"all selects available groups");

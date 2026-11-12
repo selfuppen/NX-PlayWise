@@ -153,6 +153,19 @@ void request_config_restore(UiState *ui)
 void config_backup_action(UiState *ui, int index)
 {
     if (!ui || ui->waiting) return;
+    if (index == 18) {
+        if (ui->model.config_backup_tab != 0 || !ui->model.setup_snapshot_available ||
+            ui->model.parent_support_only || ui->model.recovery_active ||
+            ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_RUNNING) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     ptc_ui_text(PTC_UI_T_CURRENT_STATUS_IS_NOT_AVAILABLE));
+            return;
+        }
+        open_danger_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT,
+            ptc_ui_text(PTC_UI_T_RESTORE_ORIGINAL_STATE),
+            ptc_ui_text(PTC_UI_T_RESTORES_ORIGINAL_PARENTAL_CONTROL_SETTINGS_AND_TIMERS));
+        return;
+    }
     if (index == 16) {
         ui->model.config_backup_tab = 0;
         if (ui->model.overlay_selection != 15 && ui->model.overlay_selection != 16 && ui->model.overlay_selection != 17) {

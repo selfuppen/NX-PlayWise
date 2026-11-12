@@ -276,7 +276,7 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         snprintf(key, sizeof(key), "week_%d", i);
         if (!ptc_eden_target(out, size, &used, key, ptc_ui_weekly_day_minutes_rect(i))) goto fail;
     }
-    for (int i = 0; i < 18; ++i) {
+    for (int i = 0; i < 19; ++i) {
         char key[24];
         snprintf(key, sizeof(key), "backup_%d", i);
         if (!ptc_eden_target(out, size, &used, key, ptc_ui_config_backup_field_rect(i))) goto fail;

@@ -104,7 +104,7 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
         draw_button_label(pixels, stride, btn_create, create_label, 19, create_disabled ? UI_DISABLED : UI_ON_ACCENT);
 
         /* 右侧快照状态卡片 (Right Side Info Card, X=824, Y=172, W=402, H=438) */
-        UiRect info = {824, 172, 402, 438};
+        UiRect info = to_uirect(ptc_ui_config_backup_group_rect(3));
         draw_plan_card(pixels, stride, info, false);
         draw_text(pixels, stride, info.x + 20, info.y + 34, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SD_STATUS_TITLE), 19, UI_INK);
         if (model->config_backup_ready) {
@@ -138,6 +138,12 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
         draw_rect_outline(pixels, stride, hint_box, 8, 1, UI_BORDER);
         draw_text(pixels, stride, hint_box.x + 12, hint_box.y + 24, "backups/config-backup.json", 12, UI_MUTED);
         draw_text(pixels, stride, hint_box.x + 12, hint_box.y + 44, ptc_ui_text(PTC_UI_T_Y_REFRESH), 12, UI_ACCENT);
+        bool restore_enabled = model->setup_snapshot_available && !model->parent_support_only &&
+            !model->waiting && !model->recovery_active && model->hot_reload_status != PTC_UI_HOT_RELOAD_RUNNING;
+        char restore_label[160];
+        snprintf(restore_label, sizeof(restore_label), "X  %s", ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALLATION_SETTINGS));
+        draw_candidate_button(pixels, stride, ptc_ui_config_backup_field_rect(18), restore_label,
+            UI_DANGER_SOFT, UI_DANGER, model->overlay_selection == 18, !restore_enabled);
     } else {
         /* ======================== Tab 1: 从备份恢复 ======================== */
         /* 备份标识放在胶囊标签右侧的同一行：Y=120..158 已被标签占用，原先

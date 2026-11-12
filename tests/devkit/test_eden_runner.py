@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from tools.automation.eden_runner import (
     GateError, ObservationPending, McpClient, SCENARIOS, Suite, decode, healthy_exit, healthy_launch,
-    receipt, save, seal, validate_observation, verify, profile_settings, set_profile_timezone,
+    receipt, read, save, seal, validate_observation, verify, profile_settings, set_profile_timezone,
     open_shared_read, read_observation_file,
     scenario_names,
     validate_native_environment,
@@ -242,6 +242,72 @@ def test_main_suite_and_fail_closed() -> None:
         root = Path(directory)
         save(root / "evidence-manifest.json", {"schema_version": 1, "files": [{"path": "../outside"}]})
         rejected(lambda: verify(root))
+
+
+def test_support_seed_enters_parent_after_setup() -> None:
+    from tools.automation.eden_support_flow import SupportFlow
+
+    class SeedFlow(SupportFlow):
+        def __init__(self, root: Path, view: int):
+            self.app = root / "app"
+            self.output = root / "output"
+            self.view = view
+            self.overlay = 0
+            self.authenticated = False
+            self.actions = []
+            self.redeemed = False
+            (self.app / "backups").mkdir(parents=True)
+            (self.app / "activity").mkdir()
+            save(self.app / "backups/install_pctl_snapshot.json", {"version": 1})
+            save(self.app / "rules.json", {"week": []})
+            (self.app / "activity/history.jsonl").write_text("grant\n", encoding="utf-8")
+
+        def wait_ui(self, **expected):
+            assert "view" not in expected or self.view == expected["view"]
+            assert "overlay" not in expected or self.overlay == expected["overlay"]
+
+        def observe(self):
+            return {"ui": {"view": self.view}}
+
+        def pin_open(self):
+            assert self.view == 0
+            self.overlay = 22
+
+        def enter_pin(self, digits):
+            assert self.overlay == 22 and digits == "110"
+            self.authenticated = True
+            self.view, self.overlay = 1, 0
+
+        def refresh(self):
+            assert self.view == 1
+            return {"status": "ok"}
+
+        def action(self, button):
+            assert button == "B" and (self.view == 1 or self.overlay == 13)
+            self.actions.append(button)
+            self.view, self.overlay = 0, 0
+
+        def code_success(self):
+            assert self.view == 0 and self.overlay == 0
+            self.redeemed = True
+            self.overlay = 13
+
+    for view in (0, 1):
+        with tempfile.TemporaryDirectory() as directory:
+            flow = SeedFlow(Path(directory), view)
+            flow.support_seed()
+            assert flow.authenticated is (view == 0)
+            assert flow.redeemed and flow.actions == ["B", "B"]
+            assert read(flow.output / "assertions/support_seed.json")["passed"] is True
+    with tempfile.TemporaryDirectory() as directory:
+        flow = SeedFlow(Path(directory), 2)
+        try:
+            flow.support_seed()
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("unknown setup view accepted")
+        assert not flow.actions and not flow.redeemed
 
 
 def test_support_suite_evidence_gates() -> None:
@@ -736,6 +802,7 @@ def main() -> None:
     test_report_roundtrip_and_tamper()
     test_main_suite_and_fail_closed()
     test_support_suite_evidence_gates()
+    test_support_seed_enters_parent_after_setup()
     test_post_screenshot_neutral_progress()
     test_observation_stream_partial_tail()
     test_preview_cancel_does_not_exit_child()

@@ -2059,6 +2059,7 @@ static int render_config_backup_previews(const char *directory, const PtcUiModel
         model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
         model.config_backup_tab = 0; model.overlay_selection = 13;
         model.config_backup_ready = true;
+        model.setup_snapshot_available = true;
         snprintf(model.config_metadata, sizeof(model.config_metadata), "kid-switch / 2026-10-06 12:00");
         failed |= save_preview(directory, "settings", "config-backup-create", &model, dark);
         model.config_backup_tab = 1; model.overlay_selection = 14;

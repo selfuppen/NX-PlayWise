@@ -6,6 +6,9 @@ void handle_config_backup_input(UiState *ui, u64 down)
     if (down & HidNpadButton_B) {
         ptc_audio_play(PTC_SE_CANCEL);
         config_backup_action(ui, 15);
+    } else if (down & HidNpadButton_X) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+        config_backup_action(ui, 18);
     } else if (down & HidNpadButton_Y) {
         ptc_audio_play(PTC_SE_CONFIRM);
         open_config_backup(ui);
@@ -22,6 +25,7 @@ void handle_config_backup_input(UiState *ui, u64 down)
         if (ui->model.config_backup_tab == 0) {
             if (sel == 16 || sel == 17) ui->model.overlay_selection = 15;
             else if (sel == 13) ui->model.overlay_selection = 16;
+            else if (sel == 18) ui->model.overlay_selection = 17;
             else if (sel == 15) ui->model.overlay_selection = 13;
             else ui->model.overlay_selection = 13;
         } else {
@@ -47,7 +51,7 @@ void handle_config_backup_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_FOCUS);
         if (ui->model.config_backup_tab == 0) {
             if (sel == 16 || sel == 17) ui->model.overlay_selection = 13;
-            else if (sel == 13) ui->model.overlay_selection = 15;
+            else if (sel == 13 || sel == 18) ui->model.overlay_selection = 15;
             else if (sel == 15) ui->model.overlay_selection = 16;
             else ui->model.overlay_selection = 13;
         } else {
@@ -72,6 +76,7 @@ void handle_config_backup_input(UiState *ui, u64 down)
     } else if (down & HidNpadButton_Left) {
         ptc_audio_play(PTC_SE_FOCUS);
         if (sel == 17) ui->model.overlay_selection = 16;
+        else if (sel == 18 && ui->model.config_backup_tab == 0) ui->model.overlay_selection = 13;
         else if (ui->model.config_backup_tab == 1) {
             if (sel == 1) ui->model.overlay_selection = 0;
             else if (sel == 3) ui->model.overlay_selection = 2;
@@ -84,6 +89,7 @@ void handle_config_backup_input(UiState *ui, u64 down)
     } else if (down & HidNpadButton_Right) {
         ptc_audio_play(PTC_SE_FOCUS);
         if (sel == 16) ui->model.overlay_selection = 17;
+        else if (sel == 13 && ui->model.config_backup_tab == 0) ui->model.overlay_selection = 18;
         else if (ui->model.config_backup_tab == 1) {
             if (sel == 0) ui->model.overlay_selection = 1;
             else if (sel == 2) ui->model.overlay_selection = 3;

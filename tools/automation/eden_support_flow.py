@@ -107,6 +107,7 @@ class SupportFlow(MainFlow):
         return result
 
     def support_seed(self) -> None:
+        self.parent()
         before = self.refresh()
         save(self.output / "support-before/status.json", before)
         shutil.copy2(self.app / "backups/install_pctl_snapshot.json",
@@ -173,7 +174,11 @@ class SupportFlow(MainFlow):
         self.reenter_support()
         before = self.ids()
         self.action(target="card_3")
+        self.wait_ui(overlay=44)
+        self.action(button="X")
         self.wait_ui(overlay=3)
+        self.action(button="B")
+        self.wait_ui(overlay=44, disable_flag_present=True)
         self.action(button="B")
         self.wait_ui(overlay=0, disable_flag_present=True)
         require(read(self.app / "setup.json")["phase"] != "restored", "cancel restored installation")
@@ -181,6 +186,8 @@ class SupportFlow(MainFlow):
                         for path in (self.app / "results").glob("*.json") if path.stem not in before),
                 "cancel submitted installation restore")
         self.action(target="card_3")
+        self.wait_ui(overlay=44)
+        self.action(button="X")
         self.submitted("restore_install_snapshot", before)
         result = self.archive_status("restored", disable_flag_present=True, recovery_active=False, setup_active=False)
         verify_restored_status(result, read(self.output / "support-before/status.json"))

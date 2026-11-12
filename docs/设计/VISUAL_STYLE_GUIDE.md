@@ -1,5 +1,7 @@
 # Visual Style and Design Guide
 
+The configuration backup create page has a separate Restore pre-installation settings button. X, controller focus and touch open the same held confirmation. Theme danger colors and measured text apply. Missing installation snapshots, read-only support, active recovery or hot reload disable the action. Cancelling returns to the backup page.
+
 The PIN Inspector in all three languages follows the authentication constants: 1–64 digits, with cooldown starting on consecutive failure 5. This is a text correction only. Settings and plan card titles use the measured status badge bounds; a title that would collide moves below the badge. Fixed Overlay buttons measure both width and height, keep readable type, and bound future oversized translations to the final line and button clip. Current buffer and grant-code labels remain complete in all three languages, above the Tesla footer.
 
 A hold is a confirmation gate, not proof of exhausted quota. Restoring only preferences, PIN or pairing data explains that rules and consumed time stay unchanged, while retaining current PIN, source PIN where applicable, and hold confirmation. Policy imports and dangerous quota or bedtime actions keep their actual impact warnings. Never infer zero remaining time or immediate restriction from the generic hold flag.

@@ -1469,6 +1469,7 @@ PtcUiRect ptc_ui_config_backup_field_rect(int index)
 {
     if (index == 16) return (PtcUiRect){54, 120, 190, 38};
     if (index == 17) return (PtcUiRect){254, 120, 190, 38};
+    if (index == 18) return (PtcUiRect){824, 552, 402, 58};
     if (index >= 0 && index < 4) return (PtcUiRect){70 + (index % 2) * 364, 210 + (index / 2) * 44, 348, 38};
     if (index >= 4 && index < 9) return (PtcUiRect){70 + ((index - 4) % 2) * 364, 354 + ((index - 4) / 2) * 44, 348, 38};
     if (index == 9 || index == 10) return (PtcUiRect){70 + (index - 9) * 364, 542, 348, 38};
@@ -1484,6 +1485,7 @@ PtcUiRect ptc_ui_config_backup_group_rect(int group)
     if (group == 0) return (PtcUiRect){54, 172, 744, 132};
     if (group == 1) return (PtcUiRect){54, 316, 744, 176};
     if (group == 2) return (PtcUiRect){54, 504, 744, 88};
+    if (group == 3) return (PtcUiRect){824, 172, 402, 360};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
