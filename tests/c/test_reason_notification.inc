@@ -140,6 +140,65 @@ static void test_reason_events(void)
     check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,4000,103,true,false),"stale intermediate snapshot is never accepted as a transition");
     s=reason_sample(3,PTC_REASON_DAILY,1,110);
     check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,11000,110,true,false),"stale intermediate cannot manufacture a return notification");
+
+    for (int reason = PTC_REASON_DAILY; reason <= PTC_REASON_DOCK; ++reason) {
+        ptc_reason_event_init(&e, "r1", "0123456789abcdef");
+        s = reason_sample(1, (PtcRestrictionReason)reason, 9, 100);
+        s.time_kind = PTC_REASON_TIME_REMAINING; s.remaining_seconds = 600;
+        check_true(ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,1000,100,true,false) && !e.repeat,
+            "initial restriction still prefers detail");
+        ptc_reason_event_attempted(&e,1000);
+        s.revision++; s.captured_at = 159; s.remaining_seconds = 541;
+        check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,60000,159,true,false) && !e.dirty,
+            "minute reminder never accelerates idle polling or fires early");
+        check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,61000,160,true,false),
+            "even a fresh cached revision cannot drive a periodic reminder");
+        s.revision++; s.captured_at = 160; s.remaining_seconds = 540;
+        bool countdown = reason == PTC_REASON_EYE || reason == PTC_REASON_BEDTIME;
+        check_true(ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,61000,160,true,false) == countdown &&
+            e.repeat == countdown && !e.dirty, "only rest and bedtime repeat on a fresh minute observation");
+        ptc_reason_event_attempted(&e,61000);
+        s.revision++; s.captured_at = 161;
+        check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,61250,161,true,false),
+            "repeated reminder is deduplicated and rescheduled for a full minute");
+    }
+    for (int invalid = 0; invalid < 11; ++invalid) {
+        ptc_reason_event_init(&e, "r1", "0123456789abcdef");
+        s = reason_sample(1, PTC_REASON_EYE, 9, 100);
+        s.time_kind = PTC_REASON_TIME_REMAINING; s.remaining_seconds = 600;
+        (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,1000,100,true,false);
+        ptc_reason_event_attempted(&e,1000);
+        s.revision++; s.captured_at = 160; s.remaining_seconds = 540;
+        if (invalid == 0) s.time_kind = PTC_REASON_TIME_UNKNOWN;
+        if (invalid == 1) s.remaining_seconds = 0;
+        if (invalid == 2) s.remaining_seconds = 3601;
+        if (invalid == 3) s.reliable = false;
+        if (invalid == 4) s.captured_at = 158;
+        if (invalid == 5) { s.local_clock_available = true; s.local_second_of_day = 86399; s.captured_at = 159; }
+        if (invalid == 6) s.captured_at = 161;
+        if (invalid == 7) e.last_wall = 161;
+        if (invalid == 9) { s.captured_at = 159; s.remaining_seconds = 1; }
+        if (invalid == 10) { s.reliable = true; s.reason = PTC_REASON_NONE; s.restricted = false; }
+        check_true(!ptc_reason_event_update(&e,invalid == 8 ? "foreign" : "r1","0123456789abcdef",
+            &s,61000,160,true,false) && !e.repeat,
+            "unknown expired oversized midnight future rollback and foreign reminders are rejected");
+    }
+    ptc_reason_event_init(&e, "r1", "0123456789abcdef");
+    s = reason_sample(1, PTC_REASON_BEDTIME, 9, 100);
+    s.time_kind = PTC_REASON_TIME_REMAINING; s.remaining_seconds = 36000;
+    (void)ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,1000,100,true,false);
+    ptc_reason_event_attempted(&e,1000);
+    s.revision++; s.captured_at = 160;
+    check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,61000,160,true,true),
+        "visible owner suppresses an otherwise due repeat");
+    s.revision++; s.captured_at = 161;
+    check_true(!ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,62000,161,true,false),
+        "closing details does not replay the suppressed reminder");
+    s.revision++; s.captured_at = 220;
+    check_true(ptc_reason_event_update(&e,"r1","0123456789abcdef",&s,121000,220,true,false) && e.repeat,
+        "after leaving details a new minute observation may show a brief reminder");
+    ptc_reason_event_attempted(&e, UINT64_MAX - 100);
+    check_true(e.next_repeat_ms == UINT64_MAX, "repeat deadline saturates rather than wraps");
 }
 
 static void notify_tick(PtcReasonNotification *n, PtcReasonObservation *s, uint64_t ms, int64_t wall, bool on)
@@ -214,6 +273,58 @@ static void test_reason_idle_cost(void)
     notify_tick(&n, &s, 3300, 103, true);
     check_true(!n.detail_pending && !n.pending && n.sequence == 0 && !ptc_reason_notification_busy(&n),
         "an unanswered offer with an aged observation ends without any toast");
+
+    for (int reason = PTC_REASON_BEDTIME; reason <= PTC_REASON_EYE; ++reason) {
+        ptc_mem_storage_init(mem);
+        storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+        storage->vtable->write_text_atomic(storage, "app/ledger/used_nonces.jsonl", "business sentinel");
+        ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+        s = reason_sample(1, (PtcRestrictionReason)reason, 7, 100);
+        s.time_kind = PTC_REASON_TIME_REMAINING; s.remaining_seconds = 600;
+        notify_tick(&n, &s, 1000, 100, true);
+        check_true(n.pending && n.sequence == 1, "countdown initially publishes with no loaded detail UI");
+        notify_tick(&n, &s, 3000, 102, true);
+        check_true(!ptc_reason_notification_busy(&n), "waiting for countdown repeat does not keep fast polling");
+        uint64_t config_deadline = n.config_ms;
+        for (unsigned i = 3; i < 60; ++i) {
+            notify_tick(&n, &s, 1000 + i * 1000, 100 + i, true);
+            check_true(n.sequence == 1 && n.config_ms == config_deadline && !ptc_reason_notification_busy(&n),
+                "cached idle countdown neither republishes nor polls the receiver or requests fast polling");
+        }
+        /* A newly ready hidden UI must not be reopened for this same countdown. */
+        lease.issued_ms = 60000; lease.expires_ms = 62000;
+        check_true(ptc_reason_detail_write(storage, "app", "ready", &lease), "repeat fixture has fresh hidden detail readiness");
+        s.revision++; s.captured_at = 160; s.remaining_seconds = 540;
+        notify_tick(&n, &s, 61000, 160, true);
+        check_true(n.pending && n.sequence == 2 && n.detail_sequence == 0 && !n.detail_pending &&
+            !storage->vtable->exists(storage, "app/support/reason-detail-request.json"),
+            "minute repeat only publishes a brief notice even when details become ready");
+        cJSON *payload = cJSON_Parse(n.payload);
+        const char *body = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(payload, "text"));
+        check_true(body && strstr(body, "9") && cJSON_GetObjectItemCaseSensitive(payload, "duration")->valueint == 10000,
+            "repeat contains updated remaining time and preserves ten-second display parameter");
+        cJSON_Delete(payload);
+        notify_tick(&n, &s, 63000, 162, true);
+        check_true(!n.pending && !ptc_reason_notification_busy(&n), "repeat is cleaned after two seconds then returns to idle");
+
+        mem->fail_writes = true;
+        s.revision++; s.captured_at = 220; s.remaining_seconds = 480;
+        notify_tick(&n, &s, 121000, 220, true);
+        check_true(n.failures == 1 && !n.pending && n.sequence == 3 && !n.detail_pending,
+            "failed repeat remains a notification failure, never a detail offer");
+        mem->fail_writes = false;
+        s.revision++; s.captured_at = 230; s.remaining_seconds = 470;
+        notify_tick(&n, &s, 131000, 230, true);
+        check_true(n.sequence == 3 && !ptc_reason_notification_busy(&n), "failed repeat is not replayed at retry deadline");
+        s.revision++; s.captured_at = 280; s.remaining_seconds = 420;
+        notify_tick(&n, &s, 181000, 280, true);
+        char ledger[64];
+        check_true(n.pending && n.sequence == 4 &&
+            storage->vtable->read_text(storage, "app/ledger/used_nonces.jsonl", ledger, sizeof(ledger)) &&
+            !strcmp(ledger, "business sentinel"), "next minute repeat recovers without touching the business ledger");
+        ptc_reason_notification_tick(&n, &s, 181250, 280, true, false, true, PTC_UI_LANGUAGE_ENGLISH);
+        check_true(!n.pending && !n.path[0], "handover cleans a pending repeat with existing ownership rules");
+    }
     free(mem);
 }
 

@@ -526,6 +526,130 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
     }
 }
 
+static void test_detail_countdown_refresh(tsl::gfx::Renderer &renderer)
+{
+    const auto setup = [](PreviewView &view, PtcOverlayBridge &bridge, PtcOverlayInput &input) {
+        ptc_overlay_input_init(&input);
+        view.bridge_ = &bridge;
+        view.input_ = &input;
+        view.preview_clock_ = false;
+        view.status_expanded_ = true;
+        auto &s = view.displayed_summary_;
+        s.valid = s.local_clock_available = s.remaining_available = true;
+        s.day_index = 2498;
+        s.local_second_of_day = 10 * 3600;
+        s.completed_at = 1793671200;
+        s.remaining_minutes = 25;
+        s.eye_care_available = s.eye_care_enabled = true;
+        s.eye_care_play_minutes = 40;
+        s.eye_care_rest_minutes = 10;
+        s.eye_care_rest_remaining_seconds = 5;
+        s.eye_care_break_id = 123;
+        std::snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "resting");
+    };
+    const auto draw_at_age = [&](PreviewView &view, u64 seconds) {
+        // The host tick is fixed; age both receipt and request-origin clocks
+        // deterministically without sleeping or changing the backend snapshot.
+        view.last_refresh_tick_ = view.usage_snapshot_tick_ =
+            armGetSystemTick() - seconds * 1000000000ULL;
+        renderer.text_runs.clear();
+        view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+            PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+    };
+    for (const bool start_on_overview : {false, true}) {
+        PtcOverlayBridge bridge{};
+        PtcOverlayInput input{};
+        PreviewView view;
+        setup(view, bridge, input);
+        view.status_expanded_ = !start_on_overview;
+        draw_at_age(view, 0);
+        require(view.countdown_watch_.armed && view.countdown_watch_.instance_id == 123,
+            "overview and details both arm the displayed rest instance");
+        view.status_expanded_ = true;
+        for (u64 age = 1; age < 5; ++age) {
+            draw_at_age(view, age);
+            require(view.page_identity() == 4 && !view.countdown_recheck_pending_ &&
+                view.child_eye_care_status(view.displayed_summary_).rest_seconds == 5 - static_cast<int>(age),
+                "detail countdown advances each second without requesting status");
+        }
+        draw_at_age(view, 5);
+        require(view.countdown_recheck_pending_ && !view.countdown_watch_.armed,
+            "detail countdown reaching zero schedules the existing refresh handoff");
+        const auto eye = view.child_eye_care_status(view.displayed_summary_);
+        require(eye.warning && eye.rest_seconds < 0 &&
+            std::strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0 &&
+            view.child_is_restricted() && !view.current_state_line(false).normal,
+            "elapsed detail countdown waits for backend confirmation, not an inferred release");
+
+        // Production update consumes this flag through begin_status_refresh
+        // only when the bridge is idle; the preview tests its producer contract.
+        bridge.waiting = true;
+        view.active_request_kind_ = OverlayRequestKind::Status;
+        draw_at_age(view, 6);
+        require(view.countdown_recheck_pending_, "busy bridge retains the one pending countdown refresh");
+        bridge.waiting = false;
+        int refresh_handoffs = 0;
+        for (u64 age = 6; age <= 10; ++age) {
+            if (view.countdown_recheck_pending_) {
+                view.countdown_recheck_pending_ = false;
+                ++refresh_handoffs;
+            }
+            // Switching back to overview and returning cannot duplicate it.
+            view.status_expanded_ = age != 7;
+            draw_at_age(view, age);
+            require(!view.countdown_recheck_pending_ && view.child_is_restricted(),
+                "repeated expired frames and page switches neither re-request nor release the same instance");
+        }
+        require(refresh_handoffs == 1, "same rest instance produces exactly one countdown refresh handoff");
+        require(view.displayed_summary_.eye_care_enabled &&
+            view.displayed_summary_.eye_care_rest_remaining_seconds == 5 &&
+            std::strcmp(view.displayed_summary_.eye_care_phase, "resting") == 0,
+            "countdown rendering never rewrites backend restriction or remaining time");
+
+        // A failed refresh retains the restriction and must not cause a retry loop.
+        view.error_ = true;
+        view.last_request_kind_ = OverlayRequestKind::Status;
+        draw_at_age(view, 11);
+        require(!view.countdown_recheck_pending_ && view.child_is_restricted(),
+            "failed countdown refresh keeps the last confirmed restriction without automatic retries");
+        view.error_ = false;
+        auto confirmed = view.displayed_summary_;
+        confirmed.eye_care_rest_remaining_seconds = 0;
+        confirmed.eye_care_break_id = 0;
+        std::snprintf(confirmed.eye_care_phase, sizeof(confirmed.eye_care_phase), "playing");
+        view.displayed_summary_ = confirmed;
+        draw_at_age(view, 0);
+        require(!view.child_is_restricted() && view.current_state_line(false).normal &&
+            !view.countdown_recheck_pending_, "only a backend-confirmed non-resting snapshot releases the detail state");
+    }
+
+    for (int flow = 0; flow < 10; ++flow) {
+        PtcOverlayBridge bridge{};
+        PtcOverlayInput input{};
+        PreviewView view;
+        setup(view, bridge, input);
+        draw_at_age(view, 0); // Arm in details before entering a protected flow.
+        switch (flow) {
+        case 0: view.parent_view_ = ParentView::Pin; break;
+        case 1: view.parent_view_ = ParentView::Actions; break;
+        case 2: view.parent_view_ = ParentView::Confirm; break;
+        case 3: view.parent_view_ = ParentView::Result; break;
+        case 4: view.preview_ready_ = true; break;
+        case 5: view.success_visible_ = true; break;
+        case 6: view.language_confirm_active_ = true; break;
+        case 7: view.keypad_active_ = true; break;
+        case 8: input.symbols[0] = '1'; input.length = 1; break;
+        case 9: view.keypad_active_ = true; view.status_expanded_ = false; break;
+        }
+        for (const u64 age : {1ULL, 5ULL, 6ULL}) {
+            draw_at_age(view, age);
+            require(!view.countdown_recheck_pending_ && view.countdown_watch_.armed,
+                "PIN, parent, preview, result, language and code-entry flows do not observe or request countdown refreshes");
+        }
+    }
+    std::puts("PASS: detail countdown refreshes once at zero, waits for backend, and leaves protected flows alone");
+}
+
 static void test_parent_cards(tsl::gfx::Renderer &renderer)
 {
     PreviewView view;
@@ -599,6 +723,7 @@ int main(int argc, char **argv) {
         tsl::gfx::Renderer renderer(argv[1]);
         test_child_policy_freshness();
         test_disabled_status(argv[1]);
+        test_detail_countdown_refresh(renderer);
         test_child_cards(renderer);
         test_parent_cards(renderer);
         test_surface_outline(renderer);

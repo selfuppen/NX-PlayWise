@@ -37,6 +37,8 @@ typedef struct {
     uint64_t observed_ms;
     uint64_t last_ms;
     uint64_t next_publish_ms;
+    uint64_t next_repeat_ms;
+    bool repeat; /* this attempt is a brief countdown reminder, never a detail offer */
     int64_t last_wall;
     bool handled_valid;
     bool dirty;
