@@ -8,8 +8,10 @@
    status request must also have completed after accepting this detail offer. */
 static inline bool ptc_overlay_detail_matches(const PtcReasonDetail *d, const PtcCompanionResultSummary *s)
 {
+    /* access_recovery_required also marks the normal restricted child page.
+       Sensitive parent/PIN pages are excluded by the GUI's frame-level gate. */
     if (!s->valid || !s->ok || s->day_index != d->day || s->restricted_now != 1 ||
-        s->disable_flag_present || s->access_recovery_required ||
+        s->disable_flag_present ||
         !s->temporary_unlocked_available || s->temporary_unlocked) return false;
     if (s->bedtime_available && s->bedtime_active && !s->bedtime_skipped)
         return d->reason == PTC_REASON_BEDTIME && d->instance == s->bedtime_window_instance_id;

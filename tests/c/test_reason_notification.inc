@@ -306,6 +306,42 @@ static void test_reason_detail_transport(void)
     check_true(ptc_overlay_detail_matches(&detail, &summary), "matching bedtime instance matches correct detail");
     summary.temporary_unlocked = true;
     check_true(!ptc_overlay_detail_matches(&detail, &summary), "official unlock cannot ACK restricted details");
+    /* Exercise the real wire projection: access_recovery_required is also set
+       by normal restrictions, not just by a parent/recovery page. */
+    for (int reason = PTC_REASON_DAILY; reason <= PTC_REASON_DOCK; ++reason) {
+        PtcResultState state;
+        char wire[8192];
+        ptc_result_state_default(&state, 2380);
+        state.restricted_now = 1;
+        state.temporary_unlocked_available = true;
+        state.daily_restriction_active = reason == PTC_REASON_DAILY;
+        state.bedtime_enabled = state.bedtime_active = reason == PTC_REASON_BEDTIME;
+        state.bedtime_window_instance_id = 77;
+        state.eye_care_enabled = reason == PTC_REASON_EYE;
+        state.eye_care_phase = reason == PTC_REASON_EYE ? "resting" : "disabled";
+        state.eye_care_break_id = 88;
+        state.dock_available = true;
+        state.dock_restriction_active = reason == PTC_REASON_DOCK;
+        detail.day = 2380; detail.reason = reason;
+        detail.instance = reason == PTC_REASON_BEDTIME ? 77 : reason == PTC_REASON_EYE ? 88 : 2381;
+        check_true(ptc_result_ok_json(wire, sizeof(wire), "detail-wire", "status", "release",
+            false, &state, 1000) == 0 && ptc_companion_result_summary_parse(wire, &summary) &&
+            summary.access_recovery_required, "real restricted status projects its access-recovery marker");
+        check_true(ptc_overlay_detail_matches(&detail, &summary),
+            "parsed restricted child detail can match all four offered reasons");
+        ++detail.instance;
+        check_true(!ptc_overlay_detail_matches(&detail, &summary), "parsed wrong instance cannot ACK");
+        --detail.instance;
+        summary.disable_flag_present = true;
+        check_true(!ptc_overlay_detail_matches(&detail, &summary), "disabled status cannot ACK");
+        summary.disable_flag_present = false;
+        summary.temporary_unlocked_available = false;
+        check_true(!ptc_overlay_detail_matches(&detail, &summary), "unknown official unlock cannot ACK");
+        state.temporary_unlocked = true;
+        check_true(ptc_result_ok_json(wire, sizeof(wire), "detail-unlocked", "status", "release",
+            false, &state, 1001) == 0 && ptc_companion_result_summary_parse(wire, &summary) &&
+            !ptc_overlay_detail_matches(&detail, &summary), "parsed official unlock cannot ACK");
+    }
     free(mem);
 }
 
