@@ -390,8 +390,8 @@ class MainFlow:
                                      "simulated TV and handheld switch reasons", "PIN waiver and disable restore"])
 
     def backup_journey(self) -> None:
-        self.page(3)
-        self.action(target="card_7")
+        self.page(4)
+        self.action(target="card_3")
         self.wait_ui(overlay=44)
         before = self.ids()
         self.action(target="backup_13")
@@ -403,8 +403,8 @@ class MainFlow:
         self.action(button="B")
         self.wait_ui(overlay=0)
         self.weekly(240)
-        self.page(3)
-        self.action(target="card_7")
+        self.page(4)
+        self.action(target="card_3")
         self.wait_ui(overlay=44, config_backup_ready=True)
         self.action(target="backup_17")
         self.action(target="backup_12")
@@ -445,7 +445,7 @@ class MainFlow:
     def preferences_journey(self) -> None:
         config = self.app / "config.json"
         self.page(3)
-        self.action(target="card_1")
+        self.action(target="card_5")
         self.wait_ui(overlay=21, overlay_selection=0)
         # Both radio groups preview live but write nothing until A commits them together.
         self.action(button="Right")
@@ -462,7 +462,7 @@ class MainFlow:
         require(saved["theme"] == "light" and saved["theme_style"] == "teal",
                 "theme mode and style were not saved together")
         self.capture("preference-light")
-        self.action(target="card_1")
+        self.action(target="card_5")
         self.wait_ui(overlay=21, overlay_selection=1)
         self.action(button="Right")
         self.wait_ui(overlay_selection=2)
@@ -472,14 +472,16 @@ class MainFlow:
                 "dark theme did not persist with the chosen style")
         self.capture("preference-dark")
         # B discards a pending draft and restores the saved appearance.
-        self.action(target="card_1")
+        self.action(target="card_5")
         self.wait_ui(overlay=21, overlay_selection=2)
         self.action(button="Right")
         self.wait_ui(overlay_selection=0)
         self.action(button="B")
         self.wait_ui(overlay=0)
         require(read(config)["theme"] == "dark", "discarded theme draft reached config")
-        self.action(target="card_3")
+        # The language badge is rendered/hit-tested only on Today's Schedule.
+        self.page(0)
+        self.action(target="header_language")
         self.wait_ui(overlay=37, overlay_selection=0)
         self.action(button="Down")
         self.wait_ui(overlay_selection=2)

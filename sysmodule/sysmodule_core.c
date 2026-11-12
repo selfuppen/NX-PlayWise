@@ -795,8 +795,9 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     disable_changed = !sysmodule->disable_initialized || sysmodule->disable_present != disable_present;
     reload = sysmodule->storage->vtable->exists(sysmodule->storage, reload_path);
     if (reload) {
-        /* 重载会丢弃缓存：先把合并落盘尚未写入的采样提交到磁盘。 */
-        (void)ptc_sysmodule_flush_state(sysmodule);
+        /* 重载会丢弃缓存：写入失败时保留采样及标记，下一轮重试；不能继续控制
+           或确认已重载，否则后续事务前像会退回旧用量。 */
+        if (!ptc_sysmodule_flush_state(sysmodule)) return actions;
         invalidate_all_caches(sysmodule);
         (void)ptc_sysmodule_refresh_caches(sysmodule);
     }

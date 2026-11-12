@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "reviewed_date": "2026-11-09",
+  "reviewed_date": "2026-11-12",
   "scope": "playwise/tools",
-  "script_count": 75,
+  "script_count": 76,
   "scripts": [
     {
       "path": "build/runtime_resource_report.py",
@@ -282,6 +282,11 @@
       "path": "automation/eden_main_flow.py",
       "category": "automation",
       "purpose": "发版前中文业务旅程串行编排与离线断言复核"
+    },
+    {
+      "path": "automation/eden_notification_flow.py",
+      "category": "automation",
+      "purpose": "通知设置的setup与家长区交互、示意切换、浅暗主题和重开验证"
     },
     {
       "path": "automation/eden_support_flow.py",

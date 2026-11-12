@@ -92,6 +92,16 @@ static inline int ptc_eden_rule_source(const char *source)
     return -1;
 }
 
+/* Fixed result IDs only; never export the model's free-form feedback text. */
+static inline int ptc_eden_notification_feedback(const PtcUiModel *m)
+{
+    const PtcUiTextId keys[] = {PTC_UI_T_NOTICE_PROBED, PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG,
+        PTC_UI_T_NOTICE_TEST_SENT, PTC_UI_T_NOTICE_TEST_FAILED, PTC_UI_T_REASON_NOTICE_SAVE_FAILED};
+    for (unsigned i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
+        if (!strcmp(m->reason_test_message, ptc_ui_text(keys[i]))) return (int)i + 1;
+    return 0;
+}
+
 /* Test-only observation, never an action or authentication interface. Keep this
  * whitelist numeric: model strings can contain PINs, codes or pairing secrets. */
 static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t size)
@@ -134,6 +144,17 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         (int)m->diagnostic_status);
     if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
     used = (size_t)n;
+    n = snprintf(out + used, size - used,
+        "\"setup_review_active\":%s,\"setup_review_option\":%d,"
+        "\"notification_preview\":%d,\"reason_notifications_enabled\":%s,"
+        "\"reason_external_notifications\":%d,\"reason_detail_ready\":%s,"
+        "\"reason_overlay_installed\":%s,\"notification_feedback\":%d,",
+        m->setup_review_active ? "true" : "false", ptc_ui_setup_next_option(m),
+        m->notification_preview, m->reason_notifications_enabled ? "true" : "false",
+        m->reason_external_notifications, m->reason_detail_ready ? "true" : "false",
+        m->reason_overlay_installed ? "true" : "false", ptc_eden_notification_feedback(m));
+    if (n < 0 || (size_t)n >= size - used) goto fail;
+    used += (size_t)n;
     /* Only this non-secret editor value is observable; other numeric entry
        buffers can contain a PIN or an offline code and stay private. */
     uint16_t minutes = 0;
@@ -218,8 +239,22 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         !ptc_eden_target(out, size, &used, "overlay_complete", ptc_ui_confirm_rect(m->overlay)) ||
         !ptc_eden_target(out, size, &used, "plan_back", ptc_ui_parent_subpage_footer_rect(0))) goto fail;
     if (!ptc_eden_target(out, size, &used, "setup_primary", ptc_ui_setup_primary_rect()) ||
+        !ptc_eden_target(out, size, &used, "setup_notifications", ptc_ui_setup_notifications_rect()) ||
+        !ptc_eden_target(out, size, &used, "header_language", ptc_ui_header_language_rect()) ||
         !ptc_eden_target(out, size, &used, "child_code", ptc_ui_child_submit_rect()) ||
         !ptc_eden_target(out, size, &used, "pin_confirm", ptc_ui_pin_confirm_rect())) goto fail;
+    if (m->overlay == PTC_UI_OVERLAY_NOTIFICATIONS) {
+        for (int i = 0; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i) {
+            char key[24];
+            snprintf(key, sizeof(key), "notification_%d", i);
+            if (!ptc_eden_target(out, size, &used, key, ptc_ui_notification_option_rect(i))) goto fail;
+        }
+        for (int i = 0; i < 2; ++i) {
+            char key[24];
+            snprintf(key, sizeof(key), "notice_preview_%d", i);
+            if (!ptc_eden_target(out, size, &used, key, ptc_ui_notification_preview_tab_rect(i))) goto fail;
+        }
+    }
     if (!ptc_eden_target(out, size, &used, "child_buffer", ptc_ui_child_buffer_rect())) goto fail;
     /* Only publish geometry for the current page. All centers come from the
      * production layout; the observer cannot submit or authorize an action. */

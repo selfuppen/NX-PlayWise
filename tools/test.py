@@ -93,6 +93,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_audio_fixtures.py",
         "tests/devkit/test_eden_bedtime.py",
         "tests/devkit/test_eden_runner.py",
+        "tests/devkit/test_eden_notifications.py",
         "tests/devkit/test_eden_runtime.py",
         "tests/devkit/test_eden_web_flow.py",
         "tests/devkit/test_eden_plan_flow.py",

@@ -29,7 +29,10 @@ SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
-    require(suite in ("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock"), "unknown suite")
+    require(suite in ("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock", "notifications"), "unknown suite")
+    if suite == "notifications":
+        from tools.automation.eden_notification_flow import NOTIFICATION_SCENARIOS
+        return NOTIFICATION_SCENARIOS
     if suite == "dock":
         from tools.automation.eden_dock_flow import DOCK_SCENARIOS
         return DOCK_SCENARIOS
@@ -407,6 +410,10 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
         from tools.automation.eden_plan_flow import prepare_plans
         prepare_plans(app, output, rules)
     save(app / "rules.json", rules)
+    if args.suite == "notifications":
+        manager = profile / "sdmc/config/ultrahand/config.ini"
+        manager.parent.mkdir(parents=True, exist_ok=True)
+        manager.write_text("[ultrahand]\nnotifications=false\nother=retained\n", encoding="utf-8")
     save(output / "fixtures/rules.json", rules)
     artifacts = output / "artifacts"
     artifacts.mkdir()
@@ -414,6 +421,9 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     shutil.copy2(args.manifest, artifacts / "manifest.json")
     for name in ("eden_runner.py", "eden_mcp_bridge.py"):
         shutil.copy2(Path(__file__).with_name(name), artifacts / name)
+    if args.suite == "notifications":
+        for name in ("eden_main_flow.py", "eden_notification_flow.py"):
+            shutil.copy2(Path(__file__).with_name(name), artifacts / name)
     if args.suite in ("main", "support", "web", "plans", "input", "input-hold", "dock"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
     if args.suite == "dock":
@@ -773,14 +783,27 @@ class Suite:
         self.wait_ui(view=3, setup_step=1, overlay=0, waiting=False)
         self.action(target="setup_primary")
         self.wait_ui(view=3, setup_step=2, overlay=0)
+        self.setup_preferences()
         self.action(target="setup_primary")
         self.wait_ui(view=3, setup_step=3, overlay=0)
         before = self.ids()
         self.action(target="setup_primary")
         reply = self.wait_receipt("complete_setup", before)
         require(reply["status"] == "ok", "setup activation rejected")
-        self.wait_ui(view=1, overlay=0, waiting=False, setup_active=True)
+        value = self.wait_ui(overlay=0, waiting=False, setup_active=True)
+        if value["ui"].get("setup_review_active"):
+            self.capture("setup-review")
+            self.action(button="X")
+            self.wait_ui(view=0, overlay=0, setup_review_active=False)
+            guide = read(self.app / "setup-guide.json")["items"]
+            require(all(key in guide for key in ("language", "theme", "shortcut", "notifications", "eye_care", "bedtime")),
+                    "skip remaining setup options did not persist all items")
+        else:
+            self.wait_ui(view=1, overlay=0, waiting=False, setup_active=True)
         require(read(self.app / "config.json")["setup_wizard_step"] == 0, "setup completion not persisted")
+
+    def setup_preferences(self) -> None:
+        """Optional suite-specific UI checks in the normal second setup step."""
 
     def reopen(self) -> None:
         self.stop()
@@ -963,6 +986,10 @@ def verify(output: Path) -> dict:
             from tools.automation.eden_support_flow import verify_support
             verify_support(output)
             return summary
+        if summary.get("suite") == "notifications":
+            from tools.automation.eden_notification_flow import verify_notifications
+            verify_notifications(output)
+            return summary
         if summary.get("suite") == "web":
             from tools.automation.eden_web_flow import verify_web
             verify_web(output)
@@ -975,7 +1002,9 @@ def verify(output: Path) -> dict:
             from tools.automation.eden_input_flow import verify_input
             verify_input(output, include_matrix=summary["suite"] == "input")
             return summary
-        require(read(output / "checkpoints/setup.json")["ui"]["view"] == 1 and
+        setup_ui = read(output / "checkpoints/setup.json")["ui"]
+        expected_setup_view = 0 if "setup_review_active" in setup_ui else 1
+        require(setup_ui["view"] == expected_setup_view and not setup_ui.get("setup_review_active", False) and
                 read(output / "checkpoints/reopen.json")["ui"]["view"] == 0 and
                 read(output / "checkpoints/pin_correct_parent.json")["ui"]["view"] == 1,
                 "setup/reopen/PIN page assertions differ")
@@ -1134,6 +1163,11 @@ def run(args: argparse.Namespace) -> int:
             class MainSuite(MainFlow, Suite):
                 pass
             suite_class = MainSuite
+        elif args.suite == "notifications":
+            from tools.automation.eden_notification_flow import NotificationFlow
+            class NotificationSuite(NotificationFlow, Suite):
+                pass
+            suite_class = NotificationSuite
         elif args.suite == "support":
             from tools.automation.eden_support_flow import SupportFlow
             class SupportSuite(SupportFlow, Suite):
@@ -1185,7 +1219,7 @@ def run(args: argparse.Namespace) -> int:
          profile_settings((runtime / "user/config/qt-config.ini").read_text(encoding="utf-8-sig")))
     app = runtime / "user" / APP
     for name in ("config.json", "rules.json", "state.json", "build.json", "ledger/used_nonces.jsonl", "activity/history.jsonl",
-                 "setup.json", "flags/disable.flag", "backups/install_pctl_snapshot.json", "support/automation-ui.jsonl",
+                 "setup.json", "setup-guide.json", "flags/disable.flag", "backups/install_pctl_snapshot.json", "support/automation-ui.jsonl",
                  "support/automation-progress.jsonl", "support/automation-input.jsonl"):
         path = app / name
         if path.is_file():
@@ -1258,7 +1292,7 @@ def main() -> int:
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock"), default="smoke",
+    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock", "notifications"), default="smoke",
                       help="main covers core journeys; support covers diagnostics/disable/installation restore")
     live.add_argument('--plans-language', choices=('system', 'en'), default='system',
                       help='plans only: explicit English UI layout check through the normal language menu')

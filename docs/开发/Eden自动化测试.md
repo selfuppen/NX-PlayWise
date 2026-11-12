@@ -34,6 +34,10 @@ Eden 场景回归集中到发版前。固定候选 NRO／manifest 后，执行�
 
 ## 准备与运行
 
+通知设置专项使用 `--suite notifications --timeout 600`，与 main 使用不同的新 profile。四项为：setup 第二步的通知入口与补充引导跳过、家长区开关／探测／测试按钮、浅暗主题下两种示意的切换、正常关闭重开及关闭自有提醒。仅在私有 SD 准备公开的 Ultrahand 配置 fixture；开启后核对配置原子保存、保留其他键，关闭自有提醒不关闭全局通知。方向键、L/R、触摸均经正常输入与生产几何；核对规则、业务写请求及声音偏好保持，截图独立复核。测试载荷发布成功不代表接收或显示，Eden 不加载真实 Tesla／Ultrahand，也不签署真实官方限制遮罩或通知可见性。
+
+主流程已沿当前菜单从“支持与恢复”打开配置备份，从“安全与偏好”的外观卡打开主题，并先返回“今日安排”再从页头语言入口切换语言。该语言徽章仅在孩子首页／家长今日安排可见，观察器提供几何不代表其他页也可点击。核心 setup 完成后如出现补充引导，通过正常 X 跳过其余项目并核对逐项记录，重开不能重复引导。旧封存报告仍按旧观察字段核验，不改写旧 checkpoint。
+
 先经统一构建入口生成当前源码的 Eden NRO。C、NRO 或 package 改动的最终门禁仍为 `python tools/package_remote.py`，保留默认 Eden；`--only eden` 只用于可选迭代。
 
 需要带 protocol 2 的定制 Eden、配置好的 profile，以及装有 `eden-mcp 0.5.0` 的外部 Python。执行器本身和 Host 回归只用标准库；不会联网安装依赖、修改全局 MCP 配置或原 profile。外部依赖可显式用 `--mcp-site` 指定。
@@ -152,6 +156,8 @@ Host只读取流尾最多64KiB，选择最后一条以换行结束的完整JSON�
 ui 白名单：view、parent_page、overlay、setup_step、setup_active、waiting、status_loaded、error_code、selected_index、pin_length、numpad_length、numpad_purpose、code_result_failed、code_result_pending、overlay_animating，以及 targets。枚举沿 `ui_model.h`：view 0孩子/1家长/3向导，overlay 0无/3确认/4数字输入/12兑换结果/13认证错误/22 PIN。targets 的 width/height 为1280/720，坐标中心直接来自生产布局函数；提供 setup_primary、child_code、pin_confirm、pin_0..9、code_0..9。执行器不写死页面 X 偏移，并等待弹层入场结束。
 
 不导出 PIN、加时码、配对密钥、弹窗自由文本或可复用认证材料。长度只用于等待每次独立输入处理完成；不能作为认证成功证明，仍核对进入页面、认证计数及对应业务回执。
+
+通知专项新增只读字段 `setup_review_active`／`setup_review_option`、`notification_preview`（0浮窗／1短提醒）、`reason_notifications_enabled`、`reason_external_notifications`（-1未知／0关／1开）、`reason_detail_ready`、`reason_overlay_installed`。`notification_feedback` 只投影固定结果：0无匹配、1已检查、2缺少通知配置、3已发布、4失败或未知、5保存失败；不导出自由文本。targets 从生产布局发布 `setup_notifications`、`header_language` 及通知弹层中的 `notification_0..2`、`notice_preview_0..1`。这些字段只在 Eden 编译，不增加动作／认证接口。
 
 主流程扩展同一只读schema v1的数字/布尔白名单：plan_page、overlay_selection、editor_index、weekly_dirty、confirm_hold_required、config_groups、config_backup_ready、daily_buffer_available/claimed、daily_restriction_active、dock_restriction_active、bedtime_active/skipped、eye_resting、restricted_now、unrestricted_today和today_minutes。targets另提供页签、对应页面卡片、周编辑、时长字段、备份字段、电视页及规则总开关的生产布局中心；时长键盘使用其专属生产几何。观察不接受动作指令，不赋予认证。formatter空间不足不发布截断JSON，Host测试覆盖类型、布局中心、敏感文本排除与失败路径。
 

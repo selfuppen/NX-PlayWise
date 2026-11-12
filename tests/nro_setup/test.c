@@ -1041,6 +1041,9 @@ int main(void)
         json = cJSON_Parse(text);
         check(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "overlay_animating")),
               "plain page remains stable with saturated opening frames");
+        check(cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(json, "setup_review_active")) &&
+              cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(json, "notification_preview")),
+              "setup review and notification observations use typed projections");
         check(cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(json, "plan_page")) &&
               cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(json, "daily_buffer_claimed")),
               "journey observation exposes typed navigation and business projections");
@@ -1135,6 +1138,28 @@ int main(void)
                   "specified-date target uses production geometry");
         }
         cJSON_Delete(json);
+        model.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
+        model.notification_preview = 1;
+        model.reason_notifications_enabled = true;
+        model.reason_external_notifications = -1;
+        snprintf(model.reason_test_message, sizeof(model.reason_test_message), "%s", ptc_ui_text(PTC_UI_T_NOTICE_TEST_SENT));
+        check(ptc_eden_format_ui(&model, text, sizeof(text)), "notification observations fit bounded output");
+        json = cJSON_Parse(text);
+        check(cJSON_GetObjectItemCaseSensitive(json, "notification_preview")->valueint == 1 &&
+              cJSON_GetObjectItemCaseSensitive(json, "notification_feedback")->valueint == 3 &&
+              cJSON_GetObjectItemCaseSensitive(json, "reason_external_notifications")->valueint == -1 &&
+              cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "reason_notifications_enabled")),
+              "notification feedback keeps unknown environment and fixed result identity");
+        cJSON *notice_targets = cJSON_GetObjectItemCaseSensitive(json, "targets");
+        cJSON *preview_target = cJSON_GetObjectItemCaseSensitive(notice_targets, "notice_preview_1");
+        PtcUiRect preview_tab = ptc_ui_notification_preview_tab_rect(1);
+        check(cJSON_GetArrayItem(preview_target, 0)->valueint == preview_tab.x + preview_tab.w / 2 &&
+              cJSON_GetArrayItem(preview_target, 1)->valueint == preview_tab.y + preview_tab.h / 2,
+              "notification touch observation uses production geometry");
+        cJSON_Delete(json);
+        snprintf(model.reason_test_message, sizeof(model.reason_test_message), "%s", "unrecognized-private-feedback");
+        check(ptc_eden_format_ui(&model, text, sizeof(text)) && !strstr(text, "unrecognized-private-feedback") &&
+              ptc_eden_notification_feedback(&model) == 0, "unknown notification feedback is never exported as text");
         check(!ptc_eden_format_ui(&model, small, sizeof(small)) && small[0] == '\0',
               "Eden observation never publishes truncated JSON");
         check(!ptc_eden_format_ui(NULL, text, sizeof(text)), "Eden observation rejects missing model");

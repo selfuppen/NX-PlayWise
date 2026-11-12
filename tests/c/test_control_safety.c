@@ -2374,12 +2374,25 @@ static void test_sampled_state_persistence(void)
     sample_second(&f, ++used);
     (void)ptc_sysmodule_enforce_tick(&f.core);
     expect(f.core.state_dirty, "a post-rollback sample defers again");
+    (void)state_json_changes(&f, disk, sizeof(disk));
     expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/reload.flag", ""),
         "write the reload marker");
+    f.mem->fail_write_path_contains = "app/state.json";
+    expect(!recovery_begin(&f.core, NULL, f.clock.snapshot) && f.core.state_dirty &&
+        !f.mem->storage.vtable->exists(&f.mem->storage, "app/recovery/active/meta.json"),
+        "failed sample flush refuses a recovery preimage and keeps consumption for retry");
+    (void)ptc_sysmodule_scheduler_tick(&f.core, false);
+    expect(f.core.state_dirty && load_state(&f.core, &state) &&
+        state.undocked_used_ns == live + UINT64_C(1000000000) &&
+        f.mem->storage.vtable->exists(&f.mem->storage, "app/flags/reload.flag") &&
+        !state_json_changes(&f, disk, sizeof(disk)),
+        "failed reload flush keeps live consumption and marker without invalidating caches");
+    f.mem->fail_write_path_contains = NULL;
     (void)ptc_sysmodule_scheduler_tick(&f.core, false);
     expect(!f.core.state_dirty && load_state(&f.core, &state) &&
-        state.undocked_used_ns == live + UINT64_C(1000000000),
-        "a reload flushes deferred samples before dropping the caches");
+        state.undocked_used_ns == live + UINT64_C(1000000000) &&
+        !f.mem->storage.vtable->exists(&f.mem->storage, "app/flags/reload.flag"),
+        "a retried reload flushes deferred samples before dropping caches and clearing marker");
 
     sample_second(&f, ++used);
     (void)ptc_sysmodule_enforce_tick(&f.core);
@@ -2419,6 +2432,35 @@ static void test_sampled_state_persistence(void)
     free(f.mem);
 }
 
+static void test_sampled_state_boundaries(void)
+{
+    Fixture f;
+    PtcRuntimeState state;
+    init_fixture(&f);
+    f.core.state_persist_interval_s = 30;
+    expect(load_state(&f.core, &state), "load sampled-boundary baseline");
+    state.eye_usage_counter.total_ns = state.eye_cycle_used_ns = UINT64_C(1000000000);
+    state.eye_usage_counter.captured_at = ++f.clock.snapshot.unix_seconds;
+    expect(save_state_sampled(&f.core, &state, f.clock.snapshot.unix_seconds) && f.core.state_dirty,
+        "eye-only monotonic progress may defer");
+    --f.clock.snapshot.unix_seconds;
+    ++state.eye_usage_counter.total_ns;
+    expect(save_state_sampled(&f.core, &state, f.clock.snapshot.unix_seconds - 1) && !f.core.state_dirty,
+        "backward wall clock commits pending eye usage immediately");
+    state.eye_cycle_used_ns = 0;
+    expect(save_state_sampled(&f.core, &state, f.clock.snapshot.unix_seconds) && !f.core.state_dirty,
+        "eye-cycle reset is never treated as monotonic sampling");
+    ++state.eye_care_day_index;
+    ++state.dock_day_index;
+    expect(save_state_sampled(&f.core, &state, ++f.clock.snapshot.unix_seconds) && !f.core.state_dirty,
+        "cross-day state commits without waiting for the sampling interval");
+    state.eye_care_resting = true;
+    state.eye_care_rest_deadline = f.clock.snapshot.unix_seconds + 60;
+    expect(save_state_sampled(&f.core, &state, f.clock.snapshot.unix_seconds) && !f.core.state_dirty,
+        "starting a rest commits its deadline immediately");
+    free(f.mem);
+}
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
@@ -2430,6 +2472,7 @@ int ptc_test_control_safety(void)
     test_eye_rest_scheduler_deadline();
     test_scheduler_idle_probe();
     test_sampled_state_persistence();
+    test_sampled_state_boundaries();
     test_direct_unlimited_lifecycle();
     test_direct_unlimited_reason_recovery();
     test_eden_direct_unlimited_counter();
