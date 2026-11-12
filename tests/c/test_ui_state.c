@@ -4210,6 +4210,36 @@ static void test_config_backup_layout(void)
         for (int j = 0; j < PTC_UI_NOTIFICATION_OPTION_COUNT; ++j)
             check_true(!rects_overlap(tab, ptc_ui_notification_option_rect(j)), "preview tabs do not change notification controls");
     }
+    PtcUiRect preview_group = ptc_ui_notification_preview_group_rect();
+    PtcUiRect verification = ptc_ui_notification_verification_rect();
+    check_true(ptc_ui_rect_contains(preview_group, preview.x, preview.y) &&
+        ptc_ui_rect_contains(preview_group, preview.x + preview.w - 1, preview.y + preview.h - 1),
+        "preview image belongs to its labelled selector group");
+    check_true(!rects_overlap(verification, preview_group) &&
+        !rects_overlap(verification, ptc_ui_cancel_rect(notifications.overlay)),
+        "verification workflow is distinct from preview and back action");
+    PtcUiRect first_tab = ptc_ui_notification_preview_tab_rect(0);
+    PtcUiRect second_tab = ptc_ui_notification_preview_tab_rect(1);
+    check_true(first_tab.x + first_tab.w == second_tab.x && first_tab.y == second_tab.y &&
+        first_tab.y + first_tab.h <= preview.y,
+        "preview modes form one segmented selector above the example");
+    for (int i = PTC_UI_NOTIFICATION_PROBE; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i) {
+        PtcUiRect action = ptc_ui_notification_option_rect(i);
+        check_true(ptc_ui_rect_contains(verification, action.x, action.y) &&
+            ptc_ui_rect_contains(verification, action.x + action.w - 1, action.y + action.h - 1),
+            "both validation steps belong to the same workflow group");
+    }
+    for (int i = 0; i < 3; ++i) {
+        PtcUiRect info = ptc_ui_notification_info_rect(i);
+        check_hit(hit_center(&notifications, info), PTC_UI_HIT_NONE, 0,
+            "linked guide and validation results remain read-only");
+        check_true(!rects_overlap(info, verification) && !rects_overlap(info, preview_group),
+            "guide, environment and results stay separate from actions and image");
+        for (int j = 0; j < i; ++j)
+            check_true(!rects_overlap(info, ptc_ui_notification_info_rect(j)), "information cards do not overlap");
+    }
+    check_true(ptc_ui_notification_info_rect(-1).w == 0 && ptc_ui_notification_info_rect(3).w == 0,
+        "invalid notification information card has no geometry");
     for (int i = 0; i < 11; ++i) {
         int group = i < 4 ? 0 : i < 9 ? 1 : 2;
         PtcUiRect section = ptc_ui_config_backup_group_rect(group);

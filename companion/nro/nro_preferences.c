@@ -34,6 +34,9 @@ void poll_notification_test(UiState *ui)
 
 void test_notification(UiState *ui)
 {
+    /* This action tests only brief notices, not automatic overlay opening.
+       Keep the illustrative view aligned even when delivery is unavailable. */
+    ui->model.notification_preview = 1;
     probe_notification_environment(ui);
     PtcUiTextId message = PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG;
     if (ui->model.reason_external_notifications == 1) {

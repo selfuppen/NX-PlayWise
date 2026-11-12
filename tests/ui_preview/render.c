@@ -1696,6 +1696,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg = model;
             settings_dlg.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
             settings_dlg.reason_notifications_enabled = true;
+            settings_dlg.reason_overlay_installed = true;
             settings_dlg.reason_external_notifications = 0;
             snprintf(settings_dlg.reason_overlay_shortcut, sizeof(settings_dlg.reason_overlay_shortcut), "L＋↓");
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
@@ -1703,7 +1704,24 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             failed |= save_preview(directory, "settings", "settings-notifications", &settings_dlg, dark);
             settings_dlg.reason_external_notifications = 1;
             failed |= save_preview(directory, "settings", "settings-notifications-ready", &settings_dlg, dark);
+            settings_dlg.reason_notifications_enabled = false;
+            failed |= save_preview(directory, "settings", "settings-notifications-off", &settings_dlg, dark);
+            settings_dlg.reason_notifications_enabled = true;
+            settings_dlg.reason_detail_ready = true;
+            settings_dlg.notification_preview = 1;
+            settings_dlg.overlay_selection = PTC_UI_NOTIFICATION_TEST;
+            snprintf(settings_dlg.reason_test_message, sizeof(settings_dlg.reason_test_message), "%s",
+                ptc_ui_text(PTC_UI_T_NOTICE_TEST_SENT));
+            failed |= save_preview(directory, "settings", "settings-notifications-test-sent", &settings_dlg, dark);
+            settings_dlg.reason_detail_ready = false;
+            snprintf(settings_dlg.reason_test_message, sizeof(settings_dlg.reason_test_message), "%s",
+                ptc_ui_text(PTC_UI_T_NOTICE_TEST_FAILED));
+            failed |= save_preview(directory, "settings", "settings-notifications-test-failed", &settings_dlg, dark);
+            settings_dlg.notification_preview = 0;
+            settings_dlg.overlay_selection = PTC_UI_NOTIFICATION_TOGGLE;
+            settings_dlg.reason_test_message[0] = '\0';
             settings_dlg.reason_external_notifications = -1;
+            settings_dlg.reason_overlay_installed = false;
             settings_dlg.reason_overlay_shortcut[0] = '\0';
             failed |= save_preview(directory, "settings", "settings-notifications-unknown", &settings_dlg, dark);
             settings_dlg.notification_preview = 1;
@@ -2200,19 +2218,23 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                     if (style == 0 && option == PTC_UI_SETUP_OPTION_NOTIFICATIONS)
                         failed |= save_preview(folder, "setup", "setup-review", &review, dark);
                 }
-                for (int scenario = 0; scenario < 4; ++scenario) {
+                const PtcUiTextId notification_results[] = {PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG,
+                    PTC_UI_T_NOTICE_TEST_SENT, PTC_UI_T_NOTICE_PROBED, PTC_UI_T_NOTICE_TEST_FAILED,
+                    PTC_UI_T_NOTICE_RESULT_IDLE, PTC_UI_T_REASON_NOTICE_PREPARE_FAILED,
+                    PTC_UI_T_REASON_NOTICE_PREPARED, PTC_UI_T_REASON_NOTICE_SAVE_FAILED};
+                for (int scenario = 0; scenario < 8; ++scenario)
+                for (int preview = 0; preview < 2; ++preview) {
                     PtcUiModel model = *baseline;
                     model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
                     model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
                     model.reason_notifications_enabled = scenario != 0;
-                    model.reason_external_notifications = scenario - 1;
+                    model.reason_external_notifications = scenario == 0 ? 0 : scenario == 3 ? -1 : 1;
                     model.overlay_selection = scenario % PTC_UI_NOTIFICATION_OPTION_COUNT;
-                    model.notification_preview = scenario % 2;
+                    model.notification_preview = preview;
                     model.reason_overlay_installed = scenario != 0;
-                    model.reason_detail_ready = scenario == 2;
-                    snprintf(model.reason_test_message, sizeof(model.reason_test_message), "%s", ptc_ui_text(
-                        scenario == 0 ? PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG : scenario == 1 ? PTC_UI_T_NOTICE_TEST_SENT :
-                        scenario == 2 ? PTC_UI_T_NOTICE_PROBED : PTC_UI_T_NOTICE_TEST_FAILED));
+                    model.reason_detail_ready = scenario == 2 || scenario == 6;
+                    snprintf(model.reason_test_message, sizeof(model.reason_test_message), "%s",
+                        scenario == 4 ? "" : ptc_ui_text(notification_results[scenario]));
                     snprintf(model.reason_overlay_shortcut, sizeof(model.reason_overlay_shortcut), "%s",
                         scenario == 0 ? "" : scenario == 3 ? "ZL＋ZR＋↓＋−" : "L＋↓");
                     snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
@@ -2226,12 +2248,27 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                     /* Native prompt text is deliberately composited beneath the
                        35%-width overlay. Check the surrounding page independently. */
                     PtcUiRect illustration = ptc_ui_notification_preview_rect();
+                    bool notice_title_on_left = false;
                     for (int i = 0; i < action_trace.count; ++i) {
                         UiRect b = action_trace.bounds[i];
-                        if (ptc_ui_rect_contains(illustration, b.x, b.y))
+                        if (ptc_ui_rect_contains(illustration, b.x, b.y)) {
+                            if (!strcmp(action_trace.text[i], ptc_ui_text(PTC_UI_T_NOTIFY_TITLE)) &&
+                                b.x + b.width < illustration.x + illustration.w / 2 &&
+                                b.y + b.height < illustration.y + illustration.h / 3)
+                                notice_title_on_left = true;
                             action_trace.bounds[i] = (UiRect){-2000, -2000, 0, 0};
+                        }
                     }
-                    failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1180, 680)), ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+                    if (!notice_title_on_left) {
+                        fprintf(stderr, "FAIL: notification preview not upper-left lang=%d preview=%d\n", lang, model.notification_preview);
+                        ++failed;
+                    }
+                    UiRect dialog = to_uirect(ptc_ui_dialog_rect(1180, 680));
+                    failed += check_action_text(dialog, ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+                    for (int i = 0; i < 3; ++i)
+                        failed += check_action_text(to_uirect(ptc_ui_notification_info_rect(i)), NULL);
+                    failed += check_action_text(to_uirect(ptc_ui_notification_preview_group_rect()), NULL);
+                    failed += check_action_text(to_uirect(ptc_ui_notification_verification_rect()), NULL);
                     /* Every paragraph must survive wrapping without losing its
                        end to max-lines clipping. Compare without wrap whitespace. */
                     char all[8192] = "";
@@ -2240,20 +2277,34 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                         for (const char *p = action_trace.text[i]; *p && used + 1 < sizeof(all); ++p)
                             if (*p != ' ' && *p != '\n' && *p != '\t') all[used++] = *p;
                     all[used] = '\0';
-                    PtcUiTextId paragraphs[] = {PTC_UI_T_REASON_NOTICE_EXPERIMENT, PTC_UI_T_REASON_NOTICE_COMPAT,
-                        PTC_UI_T_REASON_NOTICE_EXPIRY, PTC_UI_T_NOTICE_PREVIEW_LABEL,
+                    PtcUiTextId paragraphs[] = {PTC_UI_T_REASON_NOTICE_EXPERIMENT, PTC_UI_T_NOTICE_PREVIEW_LABEL,
                         PTC_UI_T_NOTICE_PREVIEW_DETAILS, PTC_UI_T_NOTICE_PREVIEW_SHORT, PTC_UI_T_NOTICE_NAV_HINT,
-                        PTC_UI_T_NOTICE_PROBE, PTC_UI_T_NOTICE_TEST,
-                        scenario == 0 ? PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG : scenario == 1 ? PTC_UI_T_NOTICE_TEST_SENT :
-                        scenario == 2 ? PTC_UI_T_NOTICE_PROBED : PTC_UI_T_NOTICE_TEST_FAILED,
-                        scenario == 0 ? PTC_UI_T_NOTICE_OVERLAY_MISSING : scenario == 2 ? PTC_UI_T_NOTICE_DETAIL_READY :
-                        PTC_UI_T_NOTICE_DETAIL_UNREADY};
+                        PTC_UI_T_NOTICE_SELECTOR_TITLE, PTC_UI_T_NOTICE_VERIFY_TITLE, PTC_UI_T_NOTICE_VERIFY_HINT,
+                        PTC_UI_T_NOTICE_PROBE, PTC_UI_T_NOTICE_TEST, PTC_UI_T_NOTICE_PROBE_NOTE, PTC_UI_T_NOTICE_TEST_NOTE,
+                        preview == 0 ? PTC_UI_T_NOTICE_DETAIL_NAME : PTC_UI_T_NOTICE_BRIEF_NAME,
+                        preview == 0 ? PTC_UI_T_NOTICE_DETAIL_GUIDE : PTC_UI_T_NOTICE_BRIEF_GUIDE,
+                        preview == 0 ? PTC_UI_T_NOTICE_DETAIL_BOUNDARY : PTC_UI_T_NOTICE_BRIEF_BOUNDARY,
+                        PTC_UI_T_NOTICE_ENVIRONMENT_TITLE, PTC_UI_T_NOTICE_USAGE_TITLE, PTC_UI_T_NOTICE_RESULT_TITLE,
+                        notification_results[scenario],
+                        model.reason_external_notifications == 1 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
+                        model.reason_external_notifications == 0 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_OFF : PTC_UI_T_REASON_NOTICE_EXTERNAL_UNKNOWN,
+                        !model.reason_overlay_installed ? PTC_UI_T_NOTICE_OVERLAY_MISSING :
+                        model.reason_detail_ready ? PTC_UI_T_NOTICE_DETAIL_READY : PTC_UI_T_NOTICE_DETAIL_UNREADY};
                     for (unsigned i = 0; i < sizeof(paragraphs)/sizeof(paragraphs[0]); ++i) {
                         char required[1024]; size_t count = 0;
                         for (const char *p = ptc_ui_text(paragraphs[i]); *p && count + 1 < sizeof(required); ++p)
                             if (*p != ' ' && *p != '\n' && *p != '\t') required[count++] = *p;
                         required[count] = '\0';
                         if (!strstr(all, required)) { fprintf(stderr, "FAIL: notification paragraph clipped lang=%d key=%u\n", lang, (unsigned)paragraphs[i]); ++failed; }
+                    }
+                    char inactive[512]; size_t inactive_length = 0;
+                    const char *inactive_guide = ptc_ui_text(preview == 0 ? PTC_UI_T_NOTICE_BRIEF_GUIDE : PTC_UI_T_NOTICE_DETAIL_GUIDE);
+                    for (const char *p = inactive_guide; *p && inactive_length + 1 < sizeof(inactive); ++p)
+                        if (*p != ' ' && *p != '\n' && *p != '\t') inactive[inactive_length++] = *p;
+                    inactive[inactive_length] = '\0';
+                    if (strstr(all, inactive)) {
+                        fprintf(stderr, "FAIL: inactive example guide still visible lang=%d preview=%d\n", lang, preview);
+                        ++failed;
                     }
                     for (int i = 0; i < action_trace.count; ++i)
                         if (!strcmp(action_trace.text[i], ptc_ui_text(PTC_UI_T_SOUND_EFFECTS))) {
