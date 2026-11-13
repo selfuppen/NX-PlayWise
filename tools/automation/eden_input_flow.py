@@ -69,8 +69,8 @@ def verify_input(output: Path, include_matrix: bool = True) -> None:
 class InputFlow(PlanFlow):
     def setup(self) -> None:
         super().setup()
-        self.page(3)
-        self.action(target="card_3")
+        self.page(0)
+        self.action(target="header_language")
         self.wait_ui(overlay=37, overlay_selection=0)
         language = self.identity["input_language"]
         if language == "zh-Hans":
@@ -96,7 +96,7 @@ class InputFlow(PlanFlow):
 
     def theme(self, style: str, mode: str) -> None:
         self.page(3)
-        self.action(target="card_1")
+        self.action(target="card_5")
         current = self.wait_ui(overlay=21)["ui"]["overlay_selection"]
         desired = ("system", "light", "dark").index(mode)
         for _ in range((desired - current) % 3):

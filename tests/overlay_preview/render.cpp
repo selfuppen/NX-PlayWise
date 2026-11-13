@@ -647,7 +647,55 @@ static void test_detail_countdown_refresh(tsl::gfx::Renderer &renderer)
                 "PIN, parent, preview, result, language and code-entry flows do not observe or request countdown refreshes");
         }
     }
-    std::puts("PASS: detail countdown refreshes once at zero, waits for backend, and leaves protected flows alone");
+    for (const bool valid_instance : {true, false}) {
+        PtcOverlayBridge bridge{};
+        PtcOverlayInput input{};
+        PreviewView view;
+        setup(view, bridge, input);
+        auto &s = view.displayed_summary_;
+        s.eye_care_enabled = false;
+        std::snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "off");
+        s.bedtime_available = s.bedtime_enabled = s.bedtime_active = true;
+        s.bedtime_start_day_index = s.day_index - 1;
+        s.bedtime_start_minute = 21 * 60;
+        s.bedtime_end_minute = 10 * 60;
+        s.bedtime_window_instance_id =
+            (static_cast<uint64_t>(s.bedtime_start_day_index) << 16) | s.bedtime_start_minute;
+        if (!valid_instance) ++s.bedtime_window_instance_id;
+        // Preview builds pin the countdown clock. Supply successive legitimate
+        // snapshot seconds to exercise the same bedtime producer without sleeps.
+        for (int second = 0; second <= 5; ++second) {
+            s.local_second_of_day = 10 * 3600 - 5 + second;
+            draw_at_age(view, 0);
+            require(view.page_identity() == 4 &&
+                view.countdown_recheck_pending_ == (valid_instance && second == 5),
+                "bedtime details request a boundary refresh only for a recognized running instance");
+            require(view.child_is_restricted(), "bedtime elapsed display does not release the restriction");
+        }
+        if (!valid_instance) {
+            require(!view.countdown_watch_.armed, "invalid bedtime instance never arms a countdown refresh");
+            continue;
+        }
+        require(view.child_policy_status(s).bedtime.state == PTC_POLICY_WAITING,
+            "bedtime details show waiting for confirmation at the boundary");
+        view.countdown_recheck_pending_ = false;
+        view.error_ = true;
+        view.last_request_kind_ = OverlayRequestKind::Status;
+        draw_at_age(view, 0);
+        require(!view.countdown_recheck_pending_ && view.child_is_restricted(),
+            "failed bedtime refresh neither retries automatically nor infers release");
+        view.error_ = false;
+        view.status_expanded_ = false;
+        draw_at_age(view, 0);
+        view.status_expanded_ = true;
+        draw_at_age(view, 0);
+        require(!view.countdown_recheck_pending_, "bedtime overview and details share boundary deduplication");
+        s.bedtime_active = false;
+        draw_at_age(view, 0);
+        require(!view.child_is_restricted() && !view.countdown_recheck_pending_,
+            "only a confirmed inactive bedtime snapshot releases the restriction");
+    }
+    std::puts("PASS: eye and bedtime details refresh once at zero, wait for backend, and leave protected flows alone");
 }
 
 static void test_parent_cards(tsl::gfx::Renderer &renderer)

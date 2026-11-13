@@ -8,8 +8,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from tools.automation.eden_plan_flow import PLAN_SCENARIOS, prepare_plans, verify_partition, verify_forecast, verify_windows
-from tools.automation.eden_runner import GateError, read, scenario_names
+from tools.automation.eden_plan_flow import PLAN_SCENARIOS, PlanFlow, prepare_plans, verify_partition, verify_forecast, verify_windows
+from tools.automation.eden_runner import GateError, read, save, scenario_names
 
 
 def rejected(function) -> None:
@@ -20,7 +20,44 @@ def rejected(function) -> None:
     raise AssertionError("bad plan evidence accepted")
 
 
+def test_language_navigation() -> None:
+    class SetupBase:
+        def setup(self) -> None:
+            self.calls.append(("setup",))
+
+    class Flow(PlanFlow, SetupBase):
+        def page(self, index: int) -> None:
+            self.calls.append(("page", index))
+
+        def action(self, **kwargs: object) -> None:
+            self.calls.append(("action", kwargs))
+
+        def wait_ui(self, **expected: object) -> dict:
+            self.calls.append(("wait", expected))
+            return {"ui": expected}
+
+    with tempfile.TemporaryDirectory() as folder:
+        flow = Flow()
+        flow.app = Path(folder)
+        save(flow.app / "config.json", {"ui_language": "en"})
+        flow.calls, flow.identity = [], {"plans_language": "system"}
+        flow.setup()
+        assert flow.calls == [("setup",)]
+        flow.calls, flow.identity = [], {"plans_language": "en"}
+        flow.setup()
+        assert flow.calls == [
+            ("setup",), ("page", 0), ("action", {"target": "header_language"}),
+            ("wait", {"overlay": 37, "overlay_selection": 0}),
+            ("action", {"button": "Down"}), ("wait", {"overlay_selection": 2}),
+            ("action", {"button": "Right"}), ("wait", {"overlay_selection": 3}),
+            ("action", {"button": "A"}), ("wait", {"overlay": 0}),
+        ]
+        (flow.app / "config.json").write_text('{"ui_language":"zh-Hans"}', encoding="utf-8")
+        rejected(flow.setup)
+
+
 def main() -> None:
+    test_language_navigation()
     assert scenario_names("plans") == PLAN_SCENARIOS and len(PLAN_SCENARIOS) == 7
     with tempfile.TemporaryDirectory() as folder:
         output = Path(folder) / 'not-created'
@@ -67,7 +104,7 @@ def main() -> None:
     verify_windows(ui, rules)
     rejected(lambda: verify_windows({**ui, "bedtime_draft_start_day": 2488}, rules))
     rejected(lambda: verify_windows({**ui, "bedtime_dirty": True}, rules))
-    print("PASS: X01 fixture isolation, source/preview binding and X04 partition preservation gates")
+    print("PASS: plans language navigation, X01 fixture/source binding and X04 partition preservation gates")
 
 
 if __name__ == "__main__":

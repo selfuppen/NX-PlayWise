@@ -8,8 +8,10 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from tools.automation.eden_input_flow import INPUT_SCENARIOS, INPUT_HOLD_SCENARIOS, STYLES, LANGUAGES, verify_matrix, load_matrix
-from tools.automation.eden_runner import GateError, scenario_names
+from tools.automation.eden_input_flow import (
+    INPUT_SCENARIOS, INPUT_HOLD_SCENARIOS, STYLES, LANGUAGES, InputFlow, InputHoldFlow, verify_matrix, load_matrix,
+)
+from tools.automation.eden_runner import GateError, save, scenario_names
 
 
 def rejected(rows: list, language: str) -> None:
@@ -23,7 +25,65 @@ def rejected(rows: list, language: str) -> None:
     raise AssertionError("incomplete/changed input matrix accepted")
 
 
+def test_preference_navigation() -> None:
+    class SetupBase:
+        def setup(self) -> None:
+            self.calls.append(("setup",))
+
+    for flow_type in (InputFlow, InputHoldFlow):
+        for language in LANGUAGES:
+            class Flow(flow_type, SetupBase):
+                def page(self, index: int) -> None:
+                    self.calls.append(("page", index))
+
+                def action(self, **kwargs: object) -> None:
+                    self.calls.append(("action", kwargs))
+
+                def wait_ui(self, **expected: object) -> dict:
+                    self.calls.append(("wait", expected))
+                    if expected.get("overlay") == 21:
+                        self.theme_waits += 1
+                        return {"ui": {"overlay_selection": 0 if self.theme_waits % 2 else 3}}
+                    return {"ui": expected}
+
+                def enter_pin(self, digits: str) -> None:
+                    assert digits == "110"
+                    self.calls.append(("pin",))
+
+                def capture(self, name: str) -> None:
+                    self.calls.append(("capture", name))
+
+            with tempfile.TemporaryDirectory() as folder:
+                flow = Flow()
+                flow.app = Path(folder)
+                flow.calls, flow.theme_waits = [], 0
+                flow.identity = {"input_language": language}
+                save(flow.app / "config.json", {"ui_language": language, "theme": "dark", "theme_style": "amethyst"})
+                flow.setup()
+                prefix = [("setup",), ("page", 0), ("action", {"target": "header_language"}),
+                          ("wait", {"overlay": 37, "overlay_selection": 0})]
+                buttons = ["Right"] if language == "zh-Hans" else ["Down"] + (["Right"] if language == "en" else [])
+                prefix += [("action", {"button": button}) for button in buttons + ["A"]]
+                prefix += [("wait", {"overlay": 0})]
+                assert flow.calls[:len(prefix)] == prefix, (flow_type.__name__, language, flow.calls)
+                assert not any(call == ("action", {"target": "card_3"}) for call in flow.calls)
+                if flow_type is InputHoldFlow:
+                    assert ("action", {"target": "card_5"}) in flow.calls
+
+                # Exercise the shared theme method itself, not a replaced mock.
+                flow.calls, flow.theme_waits = [], 0
+                flow.theme("amethyst", "dark")
+                assert flow.calls == [
+                    ("page", 3), ("action", {"target": "card_5"}), ("wait", {"overlay": 21}),
+                    ("action", {"button": "Right"}), ("action", {"button": "Right"}),
+                    ("action", {"button": "Down"}), ("wait", {"overlay": 21}),
+                    ("action", {"button": "Right"}), ("action", {"button": "Right"}),
+                    ("action", {"button": "Right"}), ("action", {"button": "A"}), ("wait", {"overlay": 0}),
+                ]
+
+
 def main() -> None:
+    test_preference_navigation()
     assert scenario_names("input") == INPUT_SCENARIOS
     assert scenario_names("input-hold") == INPUT_HOLD_SCENARIOS
     for language in LANGUAGES:
@@ -56,7 +116,7 @@ def main() -> None:
                 except GateError:
                     continue
                 raise AssertionError("duplicate/invalid matrix schema accepted")
-    print("PASS: X05 complete language/theme matrix and discard/no-write failure gates")
+    print("PASS: X05 input/hold preference navigation, language/theme matrix and discard/no-write gates")
 
 
 if __name__ == "__main__":

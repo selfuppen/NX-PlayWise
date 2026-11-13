@@ -785,7 +785,7 @@ When an eligible newer version is found, a quiet Update hint appears in the uppe
 
 When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode rules prevent play, PlayWise can explain the reason automatically. **The reminder switch only controls hints: it does not change playtime rules or clear restrictions.** It is off by default and can be skipped without blocking core setup.
 
-This feature is implemented in development candidates but has not been publicly released or fully qualified. Older releases may not have the entry. Prior brief-notice evidence covers only Ultrahand 2.5.3 / loader 2.0.2; it does not verify the new automatic-detail path. PlayWise packages do not include an overlay manager and do not install, replace or upgrade one.
+Version 3.1.7 publicly shipped the opt-in experimental reminders. The revised example switching and ongoing remaining-time notices still need new-candidate validation; full qualification remains pending. One earlier candidate has a matching automatic-detail ACK for a daily restriction, which does not qualify other reasons, lifecycle cases or this candidate. Prior brief-notice compatibility evidence covers only Ultrahand 2.5.3 / loader 2.0.2. PlayWise packages do not include an overlay manager and do not install, replace or upgrade one.
 
 Automatic reminders are attempted for newly confirmed restrictions, not for every status refresh. While an eye-rest or bedtime restriction continues with a reliable remaining time, a brief notice may repeat at most once a minute. Daily exhaustion and TV-mode restrictions do not repeat periodically. There are two reminder formats:
 

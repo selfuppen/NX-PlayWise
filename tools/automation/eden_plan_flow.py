@@ -138,8 +138,8 @@ class PlanFlow(MainFlow):
         super().setup()
         if self.identity.get('plans_language', 'system') != 'en':
             return
-        self.page(3)
-        self.action(target='card_3')
+        self.page(0)
+        self.action(target='header_language')
         self.wait_ui(overlay=37, overlay_selection=0)
         self.action(button='Down')
         self.wait_ui(overlay_selection=2)
