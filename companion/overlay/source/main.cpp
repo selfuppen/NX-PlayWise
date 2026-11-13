@@ -16,6 +16,7 @@ extern "C" {
 #include "../bridge.h"
 #include "../detail_status.h"
 #include "../hidden_poll.h"
+#include "../brief_notice.h"
 #include "../../auth.h"
 #include "../../auth_clock.h"
 #include "../input_model.h"
@@ -1335,7 +1336,46 @@ class PctcOverlay final : public tsl::Overlay {
 public:
     u64 hiddenPollInterval() override
     {
+        if (brief_notice_.active) return UINT64_C(50000000);
         return ptc_overlay_hidden_poll_ns(automatic_enabled_, automatic_failures_);
+    }
+
+    bool hasHiddenFrame() override { return brief_notice_.active; }
+
+    void onHiddenFrame(bool blocked, u64 keysDown) override
+    {
+        uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
+        bool allowed = !blocked && automatic_enabled_ && runtime_known_ && gui_ &&
+            gui_->automatic_detail_allowed() && !s_automatic_detail;
+        bool dismiss = (keysDown & HidNpadButton_Minus) != 0;
+        bool read_due = ms >= next_brief_read_ms_ || !allowed || dismiss;
+        if (read_due) next_brief_read_ms_ = ms + 250;
+        ptc_overlay_brief_poll(&brief_notice_, read_due ? ptc_fs_storage_as_storage(&storage_) : nullptr,
+            APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, ms, allowed,
+            dismiss);
+    }
+
+    void drawHiddenFrame(tsl::gfx::Renderer *target) override
+    {
+        auto &renderer = *target;
+        renderer.setPreferTraditionalChinese(ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_TRADITIONAL);
+        const auto &palette = get_overlay_palette(s_overlay_theme);
+        const int width = tsl::cfg::FramebufferWidth - 32;
+        const int title_height = overlay_text_height(&renderer, brief_notice_.title, width - 32, 26);
+        const int text_height = overlay_text_height(&renderer, brief_notice_.text, width - 32, 26);
+        const int height = title_height + text_height + 48;
+        if (height > tsl::cfg::FramebufferHeight - 32) {
+            brief_notice_.active = false;
+            return;
+        }
+        renderer.drawRect(28, 16, width - 24, height, palette.card_bg);
+        renderer.drawRect(16, 28, width, height - 24, palette.card_bg);
+        renderer.drawCircle(28, 28, 12, true, palette.card_bg);
+        renderer.drawCircle(16 + width - 12, 28, 12, true, palette.card_bg);
+        renderer.drawCircle(28, 16 + height - 12, 12, true, palette.card_bg);
+        renderer.drawCircle(16 + width - 12, 16 + height - 12, 12, true, palette.card_bg);
+        overlay_text(&renderer, brief_notice_.title, 32, 32, width - 32, 26, palette.text_primary);
+        overlay_text(&renderer, brief_notice_.text, 32, 40 + title_height, width - 32, 26, palette.text_primary);
     }
 
     bool onHiddenPoll(bool neutral) override
@@ -1360,7 +1400,7 @@ public:
             }
             next_config_ms_ = ms + PTC_OVERLAY_HIDDEN_CONFIG_MS;
         }
-        if (!automatic_enabled_ || !neutral) return false;
+        if (!automatic_enabled_) return false;
         /* The backend identity changes only on boot or handoff: cache it instead
            of re-reading and re-parsing runtime-ready.json on every 250ms poll. */
         if (ms >= next_runtime_ms_) {
@@ -1373,6 +1413,7 @@ public:
             next_runtime_ms_ = ptc_overlay_hidden_runtime_next_ms(ms, runtime_known_);
         }
         if (!runtime_known_) return false;
+        if (!neutral) return false;
         if (ms >= next_ready_ms_) {
             PtcReasonDetail ready{};
             std::snprintf(ready.release, sizeof(ready.release), "%s", PLAYWISE_BUILD_RELEASE_ID);
@@ -1432,6 +1473,9 @@ public:
 
     void onShow() override
     {
+        ptc_overlay_brief_poll(&brief_notice_, ptc_fs_storage_as_storage(&storage_),
+            APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_,
+            armTicksToNs(armGetSystemTick()) / 1000000, false, false);
         next_config_ms_ = 0;
         s_display_clock.sampled = false;
         s_owner_visible = true;
@@ -1491,7 +1535,9 @@ private:
     PtcOverlayInput input_{};
     PctcGui *gui_ = nullptr;
     PtcReasonDetail automatic_offer_{};
+    PtcOverlayBriefNotice brief_notice_{};
     uint64_t ui_instance_ms_ = 0, seen_sequence_ = 0, next_ready_ms_ = 0;
+    uint64_t next_brief_read_ms_ = 0;
     unsigned automatic_failures_ = 0;
     bool automatic_ack_written_ = false;
     bool automatic_enabled_ = false;

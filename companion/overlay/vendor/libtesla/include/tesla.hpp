@@ -3007,6 +3007,9 @@ namespace tsl {
         // PlayWise cooperation stays on the UI thread, outside the HID mutex.
         virtual u64 hiddenPollInterval() { return UINT64_MAX; }
         virtual bool onHiddenPoll(bool neutral) { return false; }
+        virtual bool hasHiddenFrame() { return false; }
+        virtual void onHiddenFrame(bool blocked, u64 keysDown) {}
+        virtual void drawHiddenFrame(gfx::Renderer *renderer) {}
         virtual void onFrameRendered() {}
 
         /**
@@ -3350,6 +3353,21 @@ namespace tsl {
             renderer.endFrame();
         }
 
+        void loopHiddenFrame(bool blocked, u64 keysDown) {
+            this->onHiddenFrame(blocked, keysDown);
+            bool active = this->hasHiddenFrame();
+            if (!active && !this->m_hiddenFrameDrawn) return;
+            auto &renderer = gfx::Renderer::get();
+            renderer.startFrame();
+            renderer.clearScreen();
+            gfx::Renderer::setOpacity(1.0f);
+            if (active) this->drawHiddenFrame(&renderer);
+            renderer.endFrame();
+            this->m_hiddenFrameDrawn = this->hasHiddenFrame();
+        }
+
+        bool m_hiddenFrameDrawn = false;
+
         /**
          * @brief Reset hide and close flags that were previously set by \ref Overlay::close() or \ref Overlay::hide()
          *
@@ -3658,17 +3676,22 @@ namespace tsl {
         while (shData.running) {
 
             Result wake = eventWait(&shData.comboEvent,
-                detail::hiddenPollNs(shData.automaticOpenBlocked.load(), overlay->hiddenPollInterval()));
+                detail::hiddenPollNs(shData.automaticOpenBlocked.load() && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval()));
             if (wake == KERNELRESULT(TimedOut)) {
                 bool neutral;
+                u64 hiddenKeysDown;
                 {
                     std::scoped_lock lock(shData.dataMutex);
+                    hiddenKeysDown = shData.keysDownPending;
                     neutral = !shData.keysHeld && !shData.keysDownPending && !shData.touchState.count &&
                         std::abs(shData.joyStickPosLeft.x) < 16000 && std::abs(shData.joyStickPosLeft.y) < 16000 &&
                         std::abs(shData.joyStickPosRight.x) < 16000 && std::abs(shData.joyStickPosRight.y) < 16000;
                     shData.keysDownPending = 0;
                 }
-                if (!overlay->onHiddenPoll(neutral && !shData.automaticOpenBlocked)) continue;
+                bool blocked = shData.automaticOpenBlocked.load();
+                bool open = !blocked && overlay->onHiddenPoll(neutral);
+                overlay->loopHiddenFrame(blocked, hiddenKeysDown);
+                if (!open) continue;
             } else if (R_FAILED(wake)) {
                 ASSERT_FATAL(wake);
             }
@@ -3681,6 +3704,7 @@ namespace tsl {
 
             overlay->show();
             overlay->clearScreen();
+            overlay->m_hiddenFrameDrawn = false;
 
 
             while (shData.running) {

@@ -76,7 +76,8 @@ void ptc_notification_test_poll(PtcNotificationTest *t, PtcStorage *s, const cha
 bool ptc_notification_test_send(PtcNotificationTest *t, PtcStorage *s, const char *root,
     uint64_t ms, uint64_t random_id, const char *title, const char *body)
 {
-    if (t->blocked || t->pending || (t->sent && (ms < t->last_send_ms || ms - t->last_send_ms < 10000))) return false;
+    if (ms > UINT64_MAX - 2000 || t->blocked || t->pending ||
+        (t->sent && (ms < t->last_send_ms || ms - t->last_send_ms < 10000))) return false;
     t->last_send_ms = ms; t->sent = true;
     if (!ptc_notification_test_cleanup(t, s, root)) return false;
     char name[64], journal[256], stage[280];
@@ -94,6 +95,11 @@ bool ptc_notification_test_send(PtcNotificationTest *t, PtcStorage *s, const cha
         cJSON_AddNumberToObject(p, "font_size", 26) && cJSON_AddNumberToObject(p, "duration", 10000) &&
         cJSON_AddStringToObject(p, "show_time", "false") && cJSON_AddNumberToObject(p, "priority", 30) &&
         cJSON_AddStringToObject(p, "pw_owner", "test-v1") && cJSON_AddStringToObject(p, "pw_file", name);
+    char issued[32], expires[32];
+    snprintf(issued, sizeof(issued), "%llu", (unsigned long long)ms);
+    snprintf(expires, sizeof(expires), "%llu", (unsigned long long)(ms + 2000));
+    ok = ok && cJSON_AddStringToObject(p, "pw_issued_ms", issued) &&
+        cJSON_AddStringToObject(p, "pw_expires_ms", expires);
     char *payload = ok ? cJSON_PrintUnformatted(p) : NULL;
     ok = payload && strlen(payload) < sizeof(t->payload);
     if (ok) snprintf(t->payload, sizeof(t->payload), "%s", payload);

@@ -4535,6 +4535,7 @@ static void test_quiescing_scheduler(void)
 }
 
 #include "test_reason_notification.inc"
+#include "test_overlay_brief.inc"
 
 #include "../../sysmodule/power_ledger.h"
 
@@ -4622,6 +4623,7 @@ static void test_power_ledger(void)
 int main(void)
 {
     test_reason_events();
+    test_overlay_brief();
     test_notification_dependency();
     test_reason_detail_transport();
     test_reason_idle_cost();

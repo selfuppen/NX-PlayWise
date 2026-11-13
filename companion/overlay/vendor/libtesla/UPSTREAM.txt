@@ -33,3 +33,8 @@ Local idle power patch (2026-11-11): input polling waits 50ms while hidden with
 no buttons held, 20ms while visible or holding buttons. HOME/POWER-blocked hidden
 UI waits indefinitely for the manual combo event. Local support header:
 include/playwise_poll_policy.hpp. Upstream commit remains pinned as above.
+Local resident brief patch (2026-11-14): optional UI-thread hidden-frame callback.
+A drawn hidden frame keeps bounded polling long enough to clear on HOME/POWER.
+The callback receives a copied button-down snapshot and never requests foreground.
+PlayWise reads only its exact-byte reason/test journal targets, retains publisher
+cleanup ownership and draws on the existing framebuffer. No upstream files synced.

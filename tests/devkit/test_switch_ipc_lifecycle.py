@@ -106,8 +106,9 @@ def main() -> None:
     loop = libtesla[libtesla.index("static inline int loop(int argc, char** argv)"):]
     require("detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0)" in poller,
             "idle input throttling must preserve visible and held-button sampling")
-    require("detail::hiddenPollNs(shData.automaticOpenBlocked.load(), overlay->hiddenPollInterval())" in loop,
-            "HOME/POWER blocked hidden UI must wait for the manual combo event")
+    require("detail::hiddenPollNs(shData.automaticOpenBlocked.load() && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval())" in loop and
+            "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop,
+            "HOME/POWER must clear a hidden frame before waiting for the manual combo event")
     require("ptc_sysmodule_idle_wait_ms(wait_ms, fast_poll)" in sysmodule and
             "usage_evidence.active ||" in sysmodule and
             "ptc_reason_notification_busy(&reason_notification)" in sysmodule and
@@ -144,9 +145,14 @@ def main() -> None:
     hidden = overlay[overlay.index("bool onHiddenPoll(bool neutral) override"):overlay.index("void onFrameRendered() override")]
     require("ready.expires_ms = ms + 1500;" in hidden and "next_ready_ms_ = ms + 1000;" in hidden,
             "hidden Overlay must keep the 1.5s presence lease renewed every second")
-    require(hidden.index("ms >= next_config_ms_") < hidden.index("!automatic_enabled_ || !neutral") <
-            hidden.index("ptc_reason_detail_runtime(") < hidden.index('ptc_reason_detail_write(s, APP_ROOT, "ready"'),
-            "preference checks ignore input, but identity reads and the lease need neutral input")
+    require(hidden.index("ms >= next_config_ms_") < hidden.index("!automatic_enabled_") <
+            hidden.index("ptc_reason_detail_runtime(") < hidden.index("!neutral") <
+            hidden.index('ptc_reason_detail_write(s, APP_ROOT, "ready"'),
+            "brief identity reads ignore input, but the detail lease needs neutral input")
+    brief = overlay[overlay.index("void onHiddenFrame("):overlay.index("bool onHiddenPoll(")]
+    require("requestForeground(" not in brief and "ptc_input_owner_acquire(" not in brief and
+            "renderer.clearScreen();" in libtesla[libtesla.index("void loopHiddenFrame("):libtesla.index("bool m_hiddenFrameDrawn")],
+            "hidden brief rendering must release pixels without acquiring input")
     require("UINT64_C(250000000) : UINT64_C(5000000000)" in hidden_poll,
             "hidden Overlay polls every five seconds while reason notifications are off")
     require(loop.index("eventCreate(&shData.comboEvent") < loop.index("threadStart(&backgroundThread)"),

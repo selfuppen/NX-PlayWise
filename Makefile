@@ -88,6 +88,8 @@ PLATFORM_HOST_SRCS := \
 	platform/switch/play_timer_settings_layout.c
 
 ORCH_SRCS := \
+	companion/overlay/brief_notice.c \
+	companion/notification_test.c \
 	companion/input_owner.c \
 	companion/notification_text.c \
 	sysmodule/reason_notification.c \

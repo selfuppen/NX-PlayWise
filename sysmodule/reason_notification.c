@@ -170,9 +170,10 @@ bool ptc_reason_notification_body(const PtcReasonObservation *s, int64_t wall,
     return true;
 }
 
-static bool publish(PtcReasonNotification *n, PtcUiLanguagePreference lang, int64_t wall)
+static bool publish(PtcReasonNotification *n, PtcUiLanguagePreference lang, int64_t wall, uint64_t ms)
 {
     char name[96], stage[280], body[512];
+    if (ms > UINT64_MAX - 2000) return false;
     if (!ptc_reason_notification_body(&n->event.latest, wall, lang, n->external.shortcut, body, sizeof(body))) return false;
     if (++n->sequence == 0) return false;
     snprintf(name, sizeof(name), "playwise-reason-%s-%016llx.notify", n->event.boot,
@@ -191,6 +192,11 @@ static bool publish(PtcReasonNotification *n, PtcUiLanguagePreference lang, int6
     snprintf(instance, sizeof(instance), "%llu", (unsigned long long)n->event.latest.instance);
     ok = ok && cJSON_AddNumberToObject(p, "pw_reason", n->event.latest.reason) &&
         cJSON_AddStringToObject(p, "pw_instance", instance);
+    char issued[32], expires[32];
+    snprintf(issued, sizeof(issued), "%llu", (unsigned long long)ms);
+    snprintf(expires, sizeof(expires), "%llu", (unsigned long long)(ms + 2000));
+    ok = ok && cJSON_AddStringToObject(p, "pw_issued_ms", issued) &&
+        cJSON_AddStringToObject(p, "pw_expires_ms", expires);
     char *payload = ok ? cJSON_PrintUnformatted(p) : NULL;
     ok = payload && strlen(payload) < sizeof(n->payload);
     if (ok) snprintf(n->payload, sizeof(n->payload), "%s", payload);
@@ -288,7 +294,7 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         n->config_ms = ms > UINT64_MAX - 2000 ? UINT64_MAX : ms + 2000;
     }
     if (n->external.notifications != 1) { state(n, "fallback_receiver_unavailable"); return; }
-    if (!publish(n, lang, wall)) goto failed;
+    if (!publish(n, lang, wall, ms)) goto failed;
     n->pending = true;
     n->expires_ms = ms + 2000;
     state(n, "pending_display_unknown");
