@@ -64,11 +64,23 @@ In the Switch Parent Portal, navigate to **Offline Grant → Generate on Phone/P
 
 The QR code in the first screenshot has been replaced with a **public demo configuration** and cannot be used on real home devices. The second image shows a historical web interface preview; actual dates and operations reflect your current device. If the public web app is unreachable under certain network environments, use `playwise-offline.html` from the complete delivery bundle or generate codes directly on the Switch console. Detailed steps and security considerations are documented in [User Guide: Generating on Phone or PC](docs/使用/USER_GUIDE.md#generating-on-phone-or-pc).
 
+## Play Restriction Reminders (Experimental)
+
+When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode rules prevent play, PlayWise can explain the reason automatically. **Detailed view** shows the current state and available actions; **Brief notice** briefly shows the reason, time information at the moment of the notice, and a manual entry to details in the upper-left corner.
+
+| Reminder settings and detailed-view example | Upper-left brief-notice example |
+| --- | --- |
+| ![Play restriction reminders with automatic reasons enabled and a detailed-view preview](docs/images/usage-en/settings/settings-notifications-ready-light.png) | ![Upper-left brief-notice preview in dark settings](docs/images/usage-en/settings/settings-notifications-short-dark.png) |
+
+Open **Play restriction reminders** in setup step two or **Security & Preferences**, then enable **Show restriction reasons automatically** (off by default). **Switch example** changes the preview and its linked guide, not separate feature switches. The numbered **Verify reminders** flow recommends **1 Check setup → 2 Send test**, linked to the setup and result panels. Testing covers brief notices only, not automatic overlay opening. Missing dependencies and failed tests can be skipped with B so setup can continue. The switch and test do not change playtime rules or clear restrictions.
+
+Automatic details require PlayWise to be loaded and hidden; they cannot switch from another overlay or interrupt PIN or code entry. If details are not ready, a compatible Ultrahand brief notice is attempted. An enabled notice setting or a sent test does not confirm actual display. Reopen the overlay manager normally if needed; a console reboot is not required for this. See [Play restriction reminders](docs/使用/USER_GUIDE.md#play-restriction-reminders-experimental) and [Hint previews and setup](docs/使用/USER_GUIDE.md#hint-previews-and-setup).
+
+> These images are generated from current drawing code and fixed sample data, marked `HOST PREVIEW / SAMPLE DATA`; they are not console captures or acceptance evidence. Version 3.1.7 publicly shipped the opt-in experimental reminders; the revised example switching and ongoing remaining-time notices still need new-candidate validation. One earlier candidate has a matching automatic-detail ACK for a daily restriction. Other reasons and lifecycle checks remain partial and do not qualify this candidate. Brief-notice compatibility evidence covers only Ultrahand 2.5.3 / loader 2.0.2. Full qualification remains pending and is recorded separately below.
+
 ## Key Features
 
-The [hint setup and light/dark previews](docs/使用/USER_GUIDE.md#hint-previews-and-setup) show the setup entry, three notice configuration states, and when automatic details or short-notice fallback apply.
-
-- **Automatic restriction details with notice fallback (experimental)**: optional in setup step two and Security & Preferences → When play stops, off by default. An already loaded PlayWise overlay refreshes details first; missing readiness or timeout attempts one compatible Ultrahand notice. It cannot switch from another overlay. Enabling prepares and reads back the global notice setting; this does not confirm resident reception. One daily restriction window has device evidence for a matching automatic-detail ACK. Other reasons and lifecycle verification remain partial, and full qualification is pending. Notice evidence covers Ultrahand 2.5.3 / loader 2.0.2. See the [usage guide](docs/使用/USER_GUIDE.md#automatic-reason-notices-experimental).
+- **Play restriction reminders (experimental)**: optional automatic explanations, environment checks, and test notices; detailed view first, brief notice as a fallback, without changing restriction rules. Ongoing eye-rest and bedtime restrictions receive remaining-time brief notices at minute intervals without reopening details. See the [setup steps](docs/使用/USER_GUIDE.md#hint-previews-and-setup).
 
 - **Configuration backup/import**: eleven selective groups, PIN/hold verification, transactional rollback, calendar restore and fresh pairing keys; available in Security & Preferences.
 - **TV mode rules**: require TV mode, a uniform 0–1440-minute daily non-TV ceiling within the total, and a PIN-authorized today waiver. Disabled by default; functional testing completed.

@@ -287,21 +287,42 @@ PtcUiRect ptc_ui_notification_option_rect(int index)
     if (index < 0 || index >= PTC_UI_NOTIFICATION_OPTION_COUNT) return (PtcUiRect){0, 0, 0, 0};
     if (index == PTC_UI_NOTIFICATION_TOGGLE)
         return (PtcUiRect){d.x + 34, d.y + 126, d.w - 68, 56};
-    int width = (d.w - 100) / 3;
-    return (PtcUiRect){d.x + 34 + index * (width + 16), dialog_button_top(d), width, PTC_UI_DIALOG_BTN_H};
+    return (PtcUiRect){d.x + (index == PTC_UI_NOTIFICATION_PROBE ? 312 : 742), d.y + 620,
+        index == PTC_UI_NOTIFICATION_PROBE ? 382 : 388, 44};
+}
+
+PtcUiRect ptc_ui_notification_preview_group_rect(void)
+{
+    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    return (PtcUiRect){d.x + 34, d.y + 198, 624, 385};
 }
 
 PtcUiRect ptc_ui_notification_preview_rect(void)
 {
     PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 34, d.y + 202, 624, 351};
+    return (PtcUiRect){d.x + 50, d.y + 242, 592, 333};
 }
 
 PtcUiRect ptc_ui_notification_preview_tab_rect(int index)
 {
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
     PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 34 + index * 320, d.y + 565, 304, 32};
+    return (PtcUiRect){d.x + 210 + index * 216, d.y + 206, 216, 30};
+}
+
+PtcUiRect ptc_ui_notification_info_rect(int index)
+{
+    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    const int ys[] = {198, 372, 510};
+    const int heights[] = {162, 126, 73};
+    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){d.x + 686, d.y + ys[index], 460, heights[index]};
+}
+
+PtcUiRect ptc_ui_notification_verification_rect(void)
+{
+    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
+    return (PtcUiRect){d.x + 296, d.y + 591, 850, 78};
 }
 
 /* Pairing QR page shares the standard dialog button row so the drawn button,
@@ -1184,7 +1205,7 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (settings_page_overlay(overlay)) return ptc_ui_settings_page_back_rect();
     if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
-        return (PtcUiRect){dialog.x + 34, dialog_button_top(dialog), (dialog.w - 100) / 3, PTC_UI_DIALOG_BTN_H};
+        return (PtcUiRect){dialog.x + 34, dialog.y + 620, 246, 44};
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
         return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)

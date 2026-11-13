@@ -355,7 +355,14 @@ static void test_notification_preferences(void)
     handle_notification_preferences_input(&ui, HidNpadButton_Right);
     check(ui.model.overlay_selection == PTC_UI_NOTIFICATION_TEST, "right reaches footer test");
     handle_notification_preferences_input(&ui, HidNpadButton_A);
-    check(!ui.notification_test.pending && !ui.waiting, "test without configuration stays optional");
+    check(!ui.notification_test.pending && !ui.waiting && ui.model.notification_preview == 1 &&
+          !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG)),
+          "unavailable test still selects its brief-notice example without enabling or sending");
+    handle_notification_preferences_input(&ui, HidNpadButton_L);
+    check(ui.model.notification_preview == 0 &&
+          !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG)) &&
+          !ui.notification_test.pending && !ui.model.reason_notifications_enabled,
+          "switching the example preserves the real check result and notification preference");
     handle_notification_preferences_input(&ui, HidNpadButton_Left);
     check(ui.model.overlay_selection == PTC_UI_NOTIFICATION_PROBE, "left returns to probe");
     handle_notification_preferences_input(&ui, HidNpadButton_Up);
@@ -376,6 +383,13 @@ static void test_notification_preferences(void)
     ui.model.overlay = PTC_UI_OVERLAY_NONE;
     check(ptc_ui_hit_test(&ui.model, entry.x + entry.w / 2, entry.y + entry.h / 2).kind == PTC_UI_HIT_SETUP_NOTIFICATIONS,
         "setup touch and controller share notification entry");
+    ui.model.notification_preview = 0;
+    ui.model.reason_notifications_enabled = false;
+    test_notification(&ui);
+    check(ui.model.notification_preview == 1 && ui.notification_test.pending &&
+          !ui.model.reason_notifications_enabled &&
+          !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_TEST_SENT)),
+          "successful standalone test aligns the brief example without enabling automatic reminders");
 }
 
 static void test_incremental_setup_options(void)

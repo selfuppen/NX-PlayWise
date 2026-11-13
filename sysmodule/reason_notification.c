@@ -261,7 +261,8 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
     if (!fallback) {
         ptc_reason_event_attempted(&n->event, ms);
         PtcReasonDetail detail;
-        if (n->detail_failures < 5 && ptc_reason_detail_read(n->storage, n->root, "ready", &detail) &&
+        /* A continuing countdown gets only a brief notice, never another focus grab. */
+        if (!n->event.repeat && n->detail_failures < 5 && ptc_reason_detail_read(n->storage, n->root, "ready", &detail) &&
             ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, ms) &&
             ms <= UINT64_MAX - 2000 && n->detail_sequence != UINT64_MAX) {
             detail.sequence = ++n->detail_sequence;

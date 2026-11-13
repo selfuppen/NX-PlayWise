@@ -1484,9 +1484,9 @@
     {
         (void)ch;
         prepare_page();
-        // Only the page that shows a countdown can observe its end.
+        // Child overview and details share the watcher; never interrupt code entry.
         if (!language_confirm_active_ && !access_recovery_visible() && !success_visible_ &&
-            !preview_ready_ && !status_expanded_)
+            !preview_ready_ && !is_keypad_mode())
             observe_child_countdown();
         if (language_confirm_active_) draw_language_confirm(renderer, cx, cy, cw);
         else if (access_recovery_visible()) draw_parent_page(renderer, cx, cy, cw);

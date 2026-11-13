@@ -190,8 +190,11 @@ PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_settings_card_rect(int index);
 PtcUiRect ptc_ui_notification_option_rect(int index);
+PtcUiRect ptc_ui_notification_preview_group_rect(void);
 PtcUiRect ptc_ui_notification_preview_rect(void);
 PtcUiRect ptc_ui_notification_preview_tab_rect(int index);
+PtcUiRect ptc_ui_notification_info_rect(int index); /* 0 example guide, 1 environment, 2 result */
+PtcUiRect ptc_ui_notification_verification_rect(void);
 PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_qr_panel_rect(int index);
 PtcUiRect ptc_ui_qr_code_rect(void);

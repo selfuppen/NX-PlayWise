@@ -36,11 +36,11 @@ Current release candidates qualify specifically against Nintendo Switch OLED, HO
 
 ## Initial Setup
 
-Step two includes an optional **When play stops** entry on the left. Select it with the D-pad and A, or tap it; B returns to setup. Hints are off by default and can be skipped without blocking core setup. See [Hint previews and setup](#hint-previews-and-setup) for the controls and notice configuration states.
+Step two includes an optional **Play restriction reminders** entry on the left. Select it with the D-pad and A, or tap it; B returns to setup. Hints are off by default and can be skipped without blocking core setup. See [Hint previews and setup](#hint-previews-and-setup) for the controls and notice configuration states.
 
-After core setup, or when an update introduces unreviewed requirements, **Review setup options** walks through language, theme, shortcut, when play stops, eye rest, and bedtime. Configure an option, keep current settings, press B to skip it, or X to skip all remaining options; touch uses the same buttons. Each confirmed or skipped revision is remembered locally. Ordinary updates do not repeat resolved items. Older installs without item records get one review and may skip all. Editing keeps existing PIN and save checks; return from time plans to the child page to resume. Opening an editor or testing a notice does not confirm an option. Failed progress writes allow this session to continue and may prompt again next time. These local guide records are not transferred through preference backups.
+After core setup, or when an update introduces unreviewed requirements, **Review setup options** walks through language, theme, shortcut, play restriction reminders, eye rest, and bedtime. Configure an option, keep current settings, press B to skip it, or X to skip all remaining options; touch uses the same buttons. Each confirmed or skipped revision is remembered locally. Ordinary updates do not repeat resolved items. Older installs without item records get one review and may skip all. Editing keeps existing PIN and save checks; return from time plans to the child page to resume. Opening an editor or testing a notice does not confirm an option. Failed progress writes allow this session to continue and may prompt again next time. These local guide records are not transferred through preference backups.
 
-In that page, **Check again** refreshes the notice setting, shortcut, overlay file and automatic-details readiness snapshot without changing settings. **Try a notice** publishes one clearly labelled test notice when the global notice setting is on; it does not enable automatic hints or change parental rules. Use the D-pad and A or tap either button. B returns to setup at any time. Missing dependencies and failed tests can be skipped. Publication does not confirm reception or display; reopen the manager normally and wait 10 seconds before retrying if needed.
+On that page, **Check reminder setup** checks the notice setting, shortcut, overlay file and automatic-detail readiness without changing settings. **Send test notice** sends one labelled test when the global notice setting is on; it does not enable automatic reminders or change parental rules. Use the D-pad and A or tap either button. B returns to setup at any time. Missing dependencies and failed tests can be skipped. A sent test does not confirm reception or display; reopen the manager normally and wait at least ten seconds before retrying if needed. A console reboot is not required for this.
 
 The wizard has three steps. Check and save errors appear inline and never prevent continuing. Finishing the wizard does not mean controls are active. Saved progress resumes on reopening; settings that could not be saved may need to be entered again.
 
@@ -605,6 +605,7 @@ Always refer to buttons and prompts in your installed version. This guide does n
 - **Change PlayWise PIN**: Modify the dedicated PIN used to enter Parent Zone and authorize sensitive operations;
 - **Theme**: Switch between Follow System, Light, and Dark modes;
 - **Interface Language**: Switch between Follow System, Simplified Chinese (简体中文), Traditional Chinese (繁體中文), and English;
+- **Play restriction reminders**: optionally show restriction reasons automatically, check reminder setup and send a test notice. Off by default; details from a loaded, hidden PlayWise overlay are preferred, with a compatible Ultrahand brief notice as fallback. This does not change restrictions, and an enabled setting or sent test does not confirm display. See [setup steps and previews](#hint-previews-and-setup);
 - **Parent Zone Entry**: Customize the shortcut held in Child Zone to enter Parent Zone directly (default `-` Minus button);
 - **Album & Capture Restrictions**: Restrict children from directly injecting or launching unrestricted homebrew via the Photo Album applet;
 - **Family Activity History**: Audit the most recent 200 playtime adjustments, offline grants, and protection events on this console;
@@ -778,55 +779,81 @@ Press Y or tap release notes to read the complete bounded description; use L/R o
 
 When an eligible newer version is found, a quiet Update hint appears in the upper-right status card. Tap it to open update details; children must pass the existing parent PIN first. Offline checks and failures show no update hint. Pending work and unsaved edits keep their current page.
 
-### Automatic reason notices (experimental)
+<a id="automatic-reason-notices-experimental"></a>
 
-In development candidates, open When play stops from setup step two or Security & Preferences, then enable Explain why play stopped (optional, off by default). Enabling prepares and reads back the existing Ultrahand global notice setting, affecting other apps. Missing or ambiguous settings are left untouched. Saving is not resident loading confirmation; reopen the manager if needed. PlayWise does not install, replace or restart it. “API notifications enabled.” is the manager's global toggle message, not a per-notice action. Receiver evidence covers Ultrahand 2.5.3 / loader 2.0.2. This feature has not been publicly released or fully qualified.
+### Play restriction reminders (experimental)
 
-Fresh restriction events first request current details from an already loaded, hidden PlayWise overlay with neutral input and no sensitive page. This path uses the loader and PlayWise itself, independently of Ultrahand notice reception. It cannot load PlayWise from another overlay or manager. Missing readiness or a bounded timeout attempts one short notice instead. Closing does not reopen the same instance. Y refreshes; B returns through the page hierarchy, then hides an automatically opened root. After HOME or POWER, manually open PlayWise before automatic details can resume. The new cooperation path requires separate device verification; old accepted screenshots do not prove it.
+When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode rules prevent play, PlayWise can explain the reason automatically. **The reminder switch only controls hints: it does not change playtime rules or clear restrictions.** It is off by default and can be skipped without blocking core setup.
 
-Notices use child-friendly wording for daily time, bedtime, eye rest or TV mode. They show time left **at the notice**, not a live countdown: known daily exhaustion is zero; rest and bedtime use their own remaining duration; under one minute stays explicit. Unknown time stays unknown. TV requirements do not invent a countdown, and the end of one restriction does not promise play is available. The receiver expands the box at the same readable font size; the new layout awaits device acceptance.
+This feature is implemented in development candidates but has not been publicly released or fully qualified. Older releases may not have the entry. Prior brief-notice evidence covers only Ultrahand 2.5.3 / loader 2.0.2; it does not verify the new automatic-detail path. PlayWise packages do not include an overlay manager and do not install, replace or upgrade one.
 
-Use the saved shortcut in a fallback notice to open current details manually. Missing or invalid shortcut settings show Open PlayWise for details. Saved settings do not prove the resident manager has loaded them. Short notices do not take input focus; automatic details acquire the existing overlay input lease. Repeated status reads do not repeat the same hint; rapid changes coalesce with a ten-second attempt limit and still require fresh policy data. The requested short-notice duration is ten seconds; cleanup of unconsumed owned files targets two seconds. The receiver may retain a consumed notice, so disappearance or continued visibility does not prove restriction or recovery. Disabling hints leaves the manager's global notices enabled for other apps; restoring preferences only changes PlayWise's own setting.
+Automatic reminders are attempted for newly confirmed restrictions, not for every status refresh. While an eye-rest or bedtime restriction continues with a reliable remaining time, a brief notice may repeat at most once a minute. Daily exhaustion and TV-mode restrictions do not repeat periodically. There are two reminder formats:
+
+- **Detailed view**: first asks an already loaded, hidden PlayWise overlay with neutral input and no sensitive operation to refresh its state and show the restriction reason and available actions. This does not depend on Ultrahand notice reception, but still needs an overlay loader and loaded PlayWise. It cannot switch from another overlay or manager. PIN entry, code entry and parent-operation pages are not interrupted.
+- **Brief notice**: when automatic details are not ready or have not been confirmed within about two seconds, one compatible Ultrahand notice is attempted. It shows the reason, time information at that moment, and a manual entry to details without repeatedly taking focus.
+
+Brief notices use child-friendly wording such as “Play time is up today”, “Time for bed”, “Let your eyes rest” or “Please connect a TV”. Time is a **snapshot at the notice, not a live countdown**: known daily exhaustion is zero; rest and bedtime show their own remaining duration; under one minute stays explicit. A TV requirement does not invent a countdown, and unknown time stays unknown. Open and refresh details for the latest state. One break ending does not clear separate daily, bedtime or TV restrictions.
+
+The shortcut in a brief notice comes from the saved PlayWise entry configuration, not a fixed `L + Down` shortcut. For example, `L+DDOWN` shows “L + Down Info”. If the configuration is missing or cannot be recognized, use the generic prompt to open PlayWise through the overlay manager. Saved shortcuts do not prove the manager has loaded the latest settings; they also differ from the main app's parent-area shortcut.
+
+**Once confirmed on screen, the detailed overlay has no fixed automatic closing time**; press B through the existing levels to hide it. Rest and bedtime countdowns continue locally without requesting the backend every second. The same instance triggers only one automatic status check at expiry and remains unconfirmed until a backend response; the UI does not declare that play is allowed. No brief reminders are attempted while details or input are active. After leaving, the same rest / bedtime instance must wait at least a minute and for a new reliable status before another reminder; details never immediately reopen. Missing fresh status or notice reception can delay or prevent a reminder, so manual opening and refresh remain available.
+
+The requested brief-notice duration is about ten seconds; actual display time is controlled by the manager. PlayWise aims to remove its own unread messages within about two seconds, but cannot immediately withdraw a notice the manager has already read. Continued visibility or disappearance therefore does not prove that a restriction has been cleared. Details can still be opened manually when no automatic reminder appears. See the [notification contract (Chinese)](../设计/自动原因通知.md) for compatibility and display boundaries.
 
 #### Hint previews and setup
 
-These are **HOST PREVIEW / SAMPLE DATA** images, generated by the production page renderer with fixed data rather than captured on a console. They show pages and setting states; they do not verify automatic opening, reception or a real console countdown.
+These are **HOST PREVIEW / SAMPLE DATA** images, generated by current page drawing code and fixed data, not captured on a console. They show example pages, settings and action results; they do not verify automatic opening, reception or a real console countdown.
 
-| Optional entry in setup | Enabled hint preference (light) |
+| Optional entry in setup | Enabled reminder page (light) |
 | --- | --- |
-| ![When play stops selected in setup step two](../images/usage-en/setup/setup-notifications-light.png) | ![Hints enabled with notice configuration on and resident reception unconfirmed](../images/usage-en/settings/settings-notifications-ready-light.png) |
+| ![Play restriction reminders selected in setup step two](../images/usage-en/setup/setup-notifications-light.png) | ![Automatic reasons enabled with notice configuration on but actual reception unconfirmed](../images/usage-en/settings/settings-notifications-ready-light.png) |
 
 <details>
 <summary>View the dark setup entry</summary>
 
-![When play stops entry in dark setup](../images/usage-en/setup/setup-notifications-dark.png)
+![Play restriction reminders entry in dark setup](../images/usage-en/setup/setup-notifications-dark.png)
 
 </details>
 
-Existing users open the same dialog from **Security & Preferences → When play stops**. Press A on **Explain why play stopped**, or tap its row. This page only configures notifications and preserves existing sound preferences. The large 16:9 screen shows the native restriction mask behind a full-height overlay covering the left 35%. Press L/R or tap the tabs for overlay and short-notice examples. These are not live state; receiver placement and appearance may vary. Read the actual environment snapshot on the right. Down reaches Check again, Left/Right selects Check or Test, Up returns to the toggle, and B returns. Read the global notice explanation before enabling: preparation changes Ultrahand's global setting and affects other apps. A failed preference save restores the switch. If only dependency preparation fails, the PlayWise preference can remain saved, with the dependency problem shown separately.
+1. **Open the page**: choose **Play restriction reminders** in setup step two, or **Security & Preferences → Play restriction reminders** on an existing installation. Select with the D-pad and A, or tap. B returns without blocking setup.
+2. **Choose whether to show automatic reminders**: press A on **Show restriction reasons automatically**, or tap the row. Enabling prepares and checks the existing Ultrahand global notice setting, which may affect other apps; read the explanation first. A failed PlayWise preference save restores the switch. If only notice preparation fails, the PlayWise preference can remain saved while the environment problem is shown separately.
+3. **Check reminder setup**: inspect the notice setting, detail shortcut, overlay file and automatic-detail readiness. This check does not change settings or confirm that a reminder has appeared.
+4. **Send test notice**: when the global notice setting is on, attempt one labelled brief notice: “PlayWise · Test notice / This is a test notice / Play time rules are unchanged”. There is no need to create a restriction or enable automatic reminders. Read **Action result** and check whether the notice actually appears; **a sent test does not confirm display**. If it does not appear, reopen the manager normally and wait at least ten seconds before retrying. A console reboot is not needed for this. Missing dependencies, unavailable readiness and failed tests can all be skipped.
 
-| Notice configuration on (dark) | Notice configuration off while hints remain enabled |
+The left preview group contains **Switch example**, a segmented selector and a 16:9 screen. Press L/R or tap **L Overlay view / R Brief notice** to change only the example and the linked **About this preview** panel, not to enable separate features or send a notice. A matching highlight identifies the selected example and guide. Overlay guidance explains preferred display, staying loaded and input protection; brief-notice guidance explains fallback display, notification requirements and snapshot timing. Both examples share the actual setup state and previous action result. The illustrated overlay covers the left 35% and the brief notice appears at the **upper left**. **Not live status** means the image is neither a device capture nor delivery evidence.
+
+The bottom **Verify reminders** group uses numbered steps **1 and 2**, connected by an arrow, to show the recommended order: **1 Check reminder setup** updates **Reminder setup** and **Check / test result** on the right; **2 Send test notice** tests only a brief notice, whose actual visibility you must check on screen. Selecting the check highlights setup and results; selecting the test highlights results. Running a test also selects the brief-notice example and its guide, even when testing is unavailable; the example is never a delivery result. This is a suggested flow, not a mandatory gate: automatic reminders can remain off, and testing can run independently when the global notice setting is on. It does not verify automatic overlay opening or change rules.
+
+Down moves to the validation buttons, Left/Right selects a step, A executes, and Up returns to the switch; example options and buttons also support touch. B is separate from the workflow and returns without checking or testing. Switching examples preserves the last action result. This page has no sound settings and preserves existing sound preferences.
+
+| Notice setting on (dark) | Notice setting off while PlayWise reminders remain enabled |
 | --- | --- |
-| ![Dark hint preferences with resident reception unconfirmed](../images/usage-en/settings/settings-notifications-ready-dark.png) | ![PlayWise hints enabled but manager notice configuration off](../images/usage-en/settings/settings-notifications-dark.png) |
+| ![Dark reminder page with actual reception unconfirmed](../images/usage-en/settings/settings-notifications-ready-dark.png) | ![Automatic reminders enabled but manager notice setting off](../images/usage-en/settings/settings-notifications-dark.png) |
 
 | State | Meaning and next step |
 | --- | --- |
-| Notice setting: on; resident reception unconfirmed | Saved or already on. Reopen the manager normally if needed to load its settings; a console reboot or per-notice toggle is unnecessary. Saved configuration does not establish that a receiver is resident. |
-| Notice setting: off | Turn PlayWise hints off and on to retry preparation. If it still fails, check the compatible manager and SD card. |
-| Notice setting: unknown | Configuration is missing, unreadable or ambiguous. PlayWise does not install or replace a manager; core setup can continue. |
+| Notice setting: on; resident reception unconfirmed | Saved or already on, but current reception is not confirmed. Reopen the manager normally if needed to load its settings; a console reboot or per-notice toggle is unnecessary. “API notifications enabled.” is the manager's global toggle message, not the PlayWise test result. |
+| Notice setting: off | Turn **Show restriction reasons automatically** off and on to retry preparation. If it still fails, check the compatible manager and SD card. |
+| Notice setting: unknown | Configuration is missing, unreadable or cannot be identified clearly. PlayWise does not install or replace a manager; core setup can continue. |
 
-![Unknown notice configuration with a generic manual detail entry](../images/usage-en/settings/settings-notifications-unknown-light.png)
-
-| Short notice example (light) | Short notice example (dark) |
+| Automatic reminders off | Notice setting unknown |
 | --- | --- |
-| ![Short notice above the native restriction mask](../images/usage-en/settings/settings-notifications-short-light.png) | ![Short notice in dark settings](../images/usage-en/settings/settings-notifications-short-dark.png) |
+| ![Page example with automatic restriction reasons disabled](../images/usage-en/settings/settings-notifications-off-light.png) | ![Unknown manager notice setting with a generic manual detail entry](../images/usage-en/settings/settings-notifications-unknown-light.png) |
 
-To try automatic details, first open PlayWise while unrestricted, check that status refresh works, then use the overlay loader's configured hide action to keep PlayWise loaded but hidden. B at a manually opened root exits to the manager, so subsequent hints use short-notice fallback. Automatic details cannot switch from another overlay or manager. HOME or POWER pauses automatic readiness until another manual PlayWise opening; HOME is not a way to hide while keeping automatic readiness.
-
-| Page opened for automatic details | Ordinary eye-rest overlay page |
+| Test sent: still check actual display | Test failed: read the reason or return to setup |
 | --- | --- |
-| ![Fixed eye-rest detail sample, not evidence of automatic wake](../images/usage-en/overlay/overlay-auto-detail-eye.png) | ![Eye-rest state and ordinary overlay controls](../images/usage-en/overlay/overlay-eye-care.png) |
+| ![Test-sent action result sample, not confirmation of display](../images/usage-en/settings/settings-notifications-test-sent-light.png) | ![Failed test-notice example in dark settings](../images/usage-en/settings/settings-notifications-test-failed-dark.png) |
 
-A new reliable restriction event first requests a fresh detail page from the loaded hidden overlay. Sensitive PIN, redemption and parent-operation pages are preserved. Missing readiness or no confirmed detail within two seconds attempts one short notice. B returns through automatically opened details, then hides the root and releases input; the same restriction does not repeatedly reopen. The fallback notice retains a manual entry using your saved shortcut.
+| Upper-left brief notice (light settings) | Upper-left brief notice (dark settings) |
+| --- | --- |
+| ![Brief-notice example in the upper-left of the native restriction screen](../images/usage-en/settings/settings-notifications-short-light.png) | ![Upper-left brief-notice example in dark settings](../images/usage-en/settings/settings-notifications-short-dark.png) |
 
-An eye-rest notice may say “Let your eyes rest / Rest: ~5 min left (at notice) / L + Down Info”. The duration and shortcut are examples. Notices do not update every second; open and refresh details for current state. One rest ending does not clear separate daily, bedtime or TV restrictions. Disabling PlayWise hints leaves the manager's global setting enabled for other apps; preference backup restore also leaves manager configuration alone.
+**Prepare automatic details**: while unrestricted, open PlayWise normally, confirm that status refresh works, then use the loader's configured hide action to keep it loaded but hidden. B at a manually opened root exits to the manager, so only brief-notice fallback can be attempted. Automatic details cannot switch from another overlay or manager. HOME or POWER pauses automatic details until another manual PlayWise opening; HOME is not a way to hide while keeping automatic readiness.
+
+| Automatic detailed-view page example | Ordinary eye-rest overlay page |
+| --- | --- |
+| ![Fixed eye-rest detail sample, not evidence of automatic opening](../images/usage-en/overlay/overlay-auto-detail-eye.png) | ![Eye-rest state and ordinary overlay controls](../images/usage-en/overlay/overlay-eye-care.png) |
+
+Y refreshes automatically shown details. B returns through the page hierarchy, then hides the automatically opened root and releases input. Closing does not repeatedly reopen the same restriction; a new confirmed restriction still depends on readiness. PIN, redemption and parent-operation pages are preserved. Use your own saved shortcut to open details manually if needed.
+
+Disabling **Show restriction reasons automatically** only disables PlayWise's automatic reminders. It does not change restrictions or turn off the manager's global notices for other apps. Restoring a preference backup also changes only PlayWise's setting, not manager configuration. A notice that has already appeared may remain briefly visible.

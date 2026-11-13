@@ -788,8 +788,8 @@ static void draw_notification_example(uint32_t *pixels, uint32_t stride, UiRect 
         draw_text(pixels, stride, panel.x + 10, panel.y + panel.height - 12,
             ptc_ui_text(PTC_UI_T_B_BACK), 11, ink);
     } else {
-        /* Receiver placement/theme can vary; this is a labelled delivery example. */
-        UiRect notice = notification_scene_rect(screen, 808, 28, 448, 180);
+        /* Match the observed receiver's upper-left notice; themes can vary. */
+        UiRect notice = notification_scene_rect(screen, 24, 28, 448, 180);
         fill_round_rect(pixels, stride, notice, 5, UI_RGB(dark->surface));
         draw_rect_outline(pixels, stride, notice, 5, 1, UI_RGB(dark->border_control));
         fill_rect(pixels, stride, (UiRect){notice.x + 8, notice.y + 10, 3, notice.height - 20}, warning);
@@ -799,6 +799,43 @@ static void draw_notification_example(uint32_t *pixels, uint32_t stride, UiRect 
         draw_text(pixels, stride, notice.x + 20, notice.y + notice.height - 12, "05:00", 13, warning);
     }
     draw_rect_outline(pixels, stride, screen, 10, 1, UI_CONTROL);
+}
+
+static void draw_notification_step(uint32_t *pixels, uint32_t stride, int x, int y, int step, bool selected)
+{
+    UiRect badge = {x, y, 22, 22};
+    fill_round_rect(pixels, stride, badge, 11, selected ? UI_ACCENT : UI_ACCENT_SOFT);
+    draw_text_center(pixels, stride, badge, step == 1 ? "1" : "2", 14,
+        selected ? UI_ON_ACCENT : UI_ACCENT);
+}
+
+static void draw_notification_verification(uint32_t *pixels, uint32_t stride, const PtcUiModel *m)
+{
+    UiRect group = to_uirect(ptc_ui_notification_verification_rect());
+    fill_round_rect(pixels, stride, group, 12, UI_PAGE);
+    draw_rect_outline(pixels, stride, group, 12, 1, UI_BORDER);
+    const char *title = ptc_ui_text(PTC_UI_T_NOTICE_VERIFY_TITLE);
+    draw_text(pixels, stride, group.x + 16, group.y + 21, title, 15, UI_INK);
+    int hint_x = group.x + 28 + measure_text(title, 15);
+    draw_text(pixels, stride, hint_x, group.y + 21, ptc_ui_text(PTC_UI_T_NOTICE_VERIFY_HINT), 13, UI_MUTED);
+    for (int i = PTC_UI_NOTIFICATION_PROBE; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i) {
+        UiRect button = to_uirect(ptc_ui_notification_option_rect(i));
+        bool selected = m->overlay_selection == i;
+        fill_round_rect(pixels, stride, button, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, button, 8, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+        draw_notification_step(pixels, stride, button.x + 12, button.y + 11, i, selected);
+        draw_text(pixels, stride, button.x + 46, button.y + 20,
+            ptc_ui_text(i == PTC_UI_NOTIFICATION_PROBE ? PTC_UI_T_NOTICE_PROBE : PTC_UI_T_NOTICE_TEST), 17, UI_ACCENT);
+        draw_text(pixels, stride, button.x + 46, button.y + 37,
+            ptc_ui_text(i == PTC_UI_NOTIFICATION_PROBE ? PTC_UI_T_NOTICE_PROBE_NOTE : PTC_UI_T_NOTICE_TEST_NOTE), 12, UI_MUTED);
+    }
+    /* This connector describes a recommended order, not a prerequisite gate. */
+    UiRect first = to_uirect(ptc_ui_notification_option_rect(PTC_UI_NOTIFICATION_PROBE));
+    UiRect second = to_uirect(ptc_ui_notification_option_rect(PTC_UI_NOTIFICATION_TEST));
+    int x = (first.x + first.width + second.x) / 2, y = first.y + first.height / 2;
+    draw_line(pixels, stride, x - 8, y, x + 7, y, 2, UI_MUTED);
+    draw_line(pixels, stride, x + 2, y - 5, x + 7, y, 2, UI_MUTED);
+    draw_line(pixels, stride, x + 2, y + 5, x + 7, y, 2, UI_MUTED);
 }
 
 static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, const PtcUiModel *m)
@@ -824,40 +861,84 @@ static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, con
     draw_text(pixels, stride, status_x, row.y + 35, status, 18, enabled ? UI_SUCCESS : UI_MUTED);
     draw_toggle_switch(pixels, stride, toggle, enabled, selected, false, NULL, NULL);
 
-    draw_notification_example(pixels, stride, to_uirect(ptc_ui_notification_preview_rect()), m->notification_preview == 0);
-    for (int i = 0; i < 2; ++i)
-        draw_candidate_button(pixels, stride, ptc_ui_notification_preview_tab_rect(i),
+    bool detail = m->notification_preview == 0;
+    UiRect preview_group = to_uirect(ptc_ui_notification_preview_group_rect());
+    draw_plan_card(pixels, stride, preview_group, false);
+    draw_text(pixels, stride, preview_group.x + 16, preview_group.y + 21,
+        ptc_ui_text(PTC_UI_T_NOTICE_SELECTOR_TITLE), 16, UI_INK);
+    draw_text(pixels, stride, preview_group.x + 16, preview_group.y + 38,
+        ptc_ui_text(PTC_UI_T_NOTICE_PREVIEW_LABEL), 11, UI_MUTED);
+    UiRect selector = to_uirect(ptc_ui_notification_preview_tab_rect(0));
+    selector.width *= 2;
+    fill_round_rect(pixels, stride, selector, 8, UI_PAGE);
+    draw_rect_outline(pixels, stride, selector, 8, 1, UI_BORDER);
+    for (int i = 0; i < 2; ++i) {
+        UiRect tab = to_uirect(ptc_ui_notification_preview_tab_rect(i));
+        bool current = detail ? i == 0 : i == 1;
+        if (current) fill_round_rect(pixels, stride,
+            (UiRect){tab.x + 2, tab.y + 2, tab.width - 4, tab.height - 4}, 6, UI_ACCENT_SOFT);
+        draw_text_center(pixels, stride, tab,
             ptc_ui_text(i ? PTC_UI_T_NOTICE_PREVIEW_SHORT : PTC_UI_T_NOTICE_PREVIEW_DETAILS),
-            m->notification_preview == i ? UI_ACCENT_SOFT : UI_RAISED, UI_ACCENT, m->notification_preview == i, false);
-    const int info_x = dialog.x + 686;
-    const int info_width = dialog.width - 720;
-    int y = dialog.y + 216;
-    y = draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_COMPAT),
-        15, info_width, 21, 4, UI_MUTED) + 12;
-    y = draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(
+            16, current ? UI_ACCENT : UI_MUTED);
+    }
+    draw_notification_example(pixels, stride, to_uirect(ptc_ui_notification_preview_rect()), detail);
+    /* The guide follows the example; live checks and prior action results do
+       not. Step focus highlights the corresponding read-only destination. */
+    UiRect guidance = to_uirect(ptc_ui_notification_info_rect(0));
+    UiRect environment = to_uirect(ptc_ui_notification_info_rect(1));
+    UiRect feedback = to_uirect(ptc_ui_notification_info_rect(2));
+    const int text_x = guidance.x + 16;
+    const int text_width = guidance.width - 32;
+    bool probing = m->overlay_selection == PTC_UI_NOTIFICATION_PROBE;
+    bool testing = m->overlay_selection == PTC_UI_NOTIFICATION_TEST;
+    draw_plan_card(pixels, stride, environment, false);
+    if (probing) draw_rect_outline(pixels, stride, environment, 12, 2, UI_ACCENT);
+    draw_notification_step(pixels, stride, text_x, environment.y + 9, 1, probing);
+    draw_text(pixels, stride, text_x + 32, environment.y + 25,
+        ptc_ui_text(PTC_UI_T_NOTICE_ENVIRONMENT_TITLE), 17, UI_INK);
+    draw_wrapped_text(pixels, stride, text_x, environment.y + 48, ptc_ui_text(
         m->reason_external_notifications == 1 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
         m->reason_external_notifications == 0 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_OFF : PTC_UI_T_REASON_NOTICE_EXTERNAL_UNKNOWN),
-        15, info_width, 21, 3, UI_WARNING) + 12;
-    y = draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(
+        16, text_width, 20, 2, UI_WARNING);
+    draw_wrapped_text(pixels, stride, text_x, environment.y + 92, ptc_ui_text(
         !m->reason_overlay_installed ? PTC_UI_T_NOTICE_OVERLAY_MISSING :
         m->reason_detail_ready ? PTC_UI_T_NOTICE_DETAIL_READY : PTC_UI_T_NOTICE_DETAIL_UNREADY),
-        15, info_width, 21, 3, m->reason_detail_ready ? UI_ACCENT : UI_WARNING) + 12;
+        16, text_width, 20, 2, m->reason_detail_ready ? UI_ACCENT : UI_WARNING);
+
+    draw_plan_card(pixels, stride, guidance, false);
+    fill_rect(pixels, stride, (UiRect){guidance.x, guidance.y + 12, 3, guidance.height - 24}, UI_ACCENT);
+    draw_text(pixels, stride, text_x, guidance.y + 25, ptc_ui_text(PTC_UI_T_NOTICE_USAGE_TITLE), 17, UI_INK);
+    const char *mode = ptc_ui_text(detail ? PTC_UI_T_NOTICE_DETAIL_NAME : PTC_UI_T_NOTICE_BRIEF_NAME);
+    int mode_width = measure_text(mode, 14) + 20;
+    UiRect mode_badge = {guidance.x + guidance.width - mode_width - 16, guidance.y + 9, mode_width, 24};
+    fill_round_rect(pixels, stride, mode_badge, 6, UI_ACCENT_SOFT);
+    draw_text_center(pixels, stride, mode_badge, mode, 14, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, text_x, guidance.y + 49,
+        ptc_ui_text(detail ? PTC_UI_T_NOTICE_DETAIL_GUIDE : PTC_UI_T_NOTICE_BRIEF_GUIDE),
+        16, text_width, 20, 2, UI_INK);
+    draw_wrapped_text(pixels, stride, text_x, guidance.y + 93,
+        ptc_ui_text(detail ? PTC_UI_T_NOTICE_DETAIL_BOUNDARY : PTC_UI_T_NOTICE_BRIEF_BOUNDARY),
+        15, text_width, 20, 2, UI_MUTED);
     char shortcut[192];
     snprintf(shortcut, sizeof(shortcut), "%s%s", m->reason_overlay_shortcut,
         ptc_ui_text(m->reason_overlay_shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT : PTC_UI_T_NOTIFY_OPEN));
-    y = draw_wrapped_text(pixels, stride, info_x, y, shortcut, 15, info_width, 21, 2, UI_INK) + 12;
-    draw_wrapped_text(pixels, stride, info_x, y, ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY),
-        15, info_width, 20, 3, UI_MUTED);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 196, ptc_ui_text(PTC_UI_T_NOTICE_PREVIEW_LABEL), 12, UI_MUTED);
-    if (m->reason_test_message[0])
-        draw_wrapped_text(pixels, stride, info_x, dialog.y + 544, m->reason_test_message,
-            15, info_width, 20, 3, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, text_x, guidance.y + 137, shortcut, 16, text_width, 20, 1, UI_ACCENT);
+
+    /* A small connector binds the selected example to its explanation. */
+    int link_x = guidance.x - 14, link_y = guidance.y + 24;
+    draw_line(pixels, stride, link_x - 6, link_y, link_x + 5, link_y, 2, UI_ACCENT);
+    draw_line(pixels, stride, link_x, link_y - 5, link_x + 5, link_y, 2, UI_ACCENT);
+    draw_line(pixels, stride, link_x, link_y + 5, link_x + 5, link_y, 2, UI_ACCENT);
+
+    draw_plan_card(pixels, stride, feedback, false);
+    if (probing || testing) draw_rect_outline(pixels, stride, feedback, 12, 2, UI_ACCENT);
+    draw_text(pixels, stride, text_x, feedback.y + 23, ptc_ui_text(PTC_UI_T_NOTICE_RESULT_TITLE), 16, UI_INK);
+    draw_wrapped_text(pixels, stride, text_x, feedback.y + 44,
+        m->reason_test_message[0] ? m->reason_test_message : ptc_ui_text(PTC_UI_T_NOTICE_RESULT_IDLE),
+        15, text_width, 20, 2, m->reason_test_message[0] ? UI_ACCENT : UI_MUTED);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(m->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
         UI_RAISED, UI_INK, false);
-    for (int i = PTC_UI_NOTIFICATION_PROBE; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i)
-        draw_candidate_button(pixels, stride, ptc_ui_notification_option_rect(i),
-            ptc_ui_text(i == PTC_UI_NOTIFICATION_PROBE ? PTC_UI_T_NOTICE_PROBE : PTC_UI_T_NOTICE_TEST),
-            UI_RAISED, UI_ACCENT, m->overlay_selection == i, false);
+    draw_notification_verification(pixels, stride, m);
 }
 
 bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
