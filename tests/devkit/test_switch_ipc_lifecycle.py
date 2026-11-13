@@ -136,7 +136,7 @@ def main() -> None:
     require("PTC_POWER_LEDGER_GAP_NS UINT64_C(15000000000)" in power_ledger and
             "PTC_POWER_LEDGER_SETTLE_NS UINT64_C(120000000000)" in power_ledger,
             "freeze ledger thresholds are part of the documented diagnostic contract")
-    require("ptc_overlay_hidden_poll_ns(automatic_enabled_, automatic_failures_)" in overlay and
+    require("ptc_overlay_hidden_poll_ns(automatic_enabled_, 0)" in overlay and
             "ms + PTC_OVERLAY_HIDDEN_CONFIG_MS" in overlay and
             "ptc_overlay_hidden_runtime_next_ms(ms, runtime_known_)" in overlay,
             "hidden Overlay must use the shared cadence and cache the backend identity")
@@ -146,9 +146,18 @@ def main() -> None:
     require("ready.expires_ms = ms + 1500;" in hidden and "next_ready_ms_ = ms + 1000;" in hidden,
             "hidden Overlay must keep the 1.5s presence lease renewed every second")
     require(hidden.index("ms >= next_config_ms_") < hidden.index("!automatic_enabled_") <
-            hidden.index("ptc_reason_detail_runtime(") < hidden.index("!neutral") <
+            hidden.index("ptc_reason_detail_runtime(") < hidden.index("!neutral || automatic_failures_ >= PTC_OVERLAY_HIDDEN_FAILURE_LIMIT") <
             hidden.index('ptc_reason_detail_write(s, APP_ROOT, "ready"'),
             "brief identity reads ignore input, but the detail lease needs neutral input")
+    require("eventFire(&shData->comboEvent);" in poller and
+            "overlay->loopHiddenFrame(true, 0);" in loop and
+            loop.index("overlay->loopHiddenFrame(true, 0);") < loop.index("hlp::requestForeground(true);"),
+            "HOME/POWER must wake only a suppressed hidden callback before returning to idle")
+    diagnostic = overlay[overlay.index("void brief_diagnostic("):overlay.index("PtcFsStorage storage_{};")]
+    require("brief_diag_updates_ >= 32" in diagnostic and "brief_diag_failures_ >= 5" in diagnostic and
+            "next_brief_diag_ms_ = ms + 1000;" in diagnostic and
+            "reason-brief-receiver.json" in diagnostic and 'display_confirmed\\\":false' in diagnostic,
+            "resident diagnostic must bound writes and keep visibility unconfirmed")
     brief = overlay[overlay.index("void onHiddenFrame("):overlay.index("bool onHiddenPoll(")]
     require("requestForeground(" not in brief and "ptc_input_owner_acquire(" not in brief and
             "renderer.clearScreen();" in libtesla[libtesla.index("void loopHiddenFrame("):libtesla.index("bool m_hiddenFrameDrawn")],

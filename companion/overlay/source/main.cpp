@@ -1337,7 +1337,8 @@ public:
     u64 hiddenPollInterval() override
     {
         if (brief_notice_.active) return UINT64_C(50000000);
-        return ptc_overlay_hidden_poll_ns(automatic_enabled_, automatic_failures_);
+        /* Failed detail writes stop that writer. Brief reception remains read-only. */
+        return ptc_overlay_hidden_poll_ns(automatic_enabled_, 0);
     }
 
     bool hasHiddenFrame() override { return brief_notice_.active; }
@@ -1353,6 +1354,7 @@ public:
         ptc_overlay_brief_poll(&brief_notice_, read_due ? ptc_fs_storage_as_storage(&storage_) : nullptr,
             APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, ms, allowed,
             dismiss);
+        brief_diagnostic(ms, blocked);
     }
 
     void drawHiddenFrame(tsl::gfx::Renderer *target) override
@@ -1382,8 +1384,7 @@ public:
     {
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
         PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
-        if (automatic_failures_ >= PTC_OVERLAY_HIDDEN_FAILURE_LIMIT || !gui_ ||
-            !gui_->automatic_detail_allowed()) return false;
+        if (!gui_ || !gui_->automatic_detail_allowed()) return false;
         /* The preference check does not depend on input: with the five second
            disabled cadence a window without any key is rare during play, and the
            check itself is one bounded read. Cooperation below still needs neutral input. */
@@ -1409,11 +1410,12 @@ public:
             if (runtime_known_ && std::strcmp(boot, runtime_boot_) != 0) {
                 std::snprintf(runtime_boot_, sizeof(runtime_boot_), "%s", boot);
                 next_ready_ms_ = 0; /* a lease bound to the previous backend is useless */
+                brief_notice_.active = false;
             }
             next_runtime_ms_ = ptc_overlay_hidden_runtime_next_ms(ms, runtime_known_);
         }
         if (!runtime_known_) return false;
-        if (!neutral) return false;
+        if (!neutral || automatic_failures_ >= PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) return false;
         if (ms >= next_ready_ms_) {
             PtcReasonDetail ready{};
             std::snprintf(ready.release, sizeof(ready.release), "%s", PLAYWISE_BUILD_RELEASE_ID);
@@ -1530,6 +1532,38 @@ public:
     }
 
 private:
+    void brief_diagnostic(uint64_t ms, bool blocked)
+    {
+        unsigned key = (brief_notice_.active ? 1u : 0u) | (automatic_enabled_ ? 2u : 0u) |
+            (runtime_known_ ? 4u : 0u) | (blocked ? 8u : 0u) | (automatic_failures_ << 8);
+        if ((!automatic_enabled_ && !brief_diag_sampled_) || brief_diag_updates_ >= 32 ||
+            brief_diag_failures_ >= 5 || ms < next_brief_diag_ms_ ||
+            (brief_diag_sampled_ && key == brief_diag_key_ &&
+             !std::strcmp(brief_diag_seen_[0], brief_notice_.seen[0]) &&
+             !std::strcmp(brief_diag_seen_[1], brief_notice_.seen[1]))) return;
+        next_brief_diag_ms_ = ms + 1000;
+        char text[1536];
+        std::snprintf(text, sizeof(text), "{\"version\":1,\"release_id\":\"%s\",\"boot_id\":\"%s\","
+            "\"ui_instance\":\"%llu\",\"sampled_mono_ms\":\"%llu\",\"automatic_enabled\":%s,"
+            "\"runtime_known\":%s,\"home_power_blocked\":%s,\"detail_io_failures\":%u,"
+            "\"brief_active\":%s,\"reason_file\":\"%s\",\"test_file\":\"%s\","
+            "\"update_count\":%u,\"display_confirmed\":false}",
+            PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, (unsigned long long)ui_instance_ms_,
+            (unsigned long long)ms, automatic_enabled_ ? "true" : "false", runtime_known_ ? "true" : "false",
+            blocked ? "true" : "false", automatic_failures_, brief_notice_.active ? "true" : "false",
+            brief_notice_.seen[0], brief_notice_.seen[1], brief_diag_updates_ + 1);
+        PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
+        if (!s->vtable->write_text_atomic(s, "sdmc:/switch/playwise/support/reason-brief-receiver.json", text)) {
+            ++brief_diag_failures_;
+            return;
+        }
+        ++brief_diag_updates_;
+        brief_diag_sampled_ = true;
+        brief_diag_key_ = key;
+        for (unsigned i = 0; i < 2; ++i)
+            std::snprintf(brief_diag_seen_[i], sizeof(brief_diag_seen_[i]), "%s", brief_notice_.seen[i]);
+    }
+
     PtcFsStorage storage_{};
     PtcOverlayBridge bridge_{};
     PtcOverlayInput input_{};
@@ -1538,6 +1572,10 @@ private:
     PtcOverlayBriefNotice brief_notice_{};
     uint64_t ui_instance_ms_ = 0, seen_sequence_ = 0, next_ready_ms_ = 0;
     uint64_t next_brief_read_ms_ = 0;
+    uint64_t next_brief_diag_ms_ = 0;
+    unsigned brief_diag_key_ = 0, brief_diag_updates_ = 0, brief_diag_failures_ = 0;
+    bool brief_diag_sampled_ = false;
+    char brief_diag_seen_[2][96] = {};
     unsigned automatic_failures_ = 0;
     bool automatic_ack_written_ = false;
     bool automatic_enabled_ = false;

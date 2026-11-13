@@ -3578,6 +3578,7 @@ namespace tsl {
                     detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0));
                 if (R_SUCCEEDED(rc)) {
                     shData->automaticOpenBlocked = true;
+                    eventFire(&shData->comboEvent);
                     if (shData->overlayOpen) {
                         shData->hideRequested = true;
                         shData->overlayOpen = false;
@@ -3694,6 +3695,11 @@ namespace tsl {
                 if (!open) continue;
             } else if (R_FAILED(wake)) {
                 ASSERT_FATAL(wake);
+            }
+            if (shData.automaticOpenBlocked.load()) {
+                eventClear(&shData.comboEvent);
+                overlay->loopHiddenFrame(true, 0);
+                continue;
             }
             eventClear(&shData.comboEvent);
             shData.hideRequested = false;
