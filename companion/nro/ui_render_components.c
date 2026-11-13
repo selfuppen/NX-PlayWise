@@ -95,11 +95,12 @@ void draw_toggle_switch(
     int off_x = rect.x + 3;
     int on_x = rect.x + rect.width - 3 - knob_size;
     /* 滑块按切换时刻缓动；首帧或预览直接落位（单调用点，矩形即身份）。 */
+    float slide_t = 1.0f;
+    int knob_x;
+#ifndef PTC_UI_PREVIEW_ANIM_CLOCK_MS
     static UiRect memo_rect = {0, 0, 0, 0};
     static bool memo_is_on = false;
     static int64_t memo_changed_ms = 0;
-    float slide_t = 1.0f;
-    int knob_x;
     if (memo_rect.x != rect.x || memo_rect.y != rect.y || memo_rect.width != rect.width) {
         memo_rect = rect;
         memo_is_on = is_on;
@@ -112,6 +113,7 @@ void draw_toggle_switch(
         slide_t = ui_ease_out((float)(ptc_ui_anim_now_ms() - memo_changed_ms) / 120.0f);
         if (slide_t >= 1.0f) memo_changed_ms = 0;
     }
+#endif
     knob_x = off_x + (int)((float)(on_x - off_x) * (is_on ? slide_t : 1.0f - slide_t));
     int knob_y = rect.y + 3;
 

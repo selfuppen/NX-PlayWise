@@ -520,7 +520,29 @@ static int check_primitives(void)
         if (y < 40 || y >= 60) ++failed;
     }
     if (!clipped_pixels) ++failed;
-    printf("%s: UI primitive coverage, symmetry, strokes and clipping\n", failed ? "FAIL" : "PASS");
+    /* A fixed preview clock must not leave a switch mid-transition after a
+       different selected scene. Both on/off and scene order stay deterministic. */
+    const UiRect toggle = {20, 20, 52, 30};
+    uint32_t toggle_reference[60 * 40];
+    for (int dark = 0; dark < 2; ++dark) {
+        g_palette = ptc_ui_theme_palette(dark ? PTC_UI_RESOLVED_DARK : PTC_UI_RESOLVED_LIGHT);
+        for (int on = 0; on < 2; ++on) {
+            for (int selected = 0; selected < 2; ++selected) {
+                fill_rect_packed(preview_pixels, 1280, (UiRect){0, 0, 100, 100}, background);
+                draw_toggle_switch(preview_pixels, 1280, toggle, on, selected, false, NULL, NULL);
+                for (int y = 0; y < 40; ++y) for (int x = 0; x < 60; ++x)
+                    toggle_reference[y * 60 + x] = preview_pixels[(15 + y) * 1280 + 15 + x];
+                int center_x = on ? 57 : 35;
+                if (preview_pixels[35 * 1280 + center_x] != resolve_color(UI_SURFACE)) ++failed;
+                draw_toggle_switch(preview_pixels, 1280, toggle, !on, selected, false, NULL, NULL);
+                fill_rect_packed(preview_pixels, 1280, (UiRect){0, 0, 100, 100}, background);
+                draw_toggle_switch(preview_pixels, 1280, toggle, on, selected, false, NULL, NULL);
+                for (int y = 0; y < 40; ++y) for (int x = 0; x < 60; ++x)
+                    if (toggle_reference[y * 60 + x] != preview_pixels[(15 + y) * 1280 + 15 + x]) ++failed;
+            }
+        }
+    }
+    printf("%s: UI primitive coverage, symmetry, strokes, clipping and settled preview toggles\n", failed ? "FAIL" : "PASS");
     return failed ? 1 : 0;
 }
 
