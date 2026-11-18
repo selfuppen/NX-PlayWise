@@ -26,10 +26,15 @@ from tools.lib.ptc_token_v2 import encode_token, tier_for_minutes
 ROOT = Path(__file__).resolve().parents[2]
 APP = Path("sdmc/switch/playwise-eden")
 SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_success", "code_replay")
+SUITES = ("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock",
+          "notifications", "safeguards")
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
-    require(suite in ("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock", "notifications"), "unknown suite")
+    require(suite in SUITES, "unknown suite")
+    if suite == "safeguards":
+        from tools.automation.eden_safeguard_flow import SAFEGUARD_SCENARIOS
+        return SAFEGUARD_SCENARIOS
     if suite == "notifications":
         from tools.automation.eden_notification_flow import NOTIFICATION_SCENARIOS
         return NOTIFICATION_SCENARIOS
@@ -424,8 +429,10 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     if args.suite == "notifications":
         for name in ("eden_main_flow.py", "eden_notification_flow.py"):
             shutil.copy2(Path(__file__).with_name(name), artifacts / name)
-    if args.suite in ("main", "support", "web", "plans", "input", "input-hold", "dock"):
+    if args.suite in ("main", "support", "web", "plans", "input", "input-hold", "dock", "safeguards"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
+    if args.suite == "safeguards":
+        shutil.copy2(Path(__file__).with_name("eden_safeguard_flow.py"), artifacts / "eden_safeguard_flow.py")
     if args.suite == "dock":
         shutil.copy2(Path(__file__).with_name("eden_dock_flow.py"), artifacts / "eden_dock_flow.py")
     if args.suite == "support":
@@ -990,6 +997,10 @@ def verify(output: Path) -> dict:
             from tools.automation.eden_notification_flow import verify_notifications
             verify_notifications(output)
             return summary
+        if summary.get("suite") == "safeguards":
+            from tools.automation.eden_safeguard_flow import verify_safeguards
+            verify_safeguards(output)
+            return summary
         if summary.get("suite") == "web":
             from tools.automation.eden_web_flow import verify_web
             verify_web(output)
@@ -1168,6 +1179,11 @@ def run(args: argparse.Namespace) -> int:
             class NotificationSuite(NotificationFlow, Suite):
                 pass
             suite_class = NotificationSuite
+        elif args.suite == "safeguards":
+            from tools.automation.eden_safeguard_flow import SafeguardFlow
+            class SafeguardSuite(SafeguardFlow, Suite):
+                pass
+            suite_class = SafeguardSuite
         elif args.suite == "support":
             from tools.automation.eden_support_flow import SupportFlow
             class SupportSuite(SupportFlow, Suite):
@@ -1292,7 +1308,7 @@ def main() -> int:
     live.add_argument("--nro", type=Path, default=ROOT / "build/eden-test/pctc-eden.nro")
     live.add_argument("--manifest", type=Path, default=ROOT / "build/eden-test/generated/release-manifest.json")
     live.add_argument("--out", type=Path, required=True)
-    live.add_argument("--suite", choices=("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock", "notifications"), default="smoke",
+    live.add_argument("--suite", choices=SUITES, default="smoke",
                       help="main covers core journeys; support covers diagnostics/disable/installation restore")
     live.add_argument('--plans-language', choices=('system', 'en'), default='system',
                       help='plans only: explicit English UI layout check through the normal language menu')

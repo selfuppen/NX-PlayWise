@@ -93,6 +93,12 @@ def verify_notifications(output: Path) -> None:
             ui = read(output / f"checkpoints/notification-{mode}-{kind}.json")["ui"]
             require(ui["overlay"] == 48 and ui["notification_preview"] == index and
                     ui["reason_notifications_enabled"] is True, "notification preview checkpoint differs")
+    review = output / "notification-evidence/dark-visual-review.json"
+    visual_version = read(output / "assertions/notification_themes.json").get("dark_visual_evidence_version")
+    if visual_version is not None or review.is_file():
+        require(type(visual_version) is int and visual_version == 1 and review.is_file(),
+                "dark preview evidence version or plan missing")
+        verify_dark_visual_evidence(output, read(review))
     config = read(output / "app-final/config.json")
     reopened = read(output / "assertions/notification_reopen.json")
     require(reopened["enabled_after_reopen"] is True and config["reason_notifications_enabled"] is False and
@@ -113,6 +119,23 @@ def verify_notifications(output: Path) -> None:
     else:
         require(type(version) is int and version == 1, "unknown notification phase evidence version")
         verify_notification_phases(output)
+
+
+def verify_dark_visual_evidence(output: Path, review: dict) -> None:
+    require(review == {"schema_version": 1, "checks": ["button_text", "clock"],
+                       "frames": ["notification-dark-overlay", "notification-dark-overlay-confirmed",
+                                  "notification-dark-short", "notification-dark-short-confirmed"]},
+            "dark notification review plan differs")
+    for index, names in enumerate(zip(review["frames"][::2], review["frames"][1::2])):
+        first, second = (read(output / f"checkpoints/{name}.json") for name in names)
+        require(first["instance"] == second["instance"] and first["sequence"] < second["sequence"] and
+                0 < first["screenshot_call"] < second["screenshot_call"], "dark preview frames are not independent")
+        for frame in (first, second):
+            ui = frame["ui"]
+            require(ui["overlay"] == 48 and ui["notification_preview"] == index and
+                    ui["reason_notifications_enabled"] is True and
+                    any((output / "screens").glob(f"{frame['screenshot_call']:04d}-*.png")),
+                    "dark preview image or matching UI state missing")
 
 
 class NotificationFlow(MainFlow):
@@ -223,14 +246,22 @@ class NotificationFlow(MainFlow):
             self.action(target="card_1")
             self.wait_ui(overlay=48, notification_preview=0, reason_notifications_enabled=True)
             self.capture(f"notification-{mode}-overlay")
+            if mode == "dark":
+                self.capture("notification-dark-overlay-confirmed")
             self.action(button="R")
             self.wait_ui(notification_preview=1)
             self.capture(f"notification-{mode}-short")
             self.capture(f"notification-{mode}-short-confirmed")
             self.action(target="overlay_back")
             self.wait_ui(view=1, parent_page=3, overlay=0)
+        review = {"schema_version": 1, "checks": ["button_text", "clock"],
+                  "frames": ["notification-dark-overlay", "notification-dark-overlay-confirmed",
+                             "notification-dark-short", "notification-dark-short-confirmed"]}
+        verify_dark_visual_evidence(self.output, review)
+        save(self.output / "notification-evidence/dark-visual-review.json", review)
         self.checked("notification_themes", ["normal theme settings save light and dark",
-            "both screen examples render in both themes", "touch back returns to parent settings"])
+            "both screen examples reached in both themes", "touch back returns to parent settings"],
+            dark_visual_evidence_version=1)
 
     def notification_reopen(self) -> None:
         self.stop()

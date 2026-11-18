@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from tools.automation.eden_notification_flow import (
-    BAD_TEST_JOURNAL, NOTIFICATION_SCENARIOS, NotificationFlow, verify_notifications,
+    BAD_TEST_JOURNAL, NOTIFICATION_SCENARIOS, NotificationFlow, verify_dark_visual_evidence, verify_notifications,
 )
 from tools.automation.eden_runner import GateError, read, save, scenario_names
 
@@ -294,8 +294,31 @@ def test_bad_journal_fixture_guards() -> None:
                 assert journal.read_bytes() == b"existing ownership sentinel"
 
 
+def test_dark_visual_evidence() -> None:
+    with tempfile.TemporaryDirectory() as folder:
+        output = Path(folder)
+        frames = ["notification-dark-overlay", "notification-dark-overlay-confirmed",
+                  "notification-dark-short", "notification-dark-short-confirmed"]
+        review = {"schema_version": 1, "checks": ["button_text", "clock"], "frames": frames}
+        (output / "screens").mkdir()
+        for sequence, name in enumerate(frames, 1):
+            save(output / f"checkpoints/{name}.json", {"instance": "fixture", "sequence": sequence,
+                 "screenshot_call": sequence, "ui": {"overlay": 48, "notification_preview": (sequence - 1) // 2,
+                 "reason_notifications_enabled": True}})
+            (output / f"screens/{sequence:04d}-1.png").touch()
+        verify_dark_visual_evidence(output, review)
+        (output / "screens/0002-1.png").unlink()
+        try:
+            verify_dark_visual_evidence(output, review)
+        except GateError:
+            pass
+        else:
+            raise AssertionError("dark visual evidence accepted a missing second frame")
+
+
 if __name__ == "__main__":
     test_notification_evidence()
     test_notification_journeys_and_phase_rejection()
     test_bad_journal_fixture_guards()
+    test_dark_visual_evidence()
     print("PASS: notification action journeys, phase evidence and rejected preview/result/business mutations")

@@ -216,6 +216,19 @@ static PtcCompanionStatus eden_ipc_submit(
     }
     /* Keep cheap read-only status synchronous so the pre-HID ready-result
        drain cannot acquire a new artificial background-poll waiting window. */
+    const char *fixture_path = PLAYWISE_EDEN_SD_ROOT "/support/automation-quota-status.txt";
+    PtcStorage *storage = runtime->sysmodule.storage;
+    char fixture[16];
+    /* A private Eden run can change one status sample or fail its transport.
+       Consume before applying so a later refresh always uses the normal path. */
+    if (storage->vtable->exists(storage, PLAYWISE_EDEN_SD_ROOT "/support/automation-observe.flag") &&
+        storage->vtable->read_text(storage, fixture_path, fixture, sizeof(fixture)) &&
+        storage->vtable->remove_path(storage, fixture_path)) {
+        if (!strcmp(fixture, "fail")) return PTC_COMPANION_WRITE_FAILED;
+        if (!strcmp(fixture, "advance"))
+            (void)ptc_pctl_stub_advance_usage_ns(&runtime->pctl, 60000000000ULL,
+                &runtime->usage_carry_ns);
+    }
     eden_process_request(runtime, request_id, json);
     snprintf(result_path, sizeof(result_path), "%s/results/%s.json", PLAYWISE_EDEN_SD_ROOT, request_id);
     if (!runtime->sysmodule.storage->vtable->exists(runtime->sysmodule.storage, result_path)) {

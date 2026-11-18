@@ -2,7 +2,7 @@
   "schema_version": 2,
   "reviewed_date": "2026-11-12",
   "scope": "playwise/tools",
-  "script_count": 76,
+  "script_count": 77,
   "scripts": [
     {
       "path": "build/runtime_resource_report.py",
@@ -287,6 +287,11 @@
       "path": "automation/eden_notification_flow.py",
       "category": "automation",
       "purpose": "通知设置的setup与家长区交互、示意切换、浅暗主题和重开验证"
+    },
+    {
+      "path": "automation/eden_safeguard_flow.py",
+      "category": "automation",
+      "purpose": "PIN冷却重开、额度确认复核与备份配对恢复的Eden专项"
     },
     {
       "path": "automation/eden_support_flow.py",

@@ -145,10 +145,18 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
     if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
     used = (size_t)n;
     n = snprintf(out + used, size - used,
+        "\"auth_cooldown_seconds\":%d,\"parent_support_only\":%s,"
+        "\"quota_refresh_failed\":%s,\"confirm_hold_progress\":%u,"
+        "\"quota_draft_minutes\":%d,\"played_minutes\":%d,"
         "\"setup_review_active\":%s,\"setup_review_option\":%d,"
         "\"notification_preview\":%d,\"reason_notifications_enabled\":%s,"
         "\"reason_external_notifications\":%d,\"reason_detail_ready\":%s,"
         "\"reason_overlay_installed\":%s,\"notification_feedback\":%d,",
+        m->auth_cooldown_seconds, m->parent_support_only ? "true" : "false",
+        m->quota_refresh_failed ? "true" : "false", (unsigned)m->confirm_hold_progress,
+        m->overlay == PTC_UI_OVERLAY_CONFIRM && m->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT
+            ? (int)m->draft_minutes : -1,
+        m->played_minutes_available ? m->played_minutes : -1,
         m->setup_review_active ? "true" : "false", ptc_ui_setup_next_option(m),
         m->notification_preview, m->reason_notifications_enabled ? "true" : "false",
         m->reason_external_notifications, m->reason_detail_ready ? "true" : "false",
