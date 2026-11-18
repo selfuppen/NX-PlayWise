@@ -173,9 +173,10 @@ void ptc_policy_status_countdown(const PtcCompanionResultSummary *s,
     if (!out) return;
     memset(out, 0, sizeof(*out));
     if (!s || !s->valid || !snapshot_usable) return;
+    const bool bedtime = s->bedtime_available && s->bedtime_enabled && s->bedtime_active && !s->bedtime_skipped;
     /* A recognized instance keeps reporting zero after it passes, so an
        observer that already saw it running can tell "finished" from "gone". */
-    if (s->eye_care_available && s->eye_care_enabled && s->eye_care_break_id &&
+    if (!bedtime && s->eye_care_available && s->eye_care_enabled && s->eye_care_break_id &&
         strcmp(s->eye_care_phase, "resting") == 0 && rest_age_seconds >= 0 &&
         s->eye_care_rest_remaining_seconds >= 0 &&
         s->eye_care_rest_remaining_seconds <= 24 * 60 * 60) {
@@ -187,8 +188,7 @@ void ptc_policy_status_countdown(const PtcCompanionResultSummary *s,
     }
     /* Bedtime mirrors bedtime_project: only a running, unskipped window whose
        instance matches the reported bounds can end at a known local second. */
-    if (!s->bedtime_available || !s->bedtime_enabled || !s->bedtime_active || s->bedtime_skipped) return;
-    if (clock_age_seconds < 0) return;
+    if (!bedtime || clock_age_seconds < 0) return;
     if (!valid_window(s->bedtime_start_day_index, s->bedtime_start_minute,
         s->bedtime_end_minute, s->bedtime_window_instance_id)) return;
     if (s->bedtime_start_day_index != s->day_index &&

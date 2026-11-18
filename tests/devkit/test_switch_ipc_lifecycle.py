@@ -152,6 +152,15 @@ def main() -> None:
     # An unanswered detail offer is dropped once its observation ages, so the
     # presence lease must stay short and be renewed only from neutral input.
     hidden = overlay[overlay.index("bool onHiddenPoll(bool neutral) override"):overlay.index("void onFrameRendered() override")]
+    child_open = overlay[overlay.index("void start_child_open()"):overlay.index("void update() override")]
+    require("status_expanded_ = false;" in child_open and "!status_expanded_ && child_detail_page_available()" in child_open and
+            "child_drawn_reason_ == offer.reason" in child_open and
+            "ptc_overlay_detail_matches(&offer, &displayed_summary_)" in child_open,
+            "automatic entry must open home and confirm its drawn cause against the original offer")
+    require("request_started_tick_ < child_open_tick_ || !child_detail_page_available()" in overlay and
+            "begin_status_refresh(PTC_UI_STATUS_OVERLAY_READY, true)" in overlay and
+            "manual_open_status" not in overlay,
+            "home opening must reuse registration refresh and reject prior-open or protected-page replies")
     require("ready.expires_ms = ms + 1500;" in hidden and "next_ready_ms_ = ms + 1000;" in hidden,
             "hidden Overlay must keep the 1.5s presence lease renewed every second")
     require(hidden.index("ms >= next_config_ms_") < hidden.index("!automatic_enabled_") <

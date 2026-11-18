@@ -11,6 +11,7 @@
 #endif
 extern "C" {
 #include "../../companion/overlay/bridge.h"
+#include "../../companion/overlay/detail_status.h"
 #include "../../companion/auth.h"
 #include "../../companion/overlay/input_model.h"
 #include "../../companion/ui_language.h"

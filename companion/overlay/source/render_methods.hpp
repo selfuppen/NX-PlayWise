@@ -372,10 +372,10 @@
         }
         if (stale) return {ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH), pal.warning, false};
         if (bedtime_restricted()) return {ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_3), pal.danger, false};
-        if (displayed_summary_.daily_restriction_active)
-            return {ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_2), pal.danger, false};
         if (eye_care_restricted()) return {ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING), pal.warning, false};
         if (displayed_summary_.dock_restriction_active) return {ptc_ui_text(PTC_UI_T_DOCK_TITLE), pal.danger, false};
+        if (displayed_summary_.daily_restriction_active)
+            return {ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_2), pal.danger, false};
         return {ptc_ui_text(PTC_UI_T_NORMAL_PLAY_AVAILABLE), pal.success, true};
     }
 
@@ -533,7 +533,9 @@
     void observe_child_countdown()
     {
         int day = -1, second = -1;
-        const bool usable = child_snapshot_usable(displayed_summary_, day, second);
+        const auto reason = ptc_overlay_detail_reason(&displayed_summary_);
+        const bool usable = (reason == PTC_REASON_BEDTIME || reason == PTC_REASON_EYE) &&
+            child_snapshot_usable(displayed_summary_, day, second);
         // Eye-care rest ages from the status receipt, exactly like the countdown
         // the child sees. The bedtime clock ages from the request start that
         // produced local_second_of_day; previews pin their own clock.

@@ -6,12 +6,20 @@
     bool page_changed_ = false;
     int flow_y_ = 0;
     OverlayNavbarScheme navbar_scheme_ = OverlayNavbarScheme::Default;
+    PtcRestrictionReason child_drawn_reason_ = PTC_REASON_NONE;
+
+    PtcRestrictionReason child_home_reason() const
+    {
+        int day, second;
+        return child_snapshot_usable(displayed_summary_, day, second)
+            ? ptc_overlay_detail_reason(&displayed_summary_) : PTC_REASON_NONE;
+    }
 
     bool child_is_restricted() const
     {
-        int day, second;
-        return child_snapshot_usable(displayed_summary_, day, second) &&
-            (bedtime_restricted() || eye_care_restricted() || displayed_summary_.dock_restriction_active);
+        auto reason = child_home_reason();
+        // Daily exhaustion keeps the regular keypad and daily-buffer layout.
+        return reason != PTC_REASON_NONE && reason != PTC_REASON_DAILY;
     }
 
     int page_identity() const
@@ -21,7 +29,10 @@
         if (success_visible_) return 2;
         if (preview_ready_) return 3;
         if (status_expanded_) return 4;
-        if (child_is_restricted()) return bedtime_restricted() ? 20 : eye_care_restricted() ? 21 : 22;
+        const auto reason = child_home_reason();
+        if (reason == PTC_REASON_BEDTIME) return 20;
+        if (reason == PTC_REASON_EYE) return 21;
+        if (reason == PTC_REASON_DOCK) return 22;
         if (is_keypad_mode()) return 5;
         return 0;
     }
@@ -1158,10 +1169,13 @@
         const auto &pal = current_palette();
         auto summary = displayed_summary_;
         char line[384], number[48], window[160];
-        const bool restricted = child_is_restricted();
-        const bool bedtime = restricted && bedtime_restricted();
-        const bool eye_restricted = restricted && !bedtime && eye_care_restricted();
-        const bool dock_restricted = restricted && !bedtime && !eye_restricted;
+        const auto reason = child_home_reason();
+        const bool bedtime = reason == PTC_REASON_BEDTIME;
+        const bool eye_restricted = reason == PTC_REASON_EYE;
+        const bool dock_restricted = reason == PTC_REASON_DOCK;
+        const bool restricted = bedtime || eye_restricted || dock_restricted;
+        int day, second;
+        const bool confirmed = child_status_fresh(summary, day, second) && !bridge_->waiting;
         const auto eye = child_eye_care_status(summary);
         const auto policies = child_policy_status(summary);
 
@@ -1177,11 +1191,14 @@
             note = ptc_ui_text(PTC_UI_T_OVERLAY_DISABLED_HELP);
         } else if (bedtime) {
             head = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_TITLE); tone = pal.night;
-            sub = ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_HERO);
-            std::snprintf(window, sizeof(window), ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_WINDOW),
-                summary.bedtime_start_minute / 60, summary.bedtime_start_minute % 60,
-                summary.bedtime_end_minute / 60, summary.bedtime_end_minute % 60);
-            note = window;
+            sub = policies.bedtime.state == PTC_POLICY_ACTIVE ? policies.bedtime.detail :
+                ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH);
+            if (policies.bedtime.state == PTC_POLICY_ACTIVE || policies.bedtime.state == PTC_POLICY_WAITING) {
+                std::snprintf(window, sizeof(window), ptc_ui_text(PTC_UI_T_OVERLAY_BEDTIME_CHILD_WINDOW),
+                    summary.bedtime_start_minute / 60, summary.bedtime_start_minute % 60,
+                    summary.bedtime_end_minute / 60, summary.bedtime_end_minute % 60);
+                note = window;
+            }
         } else if (eye_restricted) {
             head = ptc_ui_text(PTC_UI_T_OVERLAY_EYE_CHILD_TITLE); tone = pal.warning;
             if (eye.rest_seconds >= 0) {
@@ -1202,27 +1219,31 @@
             const bool confirming = ptc_overlay_remaining_refresh_pending(bridge_->waiting,
                 active_request_kind_ == OverlayRequestKind::OfflineCode);
             const bool stale = status_is_stale();
+            const bool playable = confirmed && summary.ok &&
+                (summary.restricted_now == 0 || (summary.temporary_unlocked_available && summary.temporary_unlocked));
             if (confirming) {
                 head = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY); tone = pal.warning;
                 std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING));
                 num = number; num_color = pal.warning;
-            } else if (summary.valid && summary.unrestricted_today == 1) {
+            } else if (reason == PTC_REASON_DAILY && confirmed) {
+                head = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE); tone = pal.danger;
+                sub = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_VALUE);
+            } else if (playable && summary.unrestricted_today == 1) {
                 head = ptc_ui_text(PTC_UI_T_OVERLAY_NOW_CAN_PLAY); tone = stale ? pal.warning : pal.success;
                 std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
                 num = number; num_label = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY);
-            } else if (summary.valid && summary.remaining_available && summary.remaining_minutes == 0) {
-                head = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE); tone = pal.danger;
-                sub = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_VALUE);
-            } else if (summary.valid && summary.remaining_available) {
+            } else if (playable && summary.remaining_available) {
                 const bool low = summary.remaining_minutes <= 10;
-                head = ptc_ui_text(low ? PTC_UI_T_OVERLAY_NOW_LOW : PTC_UI_T_OVERLAY_NOW_CAN_PLAY);
+                head = ptc_ui_text(summary.remaining_minutes == 0 ? PTC_UI_T_PLAYTIME_TODAY :
+                    low ? PTC_UI_T_OVERLAY_NOW_LOW : PTC_UI_T_OVERLAY_NOW_CAN_PLAY);
                 tone = stale || low ? pal.warning : pal.success;
                 ptc_ui_format_minutes(summary.remaining_minutes, number, sizeof(number));
                 num = number; num_label = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY);
             } else {
                 head = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY); tone = pal.text_secondary;
-                std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
-                num = number; num_color = pal.text_disabled;
+                std::snprintf(number, sizeof(number), "%s", ptc_ui_text(summary.valid && !playable ?
+                    PTC_UI_T_STATUS_PENDING_REFRESH : PTC_UI_T_UNAVAILABLE));
+                num = number; num_size = PTC_OVERLAY_FONT_BODY; num_color = pal.text_disabled;
             }
             // Keep the quota and usage together; proxy-timer detail stays in the status page.
             char label[128], value[128], quota_note[128];
@@ -1332,6 +1353,9 @@
             refresh_busy ? pal.text_secondary : highlight ? pal.warning : pal.accent,
             highlight || refresh_busy, PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == (restricted ? 3 : 4));
         walk(true);
+        if (confirmed && (!bedtime || policies.bedtime.state == PTC_POLICY_ACTIVE) &&
+            (!eye_restricted || eye.rest_seconds > 0))
+            child_drawn_reason_ = reason;
 
         // Scrolling area: ask-a-parent hint, rule chain and the status row.
         const int button_h = PTC_OVERLAY_RAIL_H;
@@ -1483,6 +1507,7 @@
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)
     {
         (void)ch;
+        child_drawn_reason_ = PTC_REASON_NONE;
         prepare_page();
         // Child overview and details share the watcher; never interrupt code entry.
         if (!language_confirm_active_ && !access_recovery_visible() && !success_visible_ &&

@@ -12,6 +12,7 @@
 #endif
 extern "C" {
 #include "../../companion/overlay/bridge.h"
+#include "../../companion/overlay/detail_status.h"
 #include "../../companion/auth.h"
 #include "../../companion/overlay/input_model.h"
 #include "../../companion/ui_language.h"
@@ -467,6 +468,8 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
         view.bridge_ = &bridge; view.input_ = &input;
         auto &s = view.displayed_summary_;
         s.valid = s.eye_care_available = s.eye_care_enabled = true;
+        s.ok = s.temporary_unlocked_available = true;
+        s.restricted_now = 1;
         s.day_index = 2469;
         s.eye_care_play_minutes = 40; s.eye_care_rest_minutes = 10;
         s.eye_care_rest_remaining_seconds = 600; s.eye_care_break_id = 123;
@@ -536,6 +539,8 @@ static void test_detail_countdown_refresh(tsl::gfx::Renderer &renderer)
         view.status_expanded_ = true;
         auto &s = view.displayed_summary_;
         s.valid = s.local_clock_available = s.remaining_available = true;
+        s.ok = s.temporary_unlocked_available = true;
+        s.restricted_now = 1;
         s.day_index = 2498;
         s.local_second_of_day = 10 * 3600;
         s.completed_at = 1793671200;
@@ -614,6 +619,7 @@ static void test_detail_countdown_refresh(tsl::gfx::Renderer &renderer)
             "failed countdown refresh keeps the last confirmed restriction without automatic retries");
         view.error_ = false;
         auto confirmed = view.displayed_summary_;
+        confirmed.restricted_now = 0;
         confirmed.eye_care_rest_remaining_seconds = 0;
         confirmed.eye_care_break_id = 0;
         std::snprintf(confirmed.eye_care_phase, sizeof(confirmed.eye_care_phase), "playing");
@@ -653,8 +659,6 @@ static void test_detail_countdown_refresh(tsl::gfx::Renderer &renderer)
         PreviewView view;
         setup(view, bridge, input);
         auto &s = view.displayed_summary_;
-        s.eye_care_enabled = false;
-        std::snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "off");
         s.bedtime_available = s.bedtime_enabled = s.bedtime_active = true;
         s.bedtime_start_day_index = s.day_index - 1;
         s.bedtime_start_minute = 21 * 60;
@@ -691,11 +695,107 @@ static void test_detail_countdown_refresh(tsl::gfx::Renderer &renderer)
         draw_at_age(view, 0);
         require(!view.countdown_recheck_pending_, "bedtime overview and details share boundary deduplication");
         s.bedtime_active = false;
+        s.eye_care_enabled = false;
+        s.restricted_now = 0;
+        std::snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "off");
         draw_at_age(view, 0);
         require(!view.child_is_restricted() && !view.countdown_recheck_pending_,
             "only a confirmed inactive bedtime snapshot releases the restriction");
     }
     std::puts("PASS: eye and bedtime details refresh once at zero, wait for backend, and leave protected flows alone");
+}
+
+static void test_child_reminder_home(tsl::gfx::Renderer &renderer)
+{
+    PtcOverlayBridge bridge{};
+    PtcOverlayInput input{};
+    ptc_overlay_input_init(&input);
+    PreviewView view;
+    view.bridge_ = &bridge;
+    view.input_ = &input;
+    view.preview_clock_ = false;
+    view.last_refresh_tick_ = view.usage_snapshot_tick_ = armGetSystemTick();
+    auto &status = view.displayed_summary_;
+    status.valid = status.ok = status.local_clock_available = status.temporary_unlocked_available = true;
+    status.day_index = 2498;
+    status.completed_at = 1793671200;
+    status.local_second_of_day = 6 * 3600;
+    status.remaining_available = true;
+    status.remaining_minutes = 0;
+    status.restricted_now = 0;
+    status.daily_buffer_available = true;
+    const auto draw = [&] {
+        renderer.text_runs.clear();
+        view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+            PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+    };
+    const auto shows = [&](PtcUiTextId text) {
+        const auto lines = overlay_wrap(&renderer, ptc_ui_text(text), PTC_OVERLAY_FONT_TITLE_LG,
+            PTC_OVERLAY_CONTENT_W - 28);
+        return !lines.empty() && std::all_of(lines.begin(), lines.end(), [&](const auto &line) {
+            return std::any_of(renderer.text_runs.begin(), renderer.text_runs.end(), [&](const auto &run) {
+                return run.size == PTC_OVERLAY_FONT_TITLE_LG && run.text == line;
+            });
+        });
+    };
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_NONE && !shows(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE),
+        "zero balance alone does not paint a confirmed daily restriction");
+    status.restricted_now = 1;
+    status.daily_restriction_active = true;
+    status.remaining_minutes = 12;
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_DAILY && shows(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE) &&
+        view.page_layout_.redeem.w > 0 && view.page_layout_.buffer.w > 0,
+        "confirmed daily restriction paints its title and keeps recovery entries even with separate balance");
+    status.dock_available = status.dock_restriction_active = true;
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_DOCK && view.page_identity() == 22,
+        "TV restriction takes priority over daily on the home frame");
+    status.eye_care_available = status.eye_care_enabled = true;
+    status.eye_care_break_id = 7;
+    status.eye_care_play_minutes = 40;
+    status.eye_care_rest_minutes = 10;
+    status.eye_care_rest_remaining_seconds = 5;
+    std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "resting");
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_EYE && view.page_identity() == 21,
+        "eye restriction takes priority over TV and daily");
+    status.bedtime_available = status.bedtime_enabled = status.bedtime_active = true;
+    status.bedtime_start_day_index = status.day_index - 1;
+    status.bedtime_start_minute = 21 * 60;
+    status.bedtime_end_minute = 7 * 60;
+    status.bedtime_window_instance_id =
+        (static_cast<uint64_t>(status.bedtime_start_day_index) << 16) | status.bedtime_start_minute;
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_BEDTIME && view.page_identity() == 20 &&
+        view.countdown_watch_.instance_id == status.bedtime_window_instance_id &&
+        view.child_policy_status(status).bedtime.minutes == 60,
+        "bedtime frame and watcher use the same main reason and the reported end time");
+    PtcReasonDetail offer{};
+    offer.day = status.day_index;
+    offer.reason = PTC_REASON_BEDTIME;
+    offer.instance = status.bedtime_window_instance_id;
+    require(ptc_overlay_detail_matches(&offer, &status), "the drawn bedtime snapshot can match its offer");
+    ++offer.instance;
+    require(!ptc_overlay_detail_matches(&offer, &status), "a different bedtime instance cannot confirm");
+    view.status_expanded_ = true;
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_NONE, "manual details do not confirm an automatic home frame");
+    view.status_expanded_ = false;
+    status.local_second_of_day = 7 * 3600;
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_NONE && view.countdown_recheck_pending_,
+        "an elapsed bedtime still displays but cannot confirm the offer");
+    status.bedtime_active = false;
+    view.error_ = true;
+    view.last_request_kind_ = OverlayRequestKind::Status;
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_NONE, "a failed refresh cannot confirm a cached eye frame");
+    view.error_ = false;
+    status.temporary_unlocked = true;
+    draw();
+    require(view.child_drawn_reason_ == PTC_REASON_NONE, "official unlock cannot acknowledge a restriction");
 }
 
 static void test_parent_cards(tsl::gfx::Renderer &renderer)
@@ -772,6 +872,7 @@ int main(int argc, char **argv) {
         test_child_policy_freshness();
         test_disabled_status(argv[1]);
         test_detail_countdown_refresh(renderer);
+        test_child_reminder_home(renderer);
         test_child_cards(renderer);
         test_parent_cards(renderer);
         test_surface_outline(renderer);
@@ -820,6 +921,7 @@ int main(int argc, char **argv) {
                 view.bridge_ = &bridge; view.input_ = &input;
                 auto &status = view.displayed_summary_;
                 status.valid = true; status.remaining_available = true; status.remaining_minutes = 25;
+                status.ok = status.temporary_unlocked_available = true;
                 status.played_minutes_available = true; status.played_minutes = 35;
                 status.unrestricted_today = 0; status.daily_buffer_available = true;
                 status.day_index = 2469;
@@ -855,7 +957,11 @@ int main(int argc, char **argv) {
                     view.parent_action_ = PTC_OVERLAY_PARENT_WAIVE_DOCK;
                 } else if (scene == 4) {
                     status.bedtime_active = true; status.bedtime_enabled = true;
-                    status.bedtime_window_instance_id = 123;
+                    status.bedtime_start_day_index = status.day_index - 1;
+                    status.bedtime_start_minute = 21 * 60;
+                    status.bedtime_end_minute = 9 * 60;
+                    status.bedtime_window_instance_id =
+                        (static_cast<u64>(status.bedtime_start_day_index) << 16) | status.bedtime_start_minute;
                     view.parent_view_ = ParentView::Child;
                 } else if (scene == 5) {
                     status.eye_care_enabled = true; status.eye_care_rest_remaining_seconds = 300;
@@ -1051,11 +1157,9 @@ int main(int argc, char **argv) {
                     view.pin_length_ = 0;
                     std::snprintf(view.pin_message_, sizeof(view.pin_message_), "%s", ptc_ui_text(PTC_UI_T_PIN_CLOCK_UNAVAILABLE));
                 }
-                // Static sample of the page automatic detail requests open.
+                // Static sample of the home page an automatic restriction reminder opens.
                 // Rendering this scene does not exercise hidden wake or its ACK.
                 if (std::strcmp(scenes[scene], "overlay-auto-detail-eye") == 0) {
-                    view.status_expanded_ = true;
-                    view.details_tech_expanded_ = false;
                     status.bedtime_active = status.bedtime_enabled = status.bedtime_next_available = false;
                     status.dock_restriction_active = status.undocked_limit_enabled = false;
                     status.restricted_now = 1;
@@ -1064,6 +1168,10 @@ int main(int argc, char **argv) {
                     status.eye_care_rest_remaining_seconds = 300;
                     std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "resting");
                 }
+                if (scene == 56) status.daily_restriction_active = true;
+                if (status.bedtime_active || status.dock_restriction_active ||
+                    !std::strcmp(status.eye_care_phase, "resting") || status.daily_restriction_active)
+                    status.restricted_now = 1;
                 renderer.text_runs.clear();
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
