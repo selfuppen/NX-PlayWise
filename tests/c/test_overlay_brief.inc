@@ -1,6 +1,20 @@
 #include "../../companion/overlay/brief_notice.h"
 #include "../../companion/notification_test.h"
 
+typedef struct {
+    PtcStorage *storage;
+    unsigned reason_reads;
+    unsigned test_reads;
+} PtcBriefReadCounts;
+
+static bool count_brief_reads(PtcStorage *storage, const char *path, char *out, size_t size)
+{
+    PtcBriefReadCounts *counts = storage->ctx;
+    if (!strcmp(path, "app/support/reason-notification-owned.json")) ++counts->reason_reads;
+    if (!strcmp(path, "app/support/notification-test-owned.json")) ++counts->test_reads;
+    return counts->storage->vtable->read_text(counts->storage, path, out, size);
+}
+
 static void test_overlay_brief(void)
 {
     PtcMemStorage *mem = malloc(sizeof(*mem));
@@ -64,6 +78,32 @@ static void test_overlay_brief(void)
     check_true(other.active && !strcmp(other.title, "Test"), "explicit test notice uses the read-only receiver");
     ptc_overlay_brief_poll(&other, NULL, "app", "release1", "0123456789abcdef", 25100, true, false);
     check_true(!other.active, "expiry does not require additional storage reads");
+
+    const PtcStorageVTable read_counter = {.read_text = count_brief_reads};
+    PtcBriefReadCounts counts = {.storage = storage};
+    PtcStorage counted = {.vtable = &read_counter, .ctx = &counts};
+    PtcOverlayBriefNotice idle = {0};
+    ptc_overlay_brief_poll(&idle, &counted, "app", "release1", "0123456789abcdef", 14900, true, false);
+    ptc_overlay_brief_poll(&idle, &counted, "app", "release1", "0123456789abcdef", 15150, true, false);
+    check_true(counts.reason_reads == 2 && counts.test_reads == 1 && !idle.active,
+        "idle checks the real journal every poll and skips the intervening test journal read");
+    ptc_overlay_brief_poll(&idle, &counted, "app", "release1", "0123456789abcdef", 15400, true, false);
+    check_true(counts.reason_reads == 3 && counts.test_reads == 2 && idle.active && !strcmp(idle.title, "Test"),
+        "the next test poll consumes an unexpired test notice");
+
+    PtcOverlayBriefNotice blocked = {0};
+    counts.reason_reads = counts.test_reads = 0;
+    ptc_overlay_brief_poll(&blocked, &counted, "app", "release1", "", 14900, true, false);
+    ptc_overlay_brief_poll(&blocked, &counted, "app", "release1", "", 15150, false, false);
+    check_true(counts.reason_reads == 0 && counts.test_reads == 2 && blocked.seen[1][0] && !blocked.active,
+        "without a backend boot skip reason reads but still suppress a test at the boundary");
+    ptc_overlay_brief_poll(&blocked, &counted, "app", "release1", "0123456789abcdef", 15650, true, false);
+    check_true(counts.reason_reads == 1 && counts.test_reads == 3 && !blocked.active,
+        "a suppressed test does not replay when reception resumes");
+    PtcOverlayBriefNotice reason_ready = {0};
+    ptc_overlay_brief_poll(&reason_ready, &counted, "app", "release1", "0123456789abcdef", 11900, true, false);
+    check_true(ptc_overlay_brief_poll(&reason_ready, &counted, "app", "release1", "0123456789abcdef", 12150, true, false) &&
+        reason_ready.active && reason_ready.seen[0][0], "a real notice is accepted before the next idle test check");
     check_true(storage->vtable->exists(storage, publisher.path) &&
         storage->vtable->exists(storage, publisher.journal), "all receiver paths preserve publisher files");
     free(mem);

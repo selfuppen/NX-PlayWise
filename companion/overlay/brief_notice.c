@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define TEST_NOTICE_POLL_MS UINT64_C(500)
+
 static const char *string(const cJSON *object, const char *key)
 {
     const char *value = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(object, key));
@@ -50,10 +52,17 @@ static bool read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
 {
     static const char *journals[] = {"reason-notification-owned.json", "notification-test-owned.json"};
     char path[320], journal[4096], observed[1536];
+    if (!slot && strlen(boot) != 16) return false;
     snprintf(path, sizeof(path), "%s/support/%s", root, journals[slot]);
     if (!storage->vtable->read_text(storage, path, journal, sizeof(journal))) return false;
     cJSON *record = cJSON_ParseWithOpts(journal, NULL, true);
-    const char *name = string(record, "file"), *payload = string(record, "payload");
+    const char *name = string(record, "file");
+    /* Already witnessed files cannot display again, including suppressed ones. */
+    if (!strcmp(name, notice->seen[slot])) {
+        cJSON_Delete(record);
+        return false;
+    }
+    const char *payload = string(record, "payload");
     cJSON *body = cJSON_ParseWithOpts(payload, NULL, true);
     const char *title = string(body, "title"), *text = string(body, "text");
     bool valid = unique_object(record) && cJSON_GetArraySize(record) == 2 &&
@@ -61,8 +70,7 @@ static bool read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
         !strcmp(string(body, "pw_file"), name) &&
         !strcmp(string(body, "pw_owner"), slot ? "test-v1" : "reason-v1") &&
         title[0] && strlen(title) < sizeof(notice->title) && text[0] && strlen(text) < sizeof(notice->text);
-    if (valid && !slot) valid = strlen(boot) == 16 &&
-        !strncmp(name + strlen("playwise-reason-"), boot, 16) &&
+    if (valid && !slot) valid = !strncmp(name + strlen("playwise-reason-"), boot, 16) &&
         !strcmp(string(body, "pw_release"), release);
     const cJSON *font = cJSON_GetObjectItemCaseSensitive(body, "font_size");
     const cJSON *duration = cJSON_GetObjectItemCaseSensitive(body, "duration");
@@ -73,7 +81,7 @@ static bool read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
         decimal(string(body, "pw_expires_ms"), &expires) &&
         expires > issued && expires - issued == 2000 && now_ms >= issued && now_ms < expires;
     bool accepted = false;
-    if (valid && strcmp(name, notice->seen[slot])) {
+    if (valid) {
         snprintf(path, sizeof(path), "sdmc:/config/ultrahand/notifications/%s", name);
         /* Journal precedes rename. Never draw a stage or a different file. */
         if (storage->vtable->read_text(storage, path, observed, sizeof(observed)) && !strcmp(observed, payload)) {
@@ -98,14 +106,22 @@ bool ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
 {
     bool was_active = notice->active;
     bool accepted = false;
-    if (!allowed || dismiss || now_ms < notice->last_ms || now_ms >= notice->expires_ms) {
+    const bool display_allowed = allowed && !dismiss;
+    const bool clock_regressed = now_ms < notice->last_ms;
+    if (!display_allowed || clock_regressed || now_ms >= notice->expires_ms) {
         notice->active = false;
         notice->title[0] = notice->text[0] = '\0';
     }
+    if (clock_regressed) notice->next_test_read_ms = 0;
     notice->last_ms = now_ms;
     if (storage) {
-        for (unsigned slot = 0; slot < 2; ++slot) {
-            if (read_notice(notice, storage, root, release, boot, now_ms, allowed && !dismiss, slot))
+        accepted = read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 0);
+        /* Slow down test checks only in steady idle. Keep the original order
+           when notices compete or a visible frame must suppress pending tests. */
+        if (was_active || notice->active || !display_allowed || now_ms >= notice->next_test_read_ms) {
+            notice->next_test_read_ms = now_ms > UINT64_MAX - TEST_NOTICE_POLL_MS
+                ? UINT64_MAX : now_ms + TEST_NOTICE_POLL_MS;
+            if (read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 1))
                 accepted = true;
         }
     }

@@ -9,6 +9,7 @@ typedef struct {
     char text[512];
     uint64_t expires_ms;
     uint64_t last_ms;
+    uint64_t next_test_read_ms;
     bool active;
 } PtcOverlayBriefNotice;
 

@@ -256,11 +256,29 @@ public:
         ptc_companion_result_summary_expire_usage_elapsed(&displayed_summary_, age);
     }
 
+    bool child_detail_page_available() const
+    {
+        return parent_view_ == ParentView::Child &&
+            !language_confirm_active_ && !is_keypad_mode() && !recovery_active_ &&
+            !preview_ready_ && !success_visible_ && !result_pending_;
+    }
+
     bool automatic_detail_allowed() const
     {
-        return has_status_snapshot_ && !error_ && !bridge_->waiting && parent_view_ == ParentView::Child &&
-            !language_confirm_active_ && !is_keypad_mode() && !recovery_active_ &&
-            !preview_ready_ && !success_visible_ && !result_pending_ && !access_recovery_visible();
+        return child_detail_page_available() && has_status_snapshot_ && !error_ && !bridge_->waiting;
+    }
+
+    void start_manual_open()
+    {
+        if (child_detail_page_available() && (!error_ || last_request_kind_ == OverlayRequestKind::Status)) {
+            manual_open_tick_ = armGetSystemTick();
+            if (!error_) status_expanded_ = false;
+        }
+    }
+
+    void cancel_manual_open()
+    {
+        manual_open_tick_ = 0;
     }
 
     void open_automatic_detail()
@@ -290,7 +308,12 @@ public:
             return;
         }
         if (s_owner_visible && ptc_input_owner_begin_ui(&s_input_owner)) {
-            if (!restore_pending_redemption()) (void)begin_overlay_ready();
+            if (restore_pending_redemption() || !begin_overlay_ready()) cancel_manual_open();
+        }
+        if (manual_open_tick_ && !child_detail_page_available()) cancel_manual_open();
+        if (manual_open_tick_ && !bridge_->waiting) {
+            countdown_recheck_pending_ = false;
+            if (!begin_status_refresh(PTC_UI_STATUS_OTHER, true)) cancel_manual_open();
         }
         expire_usage_snapshot();
         // Parent views use a raised content top (banner hidden); re-layout the
@@ -324,20 +347,39 @@ public:
         PtcCompanionStatus status = ptc_overlay_bridge_poll(
             bridge_, elapsed_delta_ms, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
         if (status == PTC_COMPANION_PENDING) return;
+        const bool completed_open_status = active_request_kind_ == OverlayRequestKind::Status && status_for_manual_open_;
+        if (completed_open_status && !child_detail_page_available()) {
+            // A background refresh from opening must not replace an active PIN or code flow.
+            cancel_manual_open();
+            active_request_kind_ = OverlayRequestKind::None;
+            return;
+        }
+        const bool manual_open_status = completed_open_status && manual_open_tick_ &&
+            request_started_tick_ >= manual_open_tick_;
+        if (manual_open_status) cancel_manual_open();
+        const bool completing_ready = active_request_kind_ == OverlayRequestKind::OverlayReady;
         if (status == PTC_COMPANION_OK) {
-            if (active_request_kind_ == OverlayRequestKind::OverlayReady &&
-                bridge_->summary.valid && bridge_->summary.ok) {
+            if (completing_ready && bridge_->summary.valid && bridge_->summary.ok) {
                 displayed_summary_ = bridge_->summary;
                 usage_snapshot_tick_ = request_started_tick_;
                 has_status_snapshot_ = true;
                 error_ = false;
-                (void)begin_status_refresh(PTC_UI_STATUS_OVERLAY_READY);
+                // The first open already requests status after registration.
+                if (!begin_status_refresh(PTC_UI_STATUS_OVERLAY_READY, !s_automatic_detail)) cancel_manual_open();
             } else if (ptc_overlay_bridge_status_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 usage_snapshot_tick_ = request_started_tick_;
                 last_refresh_tick_ = armGetSystemTick();
                 has_status_snapshot_ = true;
                 error_ = false;
+                if (manual_open_status) {
+                    int day, second;
+                    status_expanded_ = child_status_fresh(displayed_summary_, day, second) &&
+                        ptc_overlay_detail_reason(&displayed_summary_) != PTC_REASON_NONE;
+                    status_details_focus_ = 0;
+                    details_tech_expanded_ = false;
+                    reset_page_scroll();
+                }
             } else if (ptc_overlay_bridge_preview_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 usage_snapshot_tick_ = request_started_tick_;
@@ -433,7 +475,10 @@ public:
         }
         // Check a newly received snapshot before this frame draws it, too.
         expire_usage_snapshot();
-        if (!bridge_->waiting) active_request_kind_ = OverlayRequestKind::None;
+        if (!bridge_->waiting) {
+            if (completing_ready) cancel_manual_open();
+            active_request_kind_ = OverlayRequestKind::None;
+        }
     }
 
 #include "input_pages.hpp"
@@ -520,7 +565,7 @@ public:
         ptc_overlay_input_init(input_);
     }
 
-    bool begin_status_refresh(PtcUiStatusOrigin origin = PTC_UI_STATUS_OTHER)
+    bool begin_status_refresh(PtcUiStatusOrigin origin = PTC_UI_STATUS_OTHER, bool for_manual_open = false)
     {
         if (!bridge_ || bridge_->waiting) return false;
         request_started_tick_ = armGetSystemTick();
@@ -537,6 +582,7 @@ public:
         }
         active_request_kind_ = OverlayRequestKind::Status;
         last_request_kind_ = OverlayRequestKind::Status;
+        status_for_manual_open_ = for_manual_open;
         last_elapsed_ms_ = 0;
         error_ = false;
         return true;
@@ -562,12 +608,14 @@ public:
 
     void open_status_details()
     {
+        cancel_manual_open();
         status_expanded_ = true;
         (void)maybe_refresh_on_nav(PTC_UI_STATUS_OTHER);
     }
 
     void close_status_details()
     {
+        cancel_manual_open();
         status_expanded_ = false;
         reset_page_scroll();
         (void)maybe_refresh_on_nav(PTC_UI_STATUS_RESUME);
@@ -1233,6 +1281,8 @@ private:
     OverlayRequestKind active_request_kind_ = OverlayRequestKind::None;
     OverlayRequestKind last_request_kind_ = OverlayRequestKind::None;
     unsigned int request_nonce_ = 0;
+    u64 manual_open_tick_ = 0;
+    bool status_for_manual_open_ = false;
     u64 request_started_tick_ = 0;
     u64 usage_snapshot_tick_ = 0;
     u64 last_input_tick_ = 0;
@@ -1505,13 +1555,18 @@ public:
         next_config_ms_ = 0;
         s_display_clock.sampled = false;
         s_owner_visible = true;
-        if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) hide();
-        if (s_owner_visible && s_automatic_detail && gui_) gui_->open_automatic_detail();
+        if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) {
+            hide();
+        } else if (gui_) {
+            if (s_automatic_detail) gui_->open_automatic_detail();
+            else gui_->start_manual_open();
+        }
         ptc_overlay_resource_snapshot("show", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
     }
 
     void onHide() override
     {
+        if (gui_) gui_->cancel_manual_open();
         ptc_overlay_hidden_timing_init(&hidden_timing_);
         next_detail_poll_ms_ = 0;
         s_owner_visible = false;

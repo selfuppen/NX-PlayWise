@@ -728,17 +728,28 @@ static void test_reason_detail_transport(void)
             summary.access_recovery_required, "real restricted status projects its access-recovery marker");
         check_true(ptc_overlay_detail_matches(&detail, &summary),
             "parsed restricted child detail can match all four offered reasons");
+        check_true(ptc_overlay_detail_reason(&summary) == detail.reason,
+            "opening manually can use the confirmed restriction from the status reply");
+        summary.restricted_now = 0;
+        check_true(ptc_overlay_detail_reason(&summary) == PTC_REASON_NONE,
+            "released status stays on the child overview even if a reason flag remains");
+        summary.restricted_now = -1;
+        check_true(ptc_overlay_detail_reason(&summary) == PTC_REASON_NONE,
+            "unknown restriction stays on the child overview");
+        summary.restricted_now = 1;
         ++detail.instance;
         check_true(!ptc_overlay_detail_matches(&detail, &summary), "parsed wrong instance cannot ACK");
         --detail.instance;
         summary.disable_flag_present = true;
-        check_true(!ptc_overlay_detail_matches(&detail, &summary), "disabled status cannot ACK");
+        check_true(ptc_overlay_detail_reason(&summary) == PTC_REASON_NONE &&
+            !ptc_overlay_detail_matches(&detail, &summary), "disabled status cannot open or ACK details");
         summary.disable_flag_present = false;
         summary.temporary_unlocked_available = false;
         check_true(!ptc_overlay_detail_matches(&detail, &summary), "unknown official unlock cannot ACK");
         state.temporary_unlocked = true;
         check_true(ptc_result_ok_json(wire, sizeof(wire), "detail-unlocked", "status", "release",
             false, &state, 1001) == 0 && ptc_companion_result_summary_parse(wire, &summary) &&
+            ptc_overlay_detail_reason(&summary) == PTC_REASON_NONE &&
             !ptc_overlay_detail_matches(&detail, &summary), "parsed official unlock cannot ACK");
     }
     free(mem);
