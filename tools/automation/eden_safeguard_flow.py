@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import time
 
 from tools.automation.eden_main_flow import MainFlow
 from tools.automation.eden_runner import decode, digest, read, require, save
@@ -47,10 +46,12 @@ def verify_safeguards(output: Path) -> None:
 
     before, changed, failed = (ui(f"quota-{phase}") for phase in ("before", "changed", "failed"))
     quota = read(output / "assertions/quota_recheck.json")
-    require(before["played_minutes"] >= 1 and changed["played_minutes"] > before["played_minutes"] and
-            all(row["overlay"] == 3 and row["quota_draft_minutes"] == 1 and
-                row["confirm_hold_required"] is True and row["confirm_hold_progress"] == 0
-                for row in (before, changed, failed)) and
+    minutes = quota["draft_minutes"]
+    require(0 <= before["played_minutes"] < minutes <= changed["played_minutes"] and
+            before["confirm_hold_required"] is False and
+            changed["confirm_hold_required"] is True and failed["confirm_hold_required"] is True and
+            all(row["overlay"] == 3 and row["quota_draft_minutes"] == minutes and
+                row["confirm_hold_progress"] == 0 for row in (before, changed, failed)) and
             changed["quota_refresh_failed"] is False and failed["quota_refresh_failed"] is True and
             quota["rules_before"] == quota["rules_after_change"] == quota["rules_after_failure"],
             "quota confirmation or failed refresh evidence differs")
@@ -58,7 +59,7 @@ def verify_safeguards(output: Path) -> None:
     writes = [row for row in writes if row["type"] == "set_today_limit"]
     require(len(writes) == 1 and writes[0]["request_id"] == quota["write_id"] and
             writes[0]["status"] == "ok" and
-            read(output / "app-final/rules.json")["today_override_minutes"] == 1,
+            read(output / "app-final/rules.json")["today_override_minutes"] == minutes,
             "fresh held quota confirmation did not persist")
 
 
@@ -97,10 +98,12 @@ class SafeguardFlow(MainFlow):
         self.capture("pin-read-only")
         self.action(button="B")
         self.wait_ui(view=0, overlay=0)
-        deadline = min(self.deadline, time.monotonic() + 35)
-        while time.time() <= before["cooldown_until"] and time.monotonic() < deadline:
-            time.sleep(0.25)
-        self.pin_open()
+        self.action(button="Minus")
+        entry = self.wait_ui(view=0, waiting=False)["ui"]
+        if entry["overlay"] == 13:
+            self.wait_ui(overlay=13, auth_cooldown_seconds=0)
+            self.action(button="A")
+        self.wait_ui(overlay=22, pin_length=0)
         self.enter_pin("110")
         self.wait_ui(view=1, overlay=0, parent_support_only=False)
         require(self.auth_counters() == {"failed_attempts": 0, "cooldown_until": 0},
@@ -212,31 +215,31 @@ class SafeguardFlow(MainFlow):
     def quota_recheck(self) -> None:
         self.action(button="B")
         self.wait_ui(view=0, overlay=0)
-        self.page(0)
-        initial_fixture = self.quota_fixture("advance")
-        self.refresh()
-        require(not initial_fixture.exists(), "initial use marker was not consumed")
+        self.today_action(2, "disable_today_limit")
+        self.refresh(unrestricted_today=1)
+        played = self.observe()["ui"]["played_minutes"]
+        require(0 <= played < 1439, "fresh simulated use is unavailable or too high for a risk boundary")
+        minutes = played + 1
         self.action(target="card_0")
         self.wait_ui(overlay=20)
         self.action(button="L")
-        self.duration(1)
-        self.wait_ui(overlay=3, confirm_hold_required=True, quota_draft_minutes=1)
+        self.duration(minutes)
+        self.wait_ui(overlay=3, confirm_hold_required=False, quota_draft_minutes=minutes)
         baseline = digest(self.app / "rules.json")
         self.capture("quota-before")
-        played = self.observe()["ui"]["played_minutes"]
         before = self.ids()
         advance = self.quota_fixture("advance")
         self.confirm()
         self.wait_receipt("status", before)
         changed = self.wait_ui(overlay=3, waiting=False, confirm_hold_required=True, confirm_hold_progress=0)
-        require(not advance.exists() and changed["ui"]["played_minutes"] > played,
-                "held confirmation did not recheck changed simulated use")
+        require(not advance.exists() and changed["ui"]["played_minutes"] >= minutes,
+                "fresh use did not cross the draft allowance and require a held confirmation")
         self.capture("quota-changed")
         after_change = digest(self.app / "rules.json")
         failure = self.quota_fixture("fail")
         self.confirm()
         self.wait_ui(overlay=3, waiting=False, quota_refresh_failed=True,
-                     quota_draft_minutes=1, confirm_hold_progress=0)
+                     quota_draft_minutes=minutes, confirm_hold_progress=0)
         self.capture("quota-failed")
         after_failure = digest(self.app / "rules.json")
         require(not failure.exists() and baseline == after_change == after_failure and
@@ -248,7 +251,7 @@ class SafeguardFlow(MainFlow):
         result = self.wait_receipt("set_today_limit", before)
         require(result["status"] == "ok", "fresh quota confirmation did not submit")
         self.wait_ui(overlay=0, waiting=False)
-        self.checked("quota_recheck", ["changed use requires a fresh hold", "failed refresh keeps draft",
+        self.checked("quota_recheck", ["crossing the draft allowance now requires a hold", "failed refresh keeps draft",
                      "only the fresh confirmation writes"], rules_before=baseline,
                      rules_after_change=after_change, rules_after_failure=after_failure,
-                     write_id=result["request_id"])
+                     draft_minutes=minutes, write_id=result["request_id"])
