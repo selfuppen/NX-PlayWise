@@ -12,7 +12,9 @@ static PtcStorageVTable hooked;
 static const PtcStorageVTable *original;
 static int failures, writes;
 static bool interleave, blocked_during_gap;
+static unsigned runtime_stats, runtime_status_reads, slot_stats;
 static const char *RELEASE = "playwise-test+aaaaaaaaaaaa.1234567890abcdef";
+static const char *RUNTIME = "app/handover/runtime-ready.json";
 static const char *SLOT0 = "app/support/overlay-input-0123456789abcdef-0.json";
 static const char *SLOT1 = "app/support/overlay-input-0123456789abcdef-1.json";
 static const uint64_t START = UINT64_C(2000000000);
@@ -42,7 +44,7 @@ static void runtime(const char *release, const char *boot)
 {
     char text[384];
     snprintf(text, sizeof(text), "{\"profile\":\"release\",\"release_id\":\"%s\",\"boot_id\":\"%s\"}", release, boot);
-    put("app/handover/runtime-ready.json", text);
+    put(RUNTIME, text);
 }
 
 static void fixture(void)
@@ -73,6 +75,62 @@ static void change(const char *path, const char *key, cJSON *value)
     put(path, encoded);
     free(encoded);
     cJSON_Delete(root);
+}
+
+static bool count_metadata(PtcStorage *storage, const char *path, PtcStorageMetadata *out)
+{
+    if (!strcmp(path, RUNTIME)) ++runtime_stats;
+    else if (strstr(path, "/support/overlay-input-")) ++slot_stats;
+    return original->metadata(storage, path, out);
+}
+
+static PtcStorageReadResult read_runtime_status(PtcStorage *storage, const char *path, char *out, size_t size)
+{
+    PtcStorageMetadata metadata;
+    check(!strcmp(path, RUNTIME), "only the notification runtime uses read status");
+    ++runtime_status_reads;
+    if (original->read_text(storage, path, out, size)) return PTC_STORAGE_READ_OK;
+    return original->metadata(storage, path, &metadata) && metadata.type == PTC_STORAGE_ENTRY_MISSING
+        ? PTC_STORAGE_READ_MISSING : PTC_STORAGE_READ_FAILED;
+}
+
+static void test_notification_suppression_reads(void)
+{
+    fixture();
+    hooked.metadata = count_metadata;
+    runtime_stats = runtime_status_reads = slot_stats = 0;
+    check(!ptc_input_owner_suppress_notification(&reader, START) &&
+        runtime_stats == 1 && slot_stats == 2, "adapter without read status retains metadata and slot checks");
+
+    hooked.read_text_status = read_runtime_status;
+    runtime_stats = slot_stats = 0;
+    uint64_t now = START + PTC_INPUT_OWNER_POLL_NS;
+    check(!ptc_input_owner_suppress_notification(&reader, now) &&
+        runtime_status_reads == 1 && runtime_stats == 0 && slot_stats == 2,
+        "notification saves one runtime stat and still checks both slots");
+    check(!ptc_input_owner_suppress_notification(&reader, now + 1) && runtime_status_reads == 1 && slot_stats == 2,
+        "calls within the original lease polling window add no file reads");
+
+    check(ptc_input_owner_acquire(&writer, now + 2) &&
+        ptc_input_owner_confirm(&mem.storage, "app", RELEASE, "0123456789abcdef", writer.owner, now + 3) &&
+        runtime_stats == 2 && runtime_status_reads == 1, "physical ownership and ACK retain fresh runtime metadata");
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(ptc_input_owner_suppress_notification(&reader, now), "fresh visible input owner suppresses notification");
+    ptc_input_owner_release(&writer, now + 1);
+    mem.fail_read_path_contains = "runtime-ready";
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(ptc_input_owner_suppress_notification(&reader, now), "an unreadable runtime still suppresses after release");
+    mem.fail_read_path_contains = NULL;
+    put(RUNTIME, "{}");
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(ptc_input_owner_suppress_notification(&reader, now), "invalid runtime still suppresses");
+    check(original->remove_path(&mem.storage, RUNTIME), "remove runtime fixture");
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(!ptc_input_owner_suppress_notification(&reader, now), "known absence with a released lease retains recovery");
+    runtime(RELEASE, "fedcba9876543210");
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(!ptc_input_owner_suppress_notification(&reader, now) &&
+        !strcmp(reader.context.boot, "fedcba9876543210"), "next poll binds a different boot from disk");
 }
 
 int main(void)
@@ -215,7 +273,8 @@ int main(void)
     change(SLOT0, "visible", cJSON_CreateFalse());
     check(!ptc_input_owner_maintain(&writer, START + PTC_INPUT_OWNER_RENEW_NS),
           "producer cannot silently renew an unexpected released record");
+    test_notification_suppression_reads();
     if (failures) return 1;
-    puts("PASS: bounded Overlay ownership, atomic-gap protection, failure closure and NRO neutral drain");
+    puts("PASS: bounded Overlay ownership, notification runtime read, atomic-gap protection and NRO neutral drain");
     return 0;
 }

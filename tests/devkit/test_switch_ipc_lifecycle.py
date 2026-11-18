@@ -196,7 +196,7 @@ def main() -> None:
             "hidden suppression and visible entry must skip journal probes")
     require(re.search(r"bool reason_suppressed = reason_preferences\.enabled && !reason_stopping &&\s+"
                       r"reason_sample\.reliable && reason_sample\.restricted &&\s+"
-                      r"ptc_input_owner_block\(&reason_owner, reason_ns, false\);", sysmodule) is not None,
+                      r"ptc_input_owner_suppress_notification\(&reason_owner, reason_ns\);", sysmodule) is not None,
             "the backend must probe the notification input owner only for reliable restrictions")
     require(hidden.index("ms < next_detail_poll_ms_") < hidden.index("ms >= next_config_ms_") and
             "next_detail_poll_ms_ = ms + PTC_OVERLAY_HIDDEN_DETAIL_MS;" in hidden and

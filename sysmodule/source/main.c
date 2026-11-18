@@ -382,7 +382,7 @@ int main(int argc, char **argv)
         PtcClockSnapshot reason_clock = time_provider.provider.vtable->now(&time_provider.provider);
         bool reason_suppressed = reason_preferences.enabled && !reason_stopping &&
             reason_sample.reliable && reason_sample.restricted &&
-            ptc_input_owner_block(&reason_owner, reason_ns, false);
+            ptc_input_owner_suppress_notification(&reason_owner, reason_ns);
         ptc_reason_notification_tick(&reason_notification, &reason_sample, reason_ns / 1000000,
             reason_clock.unix_seconds, reason_preferences.enabled, reason_suppressed, reason_stopping,
             reason_preferences.language);

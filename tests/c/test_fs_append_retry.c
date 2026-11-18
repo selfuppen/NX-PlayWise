@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include "../../platform/switch/fs_storage.h"
 
@@ -21,7 +22,7 @@ FILE *ptc_test_fopen(const char *name, const char *mode)
         assert(strcmp(name, expected) == 0);
         return fopen(name, mode);
     }
-    assert(strcmp(name, path) == 0 && strcmp(mode, "ab") == 0);
+    assert(strcmp(name, path) == 0 && (!strcmp(mode, "ab") || !strcmp(mode, "rb")));
     ++opens;
     if (open_failures) { --open_failures; errno = open_error; return NULL; }
     return fopen(name, mode);
@@ -136,6 +137,29 @@ int main(void)
     assert(storage->vtable->write_text_atomic(storage, path, "created") && commits == 1);
     contents("created");
     assert(remove(path) == 0 && rmdir(parent) == 0);
-    puts("PASS append retry bounds and durable/transient replacement");
+
+    path = "build/host/fs-append-retry.txt";
+    reset();
+    char text[16];
+    assert(storage->vtable->read_text_status(storage, path, text, sizeof(text)) == PTC_STORAGE_READ_MISSING);
+    assert(opens == 1 && closes == 0);
+    assert(storage->vtable->write_text_atomic(storage, path, "ready"));
+    assert(storage->vtable->read_text_status(storage, path, text, sizeof(text)) == PTC_STORAGE_READ_OK);
+    assert(opens == 2 && !strcmp(text, "ready"));
+    assert(storage->vtable->read_text_status(storage, path, text, 5) == PTC_STORAGE_READ_FAILED);
+    open_failures = 1; open_error = ENOENT;
+    assert(storage->vtable->read_text_status(storage, path, text, sizeof(text)) == PTC_STORAGE_READ_FAILED);
+    open_failures = 1; open_error = EIO;
+    assert(storage->vtable->read_text_status(storage, path, text, sizeof(text)) == PTC_STORAGE_READ_FAILED);
+    close_failure = true;
+    assert(storage->vtable->read_text_status(storage, path, text, sizeof(text)) == PTC_STORAGE_READ_FAILED);
+    assert(remove(path) == 0);
+    path = parent;
+    close_failure = false;
+    assert(mkdir(path, 0777) == 0);
+    open_failures = 1; open_error = ENOENT;
+    assert(storage->vtable->read_text_status(storage, path, text, sizeof(text)) == PTC_STORAGE_READ_FAILED);
+    assert(rmdir(path) == 0);
+    puts("PASS append retry bounds, durable/transient replacement, and bounded read status");
     return 0;
 }

@@ -28,19 +28,17 @@ static void ensure_parent_dirs(const char *path)
     }
 }
 
-static bool fs_read_text(PtcStorage *storage, const char *path, char *out, size_t out_size)
+static PtcStorageReadResult fs_read_text_result(const char *path, char *out, size_t out_size)
 {
     FILE *file;
     size_t read_size;
     int extra;
-    (void)storage;
-
     if (!out || out_size == 0) {
-        return false;
+        return PTC_STORAGE_READ_FAILED;
     }
     file = fopen(path, "rb");
     if (!file) {
-        return false;
+        return errno == ENOENT ? PTC_STORAGE_READ_MISSING : PTC_STORAGE_READ_FAILED;
     }
     read_size = fread(out, 1, out_size - 1, file);
     extra = fgetc(file);
@@ -49,11 +47,17 @@ static bool fs_read_text(PtcStorage *storage, const char *path, char *out, size_
         if (fclose(file) != 0) failed = true;
         if (failed || extra != EOF || memchr(out, '\0', read_size) != NULL) {
             out[0] = '\0';
-            return false;
+            return PTC_STORAGE_READ_FAILED;
         }
     }
     out[read_size] = '\0';
-    return true;
+    return PTC_STORAGE_READ_OK;
+}
+
+static bool fs_read_text(PtcStorage *storage, const char *path, char *out, size_t out_size)
+{
+    (void)storage;
+    return fs_read_text_result(path, out, out_size) == PTC_STORAGE_READ_OK;
 }
 
 static bool fs_replace_text(const char *path, const char *text)
@@ -226,6 +230,16 @@ static bool fs_metadata(PtcStorage *storage, const char *path, PtcStorageMetadat
     return true;
 }
 
+static PtcStorageReadResult fs_read_text_status(PtcStorage *storage, const char *path, char *out, size_t out_size)
+{
+    PtcStorageReadResult result = fs_read_text_result(path, out, out_size);
+    if (result != PTC_STORAGE_READ_MISSING) return result;
+    /* A read-only open may report a file-type mismatch as not found. */
+    PtcStorageMetadata metadata;
+    return fs_metadata(storage, path, &metadata) && metadata.type == PTC_STORAGE_ENTRY_MISSING
+        ? PTC_STORAGE_READ_MISSING : PTC_STORAGE_READ_FAILED;
+}
+
 static bool fs_list_entries(PtcStorage *storage, const char *dir, PtcStorageEntry *entries, size_t max, size_t *count)
 {
     DIR *handle;
@@ -314,6 +328,7 @@ static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_remove_tree,
     fs_read_lines,
     fs_write_text_transient,
+    fs_read_text_status,
 };
 
 void ptc_fs_storage_init(PtcFsStorage *fs)

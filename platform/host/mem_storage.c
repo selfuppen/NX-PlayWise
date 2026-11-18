@@ -354,6 +354,7 @@ static const PtcStorageVTable MEM_STORAGE_VTABLE = {
     mem_remove_tree,
     mem_read_lines,
     NULL,
+    NULL,
 };
 
 void ptc_mem_storage_init(PtcMemStorage *mem)

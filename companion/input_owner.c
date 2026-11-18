@@ -73,16 +73,24 @@ static bool context_init(PtcInputOwnerContext *c, PtcStorage *storage,
 }
 
 /* -2 is known missing, -1 unknown, 0 another candidate, 1 this candidate. */
-static int runtime(PtcInputOwnerContext *c, char boot[17])
+static int runtime(PtcInputOwnerContext *c, char boot[17], bool use_read_status)
 {
     char text[768];
     cJSON *value;
     PtcStorageMetadata metadata;
     int result;
-    if (!c->storage || !c->storage->vtable->metadata(c->storage, c->runtime_path, &metadata)) return -1;
-    if (metadata.type == PTC_STORAGE_ENTRY_MISSING) return -2;
-    if (metadata.type != PTC_STORAGE_ENTRY_FILE ||
-        !c->storage->vtable->read_text(c->storage, c->runtime_path, text, sizeof(text))) return -1;
+    if (!c->storage) return -1;
+    const PtcStorageVTable *io = c->storage->vtable;
+    if (use_read_status && io->read_text_status) {
+        PtcStorageReadResult read = io->read_text_status(c->storage, c->runtime_path, text, sizeof(text));
+        if (read == PTC_STORAGE_READ_MISSING) return -2;
+        if (read != PTC_STORAGE_READ_OK) return -1;
+    } else {
+        if (!io->metadata(c->storage, c->runtime_path, &metadata)) return -1;
+        if (metadata.type == PTC_STORAGE_ENTRY_MISSING) return -2;
+        if (metadata.type != PTC_STORAGE_ENTRY_FILE ||
+            !io->read_text(c->storage, c->runtime_path, text, sizeof(text))) return -1;
+    }
     value = object(text);
     if (!value || !hex(string(value, "boot_id"), 16) || strcmp(string(value, "profile"), "release")) {
         cJSON_Delete(value); return -1;
@@ -162,7 +170,7 @@ bool ptc_input_owner_acquire(PtcInputOwnerWriter *w, uint64_t now)
     Lease lease;
     if (!w || !w->instance_ns || !now || now <= w->epoch_ns) return false;
     if (w->active) return ptc_input_owner_maintain(w, now);
-    if (runtime(&w->context, boot) != 1 || !bind(&w->context, boot)) return false;
+    if (runtime(&w->context, boot, false) != 1 || !bind(&w->context, boot)) return false;
     for (slot = 0; slot < 2; ++slot) {
         int found = read_lease(&w->context, slot, &lease);
         if (found < 0 || (found && (lease.issued > now || (lease.visible && lease.expires > now)))) return false;
@@ -188,7 +196,7 @@ bool ptc_input_owner_maintain(PtcInputOwnerWriter *w, uint64_t now)
     if (now < w->last_ns || now >= w->expires_ns) goto failed;
     w->last_ns = now;
     if (now < w->renew_ns) return true;
-    if (runtime(&w->context, boot) != 1 || strcmp(boot, w->context.boot)) goto failed;
+    if (runtime(&w->context, boot, false) != 1 || strcmp(boot, w->context.boot)) goto failed;
     for (slot = 0; slot < 2; ++slot)
         if (read_lease(&w->context, slot, &lease) != 1 || strcmp(lease.owner, w->owner) || !lease.visible) goto failed;
     if (!write_lease(w, w->next_slot, now, true)) goto failed;
@@ -206,7 +214,7 @@ bool ptc_input_owner_accept(PtcInputOwnerWriter *w, uint64_t now)
 {
     char boot[17];
     if (!ptc_input_owner_maintain(w, now)) return false;
-    if (runtime(&w->context, boot) == 1 && !strcmp(boot, w->context.boot)) return true;
+    if (runtime(&w->context, boot, false) == 1 && !strcmp(boot, w->context.boot)) return true;
     w->active = false;
     w->failed = true;
     return false;
@@ -250,7 +258,7 @@ bool ptc_input_owner_confirm(PtcStorage *storage, const char *root, const char *
     char current[17];
     Lease leases[2];
     if (!hex(owner, 32) || !context_init(&c, storage, root, release) ||
-        runtime(&c, current) != 1 || strcmp(current, boot) || !bind(&c, boot)) return false;
+        runtime(&c, current, false) != 1 || strcmp(current, boot) || !bind(&c, boot)) return false;
     int results[2];
     for (unsigned i = 0; i < 2; ++i) {
         results[i] = read_lease(&c, i, &leases[i]);
@@ -262,7 +270,7 @@ bool ptc_input_owner_confirm(PtcStorage *storage, const char *root, const char *
         leases[newest].visible && now < leases[newest].expires;
 }
 
-bool ptc_input_owner_block(PtcInputOwnerReader *r, uint64_t now, bool non_neutral)
+static bool owner_block(PtcInputOwnerReader *r, uint64_t now, bool non_neutral, bool use_read_status)
 {
     char boot[17];
     unsigned slot;
@@ -274,7 +282,7 @@ bool ptc_input_owner_block(PtcInputOwnerReader *r, uint64_t now, bool non_neutra
     if (!non_neutral && now < r->next_poll_ns) return r->blocked || r->needs_neutral;
     r->last_ns = now;
     r->next_poll_ns = now <= UINT64_MAX - PTC_INPUT_OWNER_POLL_NS ? now + PTC_INPUT_OWNER_POLL_NS : now;
-    binding = runtime(&r->context, boot);
+    binding = runtime(&r->context, boot, use_read_status);
     if (binding == -1) unknown = true;
     if (binding == 1 && (!r->context.bound || strcmp(boot, r->context.boot))) {
         if (!bind(&r->context, boot)) unknown = true;
@@ -301,4 +309,14 @@ bool ptc_input_owner_block(PtcInputOwnerReader *r, uint64_t now, bool non_neutra
     if (newest.owner[0]) snprintf(r->acknowledged_owner, sizeof(r->acknowledged_owner), "%s", newest.owner);
     r->blocked = r->needs_neutral = false;
     return false;
+}
+
+bool ptc_input_owner_block(PtcInputOwnerReader *r, uint64_t now, bool non_neutral)
+{
+    return owner_block(r, now, non_neutral, false);
+}
+
+bool ptc_input_owner_suppress_notification(PtcInputOwnerReader *r, uint64_t now)
+{
+    return owner_block(r, now, false, true);
 }

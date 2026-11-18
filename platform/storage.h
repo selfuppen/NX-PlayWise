@@ -30,6 +30,12 @@ typedef enum {
     PTC_STORAGE_ENTRY_MISSING = 3,
 } PtcStorageEntryType;
 
+typedef enum {
+    PTC_STORAGE_READ_FAILED = 0,
+    PTC_STORAGE_READ_OK,
+    PTC_STORAGE_READ_MISSING,
+} PtcStorageReadResult;
+
 typedef struct {
     char name[128];
     PtcStorageEntryType type;
@@ -61,6 +67,8 @@ typedef struct {
                        PtcStorageLineVisitor visit, void *ctx);
     /* Optional replace for expiring hints that can be lost on interruption. */
     bool (*write_text_transient)(PtcStorage *storage, const char *path, const char *text);
+    /* Optional bounded read that distinguishes confirmed absence from I/O errors. */
+    PtcStorageReadResult (*read_text_status)(PtcStorage *storage, const char *path, char *out, size_t out_size);
 } PtcStorageVTable;
 
 struct PtcStorage {
