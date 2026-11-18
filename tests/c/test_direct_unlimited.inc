@@ -1,5 +1,97 @@
 /* Production policy regression: 1952 counts usable console time without a
    synthetic quota. Legacy result parsing remains compatible with old reports. */
+static void test_direct_dock_daily_reason_projection(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state, before;
+    PtcResultState result;
+    PtcCompanionResultSummary summary;
+    PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+    PtcOperationModeProvider provider = {test_operation_mode, &mode};
+    char json[8192];
+    seed_direct_grant(&f, 30 * PTC_USAGE_MINUTE_NS, 1);
+    f.core.operation_mode_provider = &provider;
+    expect(load_rules(&f.core, &rules) && load_state(&f.core, &state),
+        "load independent daily and dock projection fixture");
+    rules.dock_policy.force_docked = true;
+    state.dock_enforced = state.dock_tracking_started = true;
+    state.dock_day_index = f.clock.snapshot.day_index - 12;
+    state.dock_usage_counter = (PtcUsageCounter){PTC_USAGE_SOURCE_PCTL_1952, true,
+        state.dock_day_index, 100 * PTC_USAGE_MINUTE_NS, f.clock.snapshot.unix_seconds - 12 * 86400};
+    state.dock_baseline_known = state.dock_usage_known = false;
+    state.undocked_used_ns = 10 * PTC_USAGE_MINUTE_NS;
+    before = state;
+    f.pctl.status.limited_today = false;
+    f.pctl.status.blocked_today = true;
+    f.pctl.status.configured_minutes = 0;
+    f.pctl.status.play_timer_enabled = false;
+    unsigned writes = f.pctl.apply_target_calls;
+    unsigned starts = f.pctl.start_timer_calls;
+    result_state_from_pctl(&result, f.clock.snapshot.day_index, &f.pctl.status);
+    fill_extended_result_state(&f.core, &result, &rules, &state, &f.pctl.status, f.clock.snapshot);
+    expect(result.daily_restriction_active && result.dock_restriction_active && !result.undocked_usage_available,
+        "fresh daily exhaustion survives an unknown multi-day non-TV interval");
+    expect(memcmp(&state, &before, sizeof(state)) == 0 && f.pctl.apply_target_calls == writes &&
+        f.pctl.start_timer_calls == starts, "reason projection preserves usage, PCTL target and timer");
+    expect(ptc_result_ok_json(json, sizeof(json), "daily-dock-projection", "status", "release", true,
+        &result, f.clock.snapshot.unix_seconds) == 0 && ptc_companion_result_summary_parse(json, &summary) &&
+        summary.daily_restriction_active && summary.dock_restriction_active,
+        "both restriction reasons survive the ordinary result and Companion parser");
+
+    PtcPctlStatus valid = f.pctl.status;
+    PtcPctlStatus observations[10];
+    const char *labels[10] = {
+        "missing total does not reuse non-TV baseline for daily exhaustion",
+        "failed total does not reuse non-TV baseline for daily exhaustion",
+        "previous-day total cannot populate daily exhaustion",
+        "next-day total cannot populate daily exhaustion",
+        "expired total cannot populate daily exhaustion",
+        "future capture cannot populate daily exhaustion",
+        "missing capture cannot populate daily exhaustion",
+        "direct epoch never falls back after unsupported read",
+        "out-of-range total cannot populate daily exhaustion",
+        "positive subminute balance does not count as exhausted"
+    };
+    for (unsigned i = 0; i < 10; ++i) observations[i] = valid;
+    observations[0].usage_available = false;
+    observations[1].usage_result = 1;
+    --observations[2].usage_day_index;
+    ++observations[3].usage_day_index;
+    observations[4].usage_captured_at -= 11;
+    ++observations[5].usage_captured_at;
+    observations[6].usage_captured_at = 0;
+    observations[7].usage_supported = false;
+    observations[8].usage_ns = (uint64_t)INT64_MAX + 1;
+    observations[9].usage_ns = PTC_USAGE_MINUTE_NS - 1;
+    state.dock_day_index = f.clock.snapshot.day_index;
+    state.dock_baseline_known = true;
+    state.dock_last_used_ns = 100 * PTC_USAGE_MINUTE_NS;
+    for (unsigned i = 0; i < 10; ++i) {
+        result_state_from_pctl(&result, f.clock.snapshot.day_index, &observations[i]);
+        fill_extended_result_state(&f.core, &result, &rules, &state, &observations[i], f.clock.snapshot);
+        expect(!result.daily_restriction_active && result.dock_restriction_active, labels[i]);
+    }
+    valid.usage_ns = PTC_USAGE_MINUTE_NS;
+    valid.usage_captured_at -= 10;
+    result_state_from_pctl(&result, f.clock.snapshot.day_index, &valid);
+    fill_extended_result_state(&f.core, &result, &rules, &state, &valid, f.clock.snapshot);
+    expect(result.daily_restriction_active, "exact daily threshold and existing ten-second freshness boundary accepted");
+    for (unsigned i = 0; i < 7; ++i) rules.week[i].mode = PTC_RULE_MODE_UNLIMITED;
+    fill_extended_result_state(&f.core, &result, &rules, &state, &valid, f.clock.snapshot);
+    expect(!result.daily_restriction_active && result.dock_restriction_active,
+        "unlimited daily rule retains only the remaining dock reason");
+    for (unsigned i = 0; i < 7; ++i) rules.week[i].mode = PTC_RULE_MODE_LIMIT;
+    valid.usage_supported = false;
+    state.dock_usage_counter.source = 0;
+    fill_extended_result_state(&f.core, &result, &rules, &state, &valid, f.clock.snapshot);
+    expect(result.daily_restriction_active, "legacy known daily baseline preserves its existing exhaustion projection");
+    state.dock_baseline_known = false;
+    fill_extended_result_state(&f.core, &result, &rules, &state, &valid, f.clock.snapshot);
+    expect(!result.daily_restriction_active, "legacy unknown baseline remains unconfirmed");
+    free(f.mem);
+}
+
 static void test_direct_unlimited_lifecycle(void)
 {
     Fixture f;

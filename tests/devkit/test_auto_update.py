@@ -740,6 +740,94 @@ def test_capture_stop_proof():
             else: raise AssertionError('unsafe completed stop accepted: ' + failure)
 
 
+def restart_gap_fixture():
+    from test_pctl_standard_evidence import CONFIG, raw_rows
+    config = dict(CONFIG, duration_s=7200)
+    rows = raw_rows()
+    rows[0].update(duration_ns="7200000000000", append_diagnostics_version=1)
+    rows[1]["sample_index"] = 1
+    rows.insert(2, dict(rows[1], sample_index=2, begin_ns="401000000000", end_ns="401100000000",
+                        unix_before=1791915260, unix_after=1791915260))
+    rows[-1].update(samples=2, save_failures=0, last_failed_sample=0, sample_open_retries=0,
+                    last_save_errno=0, last_save_result=0, last_save_operation="none")
+    target = {"profile": "release", "title_id": "4200000000BD2300", "ipc_version": 2,
+              "pid": 2, "boot_id": rows[0]["boot_id"], "release_id": config["release_id"]}
+    return config, rows, target
+
+
+def test_capture_restart_stop_proof():
+    from test_pctl_standard_evidence import encode
+    config, rows, target = restart_gap_fixture()
+    raw = encode(rows)
+    pulls = [(0, raw), (7_000_000_000, raw), (14_000_000_000, raw)]
+    with mock.patch.object(update, "Device", side_effect=AssertionError("pure evidence only")):
+        proof = update.capture_restart_stop_proof(config=config, target=target, pulls=pulls)
+        require(proof["recorder_stopped"] is True and proof["complete_stream_stop_proof"] is False and
+                proof["historical_time_gaps"] and proof["qualified"] is False, "time gap is retained, not qualified")
+        require(proof == json.loads(json.dumps(proof)) ==
+                update.capture_restart_stop_proof(config=config, target=target, pulls=pulls), "restart proof readback")
+        try: update.capture_stop_proof(config=config, target=target, pulls=pulls)
+        except update.UpdateError: pass
+        else: raise AssertionError("formal complete-stream stop must still reject the gap")
+        for failure in ("no_sequence", "missing_row", "append_failure", "invalid", "no_stop", "tail",
+                        "abnormal", "changing", "short_interval", "wrong_boot", "wrong_commit", "wrong_run"):
+            changed, subject, settings = deepcopy(rows), deepcopy(target), deepcopy(config)
+            if failure == "no_sequence":
+                del changed[0]["append_diagnostics_version"]
+                for row in changed[1:-1]: del row["sample_index"]
+            elif failure == "missing_row": del changed[1]
+            elif failure == "append_failure":
+                changed[-1].update(save_failures=1, last_failed_sample=1, last_save_errno=5, last_save_operation="write")
+            elif failure == "invalid": changed[1]["valid"] = False
+            elif failure == "no_stop": changed.pop()
+            elif failure == "abnormal": changed[-1]["reason"] = "failure_limit"
+            elif failure == "wrong_boot": subject["boot_id"] = "d" * 16
+            elif failure == "wrong_commit": settings["commit"] = "d" * 40
+            elif failure == "wrong_run": settings["run_id"] = "d" * 32
+            data = encode(changed) + (b"{" if failure == "tail" else b"")
+            supplied = [(at, data) for at, _ in pulls]
+            if failure == "changing": supplied[-1] = (pulls[-1][0], raw + b" ")
+            if failure == "short_interval": supplied[1] = (1, data)
+            try: update.capture_restart_stop_proof(config=settings, target=subject, pulls=supplied)
+            except (update.UpdateError, ValueError): pass
+            else: raise AssertionError("unsafe restart cessation accepted: " + failure)
+
+
+def test_restart_preflight_with_historical_gap():
+    from test_pctl_standard_evidence import encode
+    for changing in (False, True):
+        with tempfile.TemporaryDirectory() as temporary:
+            out, files = restart_prepared(Path(temporary))
+            console = RestartConsole(files)
+            config, rows, _ = restart_gap_fixture()
+            rows[0].update(release_id="new", boot_id="a" * 16,
+                           commit=console.json(update.APP + "/build.json")["commit"])
+            for row in rows[1:-1]: row["boot_id"] = "a" * 16
+            path = update.APP + "/support/usage-evidence-" + config["run_id"] + "-" + "a" * 16 + ".jsonl"
+            console.files[path] = encode(rows)
+            read = console.read
+            count = 0
+
+            def read_with_change(name):
+                nonlocal count
+                if name == path:
+                    count += 1
+                    if changing and count >= 2: return read(name) + b" "
+                return read(name)
+
+            with mock.patch.object(console, "read", side_effect=read_with_change):
+                if changing:
+                    try: run_case(console, out, Clock())
+                    except (update.UpdateError, ValueError): pass
+                    else: raise AssertionError("changing stop must block restart")
+                    require(not console.actions and not console.writes, "uncertain stop sends no input or writes")
+                else:
+                    require(run_case(console, out, Clock())["phase"] == "ready_for_tests", "safe fresh run after historical gap")
+                    proofs = list((out / "source-capture").glob("*.stop-proof.json"))
+                    require(len(proofs) == 1 and json.loads(proofs[0].read_bytes())["proof"]["historical_time_gaps"],
+                            "preflight persists the unqualified old gap")
+
+
 def main():
     console = Console()
     with mock.patch.object(console, "nlst", side_effect=ftplib.error_temp("450 No such file or directory")):
@@ -764,6 +852,8 @@ def main():
     test_restored_today_rules()
     test_update_recovery_without_host_target()
     test_capture_stop_proof()
+    test_capture_restart_stop_proof()
+    test_restart_preflight_with_historical_gap()
     test_success_and_offline_report()
     test_diagonal_pin_and_invalid_input()
     test_missing_ack_never_replays()

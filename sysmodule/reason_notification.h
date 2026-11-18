@@ -7,6 +7,26 @@
 #include "../companion/ui_language.h"
 
 typedef struct {
+    bool available;
+    bool repeat;
+    bool ready_read_attempted;
+    bool ready_read_ok;
+    bool ready_release_match;
+    bool ready_boot_match;
+    bool ready_fresh;
+    bool clock_budget_available;
+    bool sequence_available;
+    unsigned failures;
+    uint16_t day;
+    PtcRestrictionReason reason;
+    uint64_t instance;
+    uint64_t ms;
+    uint64_t ready_ui_instance;
+    uint64_t ready_issued_ms;
+    uint64_t ready_expires_ms;
+} PtcReasonDetailDecision;
+
+typedef struct {
     PtcReasonEvent event;
     PtcStorage *storage;
     char root[128];
@@ -23,9 +43,12 @@ typedef struct {
     bool blocked;
     bool pending;
     bool detail_pending;
+    uint64_t ready_wait_deadline_ms;
     uint64_t detail_sequence;
     unsigned detail_failures;
     PtcReasonDetail detail;
+    PtcReasonDetailDecision detail_decision;
+    bool detail_decision_dirty;
     PtcUltrahandConfig external;
     char state[40];
 } PtcReasonNotification;

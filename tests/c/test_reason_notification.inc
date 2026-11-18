@@ -2,6 +2,7 @@
 #include "../../companion/notification_text.h"
 #include "../../companion/input_owner.h"
 #include "../../companion/overlay/detail_status.h"
+#include <limits.h>
 
 static void test_notification_dependency(void)
 {
@@ -328,12 +329,190 @@ static void test_reason_idle_cost(void)
     free(mem);
 }
 
+static void test_reason_ready_renewal_wait(void)
+{
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    check_true(mem != NULL, "ready renewal fixture allocation"); if (!mem) return;
+    PtcStorage *storage = &mem->storage;
+    for (int mode = 0; mode < 12; ++mode) {
+        ptc_mem_storage_init(mem);
+        storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+        PtcReasonNotification n;
+        PtcReasonObservation s = reason_sample(1, PTC_REASON_BEDTIME, 7, 100);
+        PtcReasonDetail lease = {0}, offer;
+        snprintf(lease.release, sizeof(lease.release), "release1");
+        snprintf(lease.boot, sizeof(lease.boot), "0123456789abcdef");
+        lease.ui_instance = 900; lease.issued_ms = 8500; lease.expires_ms = 10000;
+        check_true(ptc_reason_detail_write(storage, "app", "ready", &lease), "write a just-expired neutral lease");
+        ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+        notify_tick(&n, &s, 10000, 100, true);
+        check_true(n.ready_wait_deadline_ms == 10500 && n.event.dirty &&
+            !n.event.handled_valid && !n.pending && !n.detail_pending && !n.sequence && !n.detail_sequence &&
+            !storage->vtable->exists(storage, "app/support/reason-notification.json"),
+            "renewal wait retains the event without an offer, toast, consumption or diagnostic write");
+        s.revision++;
+        if (mode == 1) {
+            notify_tick(&n, &s, 10250, 100, true);
+            check_true(n.ready_wait_deadline_ms == 10500 && !n.pending && !n.detail_pending,
+                "a new policy revision cannot extend the renewal deadline");
+            s.revision++;
+            notify_tick(&n, &s, 10500, 100, true);
+            check_true(!n.ready_wait_deadline_ms && n.pending && !n.detail_pending &&
+                n.sequence == 1 && n.detail_sequence == 0 && n.event.next_publish_ms == 20500,
+                "the exact deadline takes one fresh brief fallback and starts normal rate limiting");
+            notify_tick(&n, &s, 10750, 100, true);
+            check_true(n.sequence == 1 && !n.detail_sequence, "expired readiness never causes repeated attempts");
+            continue;
+        }
+        if (mode >= 2 && mode <= 5) {
+            if (mode == 4) s.reliable = false;
+            ptc_reason_notification_tick(&n, &s, 10250, 100, mode != 3, mode == 2, mode == 5,
+                PTC_UI_LANGUAGE_SIMPLIFIED);
+            check_true(!n.ready_wait_deadline_ms && !n.pending && !n.detail_pending &&
+                !n.sequence && !n.detail_sequence,
+                "visible owner, disable, unknown observation and stopping cancel the wait");
+            if (mode == 2) {
+                lease.issued_ms = 10300; lease.expires_ms = 11800;
+                ptc_reason_detail_write(storage, "app", "ready", &lease);
+                notify_tick(&n, &s, 10500, 100, true);
+                check_true(!n.pending && !n.detail_pending, "leaving visible details never replays the cancelled wait");
+            }
+            continue;
+        }
+        if (mode == 7) {
+            notify_tick(&n, &s, 9999, 99, true);
+            check_true(!n.ready_wait_deadline_ms && !n.pending && !n.detail_pending,
+                "monotonic and wall rollback cancel readiness waiting");
+            continue;
+        }
+        uint64_t offer_ms = 10250;
+        if (mode == 6) {
+            s.reason = PTC_REASON_EYE; s.instance = 9;
+            notify_tick(&n, &s, 10250, 100, true);
+            check_true(n.ready_wait_deadline_ms == 10750 && !n.pending && !n.detail_pending,
+                "a different restriction instance gets its own bounded wait");
+            offer_ms = 10500;
+        } else if (mode == 8) {
+            s.captured_at = 98;
+            notify_tick(&n, &s, 10250, 100, true);
+            notify_tick(&n, &s, 10500, 100, true);
+            check_true(n.ready_wait_deadline_ms == 10500 && !n.pending && !n.detail_pending,
+                "an aged observation cannot publish or renew the fixed wait");
+            s.revision++; s.captured_at = 100;
+            offer_ms = 11000;
+        } else if (mode == 9) {
+            storage->vtable->remove_path(storage, "app/support/reason-detail-ready.json");
+            notify_tick(&n, &s, 10250, 100, true);
+            check_true(n.ready_wait_deadline_ms == 10500 && !n.pending && !n.detail_pending,
+                "a missing file during renewal keeps only the original deadline");
+            offer_ms = 10400;
+        } else if (mode == 10) {
+            snprintf(lease.boot, sizeof(lease.boot), "fedcba9876543210");
+            ptc_reason_detail_write(storage, "app", "ready", &lease);
+            notify_tick(&n, &s, 10250, 100, true);
+            check_true(!n.ready_wait_deadline_ms && n.pending && !n.detail_pending,
+                "a foreign renewal immediately leaves the wait without an offer");
+            continue;
+        }
+        lease.issued_ms = offer_ms - 100; lease.expires_ms = lease.issued_ms + 1500;
+        check_true(ptc_reason_detail_write(storage, "app", "ready", &lease), "write a genuinely fresh renewal");
+        if (mode == 11) mem->fail_write_path_contains = "reason-detail-request";
+        notify_tick(&n, &s, offer_ms, 100, true);
+        check_true(!n.ready_wait_deadline_ms && n.detail_pending && !n.pending &&
+            n.detail_sequence == 1 && !n.sequence && n.event.handled_valid &&
+            n.event.next_publish_ms == offer_ms + 10000 && n.detail_decision.ready_fresh,
+            "fresh renewal consumes exactly one event and preserves normal offer and rate limits");
+        if (mode == 11) {
+            notify_tick(&n, &s, offer_ms + 10, 100, true);
+            check_true(n.detail_pending && n.detail_failures == 1 && n.detail_sequence == 1 && !n.pending,
+                "an unknown request write after waiting is retained without replay or immediate fallback");
+        } else {
+            check_true(ptc_reason_detail_read(storage, "app", "request", &offer) &&
+                offer.reason == s.reason && offer.instance == s.instance && offer.issued_ms == offer_ms &&
+                offer.expires_ms == offer_ms + 2000,
+                "the offer uses the fresh event and original two-second lease");
+        }
+    }
+    for (int invalid = 0; invalid < 7; ++invalid) {
+        ptc_mem_storage_init(mem);
+        storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+        PtcReasonNotification n;
+        PtcReasonObservation s = reason_sample(1, PTC_REASON_BEDTIME, 7, 100);
+        PtcReasonDetail lease = {0};
+        snprintf(lease.release, sizeof(lease.release), "%s", invalid == 2 ? "foreign" : "release1");
+        snprintf(lease.boot, sizeof(lease.boot), "%s", invalid == 3 ? "fedcba9876543210" : "0123456789abcdef");
+        lease.ui_instance = 900; lease.issued_ms = 8500; lease.expires_ms = 10000;
+        if (invalid == 4) { lease.issued_ms = 10001; lease.expires_ms = 11501; }
+        if (invalid == 5) lease.expires_ms = lease.issued_ms;
+        if (invalid == 6) lease.issued_ms = 7499;
+        if (invalid != 0) ptc_reason_detail_write(storage, "app", "ready", &lease);
+        if (invalid == 1) storage->vtable->write_text_atomic(storage, "app/support/reason-detail-ready.json", "invalid");
+        ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+        notify_tick(&n, &s, 10000, 100, true);
+        check_true(!n.ready_wait_deadline_ms && n.pending && !n.detail_pending,
+            "missing, invalid, foreign, future and malformed first leases retain immediate brief fallback");
+    }
+    free(mem);
+}
+
+static void test_reason_stale_ready_renewal(void)
+{
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    check_true(mem != NULL, "stale readiness renewal fixture allocation"); if (!mem) return;
+    PtcStorage *storage = &mem->storage;
+    const uint64_t ages[] = {501, 659, 1091, 10000};
+    for (unsigned reason = 0; reason < 2; ++reason) {
+        for (unsigned age = 0; age < sizeof(ages) / sizeof(ages[0]); ++age) {
+            for (unsigned renew = 0; renew < 2; ++renew) {
+                ptc_mem_storage_init(mem);
+                storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+                PtcReasonNotification n;
+                PtcReasonObservation s = reason_sample(1, reason ? PTC_REASON_DOCK : PTC_REASON_DAILY, 7, 100);
+                PtcReasonDetail lease = {0}, offer;
+                snprintf(lease.release, sizeof(lease.release), "release1");
+                snprintf(lease.boot, sizeof(lease.boot), "0123456789abcdef");
+                lease.ui_instance = 900;
+                lease.expires_ms = 20000 - ages[age]; lease.issued_ms = lease.expires_ms - 1500;
+                ptc_reason_detail_write(storage, "app", "ready", &lease);
+                ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+                notify_tick(&n, &s, 20000, 100, true);
+                check_true(n.ready_wait_deadline_ms == 20500 && !n.pending && !n.detail_pending &&
+                    !n.event.handled_valid && !n.sequence && !n.detail_sequence,
+                    "same-boot stale readiness waits for a bounded fresh renewal beyond 500ms age");
+                s.revision++;
+                notify_tick(&n, &s, 20250, 100, true);
+                check_true(n.ready_wait_deadline_ms == 20500 && !n.pending && !n.detail_pending,
+                    "stale lease age and policy revision never extend the original wait");
+                if (renew) {
+                    lease.issued_ms = 20300; lease.expires_ms = 21800;
+                    ptc_reason_detail_write(storage, "app", "ready", &lease);
+                    notify_tick(&n, &s, 20400, 100, true);
+                    check_true(!n.ready_wait_deadline_ms && n.detail_pending && !n.pending &&
+                        n.detail_sequence == 1 && n.detail_decision.ready_fresh &&
+                        ptc_reason_detail_read(storage, "app", "request", &offer) &&
+                        offer.reason == s.reason && offer.issued_ms == 20400 && offer.expires_ms == 22400,
+                        "stale hint permits one offer only after a genuine current renewal");
+                } else {
+                    s.revision++;
+                    notify_tick(&n, &s, 20500, 100, true);
+                    check_true(!n.ready_wait_deadline_ms && !n.detail_pending && n.pending &&
+                        n.sequence == 1 && !n.detail_sequence,
+                        "an unrenewed stale hint expires the fixed wait into one brief fallback");
+                }
+            }
+        }
+    }
+    free(mem);
+}
+
 static void test_reason_detail_transport(void)
 {
+    test_reason_ready_renewal_wait();
+    test_reason_stale_ready_renewal();
     PtcMemStorage *mem = malloc(sizeof(*mem));
     check_true(mem != NULL, "detail fixture allocation"); if (!mem) return;
     PtcStorage *storage = &mem->storage;
-    for (int mode = 0; mode < 13; ++mode) {
+    for (int mode = 0; mode < 19; ++mode) {
         ptc_mem_storage_init(mem);
         storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
         storage->vtable->write_text_atomic(storage, "app/handover/runtime-ready.json",
@@ -347,16 +526,53 @@ static void test_reason_detail_transport(void)
         if (mode == 6) snprintf(ready.release, sizeof(ready.release), "foreign");
         if (mode == 7) ready.expires_ms = 1000;
         if (mode == 8) snprintf(ready.boot, sizeof(ready.boot), "fedcba9876543210");
+        if (mode == 14) ready.issued_ms = 1001;
+        if (mode == 17) ready.expires_ms = 3001;
         check_true(ptc_reason_detail_write(storage, "app", "ready", &ready), "write loaded UI readiness");
+        if (mode == 13) storage->vtable->remove_path(storage, "app/support/reason-detail-ready.json");
+        if (mode == 18) storage->vtable->write_text_atomic(storage, "app/support/reason-detail-ready.json", "invalid");
         ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+        if (mode == 15) n.detail_failures = 5;
+        if (mode == 16) n.detail_sequence = UINT64_MAX;
         notify_tick(&n, &s, 1000, 100, true);
-        if (mode >= 6 && mode <= 8) {
+        char diagnostic[1536];
+        check_true(storage->vtable->read_text(storage, "app/support/reason-notification.json", diagnostic, sizeof(diagnostic)),
+            "detail choice writes existing bounded diagnostic");
+        cJSON *json = cJSON_ParseWithOpts(diagnostic, NULL, true);
+        const cJSON *decision = cJSON_GetObjectItemCaseSensitive(json, "detail_decision");
+        check_true(cJSON_IsObject(decision) && cJSON_GetArraySize(decision) == 18 &&
+            cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decision, "available")) &&
+            cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(decision, "repeat")) &&
+            !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(decision, "decision_ms")), "1000") &&
+            !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(decision, "instance")), "7") &&
+            cJSON_GetObjectItemCaseSensitive(decision, "reason")->valueint == PTC_REASON_EYE &&
+            cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "display_confirmed")),
+            "serialized decision identifies the actual event and preserves unknown display");
+        check_true(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decision, "ready_read_attempted")) == (mode != 15) &&
+            cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decision, "ready_read_ok")) ==
+                (mode != 13 && mode != 15 && mode != 18),
+            "missing, invalid and exhausted-budget reads are distinguished");
+        check_true(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decision, "ready_fresh")) ==
+            !(mode == 6 || mode == 7 || mode == 8 || mode == 13 || mode == 14 || mode == 15 || mode == 17 || mode == 18),
+            "diagnostic freshness matches identity, future, expiry and maximum lease conditions");
+        check_true(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decision, "ready_release_match")) ==
+                !(mode == 6 || mode == 13 || mode == 15 || mode == 18) &&
+            cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decision, "ready_boot_match")) ==
+                !(mode == 8 || mode == 13 || mode == 15 || mode == 18) &&
+            cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(decision, "sequence_available")) == (mode != 16) &&
+            cJSON_GetObjectItemCaseSensitive(decision, "failures")->valueint == (mode == 15 ? 5 : 0),
+            "decision records identity and sequence or failure eligibility separately");
+        cJSON_Delete(json);
+        if ((mode >= 6 && mode <= 8) || mode >= 13) {
             check_true(!n.detail_pending && n.pending, "wrong identity or expired loaded UI falls back without wake");
             continue;
         }
         check_true(n.detail_pending && !n.pending && n.sequence == 0 &&
             ptc_reason_detail_read(storage, "app", "request", &offer) && offer.instance == 7,
             "loaded UI offered correct event before any short notification");
+        check_true(n.detail_decision.ready_issued_ms == 1000 && n.detail_decision.ready_expires_ms == 2500 &&
+            n.detail_decision.ready_ui_instance == 900 && offer.issued_ms == 1000 && offer.expires_ms == 3000,
+            "captured ready metadata retains its original lease before the offer replaces it");
         PtcInputOwnerWriter writer;
         ptc_input_owner_writer_init(&writer, storage, "app", "release1", 900000000);
         if (mode == 0 || mode == 1 || mode == 3 || mode == 9 || mode == 12)
@@ -405,6 +621,54 @@ static void test_reason_detail_transport(void)
             check_true(n.sequence == 1 && n.detail_sequence == 1, "fallback does not multiply under status storm");
         }
     }
+    ptc_mem_storage_init(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=false\n");
+    PtcReasonNotification diagnostic_n;
+    PtcReasonObservation diagnostic_s = reason_sample(1, PTC_REASON_EYE, 7, 100);
+    ptc_reason_notification_init(&diagnostic_n, storage, "app", "release1", "0123456789abcdef");
+    notify_tick(&diagnostic_n, &diagnostic_s, 1000, 100, true);
+    diagnostic_s = reason_sample(2, PTC_REASON_BEDTIME, 8, 110);
+    notify_tick(&diagnostic_n, &diagnostic_s, 11000, 110, true);
+    char diagnostic_text[1536];
+    storage->vtable->read_text(storage, "app/support/reason-notification.json", diagnostic_text, sizeof(diagnostic_text));
+    cJSON *diagnostic_json = cJSON_ParseWithOpts(diagnostic_text, NULL, true);
+    const cJSON *last_decision = cJSON_GetObjectItemCaseSensitive(diagnostic_json, "detail_decision");
+    check_true(!strcmp(diagnostic_n.state, "fallback_receiver_unavailable") &&
+        last_decision && !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(last_decision, "decision_ms")), "11000") &&
+        !strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(last_decision, "instance")), "8"),
+        "a new choice updates the snapshot even when the diagnostic state is unchanged");
+    cJSON_Delete(diagnostic_json);
+
+    ptc_mem_storage_init(mem);
+    PtcReasonDetail clock_ready = {0};
+    snprintf(clock_ready.release, sizeof(clock_ready.release), "release1");
+    snprintf(clock_ready.boot, sizeof(clock_ready.boot), "0123456789abcdef");
+    clock_ready.ui_instance = UINT64_MAX;
+    /* Make the ready lease valid, with insufficient space for a new 2s offer. */
+    clock_ready.issued_ms = UINT64_MAX - 1999; clock_ready.expires_ms = UINT64_MAX;
+    ptc_reason_detail_write(storage, "app", "ready", &clock_ready);
+    ptc_reason_notification_init(&diagnostic_n, storage, "app", "release1", "0123456789abcdef");
+    diagnostic_s = reason_sample(1, PTC_REASON_EYE, UINT64_MAX, 100);
+    notify_tick(&diagnostic_n, &diagnostic_s, UINT64_MAX - 1999, 100, true);
+    check_true(diagnostic_n.detail_decision.ready_fresh && !diagnostic_n.detail_decision.clock_budget_available &&
+        !diagnostic_n.detail_pending && !storage->vtable->exists(storage, "app/support/reason-detail-request.json"),
+        "fresh readiness and offer clock overflow remain separately observable");
+
+    /* Maximum supported identifiers and counters must still serialize fully. */
+    memset(diagnostic_n.event.release, 'r', sizeof(diagnostic_n.event.release) - 1);
+    diagnostic_n.sequence = diagnostic_n.io_max_ms = UINT64_MAX;
+    diagnostic_n.detail_decision.ms = diagnostic_n.detail_decision.ready_issued_ms = UINT64_MAX;
+    diagnostic_n.detail_decision.failures = diagnostic_n.failures = UINT_MAX;
+    diagnostic_n.retry_ms = 0;
+    notify_tick(&diagnostic_n, &diagnostic_s, UINT64_MAX - 1998, 100, false);
+    check_true(storage->vtable->read_text(storage, "app/support/reason-notification.json", diagnostic_text, sizeof(diagnostic_text)),
+        "maximum decision metadata fits the bounded diagnostic file");
+    diagnostic_json = cJSON_ParseWithOpts(diagnostic_text, NULL, true);
+    check_true(cJSON_IsObject(diagnostic_json) && strlen(diagnostic_text) < sizeof(diagnostic_text) &&
+        cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(diagnostic_json, "detail_decision")),
+        "maximum diagnostic output is complete valid JSON");
+    cJSON_Delete(diagnostic_json);
+
     PtcReasonDetail detail = {0};
     PtcCompanionResultSummary summary = {0};
     detail.day = 2380; detail.reason = PTC_REASON_DAILY; detail.instance = 2381;

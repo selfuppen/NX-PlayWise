@@ -377,9 +377,18 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         state->dock_unlimited_capped = false;
         if (runtime_state->dock_enforced) {
             PtcDayRule base = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-            state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT && dock_view->dock_baseline_known &&
-                dock_view->dock_day_index == now.day_index &&
-                dock_view->dock_last_used_ns >= (uint64_t)base.minutes * 60000000000ULL;
+            if (direct) {
+                PtcUsageCounter total;
+                /* Daily exhaustion needs a fresh console total. An unknown
+                   non-TV interval cannot invalidate this independent reading. */
+                state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT &&
+                    direct_usage_sample(pctl_status, usage_sample_clock(sysmodule, now), &total) &&
+                    total.total_ns >= (uint64_t)base.minutes * PTC_USAGE_MINUTE_NS;
+            } else {
+                state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT && dock_view->dock_baseline_known &&
+                    dock_view->dock_day_index == now.day_index &&
+                    dock_view->dock_last_used_ns >= (uint64_t)base.minutes * PTC_USAGE_MINUTE_NS;
+            }
         }
         if (state->dock_restriction_active) {
             state->daily_buffer_available = false;

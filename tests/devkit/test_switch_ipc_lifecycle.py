@@ -158,6 +158,28 @@ def main() -> None:
             "next_brief_diag_ms_ = ms + 1000;" in diagnostic and
             "reason-brief-receiver.json" in diagnostic and 'display_confirmed\\\":false' in diagnostic,
             "resident diagnostic must bound writes and keep visibility unconfirmed")
+    require("ptc_overlay_hidden_timing_format(" in diagnostic and 'hidden_timing\\\":%s' in diagnostic and
+            "static_cast<size_t>(length) >= sizeof(text)" in diagnostic,
+            "hidden timing must share the bounded diagnostic and reject truncated JSON")
+    ready_write = hidden.index('ptc_reason_detail_write(s, APP_ROOT, "ready"')
+    require(hidden.index("ptc_overlay_hidden_timing_poll(") < hidden.index("ms >= next_config_ms_") and
+            hidden.index("ptc_overlay_hidden_timing_ready_begin(") < ready_write <
+            hidden.index("ptc_overlay_hidden_timing_ready_end("),
+            "hidden timing must retain the poll clock and bracket the actual ready write")
+    require("write_text_atomic" not in (ROOT / "companion/overlay/hidden_timing.h").read_text(encoding="utf-8"),
+            "hidden timing accumulation must stay memory-only")
+    config_begin = hidden.index("&hidden_timing_.config_read,")
+    config_read = hidden.index('s->vtable->read_text(s, "sdmc:/switch/playwise/config.json"')
+    config_end = hidden.index("ptc_overlay_hidden_timing_read_end(", config_read)
+    runtime_begin = hidden.index("&hidden_timing_.runtime_read,")
+    runtime_read = hidden.index("runtime_known_ = ptc_reason_detail_runtime(")
+    runtime_end = hidden.index("ptc_overlay_hidden_timing_read_end(", runtime_read)
+    request_begin = hidden.index("&hidden_timing_.request_read,")
+    request_read = hidden.index('bool read_ok = ptc_reason_detail_read(s, APP_ROOT, "request"')
+    request_end = hidden.index("ptc_overlay_hidden_timing_read_end(", request_read)
+    require(config_begin < config_read < config_end < runtime_begin < runtime_read < runtime_end <
+            request_begin < request_read < request_end < hidden.index("if (!read_ok) return false;", request_end),
+            "hidden read timing must bracket each actual call and retain failed request reads")
     brief = overlay[overlay.index("void onHiddenFrame("):overlay.index("bool onHiddenPoll(")]
     require("requestForeground(" not in brief and "ptc_input_owner_acquire(" not in brief and
             "renderer.clearScreen();" in libtesla[libtesla.index("void loopHiddenFrame("):libtesla.index("bool m_hiddenFrameDrawn")],

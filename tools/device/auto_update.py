@@ -237,6 +237,51 @@ def capture_stop_proof(*, config: dict, target: dict,
             "stop_reason": terminal["reason"], "stable_intervals_ns": [str(span) for span in intervals]}
 
 
+def capture_restart_stop_proof(*, config: dict, target: dict,
+                               pulls: list[tuple[int, bytes]]) -> dict:
+    """Prove a recorder stopped for restart preflight, without repairing its history.
+
+    A time gap is distinct from a lost row: only versioned, contiguous sample
+    indices and a clean terminal may establish cessation across such a gap.
+    Formal completion continues to use capture_stop_proof unchanged.
+    """
+    from tools.device.pctl_standard_evidence import audit
+    from tools.qualification.pctl_usage_qualification import UsageQualificationError
+    identity(target)
+    require(target["release_id"] == config.get("release_id"), "restart stop candidate differs")
+    require(len(pulls) == 3 and all(type(at) is int and at >= 0 and isinstance(raw, bytes)
+                                  for at, raw in pulls), "three timed restart stop pulls required")
+    intervals = [pulls[i][0] - pulls[i - 1][0] for i in (1, 2)]
+    require(all(span >= 7_000_000_000 for span in intervals), "two seven-second restart stop intervals required")
+    raw = pulls[0][1]
+    require(all(data == raw for _, data in pulls), "restart source capture still changes")
+    try:
+        observed = audit(raw, config)
+    except UsageQualificationError as exc:
+        raise UpdateError("restart stop raw audit rejected: " + str(exc)) from exc
+    require(observed["start"]["boot_id"] == target["boot_id"] and observed["samples"] and
+            observed["stop_record_present"] and not observed["partial_tail_lines"] and
+            not observed["invalid_sample_lines"], "restart source lacks a valid bound terminal")
+    terminal = json.loads(raw.splitlines()[-1])
+    require(terminal["kind"] == "usage_evidence_stop" and
+            terminal["reason"] in ("config_removed_or_changed", "lease_expired") and
+            terminal["consecutive_failures"] == 0, "restart source ended abnormally")
+    if observed["gaps"]:
+        require(observed["start"].get("append_diagnostics_version") == 1,
+                "time-gap restart needs versioned contiguous sample indices")
+        # audit checks every index and rejects missing rows, append failures,
+        # mixed boots, clock regression and a terminal with a mismatched count.
+    else:
+        capture_stop_proof(config=config, target=target, pulls=pulls)
+    return {"schema_version": 1, "kind": "capture_restart_stop_proof", "qualified": False,
+            "run_id": config["run_id"], "boot_id": target["boot_id"], "release_id": target["release_id"],
+            "raw_sha256": digest(raw), "samples": len(observed["samples"]),
+            "stop_reason": terminal["reason"], "stable_intervals_ns": [str(span) for span in intervals],
+            "recorder_stopped": True, "historical_time_gaps": observed["gaps"],
+            "complete_stream_stop_proof": not bool(observed["gaps"]),
+            "scope": "restart_preflight_only"}
+
+
 def load(out: Path, name: str) -> dict:
     return json.loads((out / name).read_bytes())
 
@@ -483,8 +528,9 @@ class Updater:
         import tools.device.pctl_standard_evidence as evidence
         from tools.qualification.verify_device_qualification import read_json_text
         config = json.loads((self.out / "capture-config.json").read_bytes())
+        prepared_run_id = config["run_id"]
         for name in names(self.device, APP + "/support", missing=True):
-            require(not re.fullmatch(r"usage-evidence-" + config["run_id"] + r"-[0-9a-f]{16}\.jsonl", name),
+            require(not re.fullmatch(r"usage-evidence-" + prepared_run_id + r"-[0-9a-f]{16}\.jsonl", name),
                     "capture run already used; prepare a fresh run instead of renewing its lease")
             if not re.fullmatch(r"usage-evidence-[0-9a-f]{32}-" + self.source["boot_id"] + r"\.jsonl", name):
                 continue
@@ -497,13 +543,21 @@ class Updater:
             require(start["duration_ns"].isdigit() and int(start["duration_ns"]) % 1_000_000_000 == 0,
                     "source capture lease unknown")
             config["duration_s"] = int(start["duration_ns"]) // 1_000_000_000
-            audit = evidence.audit(raw, config)
-            require(audit["start"]["boot_id"] == self.source["boot_id"] and
-                    audit["start"]["release_id"] == self.source["release_id"] and
-                    audit["start"]["commit"] == self.device.json(APP + "/build.json")["commit"] and
-                    audit["stop_record_present"] and not audit["invalid_sample_lines"] and
-                    not audit["partial_tail_lines"] and not audit["gaps"],
-                    "source capture active or uncertain; inspect without rearming")
+            observed = evidence.audit(raw, config)
+            require(observed["start"]["commit"] == self.device.json(APP + "/build.json")["commit"],
+                    "source capture commit differs")
+            pulls = [(int(self.clock() * 1_000_000_000), raw)]
+            for index in (1, 2):
+                self.wait(7)
+                require(self.device.json(RUNTIME) == self.source, "source changed during stop checks")
+                data = self.device.read(APP + "/support/" + name)
+                at = int(self.clock() * 1_000_000_000)
+                (path.parent / (name + f".pull-{index}.raw")).write_bytes(data)
+                pulls.append((at, data))
+            proof = capture_restart_stop_proof(config=config, target=self.source, pulls=pulls)
+            dump(path.parent / (name + ".stop-proof.json"),
+                 {"config": config, "target": self.source, "pull_times_ns": [str(at) for at, _ in pulls],
+                  "proof": proof})
 
     def arm_capture_restart(self) -> None:
         config = (self.out / "capture-config.json").read_bytes()

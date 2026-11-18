@@ -7,6 +7,7 @@
 #include <string.h>
 
 #define NOTIFICATION_DIR "sdmc:/config/ultrahand/notifications/"
+#define READY_RENEWAL_WAIT_MS UINT64_C(500)
 
 static const char *str(const cJSON *o, const char *key)
 {
@@ -32,18 +33,34 @@ void ptc_reason_notification_preferences(const char *config, bool *enabled,
 
 static void state(PtcReasonNotification *n, const char *value)
 {
-    char path[256], text[768];
-    if (!strcmp(n->state, value)) return;
-    snprintf(n->state, sizeof(n->state), "%s", value);
+    char path[256], text[1536];
+    const PtcReasonDetailDecision *d = &n->detail_decision;
+    if (!strcmp(n->state, value) && !n->detail_decision_dirty) return;
     snprintf(path, sizeof(path), "%s/support/reason-notification.json", n->root);
-    snprintf(text, sizeof(text), "{\"version\":1,\"state\":\"%s\",\"display_confirmed\":false,"
+    int length = snprintf(text, sizeof(text), "{\"version\":1,\"state\":\"%s\",\"display_confirmed\":false,"
         "\"receiver\":\"unknown\",\"io_failures\":%u,\"sequence\":%llu,\"io_max_ms\":%llu,"
         "\"release_id\":\"%s\",\"backend_boot_id\":\"%s\",\"day_index\":%u,\"reason\":%u,"
-        "\"instance\":\"%llu\",\"captured_at\":%lld,\"expires_mono_ms\":\"%llu\"}",
+        "\"instance\":\"%llu\",\"captured_at\":%lld,\"expires_mono_ms\":\"%llu\","
+        "\"detail_decision\":{\"version\":1,\"available\":%s,\"decision_ms\":\"%llu\","
+        "\"day_index\":%u,\"reason\":%u,\"instance\":\"%llu\",\"repeat\":%s,"
+        "\"failures\":%u,\"ready_read_attempted\":%s,\"ready_read_ok\":%s,"
+        "\"ready_release_match\":%s,\"ready_boot_match\":%s,\"ready_fresh\":%s,"
+        "\"ready_ui_instance\":\"%llu\",\"ready_issued_ms\":\"%llu\",\"ready_expires_ms\":\"%llu\","
+        "\"clock_budget_available\":%s,\"sequence_available\":%s}}",
         value, n->failures, (unsigned long long)n->sequence, (unsigned long long)n->io_max_ms,
         n->event.release, n->event.boot, n->event.latest.day, (unsigned)n->event.latest.reason,
         (unsigned long long)n->event.latest.instance, (long long)n->event.latest.captured_at,
-        (unsigned long long)n->expires_ms);
+        (unsigned long long)n->expires_ms,
+        d->available ? "true" : "false", (unsigned long long)d->ms,
+        d->day, (unsigned)d->reason, (unsigned long long)d->instance, d->repeat ? "true" : "false",
+        d->failures, d->ready_read_attempted ? "true" : "false", d->ready_read_ok ? "true" : "false",
+        d->ready_release_match ? "true" : "false", d->ready_boot_match ? "true" : "false",
+        d->ready_fresh ? "true" : "false", (unsigned long long)d->ready_ui_instance,
+        (unsigned long long)d->ready_issued_ms, (unsigned long long)d->ready_expires_ms,
+        d->clock_budget_available ? "true" : "false", d->sequence_available ? "true" : "false");
+    if (length < 0 || (size_t)length >= sizeof(text)) return;
+    snprintf(n->state, sizeof(n->state), "%s", value);
+    n->detail_decision_dirty = false;
     (void)n->storage->vtable->write_text_atomic(n->storage, path, text);
 }
 
@@ -224,10 +241,11 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         if (!startup(n)) goto failed;
         n->initialized = true;
     }
-    bool change = (n->pending || n->detail_pending) && (s->reason != n->event.latest.reason || s->instance != n->event.latest.instance ||
+    bool change = (n->pending || n->detail_pending || n->ready_wait_deadline_ms) && (s->reason != n->event.latest.reason || s->instance != n->event.latest.instance ||
         s->day != n->event.latest.day);
     bool cancel = stopping || !enabled || suppressed || !s->reliable || !s->restricted ||
         ms < n->event.last_ms || wall < n->event.last_wall || change;
+    if (cancel) n->ready_wait_deadline_ms = 0;
     bool fallback = false;
     bool detail_confirmed = false;
     if (n->detail_pending) {
@@ -265,12 +283,43 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
     if ((!enabled || suppressed) && !detail_confirmed) state(n, "suppressed");
     if ((!ready && !fallback) || n->pending || n->detail_pending) return;
     if (!fallback) {
-        ptc_reason_event_attempted(&n->event, ms);
         PtcReasonDetail detail;
+        PtcReasonDetailDecision *d = &n->detail_decision;
+        *d = (PtcReasonDetailDecision){.available = true, .repeat = n->event.repeat,
+            .failures = n->detail_failures, .day = s->day, .reason = s->reason,
+            .instance = s->instance, .ms = ms, .clock_budget_available = ms <= UINT64_MAX - 2000,
+            .sequence_available = n->detail_sequence != UINT64_MAX};
+        n->detail_decision_dirty = true;
         /* A continuing countdown gets only a brief notice, never another focus grab. */
-        if (!n->event.repeat && n->detail_failures < 5 && ptc_reason_detail_read(n->storage, n->root, "ready", &detail) &&
-            ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, ms) &&
-            ms <= UINT64_MAX - 2000 && n->detail_sequence != UINT64_MAX) {
+        if (!n->event.repeat && n->detail_failures < 5) {
+            d->ready_read_attempted = true;
+            d->ready_read_ok = ptc_reason_detail_read(n->storage, n->root, "ready", &detail);
+            if (d->ready_read_ok) {
+                /* Retain the actual read before replacing its lease with an offer. */
+                d->ready_release_match = !strcmp(detail.release, n->event.release);
+                d->ready_boot_match = !strcmp(detail.boot, n->event.boot);
+                d->ready_ui_instance = detail.ui_instance;
+                d->ready_issued_ms = detail.issued_ms;
+                d->ready_expires_ms = detail.expires_ms;
+                d->ready_fresh = ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, ms);
+            }
+        }
+        /* Any same-boot valid expired hint may be awaiting a slow renewal.
+           Retain only this fresh event for two existing polls, without treating
+           the old hint as ready. An offer still requires a newly read fresh lease. */
+        bool expired_matching_lease = d->ready_read_ok && detail.expires_ms &&
+            ms >= detail.expires_ms &&
+            ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, detail.expires_ms - 1);
+        bool same_identity_or_missing = !d->ready_read_ok ||
+            (d->ready_release_match && d->ready_boot_match);
+        if (!d->ready_fresh && !d->repeat && d->failures < 5 && d->clock_budget_available && d->sequence_available &&
+            (expired_matching_lease || (n->ready_wait_deadline_ms && same_identity_or_missing))) {
+            if (!n->ready_wait_deadline_ms) n->ready_wait_deadline_ms = ms + READY_RENEWAL_WAIT_MS;
+            if (ms < n->ready_wait_deadline_ms) return;
+        }
+        n->ready_wait_deadline_ms = 0;
+        ptc_reason_event_attempted(&n->event, ms);
+        if (d->ready_fresh && d->clock_budget_available && d->sequence_available) {
             detail.sequence = ++n->detail_sequence;
             detail.issued_ms = ms; detail.expires_ms = ms + 2000;
             detail.day = s->day; detail.reason = s->reason; detail.instance = s->instance;
