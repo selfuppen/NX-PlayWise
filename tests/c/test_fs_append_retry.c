@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "../../platform/switch/fs_storage.h"
 
 static const char *path = "build/host/fs-append-retry.txt";
@@ -15,7 +16,9 @@ static bool write_failure, close_failure;
 FILE *ptc_test_fopen(const char *name, const char *mode)
 {
     if (strcmp(mode, "wb") == 0) {
-        assert(strcmp(name, "build/host/fs-append-retry.txt.write") == 0);
+        char expected[352];
+        snprintf(expected, sizeof(expected), "%s.write", path);
+        assert(strcmp(name, expected) == 0);
         return fopen(name, mode);
     }
     assert(strcmp(name, path) == 0 && strcmp(mode, "ab") == 0);
@@ -123,7 +126,16 @@ int main(void)
     close_failure = true;
     assert(!storage->vtable->write_text_transient(storage, path, "discard") && commits == 1);
     contents("lease");
-    (void)remove(path);
+    reset();
+    const char *parent = "build/host/fs-append-retry-parent";
+    path = "build/host/fs-append-retry-parent/nested.txt";
+    assert(storage->vtable->append_line(storage, path, "one"));
+    assert(opens == 2 && sleeps == 0 && fs.last_append.open_attempts == 2);
+    contents("one\n");
+    assert(remove(path) == 0 && rmdir(parent) == 0);
+    assert(storage->vtable->write_text_atomic(storage, path, "created") && commits == 1);
+    contents("created");
+    assert(remove(path) == 0 && rmdir(parent) == 0);
     puts("PASS append retry bounds and durable/transient replacement");
     return 0;
 }

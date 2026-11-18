@@ -108,7 +108,7 @@ bool eye_care_sample_direct(const PtcRules *rules, PtcRuntimeState *state,
 }
 
 static int enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcRules *tick_rules, uint16_t rules_day_index)
+    const PtcRules *tick_rules, uint16_t rules_day_index, PtcControlObservation *summary_observation)
 {
     ++sysmodule->reason_observation.revision;
     sysmodule->reason_observation.reliable = false;
@@ -344,8 +344,9 @@ static int enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request,
         }
         bedtime_snapshot_transferred = true;
     }
-    if (runtime_state.bedtime_enforced &&
-        (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id != bedtime.window_instance_id)) {
+    bool restore_bedtime = runtime_state.bedtime_enforced &&
+        (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id != bedtime.window_instance_id);
+    if (restore_bedtime) {
         observation.sampled = false;
         err = restore_bedtime_base(sysmodule, request, &rules, &runtime_state, now);
         if (err != PTC_ERR_OK) {
@@ -377,8 +378,10 @@ static int enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request,
                 return 0;
             }
             if (eye_exit) clear_eye_care_snapshot(sysmodule);
-            if (observation.sampled && observation.error == PTC_ERR_OK)
+            if (observation.sampled && observation.error == PTC_ERR_OK) {
                 ptc_sysmodule_note_reason(sysmodule, &rules, &runtime_state, &observed_status, now);
+                if (summary_observation && !restore_bedtime) *summary_observation = observation;
+            }
             return 0;
         }
     }
@@ -473,7 +476,7 @@ static int enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request,
 
 int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request)
 {
-    return enforce_request(sysmodule, request, NULL, 0);
+    return enforce_request(sysmodule, request, NULL, 0, NULL);
 }
 
 int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
@@ -856,9 +859,11 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
                     current < previous ? "clock_moved_backward" : "clock_jump_forward");
             }
         }
-        actions += enforce_request(sysmodule, NULL, rules_ok ? &tick_rules : NULL, rules_day_index);
-        if (minute_changed || reload || storage_notified || disable_changed || processed > 0)
-            actions += usage_summary_tick(sysmodule, now);
+        bool summarize = minute_changed || reload || storage_notified || disable_changed || processed > 0;
+        PtcControlObservation summary_observation = {0};
+        actions += enforce_request(sysmodule, NULL, rules_ok ? &tick_rules : NULL, rules_day_index,
+            summarize ? &summary_observation : NULL);
+        if (summarize) actions += usage_summary_tick(sysmodule, now, &summary_observation);
 #endif
         sysmodule->last_minute_day_index = now.day_index;
         sysmodule->last_minute_of_day = now.minute_of_day;

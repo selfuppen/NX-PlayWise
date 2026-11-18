@@ -223,12 +223,11 @@ int main(int argc, char **argv)
     static PtcUsageEvidence usage_evidence;
     static PtcReasonNotification reason_notification;
     static PtcInputOwnerReader reason_owner;
-    static char reason_config[4096];
+    static PtcReasonPreferences reason_preferences;
+    static char reason_config[sizeof(reason_preferences.parsed_config)];
     static PtcPowerLedger power_ledger;
     static char power_ledger_text[3072];
     uint64_t reason_config_ns = 0;
-    bool reason_enabled = false;
-    PtcUiLanguagePreference reason_language = PTC_UI_LANGUAGE_ENGLISH;
 #endif
     static PtcIpcServer ipc_server;
     PtcStorage *storage;
@@ -375,17 +374,18 @@ int main(int argc, char **argv)
            Slow SD can still delay this serial loop. */
         uint64_t reason_ns = armTicksToNs(armGetSystemTick());
         if (notified || reason_ns >= reason_config_ns) {
-            if (!storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json", reason_config, sizeof(reason_config)))
-                snprintf(reason_config, sizeof(reason_config), "{}");
-            ptc_reason_notification_preferences(reason_config, &reason_enabled, &reason_language);
-            reason_config_ns = reason_ns + (reason_enabled ? 1000000000ULL : 5000000000ULL);
+            bool read_ok = storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json",
+                reason_config, sizeof(reason_config));
+            ptc_reason_preferences_update(&reason_preferences, read_ok ? reason_config : NULL, notified);
+            reason_config_ns = reason_ns + (reason_preferences.enabled ? 1000000000ULL : 5000000000ULL);
         }
         PtcClockSnapshot reason_clock = time_provider.provider.vtable->now(&time_provider.provider);
-        bool reason_suppressed = reason_enabled && !reason_stopping &&
+        bool reason_suppressed = reason_preferences.enabled && !reason_stopping &&
             reason_sample.reliable && reason_sample.restricted &&
             ptc_input_owner_block(&reason_owner, reason_ns, false);
         ptc_reason_notification_tick(&reason_notification, &reason_sample, reason_ns / 1000000,
-            reason_clock.unix_seconds, reason_enabled, reason_suppressed, reason_stopping, reason_language);
+            reason_clock.unix_seconds, reason_preferences.enabled, reason_suppressed, reason_stopping,
+            reason_preferences.language);
         uint64_t reason_io_ms = (armTicksToNs(armGetSystemTick()) - reason_ns) / 1000000;
         if (reason_io_ms > reason_notification.io_max_ms) reason_notification.io_max_ms = reason_io_ms;
         /* 冻结账本复用本轮已取得的单调与墙钟读数，不增加任何周期 I/O。写出只在

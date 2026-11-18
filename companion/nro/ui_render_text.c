@@ -424,15 +424,9 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
     }
 }
 
-int measure_text(const char *text, int size)
+static int measure_text_raw(const char *cursor, int size)
 {
     int width = 0;
-    char localized[4096];
-    const char *cursor;
-    if (!text) {
-        return 0;
-    }
-    cursor = ptc_ui_localize(text, localized, sizeof(localized));
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
         const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
@@ -443,16 +437,16 @@ int measure_text(const char *text, int size)
     return width;
 }
 
-static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color, bool bold)
+int measure_text(const char *text, int size)
 {
     char localized[4096];
-    const char *cursor;
+    return text ? measure_text_raw(ptc_ui_localize(text, localized, sizeof(localized)), size) : 0;
+}
+
+static void draw_text_raw(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *cursor, int size, uint32_t color, bool bold)
+{
     int pen_x = x;
     uint32_t resolved = resolve_color(color);
-    if (!text) {
-        return;
-    }
-    cursor = ptc_ui_localize(text, localized, sizeof(localized));
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
         const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, bold);
@@ -502,63 +496,63 @@ static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baselin
 /* 粗体走缓存的膨胀变体，单次绘制，无位移重影。 */
 void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
+    if (!text) return;
 #ifdef PTC_UI_PREVIEW_TEXT_TRACE
     ptc_ui_preview_record_text(x, baseline, text, size);
 #endif
-    draw_text_impl(pixels, stride, x, baseline, text, size, color, false);
+    char localized[4096];
+    draw_text_raw(pixels, stride, x, baseline, ptc_ui_localize(text, localized, sizeof(localized)), size, color, false);
 }
 
 void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
-    draw_text_impl(pixels, stride, x, baseline, text, size, color, true);
+    char localized[4096];
+    if (text)
+        draw_text_raw(pixels, stride, x, baseline, ptc_ui_localize(text, localized, sizeof(localized)), size, color, true);
 }
+
+static void fit_text_raw(char *out, size_t out_size, const char *source, int size, int max_width, int source_width);
 
 void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char *text, int size, uint32_t color)
 {
     if (!text || !*text) return;
+    char localized[4096];
+    const char *to_draw = ptc_ui_localize(text, localized, sizeof(localized));
     int cur_size = size;
-    int width = measure_text(text, cur_size);
+    int width = measure_text_raw(to_draw, cur_size);
     while (width > rect.width - 6 && cur_size > 11) {
         cur_size--;
-        width = measure_text(text, cur_size);
+        width = measure_text_raw(to_draw, cur_size);
     }
     char fitted[256];
-    const char *to_draw = text;
     if (width > rect.width - 4) {
-        fit_text(fitted, sizeof(fitted), text, cur_size, rect.width - 4);
+        fit_text_raw(fitted, sizeof(fitted), to_draw, cur_size, rect.width - 4, width);
         to_draw = fitted;
-        width = measure_text(to_draw, cur_size);
+        width = measure_text_raw(to_draw, cur_size);
     }
     int baseline = rect.y + (rect.height + cur_size) / 2 - 3;
-    draw_text(pixels, stride, rect.x + (rect.width - width) / 2, baseline, to_draw, cur_size, color);
+    int x = rect.x + (rect.width - width) / 2;
+#ifdef PTC_UI_PREVIEW_TEXT_TRACE
+    ptc_ui_preview_record_text(x, baseline, to_draw == fitted ? fitted : text, cur_size);
+#endif
+    draw_text_raw(pixels, stride, x, baseline, to_draw, cur_size, color, false);
 }
 
-void fit_text(char *out, size_t out_size, const char *text, int size, int max_width)
+static void fit_text_raw(char *out, size_t out_size, const char *source, int size, int max_width, int source_width)
 {
-    char source_copy[512];
-    char localized[4096];
-    const char *source = text ? text : "";
     const char *cursor;
     const char *end;
     size_t copy_size;
     int width = 0;
     bool truncated = false;
-    if (!out || out_size == 0) {
-        return;
-    }
-    if (out == text) {
-        snprintf(source_copy, sizeof(source_copy), "%s", source);
-        source = source_copy;
-    }
-    source = ptc_ui_localize(source, localized, sizeof(localized));
-    if (measure_text(source, size) <= max_width) {
+    if (source_width <= max_width) {
         snprintf(out, out_size, "%s", source);
         return;
     }
     cursor = source;
     end = cursor;
     out[0] = '\0';
-    int ellipsis_width = measure_text("...", size);
+    int ellipsis_width = measure_text_raw("...", size);
     if (ellipsis_width < 10) ellipsis_width = 10;
     while (*cursor) {
         const char *next = cursor;
@@ -592,6 +586,20 @@ void fit_text(char *out, size_t out_size, const char *text, int size, int max_wi
     if (truncated && copy_size + 3 < out_size) {
         strcat(out, "...");
     }
+}
+
+void fit_text(char *out, size_t out_size, const char *text, int size, int max_width)
+{
+    char source_copy[512];
+    char localized[4096];
+    const char *source = text ? text : "";
+    if (!out || !out_size) return;
+    if (out == text) {
+        snprintf(source_copy, sizeof(source_copy), "%s", source);
+        source = source_copy;
+    }
+    source = ptc_ui_localize(source, localized, sizeof(localized));
+    fit_text_raw(out, out_size, source, size, max_width, measure_text_raw(source, size));
 }
 
 /* Splits off the next line of `cursor`. Both the drawing and measuring paths use

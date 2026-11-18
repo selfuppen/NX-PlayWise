@@ -53,10 +53,17 @@ typedef struct {
     char state[40];
 } PtcReasonNotification;
 
+typedef struct {
+    char parsed_config[4096];
+    bool enabled;
+    PtcUiLanguagePreference language;
+} PtcReasonPreferences;
+
 void ptc_reason_notification_init(PtcReasonNotification *n, PtcStorage *s,
     const char *root, const char *release, const char *boot);
-void ptc_reason_notification_preferences(const char *config, bool *enabled,
+bool ptc_reason_notification_preferences(const char *config, bool *enabled,
     PtcUiLanguagePreference *language);
+void ptc_reason_preferences_update(PtcReasonPreferences *preferences, const char *config, bool force);
 /* Snapshot formatting only; false means invalid cause or insufficient buffer. */
 bool ptc_reason_notification_body(const PtcReasonObservation *sample, int64_t wall,
     PtcUiLanguagePreference language, const char *shortcut, char *out, size_t size);

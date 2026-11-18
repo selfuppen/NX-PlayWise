@@ -835,6 +835,22 @@ static void test_reason_transport(void)
     check_true(!enabled,"ambiguous preference defaults off");
     ptc_reason_notification_preferences("{\"reason_notifications_enabled\":true,\"ui_language\":\"system\",\"reason_notification_language\":\"zh-Hant\"}",&enabled,&language);
     check_true(enabled && language==PTC_UI_LANGUAGE_TRADITIONAL,"saved existing UI system language source");
+    PtcReasonPreferences preferences = {0};
+    const char *on = "{\"reason_notifications_enabled\":true,\"ui_language\":\"zh-Hant\"}";
+    ptc_reason_preferences_update(&preferences, on, false);
+    check_true(preferences.enabled && preferences.language == PTC_UI_LANGUAGE_TRADITIONAL,
+        "notification preferences start from current contents");
+    ptc_reason_preferences_update(&preferences, "{\"reason_notifications_enabled\":true,\"ui_language\":\"zh-Hans\"}", false);
+    check_true(preferences.enabled && preferences.language == PTC_UI_LANGUAGE_SIMPLIFIED,
+        "same-size config rewrite needs no mtime change or IPC");
+    ptc_reason_preferences_update(&preferences, NULL, false);
+    check_true(!preferences.enabled && preferences.language == PTC_UI_LANGUAGE_ENGLISH && !preferences.parsed_config[0],
+        "failed read never reuses enabled notification preferences");
+    ptc_reason_preferences_update(&preferences, on, false);
+    ptc_reason_preferences_update(&preferences, "{\"reason_notifications_enabled\":true", true);
+    check_true(!preferences.enabled && !preferences.parsed_config[0], "invalid forced refresh disables and invalidates");
+    ptc_reason_preferences_update(&preferences, on, true);
+    check_true(preferences.enabled && !strcmp(preferences.parsed_config, on), "recovered contents can be cached again");
     check_true(storage->vtable->read_text(storage,"sdmc:/config/ultrahand/config.ini",text,sizeof(text)) &&
         !strcmp(text,"[ultrahand]\nnotifications=true\n"),"third party settings untouched");
     check_true(storage->vtable->read_text(storage,"app/ledger/used_nonces.jsonl",text,sizeof(text)) &&

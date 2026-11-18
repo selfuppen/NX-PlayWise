@@ -61,9 +61,12 @@ static bool fs_replace_text(const char *path, const char *text)
     char tmp_path[352];
     FILE *file;
     size_t text_len;
-    ensure_parent_dirs(path);
     snprintf(tmp_path, sizeof(tmp_path), "%s.write", path);
     file = fopen(tmp_path, "wb");
+    if (!file && errno == ENOENT) {
+        ensure_parent_dirs(path);
+        file = fopen(tmp_path, "wb");
+    }
     if (!file) {
         return false;
     }
@@ -108,8 +111,12 @@ static bool fs_append_line(PtcStorage *storage, const char *path, const char *li
     memset(&fs->last_append, 0, sizeof(fs->last_append));
     fs->last_append.open_attempts = 1;
 
-    ensure_parent_dirs(path);
     file = fopen(path, "ab");
+    if (!file && errno == ENOENT) {
+        ensure_parent_dirs(path);
+        ++fs->last_append.open_attempts;
+        file = fopen(path, "ab");
+    }
 #ifdef __SWITCH__
     /* The bounded read-only device run recorded fopen EIO + FS 0xE02.
        libnx maps unlisted FS Results to EIO. Include this observed pair only;

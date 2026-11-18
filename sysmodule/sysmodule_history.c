@@ -395,7 +395,7 @@ bool record_activity(PtcSysmodule *sysmodule, const PtcRequest *request,
 }
 
 #ifndef PLAYWISE_DEVICE_LAB
-int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now)
+int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now, const PtcControlObservation *observation)
 {
     PtcSetupState setup;
     PtcRules rules;
@@ -407,10 +407,18 @@ int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now)
     bool read_failed;
     if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0 ||
         !load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) return 0;
-    memset(&pctl_status, 0, sizeof(pctl_status));
-    read_failed = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-            ptc_weekday_from_day_index(now.day_index), &pctl_status) != PTC_ERR_OK;
-    if (read_failed) memset(&pctl_status, 0, sizeof(pctl_status));
+    PtcClockSnapshot current = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    if (observation && observation->sampled && observation->error == PTC_ERR_OK &&
+        observation->clock.day_index == now.day_index && observation->clock.day_index == current.day_index &&
+        observation->clock.unix_seconds == current.unix_seconds) {
+        pctl_status = observation->status;
+        read_failed = false;
+    } else {
+        memset(&pctl_status, 0, sizeof(pctl_status));
+        read_failed = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+                ptc_weekday_from_day_index(now.day_index), &pctl_status) != PTC_ERR_OK;
+        if (read_failed) memset(&pctl_status, 0, sizeof(pctl_status));
+    }
     memset(&record, 0, sizeof(record));
     effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     record.day_index = now.day_index;

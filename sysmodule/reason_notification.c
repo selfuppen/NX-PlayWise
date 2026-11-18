@@ -15,7 +15,7 @@ static const char *str(const cJSON *o, const char *key)
     return s ? s : "";
 }
 
-void ptc_reason_notification_preferences(const char *config, bool *enabled,
+bool ptc_reason_notification_preferences(const char *config, bool *enabled,
     PtcUiLanguagePreference *language)
 {
     cJSON *j = cJSON_ParseWithOpts(config, NULL, true);
@@ -29,6 +29,17 @@ void ptc_reason_notification_preferences(const char *config, bool *enabled,
     *language = !strcmp(lang, "zh-Hans") ? PTC_UI_LANGUAGE_SIMPLIFIED :
         !strcmp(lang, "zh-Hant") ? PTC_UI_LANGUAGE_TRADITIONAL : PTC_UI_LANGUAGE_ENGLISH;
     cJSON_Delete(j);
+    return valid;
+}
+
+void ptc_reason_preferences_update(PtcReasonPreferences *preferences, const char *config, bool force)
+{
+    if (!force && preferences->parsed_config[0] && config &&
+        !strcmp(preferences->parsed_config, config)) return;
+    preferences->parsed_config[0] = '\0';
+    if (ptc_reason_notification_preferences(config ? config : "{}", &preferences->enabled,
+            &preferences->language) && config && strlen(config) < sizeof(preferences->parsed_config))
+        strcpy(preferences->parsed_config, config);
 }
 
 static void state(PtcReasonNotification *n, const char *value)

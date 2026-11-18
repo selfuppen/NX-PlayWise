@@ -169,7 +169,7 @@ bool write_current_status_result(
     bool commits_recovery);
 bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request,
     PtcClockSnapshot now);
-int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now);
+int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now, const PtcControlObservation *observation);
 bool request_file_path(char *out, size_t out_size, const PtcSysmodule *sysmodule, const char *queue, const char *name);
 PtcErrorCode ptc_backup_before_write(
     PtcSysmodule *sysmodule,

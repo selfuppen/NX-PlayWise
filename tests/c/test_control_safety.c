@@ -1947,48 +1947,48 @@ static void test_direct_usage_history(void)
     PtcDailySummaryAggregate aggregate;
     char line[PTC_DAILY_SUMMARY_LINE_SIZE], json[8192];
     init_fixture(&f);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "save pre-migration quota estimate");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "save pre-migration quota estimate");
     direct_sample(&f, UINT64_C(4191000000001), 1);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1 && read_usage_rows(&f, rows) == 2,
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1 && read_usage_rows(&f, rows) == 2,
         "same-day v1 estimate and v2 direct record coexist");
     saved = rows[1];
     expect(!rows[0].direct_source && saved.direct_source && saved.consumed_available &&
         saved.total_ns == UINT64_C(4191000000001) && saved.consumed_minutes == 69 &&
         saved.captured_at == f.pctl.status.usage_captured_at, "direct history exceeds quota with exact nanoseconds");
     f.clock.snapshot.unix_seconds += 5;
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "cached direct sample stores receipt separately");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "cached direct sample stores receipt separately");
     read_usage_rows(&f, rows);
     expect(rows[1].captured_at == saved.captured_at && rows[1].observed_at == f.clock.snapshot.unix_seconds,
         "cached sample never re-ages its original capture");
     f.pctl.status.blocked_today = true; f.pctl.configured_minutes = 0;
     direct_sample(&f, saved.total_ns + UINT64_C(1000000000), 1);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "BLOCKED zero configuration still records console usage");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "BLOCKED zero configuration still records console usage");
     f.pctl.status.unrestricted_today = true; f.pctl.status.limited_today = false;
     direct_sample(&f, saved.total_ns + UINT64_C(2000000000), 1);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "unlimited history is independent of allowance estimate");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "unlimited history is independent of allowance estimate");
     read_usage_rows(&f, rows); saved = rows[1];
     f.pctl.status.usage_available = false;
     f.clock.snapshot.unix_seconds += 60;
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "failed 1952 sample records read quality");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "failed 1952 sample records read quality");
     read_usage_rows(&f, rows);
     expect(rows[1].total_ns == saved.total_ns && rows[1].captured_at == saved.captured_at &&
         rows[1].consumed_available && !rows[1].latest_available, "read failure preserves reliable lower bound and capture");
     f.pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
     ++f.clock.snapshot.unix_seconds;
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "total service failure marks existing direct history");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "total service failure marks existing direct history");
     f.pctl.read_error = PTC_ERR_OK;
     direct_sample(&f, saved.total_ns - 1, 1);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "decreasing total is recorded as failed observation");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "decreasing total is recorded as failed observation");
     read_usage_rows(&f, rows);
     expect(rows[1].total_ns == saved.total_ns && !rows[1].latest_available,
         "decrease cannot overwrite the historical lower bound");
     direct_sample(&f, PTC_DAILY_SUMMARY_DAY_NS + 1, 1);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "out-of-range day total produces unknown sample");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "out-of-range day total produces unknown sample");
     read_usage_rows(&f, rows);
     expect(rows[1].total_ns == saved.total_ns && rows[1].consumed_minutes != 0,
         "out-of-range consumption cannot become known zero");
     direct_sample(&f, saved.total_ns + 1, 1);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "valid monotonic recovery replaces the lower bound");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "valid monotonic recovery replaces the lower bound");
     read_usage_rows(&f, rows); saved = rows[1];
     expect(saved.latest_available, "successful recovery clears only the latest read failure");
     ptc_daily_summary_aggregate(rows, 2, f.clock.snapshot.day_index, &aggregate);
@@ -2027,7 +2027,7 @@ static void test_direct_usage_history(void)
         "out-of-order unknown duplicates retain old captures and sum before rounding");
     f.mem->fail_write_path_contains = "daily-summaries";
     direct_sample(&f, saved.total_ns + 2, 1);
-    expect(usage_summary_tick(&f.core, f.clock.snapshot) == 0, "summary storage failure is best effort");
+    expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 0, "summary storage failure is best effort");
     read_usage_rows(&f, rows);
     expect(rows[1].total_ns == saved.total_ns, "failed write preserves original rows");
     f.mem->fail_write_path_contains = NULL;
@@ -2036,9 +2036,9 @@ static void test_direct_usage_history(void)
         f.pctl.status.usage_supported = false;
         f.pctl.status.unrestricted_today = false; f.pctl.status.limited_today = true;
         f.pctl.played_minutes_today = 1;
-        expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "retain old-source date before native migration");
+        expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "retain old-source date before native migration");
         direct_sample(&f, UINT64_C(59000000000), 86400);
-        expect(usage_summary_tick(&f.core, f.clock.snapshot) == 1, "bounded daily history retention writes");
+        expect(usage_summary_tick(&f.core, f.clock.snapshot, NULL) == 1, "bounded daily history retention writes");
     }
     size_t count = read_usage_rows(&f, rows);
     expect(count == 60 && rows[0].day_index == saved.day_index + 1,
@@ -2191,6 +2191,26 @@ static void test_scheduler_idle_probe(void)
     expect(f.core.reason_observation.revision == reason_before.revision &&
         f.core.reason_observation.captured_at == reason_before.captured_at,
         "quiet wakes cannot renew notification observation freshness");
+
+    f.pctl.read_status_calls = 0;
+    expect(ptc_sysmodule_scheduler_tick(&f.core, true) > 0 && f.pctl.read_status_calls == 1,
+        "unchanged target and daily summary share one same-second observation");
+    f.pctl.read_status_calls = 0;
+    f.pctl.read_status_fail_on_call = 1;
+    expect(ptc_sysmodule_scheduler_tick(&f.core, true) > 0 && f.pctl.read_status_calls == 2,
+        "failed Enforce observation does not prevent an independent successful summary read");
+    f.pctl.read_status_fail_on_call = 0;
+    expect(load_rules(&f.core, &rules), "load rules before summary target transition");
+    for (unsigned index = 0; index < 7; ++index) rules.week[index].minutes = 90;
+    expect(save_rules(&f.core, &rules), "set a different target for scheduler summary");
+    f.pctl.read_status_calls = 0;
+    unsigned int writes = f.pctl.apply_target_calls;
+    (void)ptc_sysmodule_scheduler_tick(&f.core, true);
+    char summary[1024];
+    expect(f.pctl.apply_target_calls == writes + 1 && f.pctl.read_status_calls >= 3 &&
+        f.mem->storage.vtable->read_text(&f.mem->storage, "app/stats/daily-summaries.jsonl", summary, sizeof(summary)) &&
+        strstr(summary, "\"configured_minutes\":90"),
+        "a target write and readback leave a fresh post-write daily summary");
 
     /* 未经 IPC 通知落入队列的请求。 */
     expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/inbox/pending/1-0001.json",
