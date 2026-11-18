@@ -17,7 +17,13 @@ typedef enum {
     PTC_IPC_CMD_SUBMIT_REQUEST = 1,
     PTC_IPC_CMD_GET_RESULT = 2,
     PTC_IPC_CMD_NOTIFY_STORAGE_CHANGED = 3,
+    PTC_IPC_CMD_SUBSCRIBE_REASON_WAKE = 4,
 } PtcIpcCommand;
+
+typedef struct {
+    char release[128];
+    char boot[17];
+} PtcIpcReasonSubscription;
 
 typedef enum {
     PTC_IPC_SUBMIT_ACCEPTED = 0,

@@ -45,3 +45,6 @@ its existing unblock behavior. Upstream commit remains unchanged.
 Local resident rendering patch: only submit a hidden frame when a brief appears,
 changes or clears; the front buffer presents the static notice between events.
 The brief dismissal cadence does not speed up automatic detail file polling.
+Local notification wake patch: the hidden UI can also wait on a readable IPC
+event. The combo event wins when both are ready, HOME/POWER blocks the optional
+event, and wait errors return to timed file polling. Upstream commit unchanged.

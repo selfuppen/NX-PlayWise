@@ -1,8 +1,17 @@
 #include "../../sysmodule/reason_notification.h"
+#include "../../companion/notification_preferences.h"
 #include "../../companion/notification_text.h"
 #include "../../companion/input_owner.h"
 #include "../../companion/overlay/detail_status.h"
 #include <limits.h>
+
+static unsigned preference_allocations;
+
+static void *count_preference_allocation(size_t size)
+{
+    ++preference_allocations;
+    return malloc(size);
+}
 
 static void test_notification_dependency(void)
 {
@@ -835,21 +844,40 @@ static void test_reason_transport(void)
     check_true(!enabled,"ambiguous preference defaults off");
     ptc_reason_notification_preferences("{\"reason_notifications_enabled\":true,\"ui_language\":\"system\",\"reason_notification_language\":\"zh-Hant\"}",&enabled,&language);
     check_true(enabled && language==PTC_UI_LANGUAGE_TRADITIONAL,"saved existing UI system language source");
+    check_true(!ptc_reason_notification_preferences("{\"reason_notifications_enabled\":true,\"x\":0,\"x\":1}",
+        &enabled, NULL) && !enabled, "Overlay-only projection rejects duplicate keys");
+    check_true(ptc_reason_notification_preferences("{\"reason_notifications_enabled\":true}", &enabled, NULL)
+        && enabled, "Overlay reads the flag without projecting a language");
+    check_true(!ptc_reason_notification_preferences(NULL, &enabled, NULL) && !enabled,
+        "Overlay read failure disables an earlier enabled preference");
     PtcReasonPreferences preferences = {0};
     const char *on = "{\"reason_notifications_enabled\":true,\"ui_language\":\"zh-Hant\"}";
-    ptc_reason_preferences_update(&preferences, on, false);
+    const char *changed = "{\"reason_notifications_enabled\":true,\"ui_language\":\"zh-Hans\"}";
+    cJSON_Hooks hooks = {count_preference_allocation, free};
+    preference_allocations = 0;
+    cJSON_InitHooks(&hooks);
+    ptc_reason_preferences_update(&preferences, on);
+    unsigned first_parse = preference_allocations;
+    ptc_reason_preferences_update(&preferences, on);
+    unsigned same_bytes = preference_allocations;
+    ptc_reason_preferences_update(&preferences, changed);
+    unsigned changed_bytes = preference_allocations;
+    cJSON_InitHooks(NULL);
+    check_true(first_parse > 0 && same_bytes == first_parse && changed_bytes > same_bytes,
+        "identical fresh reads skip JSON allocation and changed bytes reparse");
+    ptc_reason_preferences_update(&preferences, on);
     check_true(preferences.enabled && preferences.language == PTC_UI_LANGUAGE_TRADITIONAL,
         "notification preferences start from current contents");
-    ptc_reason_preferences_update(&preferences, "{\"reason_notifications_enabled\":true,\"ui_language\":\"zh-Hans\"}", false);
+    ptc_reason_preferences_update(&preferences, changed);
     check_true(preferences.enabled && preferences.language == PTC_UI_LANGUAGE_SIMPLIFIED,
         "same-size config rewrite needs no mtime change or IPC");
-    ptc_reason_preferences_update(&preferences, NULL, false);
+    ptc_reason_preferences_update(&preferences, NULL);
     check_true(!preferences.enabled && preferences.language == PTC_UI_LANGUAGE_ENGLISH && !preferences.parsed_config[0],
         "failed read never reuses enabled notification preferences");
-    ptc_reason_preferences_update(&preferences, on, false);
-    ptc_reason_preferences_update(&preferences, "{\"reason_notifications_enabled\":true", true);
-    check_true(!preferences.enabled && !preferences.parsed_config[0], "invalid forced refresh disables and invalidates");
-    ptc_reason_preferences_update(&preferences, on, true);
+    ptc_reason_preferences_update(&preferences, on);
+    ptc_reason_preferences_update(&preferences, "{\"reason_notifications_enabled\":true");
+    check_true(!preferences.enabled && !preferences.parsed_config[0], "invalid refresh disables and invalidates");
+    ptc_reason_preferences_update(&preferences, on);
     check_true(preferences.enabled && !strcmp(preferences.parsed_config, on), "recovered contents can be cached again");
     check_true(storage->vtable->read_text(storage,"sdmc:/config/ultrahand/config.ini",text,sizeof(text)) &&
         !strcmp(text,"[ultrahand]\nnotifications=true\n"),"third party settings untouched");

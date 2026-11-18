@@ -309,6 +309,12 @@ int main(int argc, char **argv)
     uint64_t last_full_tick = armGetSystemTick();
     bool resume_tick = false;
     ipc_available = ptc_ipc_server_start(&ipc_server, &sysmodule);
+#ifndef PLAYWISE_DEVICE_LAB
+    if (ipc_available) {
+        reason_notification.wake = ptc_ipc_server_signal_reason;
+        reason_notification.wake_ctx = &ipc_server;
+    }
+#endif
     if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");
     write_runtime_ready(&sysmodule, ipc_available);
 #ifdef PLAYWISE_PCTL_CAPTURE
@@ -376,7 +382,7 @@ int main(int argc, char **argv)
         if (notified || reason_ns >= reason_config_ns) {
             bool read_ok = storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json",
                 reason_config, sizeof(reason_config));
-            ptc_reason_preferences_update(&reason_preferences, read_ok ? reason_config : NULL, notified);
+            ptc_reason_preferences_update(&reason_preferences, read_ok ? reason_config : NULL);
             reason_config_ns = reason_ns + (reason_preferences.enabled ? 1000000000ULL : 5000000000ULL);
         }
         PtcClockSnapshot reason_clock = time_provider.provider.vtable->now(&time_provider.provider);

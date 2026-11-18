@@ -107,9 +107,12 @@ def main() -> None:
     loop = libtesla[libtesla.index("static inline int loop(int argc, char** argv)"):]
     require("detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0)" in poller,
             "idle input throttling must preserve visible and held-button sampling")
-    require("detail::hiddenPollNs(shData.automaticOpenBlocked.load() && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval())" in loop and
+    require("detail::hiddenPollNs(autoBlocked && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval())" in loop and
             "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop,
             "HOME/POWER must clear a hidden frame before waiting for the manual combo event")
+    require("autoBlocked ? nullptr : overlay->hiddenWakeEvent()" in loop and
+            "eventWait(&shData.comboEvent, 0)" in loop and "overlay->onHiddenWake(!notificationError)" in loop,
+            "IPC wait must preserve HOME/POWER, manual combo priority and timeout fallback")
     require("ptc_sysmodule_idle_wait_ms(wait_ms, fast_poll)" in sysmodule and
             "usage_evidence.active ||" in sysmodule and
             "ptc_reason_notification_busy(&reason_notification)" in sysmodule and
@@ -117,6 +120,11 @@ def main() -> None:
             "only capture, pending material and unhandled restriction changes may force fast polling")
     require("!n->blocked && (n->pending || n->detail_pending || n->event.dirty)" in reason_notification,
             "notification fast polling must cover pending toasts, detail offers and unhandled changes only")
+    preferences = sysmodule[sysmodule.index("if (notified || reason_ns >= reason_config_ns)"):
+                            sysmodule.index("PtcClockSnapshot reason_clock")]
+    require(preferences.index("storage->vtable->read_text(") <
+            preferences.index("ptc_reason_preferences_update(&reason_preferences, read_ok ? reason_config : NULL)"),
+            "IPC refresh must still read current config bytes before checking the parse cache")
     # Switch-only wiring that Host C tests cannot compile: the production loop must
     # enable sampled-state coalescing, flush it before the handoff freezes writes and
     # after the loop ends, and keep the freeze ledger free of periodic I/O.
@@ -172,6 +180,8 @@ def main() -> None:
     config_begin = hidden.index("&hidden_timing_.config_read,")
     config_read = hidden.index('s->vtable->read_text(s, "sdmc:/switch/playwise/config.json"')
     config_end = hidden.index("ptc_overlay_hidden_timing_read_end(", config_read)
+    require(config_read < hidden.index("ptc_reason_notification_preferences(read_ok ? config : nullptr,") < config_end,
+            "hidden Overlay must use the shared strict preference parser within its timing sample")
     runtime_begin = hidden.index("&hidden_timing_.runtime_read,")
     runtime_read = hidden.index("runtime_known_ = ptc_reason_detail_runtime(")
     runtime_end = hidden.index("ptc_overlay_hidden_timing_read_end(", runtime_read)

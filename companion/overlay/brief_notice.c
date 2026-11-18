@@ -103,7 +103,7 @@ static bool read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
 
 bool ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
     const char *root, const char *release, const char *boot, uint64_t now_ms,
-    bool allowed, bool dismiss)
+    bool allowed, bool dismiss, bool read_reason)
 {
     bool was_active = notice->active;
     bool accepted = false;
@@ -131,14 +131,22 @@ bool ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
         return was_active;
     }
     if (storage) {
-        accepted = read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 0);
+        if (read_reason) accepted = read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 0);
         /* Slow down test checks only in steady idle. Keep the original order
            when notices compete or a dismissal must consume pending tests. */
         if (was_active || notice->active || !display_allowed || now_ms >= notice->next_test_read_ms) {
             notice->next_test_read_ms = now_ms > UINT64_MAX - TEST_NOTICE_POLL_MS
                 ? UINT64_MAX : now_ms + TEST_NOTICE_POLL_MS;
-            if (read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 1))
+            if (read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 1)) {
                 accepted = true;
+                if (!read_reason) {
+                    /* A real restriction keeps priority over a newly accepted test,
+                       including when its event has not yet reached the UI. */
+                    notice->active = false;
+                    (void)read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 0);
+                    notice->active = true;
+                }
+            }
         }
     }
     return accepted || was_active != notice->active;

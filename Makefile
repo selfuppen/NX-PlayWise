@@ -89,6 +89,7 @@ PLATFORM_HOST_SRCS := \
 
 ORCH_SRCS := \
 	companion/overlay/brief_notice.c \
+	companion/notification_preferences.c \
 	companion/notification_test.c \
 	companion/input_owner.c \
 	companion/notification_text.c \
@@ -247,7 +248,7 @@ test-overlay-preview-save: $(HOST_BUILD_DIR)/overlay_preview_save_test
 
 test-host: test-overlay-preview-save
 
-NOTICE_PREVIEW_SRCS := sysmodule/reason_notification.c common/notification/reason_event.c companion/notification_text.c companion/input_owner.c platform/reason_detail.c platform/ultrahand_config.c third_party/cjson/cJSON.c
+NOTICE_PREVIEW_SRCS := sysmodule/reason_notification.c common/notification/reason_event.c companion/notification_preferences.c companion/notification_text.c companion/input_owner.c platform/reason_detail.c platform/ultrahand_config.c third_party/cjson/cJSON.c
 $(HOST_BUILD_DIR)/notice_preview_core.o: $(NOTICE_PREVIEW_SRCS) | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -r -o $@ $(NOTICE_PREVIEW_SRCS)
 

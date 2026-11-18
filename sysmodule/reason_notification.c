@@ -1,4 +1,5 @@
 #include "reason_notification.h"
+#include "../companion/notification_preferences.h"
 #include "../companion/notification_text.h"
 #include "../companion/input_owner.h"
 #include "../third_party/cjson/cJSON.h"
@@ -15,30 +16,13 @@ static const char *str(const cJSON *o, const char *key)
     return s ? s : "";
 }
 
-bool ptc_reason_notification_preferences(const char *config, bool *enabled,
-    PtcUiLanguagePreference *language)
+void ptc_reason_preferences_update(PtcReasonPreferences *preferences, const char *config)
 {
-    cJSON *j = cJSON_ParseWithOpts(config, NULL, true);
-    bool valid = cJSON_IsObject(j);
-    for (const cJSON *a = j ? j->child : NULL; valid && a; a = a->next)
-        for (const cJSON *b = a->next; b; b = b->next)
-            if (!strcmp(a->string, b->string)) valid = false;
-    *enabled = valid && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "reason_notifications_enabled"));
-    const char *lang = str(j, "ui_language");
-    if (!lang[0] || !strcmp(lang, "system")) lang = str(j, "reason_notification_language");
-    *language = !strcmp(lang, "zh-Hans") ? PTC_UI_LANGUAGE_SIMPLIFIED :
-        !strcmp(lang, "zh-Hant") ? PTC_UI_LANGUAGE_TRADITIONAL : PTC_UI_LANGUAGE_ENGLISH;
-    cJSON_Delete(j);
-    return valid;
-}
-
-void ptc_reason_preferences_update(PtcReasonPreferences *preferences, const char *config, bool force)
-{
-    if (!force && preferences->parsed_config[0] && config &&
+    if (preferences->parsed_config[0] && config &&
         !strcmp(preferences->parsed_config, config)) return;
     preferences->parsed_config[0] = '\0';
-    if (ptc_reason_notification_preferences(config ? config : "{}", &preferences->enabled,
-            &preferences->language) && config && strlen(config) < sizeof(preferences->parsed_config))
+    if (ptc_reason_notification_preferences(config, &preferences->enabled,
+            &preferences->language) && strlen(config) < sizeof(preferences->parsed_config))
         strcpy(preferences->parsed_config, config);
 }
 
@@ -243,10 +227,12 @@ static bool publish(PtcReasonNotification *n, PtcUiLanguagePreference lang, int6
     ok = journal && n->storage->vtable->write_text_atomic(n->storage, n->journal, journal);
     free(journal); cJSON_Delete(j);
     PtcStorageMetadata meta;
-    return ok && n->storage->vtable->metadata(n->storage, n->path, &meta) &&
-        meta.type == PTC_STORAGE_ENTRY_MISSING &&
-        n->storage->vtable->write_text_atomic(n->storage, stage, n->payload) &&
-        n->storage->vtable->rename_path(n->storage, stage, n->path);
+    if (!ok || !n->storage->vtable->metadata(n->storage, n->path, &meta) ||
+        meta.type != PTC_STORAGE_ENTRY_MISSING ||
+        !n->storage->vtable->write_text_atomic(n->storage, stage, n->payload)) return false;
+    /* The receiver scans through the publication window, even if rename reports failure. */
+    if (n->wake) n->wake(n->wake_ctx);
+    return n->storage->vtable->rename_path(n->storage, stage, n->path);
 }
 
 typedef enum {
@@ -324,6 +310,7 @@ static bool try_detail(PtcReasonNotification *n, const PtcReasonObservation *s, 
     detail.issued_ms = ms; detail.expires_ms = ms + 2000;
     detail.day = s->day; detail.reason = s->reason; detail.instance = s->instance;
     n->detail = detail; n->detail_pending = true;
+    if (n->wake) n->wake(n->wake_ctx);
     if (ptc_reason_detail_write(n->storage, n->root, "request", &detail)) {
         state(n, "detail_requested");
     } else {

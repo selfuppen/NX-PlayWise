@@ -19,6 +19,6 @@ typedef struct {
    displayed notice changes. The publisher owns cleanup. */
 bool ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
     const char *root, const char *release, const char *boot, uint64_t now_ms,
-    bool allowed, bool dismiss);
+    bool allowed, bool dismiss, bool read_reason);
 
 #endif

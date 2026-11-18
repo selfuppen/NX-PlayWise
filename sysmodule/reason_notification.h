@@ -29,6 +29,8 @@ typedef struct {
 typedef struct {
     PtcReasonEvent event;
     PtcStorage *storage;
+    void (*wake)(void *ctx);
+    void *wake_ctx;
     char root[128];
     char journal[256];
     char path[256];
@@ -61,9 +63,8 @@ typedef struct {
 
 void ptc_reason_notification_init(PtcReasonNotification *n, PtcStorage *s,
     const char *root, const char *release, const char *boot);
-bool ptc_reason_notification_preferences(const char *config, bool *enabled,
-    PtcUiLanguagePreference *language);
-void ptc_reason_preferences_update(PtcReasonPreferences *preferences, const char *config, bool force);
+/* Pass freshly read contents, or NULL after a failed read. */
+void ptc_reason_preferences_update(PtcReasonPreferences *preferences, const char *config);
 /* Snapshot formatting only; false means invalid cause or insufficient buffer. */
 bool ptc_reason_notification_body(const PtcReasonObservation *sample, int64_t wall,
     PtcUiLanguagePreference language, const char *shortcut, char *out, size_t size);

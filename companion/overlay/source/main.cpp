@@ -16,6 +16,7 @@ extern "C" {
 #include "../bridge.h"
 #include "../detail_status.h"
 #include "../hidden_poll.h"
+#include "../reason_wake.h"
 #include "../hidden_timing.h"
 #include "../brief_notice.h"
 #include "../../auth.h"
@@ -24,6 +25,7 @@ extern "C" {
 #include "../../ui_language.h"
 #include "../../ui_status_trace.h"
 #include "../../input_owner.h"
+#include "../../notification_preferences.h"
 #include "third_party/cjson/cJSON.h"
 #include "common/crypto/sha256.h"
 #include "common/time/ptc_time.h"
@@ -1385,6 +1387,22 @@ private:
 
 class PctcOverlay final : public tsl::Overlay {
 public:
+    Event* hiddenWakeEvent() override
+    {
+        return automatic_enabled_ && runtime_known_ && gui_ && gui_->automatic_detail_allowed() &&
+            eventActive(&reason_event_) ? &reason_event_ : nullptr;
+    }
+
+    void onHiddenWake(bool usable) override
+    {
+        if (usable) {
+            ptc_overlay_reason_wake(&reason_wake_, armTicksToNs(armGetSystemTick()) / 1000000);
+        } else {
+            eventClose(&reason_event_);
+        }
+        next_detail_poll_ms_ = next_brief_read_ms_ = 0;
+    }
+
     u64 hiddenPollInterval() override
     {
         if (brief_notice_.active) return UINT64_C(50000000);
@@ -1397,14 +1415,17 @@ public:
     bool onHiddenFrame(bool blocked, u64 keysDown) override
     {
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
+        if (blocked) s_automatic_detail = false;
         bool allowed = !blocked && automatic_enabled_ && runtime_known_ && gui_ &&
             gui_->automatic_detail_allowed() && !s_automatic_detail;
         bool dismiss = (keysDown & HidNpadButton_Minus) != 0;
         bool read_due = allowed && (ms >= next_brief_read_ms_ || dismiss);
         if (read_due) next_brief_read_ms_ = ms + 250;
+        bool read_reason = read_due && (dismiss || ptc_overlay_reason_scan(&reason_wake_,
+            eventActive(&reason_event_), ms, &next_reason_audit_ms_));
         bool changed = ptc_overlay_brief_poll(&brief_notice_, read_due ? ptc_fs_storage_as_storage(&storage_) : nullptr,
             APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, ms, allowed,
-            dismiss);
+            dismiss, read_reason);
         brief_diagnostic(ms, blocked);
         return changed;
     }
@@ -1445,23 +1466,18 @@ public:
            check itself is one bounded read. Cooperation below still needs neutral input. */
         if (ms >= next_config_ms_) {
             char config[8192];
-            automatic_enabled_ = false;
             ptc_overlay_hidden_timing_read_begin(&hidden_timing_, &hidden_timing_.config_read,
                 armTicksToNs(armGetSystemTick()) / 1000000);
             bool read_ok = s->vtable->read_text(s, "sdmc:/switch/playwise/config.json", config, sizeof(config));
-            if (read_ok) {
-                cJSON *j = cJSON_ParseWithOpts(config, nullptr, true);
-                automatic_enabled_ = cJSON_IsObject(j) && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "reason_notifications_enabled"));
-                for (const cJSON *a = j ? j->child : nullptr; automatic_enabled_ && a; a = a->next)
-                    for (const cJSON *b = a->next; b; b = b->next)
-                        if (!std::strcmp(a->string, b->string)) automatic_enabled_ = false;
-                cJSON_Delete(j);
-            }
+            ptc_reason_notification_preferences(read_ok ? config : nullptr, &automatic_enabled_, nullptr);
             next_config_ms_ = ms + PTC_OVERLAY_HIDDEN_CONFIG_MS;
             ptc_overlay_hidden_timing_read_end(&hidden_timing_, &hidden_timing_.config_read,
                 armTicksToNs(armGetSystemTick()) / 1000000, read_ok);
         }
-        if (!automatic_enabled_) return false;
+        if (!automatic_enabled_) {
+            eventClose(&reason_event_);
+            return false;
+        }
         /* The backend identity changes only on boot or handoff: cache it instead
            of re-reading and re-parsing runtime-ready.json on every 250ms poll. */
         if (ms >= next_runtime_ms_) {
@@ -1470,6 +1486,8 @@ public:
                 armTicksToNs(armGetSystemTick()) / 1000000);
             runtime_known_ = ptc_reason_detail_runtime(s, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot);
             if (runtime_known_ && std::strcmp(boot, runtime_boot_) != 0) {
+                eventClose(&reason_event_);
+                next_reason_subscribe_ms_ = 0;
                 std::snprintf(runtime_boot_, sizeof(runtime_boot_), "%s", boot);
                 next_ready_ms_ = 0; /* a lease bound to the previous backend is useless */
                 brief_notice_.active = false;
@@ -1478,7 +1496,17 @@ public:
             ptc_overlay_hidden_timing_read_end(&hidden_timing_, &hidden_timing_.runtime_read,
                 armTicksToNs(armGetSystemTick()) / 1000000, runtime_known_);
         }
+        if (!runtime_known_ || !bridge_.ipc.initialized || reason_session_ != bridge_.ipc.service.session)
+            eventClose(&reason_event_);
         if (!runtime_known_) return false;
+        if (bridge_.ipc.initialized && !eventActive(&reason_event_) && ms >= next_reason_subscribe_ms_) {
+            next_reason_subscribe_ms_ = ms + PTC_OVERLAY_HIDDEN_RUNTIME_MS;
+            if (ptc_switch_ipc_subscribe_reason(&bridge_.ipc, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, &reason_event_)) {
+                reason_session_ = bridge_.ipc.service.session;
+                ptc_overlay_reason_wake(&reason_wake_, armTicksToNs(armGetSystemTick()) / 1000000);
+            }
+            ms = armTicksToNs(armGetSystemTick()) / 1000000;
+        }
         if (!neutral || automatic_failures_ >= PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) return false;
         if (ms >= next_ready_ms_) {
             PtcReasonDetail ready{};
@@ -1496,6 +1524,8 @@ public:
             ptc_overlay_hidden_timing_ready_end(&hidden_timing_, armTicksToNs(armGetSystemTick()) / 1000000, written);
             if (!written) { ++automatic_failures_; return false; }
         }
+        if (!ptc_overlay_reason_scan(&reason_wake_, eventActive(&reason_event_), ms, &next_request_audit_ms_))
+            return false;
         PtcReasonDetail offer{};
         ptc_overlay_hidden_timing_read_begin(&hidden_timing_, &hidden_timing_.request_read,
             armTicksToNs(armGetSystemTick()) / 1000000);
@@ -1503,6 +1533,7 @@ public:
         ptc_overlay_hidden_timing_read_end(&hidden_timing_, &hidden_timing_.request_read,
             armTicksToNs(armGetSystemTick()) / 1000000, read_ok);
         if (!read_ok) return false;
+        ms = armTicksToNs(armGetSystemTick()) / 1000000;
         if (std::strcmp(offer.boot, runtime_boot_) != 0) {
             /* An offer from another backend boot: refresh the identity soon, but
                at most once per second while a stale offer file lingers. */
@@ -1549,7 +1580,7 @@ public:
     void onShow() override
     {
         ptc_overlay_brief_poll(&brief_notice_, nullptr, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_,
-            armTicksToNs(armGetSystemTick()) / 1000000, false, false);
+            armTicksToNs(armGetSystemTick()) / 1000000, false, false, false);
         next_config_ms_ = 0;
         s_display_clock.sampled = false;
         s_owner_visible = true;
@@ -1567,6 +1598,7 @@ public:
         if (gui_) gui_->cancel_manual_open();
         ptc_overlay_hidden_timing_init(&hidden_timing_);
         next_detail_poll_ms_ = 0;
+        next_request_audit_ms_ = next_reason_audit_ms_ = 0;
         s_owner_visible = false;
         s_automatic_detail = false;
         s_automatic_detail_confirmed = false;
@@ -1595,6 +1627,7 @@ public:
     void exitServices() override
     {
         onHide();
+        eventClose(&reason_event_);
         ptc_ui_status_trace_close(&s_status_trace, armTicksToNs(armGetSystemTick()));
         ptc_overlay_bridge_exit(&bridge_);
         ptc_overlay_resource_snapshot("exit", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
@@ -1658,6 +1691,10 @@ private:
     PctcGui *gui_ = nullptr;
     PtcReasonDetail automatic_offer_{};
     PtcOverlayBriefNotice brief_notice_{};
+    Event reason_event_{};
+    Handle reason_session_ = INVALID_HANDLE;
+    PtcOverlayReasonWake reason_wake_{};
+    uint64_t next_reason_subscribe_ms_ = 0, next_request_audit_ms_ = 0, next_reason_audit_ms_ = 0;
     PtcOverlayHiddenTiming hidden_timing_{};
     uint64_t ui_instance_ms_ = 0, seen_sequence_ = 0, next_ready_ms_ = 0;
     uint64_t next_brief_read_ms_ = 0, next_detail_poll_ms_ = 0;

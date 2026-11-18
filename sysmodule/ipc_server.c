@@ -6,6 +6,9 @@
 
 #include "../common/protocol/ipc_protocol.h"
 #include "../common/protocol/request_schema.h"
+#ifndef PLAYWISE_DEVICE_LAB
+#include "release_manifest.h"
+#endif
 
 static void make_response(Result result, const void *data, size_t data_size)
 {
@@ -247,7 +250,73 @@ static void handle_get_result(PtcIpcServer *server, HipcParsedRequest *hipc, con
     }
 }
 
-static bool dispatch(PtcIpcServer *server)
+#ifndef PLAYWISE_DEVICE_LAB
+static void handle_reason_subscribe(PtcIpcServer *server, Handle session, const void *data, size_t size)
+{
+    PtcIpcReasonSubscription request;
+    if (size < sizeof(request)) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    memcpy(&request, data, sizeof(request));
+    if (!memchr(request.release, 0, sizeof(request.release)) || !memchr(request.boot, 0, sizeof(request.boot)) ||
+        strcmp(request.release, PLAYWISE_BUILD_RELEASE_ID) || strcmp(request.boot, server->sysmodule->boot_id)) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    Handle event_handle = INVALID_HANDLE;
+    mutexLock(&server->reason_mutex);
+    if (!server->reason_stopping) {
+        PtcIpcReasonSubscriber *available = NULL;
+        for (unsigned i = 0; i < 8; ++i) {
+            PtcIpcReasonSubscriber *subscriber = &server->reason_subscribers[i];
+            if (subscriber->session == session) {
+                event_handle = subscriber->event.revent;
+                break;
+            }
+            if (!available && subscriber->session == INVALID_HANDLE) available = subscriber;
+        }
+        if (event_handle == INVALID_HANDLE && available && R_SUCCEEDED(eventCreate(&available->event, true))) {
+            available->session = session;
+            event_handle = available->event.revent;
+        }
+    }
+    mutexUnlock(&server->reason_mutex);
+    if (event_handle == INVALID_HANDLE) make_response(MAKERESULT(Module_Libnx, LibnxError_OutOfMemory), NULL, 0);
+    else make_response_handle(0, NULL, 0, event_handle);
+}
+
+void ptc_ipc_server_signal_reason(void *ctx)
+{
+    PtcIpcServer *server = ctx;
+    mutexLock(&server->reason_mutex);
+    for (unsigned i = 0; i < 8; ++i) {
+        PtcIpcReasonSubscriber *subscriber = &server->reason_subscribers[i];
+        if (subscriber->session != INVALID_HANDLE) (void)eventFire(&subscriber->event);
+    }
+    mutexUnlock(&server->reason_mutex);
+}
+#endif
+
+static void close_session(PtcIpcServer *server, unsigned index)
+{
+    Handle session = server->sessions[index];
+#ifndef PLAYWISE_DEVICE_LAB
+    mutexLock(&server->reason_mutex);
+    for (unsigned i = 0; i < 8; ++i) {
+        PtcIpcReasonSubscriber *subscriber = &server->reason_subscribers[i];
+        if (subscriber->session != session) continue;
+        eventClose(&subscriber->event);
+        subscriber->session = INVALID_HANDLE;
+        break;
+    }
+    mutexUnlock(&server->reason_mutex);
+#endif
+    svcCloseHandle(session);
+    server->sessions[index] = server->sessions[--server->session_count];
+}
+
+static bool dispatch(PtcIpcServer *server, unsigned index)
 {
     HipcParsedRequest hipc;
     CmifInHeader *header;
@@ -259,6 +328,13 @@ static bool dispatch(PtcIpcServer *server)
     case PTC_IPC_CMD_SUBMIT_REQUEST: handle_submit(server, &hipc, data, data_size); break;
     case PTC_IPC_CMD_GET_RESULT: handle_get_result(server, &hipc, data, data_size); break;
     case PTC_IPC_CMD_NOTIFY_STORAGE_CHANGED: eventFire(&server->wake_event); make_response(0, NULL, 0); break;
+#ifndef PLAYWISE_DEVICE_LAB
+    case PTC_IPC_CMD_SUBSCRIBE_REASON_WAKE:
+        handle_reason_subscribe(server, server->sessions[index], data, data_size);
+        break;
+#else
+    (void)index;
+#endif
     default: make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0); break;
     }
     return true;
@@ -279,8 +355,7 @@ static void ipc_thread(void *arg)
         reply = INVALID_HANDLE;
         if (R_FAILED(rc)) {
             if (index > 0 && (unsigned int)index <= server->session_count) {
-                svcCloseHandle(server->sessions[index - 1]);
-                server->sessions[index - 1] = server->sessions[--server->session_count];
+                close_session(server, index - 1);
             }
             continue;
         }
@@ -292,11 +367,8 @@ static void ipc_thread(void *arg)
             }
         } else if (index > 0 && (unsigned int)index <= server->session_count) {
             Handle session = server->sessions[index - 1];
-            if (dispatch(server)) reply = session;
-            else {
-                svcCloseHandle(session);
-                server->sessions[index - 1] = server->sessions[--server->session_count];
-            }
+            if (dispatch(server, index - 1)) reply = session;
+            else close_session(server, index - 1);
         }
     }
 }
@@ -307,6 +379,9 @@ bool ptc_ipc_server_start(PtcIpcServer *server, PtcSysmodule *sysmodule)
     memset(server, 0, sizeof(*server));
     server->sysmodule = sysmodule;
     mutexInit(&server->storage_mutex);
+#ifndef PLAYWISE_DEVICE_LAB
+    mutexInit(&server->reason_mutex);
+#endif
     if (R_FAILED(eventCreate(&server->wake_event, true))) return false;
     if (R_FAILED(eventCreate(&server->error_event, false))) { eventClose(&server->wake_event); return false; }
     if (R_FAILED(eventCreate(&server->completed_event, false))) {
@@ -336,6 +411,16 @@ void ptc_ipc_server_stop(PtcIpcServer *server)
     unsigned int i;
     if (!server) return;
     server->running = false;
+#ifndef PLAYWISE_DEVICE_LAB
+    mutexLock(&server->reason_mutex);
+    server->reason_stopping = true;
+    for (i = 0; i < 8; ++i) {
+        PtcIpcReasonSubscriber *subscriber = &server->reason_subscribers[i];
+        if (subscriber->session != INVALID_HANDLE) eventClose(&subscriber->event);
+        subscriber->session = INVALID_HANDLE;
+    }
+    mutexUnlock(&server->reason_mutex);
+#endif
     for (i = 0; i < server->session_count; ++i) svcCloseHandle(server->sessions[i]);
     for (i = 0; i < PTC_IPC_MAX_WAITERS; ++i) if (server->waiters[i].active) eventClose(&server->waiters[i].completion);
     if (server->registered) { svcCloseHandle(server->port); smUnregisterServiceCmif(smEncodeName(PTC_IPC_SERVICE_NAME)); }

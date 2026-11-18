@@ -52,6 +52,7 @@ export DEPSDIR := $(CURDIR)/$(BUILD)
 
 SYSMODULE_CFILES := \
 	input_owner.c \
+	notification_preferences.c \
 	notification_text.c \
 	reason_notification.c \
 	sysmodule_reason.c \

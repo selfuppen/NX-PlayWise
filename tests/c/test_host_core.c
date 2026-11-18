@@ -4625,6 +4625,7 @@ int main(void)
     test_reason_events();
     test_overlay_brief();
     test_overlay_brief_suppression();
+    test_overlay_reason_wake();
     test_notification_dependency();
     test_reason_detail_transport();
     test_reason_idle_cost();

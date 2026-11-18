@@ -20,12 +20,24 @@ typedef struct {
     bool active;
 } PtcIpcResultCacheEntry;
 
+#ifndef PLAYWISE_DEVICE_LAB
+typedef struct {
+    Handle session;
+    Event event;
+} PtcIpcReasonSubscriber;
+#endif
+
 typedef struct {
     PtcSysmodule *sysmodule;
     Handle port;
     Handle sessions[8];
     unsigned int session_count;
     Mutex storage_mutex;
+#ifndef PLAYWISE_DEVICE_LAB
+    Mutex reason_mutex;
+    PtcIpcReasonSubscriber reason_subscribers[8];
+    bool reason_stopping;
+#endif
     Event wake_event;
     Event error_event;
     Event completed_event;
@@ -42,6 +54,9 @@ bool ptc_ipc_server_start(PtcIpcServer *server, PtcSysmodule *sysmodule);
 void ptc_ipc_server_stop(PtcIpcServer *server);
 bool ptc_ipc_server_wait(PtcIpcServer *server, uint32_t timeout_ms);
 void ptc_ipc_server_signal_completed(PtcIpcServer *server);
+#ifndef PLAYWISE_DEVICE_LAB
+void ptc_ipc_server_signal_reason(void *ctx);
+#endif
 void ptc_ipc_server_lock_storage(PtcIpcServer *server);
 void ptc_ipc_server_unlock_storage(PtcIpcServer *server);
 

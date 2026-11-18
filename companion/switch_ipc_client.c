@@ -251,5 +251,24 @@ bool ptc_switch_ipc_client_probe(PtcSwitchIpcClient *client)
 {
     return backend_connect(client);
 }
+#ifdef PTC_IPC_CLIENT_OVERLAY
+bool ptc_switch_ipc_subscribe_reason(PtcSwitchIpcClient *client, const char *release, const char *boot, Event *event)
+{
+    PtcIpcReasonSubscription request = {0};
+    Handle handle = INVALID_HANDLE;
+    if (!client->initialized || strlen(release) >= sizeof(request.release) ||
+        strlen(boot) != sizeof(request.boot) - 1) return false;
+    strcpy(request.release, release);
+    strcpy(request.boot, boot);
+    Result rc = serviceDispatchIn(&client->service, PTC_IPC_CMD_SUBSCRIBE_REASON_WAKE, request,
+        .out_handle_attrs = { SfOutHandleAttr_HipcCopy }, .out_handles = &handle);
+    if (R_FAILED(rc) || handle == INVALID_HANDLE) {
+        if (handle != INVALID_HANDLE) svcCloseHandle(handle);
+        return false;
+    }
+    eventLoadRemote(event, handle, true);
+    return true;
+}
+#endif
 const PtcCompanionIpcBackend *ptc_switch_ipc_backend(void) { return &BACKEND; }
 #endif

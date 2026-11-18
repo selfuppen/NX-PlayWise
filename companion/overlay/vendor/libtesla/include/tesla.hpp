@@ -3007,6 +3007,8 @@ namespace tsl {
         // PlayWise cooperation stays on the UI thread, outside the HID mutex.
         virtual u64 hiddenPollInterval() { return UINT64_MAX; }
         virtual bool onHiddenPoll(bool neutral) { return false; }
+        virtual Event* hiddenWakeEvent() { return nullptr; }
+        virtual void onHiddenWake(bool usable) { (void)usable; }
         virtual bool hasHiddenFrame() { return false; }
         virtual bool onHiddenFrame(bool blocked, u64 keysDown) { return false; }
         virtual void drawHiddenFrame(gfx::Renderer *renderer) {}
@@ -3676,9 +3678,23 @@ namespace tsl {
 
         while (shData.running) {
 
-            Result wake = eventWait(&shData.comboEvent,
-                detail::hiddenPollNs(shData.automaticOpenBlocked.load() && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval()));
-            if (wake == KERNELRESULT(TimedOut)) {
+            const bool autoBlocked = shData.automaticOpenBlocked.load();
+            const u64 timeout = detail::hiddenPollNs(autoBlocked && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval());
+            Event* notification = autoBlocked ? nullptr : overlay->hiddenWakeEvent();
+            int index = 0;
+            Result wake;
+            if (notification) {
+                const Waiter objects[] = {waiterForEvent(&shData.comboEvent), waiterForEvent(notification)};
+                wake = waitObjects(&index, objects, 2, timeout);
+            } else {
+                wake = eventWait(&shData.comboEvent, timeout);
+            }
+            const bool notificationWake = notification && R_SUCCEEDED(wake) && index == 1;
+            const bool notificationError = notification && R_FAILED(wake) && wake != KERNELRESULT(TimedOut);
+            if (notificationWake || notificationError) overlay->onHiddenWake(!notificationError);
+            const bool comboPending = (notificationWake || notificationError) &&
+                R_SUCCEEDED(eventWait(&shData.comboEvent, 0));
+            if (wake == KERNELRESULT(TimedOut) || ((notificationWake || notificationError) && !comboPending)) {
                 bool neutral;
                 u64 hiddenKeysDown;
                 {
@@ -3693,7 +3709,7 @@ namespace tsl {
                 bool open = !blocked && overlay->onHiddenPoll(neutral);
                 overlay->loopHiddenFrame(blocked, hiddenKeysDown);
                 if (!open) continue;
-            } else if (R_FAILED(wake)) {
+            } else if (R_FAILED(wake) && !notificationError) {
                 ASSERT_FATAL(wake);
             }
             if (shData.automaticOpenBlocked.load()) {
