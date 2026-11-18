@@ -159,6 +159,15 @@ void ptc_reason_notification_init(PtcReasonNotification *n, PtcStorage *s,
         if (!((boot[i] >= '0' && boot[i] <= '9') || (boot[i] >= 'a' && boot[i] <= 'f'))) n->blocked = true;
 }
 
+static bool observation_current(const PtcReasonObservation *s, int64_t wall)
+{
+    if (!s->reliable || !s->restricted || s->reason <= PTC_REASON_NONE || s->reason > PTC_REASON_DOCK ||
+        wall < s->captured_at) return false;
+    uint64_t age = (uint64_t)wall - (uint64_t)s->captured_at;
+    return age < 2 && (!s->local_clock_available ||
+        (s->local_second_of_day < 86400 && age < 86400u - s->local_second_of_day));
+}
+
 bool ptc_reason_notification_body(const PtcReasonObservation *s, int64_t wall,
     PtcUiLanguagePreference lang, const char *shortcut, char *out, size_t size)
 {
@@ -167,10 +176,7 @@ bool ptc_reason_notification_body(const PtcReasonObservation *s, int64_t wall,
     char time[256], duration[96];
     if (!size) return false;
     out[0] = '\0';
-    if (!s->reliable || !s->restricted || s->reason <= PTC_REASON_NONE || s->reason > PTC_REASON_DOCK ||
-        wall < s->captured_at || wall - s->captured_at >= 2 ||
-        (s->local_clock_available && (s->local_second_of_day >= 86400 ||
-            wall - s->captured_at >= 86400 - s->local_second_of_day))) return false;
+    if (!observation_current(s, wall)) return false;
     PtcUiTextId time_id = PTC_UI_T_NOTIFY_TIME_UNKNOWN;
     if (s->reason == PTC_REASON_DAILY && s->time_kind == PTC_REASON_TIME_DAILY_ZERO)
         time_id = PTC_UI_T_NOTIFY_DAILY_ZERO;
@@ -243,6 +249,91 @@ static bool publish(PtcReasonNotification *n, PtcUiLanguagePreference lang, int6
         n->storage->vtable->rename_path(n->storage, stage, n->path);
 }
 
+typedef enum {
+    DETAIL_CONTINUE,
+    DETAIL_CONFIRMED,
+    DETAIL_FALLBACK,
+    DETAIL_CLEANUP_FAILED,
+} DetailResult;
+
+static DetailResult advance_detail(PtcReasonNotification *n, const PtcReasonObservation *s,
+    uint64_t ms, int64_t wall, bool cancel, bool suppressed)
+{
+    if (!n->detail_pending) return DETAIL_CONTINUE;
+    PtcReasonDetail ack;
+    bool current = observation_current(s, wall);
+    /* A live visible owner is expected when confirming a drawn detail. */
+    bool confirmed = !cancel && current &&
+        ptc_reason_detail_fresh(&n->detail, n->event.release, n->event.boot, ms) &&
+        ptc_reason_detail_read(n->storage, n->root, "ack", &ack) &&
+        ptc_reason_detail_same(&n->detail, &ack) &&
+        ptc_input_owner_confirm(n->storage, n->root, n->event.release, n->event.boot,
+            ack.owner, ms * UINT64_C(1000000));
+    /* The reader may cache the UI's release for one 250ms poll. Give that
+       release at most 500ms to drain; the UI offer itself still expires at 2s. */
+    bool timed_out = ms >= n->detail.expires_ms &&
+        (!suppressed || ms - n->detail.expires_ms >= 500);
+    if (!confirmed && !cancel && current && !timed_out) return DETAIL_CONTINUE;
+    if (!ptc_reason_detail_clear(n->storage, n->root, &n->detail)) return DETAIL_CLEANUP_FAILED;
+    n->detail_pending = false;
+    state(n, confirmed ? "detail_drawn_confirmed" : cancel ? "detail_cancelled" : "detail_timeout");
+    if (confirmed) return DETAIL_CONFIRMED;
+    return !cancel && !suppressed && current ? DETAIL_FALLBACK : DETAIL_CONTINUE;
+}
+
+/* True when the event is waiting for a renewed ready lease or a detail ACK. */
+static bool try_detail(PtcReasonNotification *n, const PtcReasonObservation *s, uint64_t ms)
+{
+    PtcReasonDetail detail;
+    PtcReasonDetailDecision *d = &n->detail_decision;
+    *d = (PtcReasonDetailDecision){.available = true, .repeat = n->event.repeat,
+        .failures = n->detail_failures, .day = s->day, .reason = s->reason,
+        .instance = s->instance, .ms = ms, .clock_budget_available = ms <= UINT64_MAX - 2000,
+        .sequence_available = n->detail_sequence != UINT64_MAX};
+    n->detail_decision_dirty = true;
+    /* A continuing countdown gets only a brief notice, never another focus grab. */
+    if (!d->repeat && d->failures < 5) {
+        d->ready_read_attempted = true;
+        d->ready_read_ok = ptc_reason_detail_read(n->storage, n->root, "ready", &detail);
+        if (d->ready_read_ok) {
+            /* Retain the actual read before replacing its lease with an offer. */
+            d->ready_release_match = !strcmp(detail.release, n->event.release);
+            d->ready_boot_match = !strcmp(detail.boot, n->event.boot);
+            d->ready_ui_instance = detail.ui_instance;
+            d->ready_issued_ms = detail.issued_ms;
+            d->ready_expires_ms = detail.expires_ms;
+            d->ready_fresh = ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, ms);
+        }
+    }
+    /* A same-boot expired hint may be awaiting a slow renewal. Wait only for
+       this event, and require a fresh lease before offering detail. */
+    bool expired_matching_lease = d->ready_read_ok && detail.expires_ms &&
+        ms >= detail.expires_ms &&
+        ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, detail.expires_ms - 1);
+    bool same_identity_or_missing = !d->ready_read_ok ||
+        (d->ready_release_match && d->ready_boot_match);
+    if (!d->ready_fresh && !d->repeat && d->failures < 5 && d->clock_budget_available && d->sequence_available &&
+        (expired_matching_lease || (n->ready_wait_deadline_ms && same_identity_or_missing))) {
+        if (!n->ready_wait_deadline_ms) n->ready_wait_deadline_ms = ms + READY_RENEWAL_WAIT_MS;
+        if (ms < n->ready_wait_deadline_ms) return true;
+    }
+    n->ready_wait_deadline_ms = 0;
+    ptc_reason_event_attempted(&n->event, ms);
+    if (!d->ready_fresh || !d->clock_budget_available || !d->sequence_available) return false;
+    detail.sequence = ++n->detail_sequence;
+    detail.issued_ms = ms; detail.expires_ms = ms + 2000;
+    detail.day = s->day; detail.reason = s->reason; detail.instance = s->instance;
+    n->detail = detail; n->detail_pending = true;
+    if (ptc_reason_detail_write(n->storage, n->root, "request", &detail)) {
+        state(n, "detail_requested");
+    } else {
+        /* A failed write may already have renamed. Let the offer expire before fallback. */
+        ++n->detail_failures;
+        state(n, "detail_write_unknown");
+    }
+    return true;
+}
+
 void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObservation *s,
     uint64_t ms, int64_t wall, bool enabled, bool suppressed, bool stopping, PtcUiLanguagePreference lang)
 {
@@ -252,38 +343,15 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         if (!startup(n)) goto failed;
         n->initialized = true;
     }
-    bool change = (n->pending || n->detail_pending || n->ready_wait_deadline_ms) && (s->reason != n->event.latest.reason || s->instance != n->event.latest.instance ||
-        s->day != n->event.latest.day);
-    bool cancel = stopping || !enabled || suppressed || !s->reliable || !s->restricted ||
+    bool change = (n->pending || n->detail_pending || n->ready_wait_deadline_ms) &&
+        (s->reason != n->event.latest.reason || s->instance != n->event.latest.instance ||
+            s->day != n->event.latest.day);
+    bool detail_cancel = stopping || !enabled || !s->reliable || !s->restricted ||
         ms < n->event.last_ms || wall < n->event.last_wall || change;
+    bool cancel = detail_cancel || suppressed;
     if (cancel) n->ready_wait_deadline_ms = 0;
-    bool fallback = false;
-    bool detail_confirmed = false;
-    if (n->detail_pending) {
-        PtcReasonDetail ack;
-        char body[512];
-        bool current = ptc_reason_notification_body(s, wall, lang, "", body, sizeof(body));
-        bool confirmed = !change && current && enabled && !stopping &&
-            ms >= n->event.last_ms && wall >= n->event.last_wall &&
-            ptc_reason_detail_fresh(&n->detail, n->event.release, n->event.boot, ms) &&
-            ptc_reason_detail_read(n->storage, n->root, "ack", &ack) &&
-            ptc_reason_detail_same(&n->detail, &ack) &&
-            ptc_input_owner_confirm(n->storage, n->root, n->event.release, n->event.boot,
-                ack.owner, ms * UINT64_C(1000000));
-        detail_confirmed = confirmed;
-        bool detail_cancel = stopping || !enabled || !s->reliable || !s->restricted || change ||
-            ms < n->event.last_ms || wall < n->event.last_wall;
-        /* The reader may cache the UI's release for one 250ms poll. Give that
-           release at most 500ms to drain; the UI offer itself still expires at 2s. */
-        bool timed_out = ms >= n->detail.expires_ms &&
-            (!suppressed || ms - n->detail.expires_ms >= 500);
-        if (confirmed || detail_cancel || !current || timed_out) {
-            if (!ptc_reason_detail_clear(n->storage, n->root, &n->detail)) goto failed;
-            n->detail_pending = false;
-            fallback = !confirmed && !cancel && current;
-            state(n, confirmed ? "detail_drawn_confirmed" : detail_cancel ? "detail_cancelled" : "detail_timeout");
-        }
-    }
+    DetailResult detail = advance_detail(n, s, ms, wall, detail_cancel, suppressed);
+    if (detail == DETAIL_CLEANUP_FAILED) goto failed;
     if (n->path[0] && (cancel || !n->pending || ms >= n->expires_ms)) {
         if (!clear(n)) goto failed;
         state(n, cancel ? "suppressed" : "expired_display_unknown");
@@ -291,61 +359,9 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
     if (stopping) return;
     bool ready = ptc_reason_event_update(&n->event, n->event.release, n->event.boot, s, ms, wall,
         enabled, suppressed);
-    if ((!enabled || suppressed) && !detail_confirmed) state(n, "suppressed");
-    if ((!ready && !fallback) || n->pending || n->detail_pending) return;
-    if (!fallback) {
-        PtcReasonDetail detail;
-        PtcReasonDetailDecision *d = &n->detail_decision;
-        *d = (PtcReasonDetailDecision){.available = true, .repeat = n->event.repeat,
-            .failures = n->detail_failures, .day = s->day, .reason = s->reason,
-            .instance = s->instance, .ms = ms, .clock_budget_available = ms <= UINT64_MAX - 2000,
-            .sequence_available = n->detail_sequence != UINT64_MAX};
-        n->detail_decision_dirty = true;
-        /* A continuing countdown gets only a brief notice, never another focus grab. */
-        if (!n->event.repeat && n->detail_failures < 5) {
-            d->ready_read_attempted = true;
-            d->ready_read_ok = ptc_reason_detail_read(n->storage, n->root, "ready", &detail);
-            if (d->ready_read_ok) {
-                /* Retain the actual read before replacing its lease with an offer. */
-                d->ready_release_match = !strcmp(detail.release, n->event.release);
-                d->ready_boot_match = !strcmp(detail.boot, n->event.boot);
-                d->ready_ui_instance = detail.ui_instance;
-                d->ready_issued_ms = detail.issued_ms;
-                d->ready_expires_ms = detail.expires_ms;
-                d->ready_fresh = ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, ms);
-            }
-        }
-        /* Any same-boot valid expired hint may be awaiting a slow renewal.
-           Retain only this fresh event for two existing polls, without treating
-           the old hint as ready. An offer still requires a newly read fresh lease. */
-        bool expired_matching_lease = d->ready_read_ok && detail.expires_ms &&
-            ms >= detail.expires_ms &&
-            ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, detail.expires_ms - 1);
-        bool same_identity_or_missing = !d->ready_read_ok ||
-            (d->ready_release_match && d->ready_boot_match);
-        if (!d->ready_fresh && !d->repeat && d->failures < 5 && d->clock_budget_available && d->sequence_available &&
-            (expired_matching_lease || (n->ready_wait_deadline_ms && same_identity_or_missing))) {
-            if (!n->ready_wait_deadline_ms) n->ready_wait_deadline_ms = ms + READY_RENEWAL_WAIT_MS;
-            if (ms < n->ready_wait_deadline_ms) return;
-        }
-        n->ready_wait_deadline_ms = 0;
-        ptc_reason_event_attempted(&n->event, ms);
-        if (d->ready_fresh && d->clock_budget_available && d->sequence_available) {
-            detail.sequence = ++n->detail_sequence;
-            detail.issued_ms = ms; detail.expires_ms = ms + 2000;
-            detail.day = s->day; detail.reason = s->reason; detail.instance = s->instance;
-            n->detail = detail; n->detail_pending = true;
-            if (ptc_reason_detail_write(n->storage, n->root, "request", &detail)) {
-                state(n, "detail_requested");
-                return;
-            }
-            /* A failed write may already have renamed. Wait out its same lease
-               before fallback, rather than race a late accepted offer. */
-            ++n->detail_failures;
-            state(n, "detail_write_unknown");
-            return;
-        }
-    }
+    if ((!enabled || suppressed) && detail != DETAIL_CONFIRMED) state(n, "suppressed");
+    if (n->pending || n->detail_pending) return;
+    if (detail != DETAIL_FALLBACK && (!ready || try_detail(n, s, ms))) return;
     /* The receiver switch and shortcut label matter only when a fallback toast
        is about to be published. Read them here, at most once per two seconds,
        instead of re-reading two SD files on every idle round. */

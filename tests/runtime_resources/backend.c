@@ -9,7 +9,7 @@
 
 extern unsigned ptc_resource_rules_parses, ptc_resource_state_parses;
 static int failures;
-static unsigned reads, library_reads;
+static unsigned reads, library_reads, config_reads, config_metadata;
 static bool fail_metadata;
 static const PtcStorageVTable *original;
 static PtcStorageVTable counted;
@@ -35,6 +35,7 @@ static bool read_text(PtcStorage *s, const char *path, char *out, size_t size)
     ++reads;
     ++storage_calls;
     if (strstr(path, "/calendars/library/")) ++library_reads;
+    if (!strcmp(path, "idle/config.json")) ++config_reads;
     return original->read_text(s, path, out, size);
 }
 
@@ -66,6 +67,7 @@ static bool list_entries(PtcStorage *s, const char *dir, PtcStorageEntry *entrie
 static bool metadata(PtcStorage *s, const char *path, PtcStorageMetadata *out)
 {
     ++storage_calls;
+    if (!strcmp(path, "idle/config.json")) ++config_metadata;
     return !fail_metadata && original->metadata(s, path, out);
 }
 
@@ -284,11 +286,21 @@ int main(void)
     uint64_t reason_revision = idle_probe.core->reason_observation.revision;
     ++idle_probe.clock->snapshot.unix_seconds;
     library_reads = 0;
+    config_reads = config_metadata = 0;
     check(ptc_sysmodule_tick_due(idle_probe.core, 1000), "television policy triggers the same-minute tick");
     (void)ptc_sysmodule_scheduler_tick(idle_probe.core, false);
     check(idle_probe.core->reason_observation.revision == reason_revision + 1 &&
         idle_probe.core->dock_last_sample_at == idle_probe.clock->snapshot.unix_seconds &&
         library_reads == 4, "television tick validates every calendar year only once for enforcement");
+    check(config_reads == 0 && config_metadata > 0, "unchanged television tick has no fresh config to share");
+    config_reads = config_metadata = 0;
+    (void)ptc_sysmodule_scheduler_tick(idle_probe.core, true);
+    check(config_reads == 0 && config_metadata > 0, "IPC wake alone has no fresh config to share");
+    put(idle_probe.mem, "idle/config.json",
+        "{\"version\":1,\"device_id\":\"probe\",\"reason_notifications_enabled\":true}");
+    config_reads = config_metadata = 0;
+    (void)ptc_sysmodule_scheduler_tick(idle_probe.core, true);
+    check(config_reads == 1 && config_metadata > 0, "changed config can overlap the notification refresh on IPC wake");
     snprintf(path, sizeof(path), "idle/calendars/library/JP-2029-%s.json", selection->entries[3].sha256);
     put(idle_probe.mem, path, "{}");
     ++idle_probe.clock->snapshot.minute_of_day;

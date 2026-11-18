@@ -79,7 +79,8 @@ static bool read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
         cJSON_IsNumber(duration) && duration->valuedouble == 10000 &&
         decimal(string(body, "pw_issued_ms"), &issued) &&
         decimal(string(body, "pw_expires_ms"), &expires) &&
-        expires > issued && expires - issued == 2000 && now_ms >= issued && now_ms < expires;
+        expires > issued && expires - issued == 2000 && now_ms >= issued && now_ms < expires &&
+        issued >= notice->earliest_issued_ms;
     bool accepted = false;
     if (valid) {
         snprintf(path, sizeof(path), "sdmc:/config/ultrahand/notifications/%s", name);
@@ -112,12 +113,27 @@ bool ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
         notice->active = false;
         notice->title[0] = notice->text[0] = '\0';
     }
-    if (clock_regressed) notice->next_test_read_ms = 0;
+    if (clock_regressed) {
+        /* Retain the high water mark so a second low tick cannot reopen reception. */
+        notice->suppressed = true;
+        return was_active;
+    }
     notice->last_ms = now_ms;
+    if (!allowed) {
+        notice->suppressed = true;
+        return was_active;
+    }
+    if (notice->suppressed) {
+        /* Skip old announcements even if a slow rename finishes after resuming. */
+        notice->earliest_issued_ms = now_ms < UINT64_MAX ? now_ms + 1 : UINT64_MAX;
+        notice->next_test_read_ms = 0;
+        notice->suppressed = false;
+        return was_active;
+    }
     if (storage) {
         accepted = read_notice(notice, storage, root, release, boot, now_ms, display_allowed, 0);
         /* Slow down test checks only in steady idle. Keep the original order
-           when notices compete or a visible frame must suppress pending tests. */
+           when notices compete or a dismissal must consume pending tests. */
         if (was_active || notice->active || !display_allowed || now_ms >= notice->next_test_read_ms) {
             notice->next_test_read_ms = now_ms > UINT64_MAX - TEST_NOTICE_POLL_MS
                 ? UINT64_MAX : now_ms + TEST_NOTICE_POLL_MS;

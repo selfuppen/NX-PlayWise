@@ -10,10 +10,13 @@ typedef struct {
     uint64_t expires_ms;
     uint64_t last_ms;
     uint64_t next_test_read_ms;
+    uint64_t earliest_issued_ms;
+    bool suppressed;
     bool active;
 } PtcOverlayBriefNotice;
 
-/* Returns true when the displayed notice changes. The publisher owns cleanup. */
+/* Call on suppression transitions even without storage. Returns true when the
+   displayed notice changes. The publisher owns cleanup. */
 bool ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
     const char *root, const char *release, const char *boot, uint64_t now_ms,
     bool allowed, bool dismiss);

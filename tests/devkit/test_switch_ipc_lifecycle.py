@@ -190,8 +190,10 @@ def main() -> None:
             brief_render.index("active == this->m_hiddenFrameDrawn && (!active || !changed)") <
             brief_render.index("renderer.startFrame();"),
             "unchanged hidden pixels must not acquire or submit another framebuffer")
-    require("bool read_due = (automatic_enabled_ || brief_notice_.active) &&" in brief,
-            "disabled hidden brief reception must not probe journals in steady state")
+    show = overlay[overlay.index("void onShow() override"):overlay.index("void onHide() override")]
+    require("bool read_due = allowed &&" in brief and
+            "ptc_overlay_brief_poll(&brief_notice_, nullptr," in show,
+            "hidden suppression and visible entry must skip journal probes")
     require(re.search(r"bool reason_suppressed = reason_preferences\.enabled && !reason_stopping &&\s+"
                       r"reason_sample\.reliable && reason_sample\.restricted &&\s+"
                       r"ptc_input_owner_block\(&reason_owner, reason_ns, false\);", sysmodule) is not None,
