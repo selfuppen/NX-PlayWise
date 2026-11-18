@@ -329,11 +329,35 @@ static void test_reason_idle_cost(void)
     free(mem);
 }
 
+static unsigned ready_transient_writes;
+
+static bool fail_transient_ready(PtcStorage *storage, const char *path, const char *text)
+{
+    (void)storage;
+    if (!strcmp(path, "app/support/reason-detail-ready.json") && strstr(text, "\"kind\":\"ready\""))
+        ++ready_transient_writes;
+    return false;
+}
+
 static void test_reason_ready_renewal_wait(void)
 {
     PtcMemStorage *mem = malloc(sizeof(*mem));
     check_true(mem != NULL, "ready renewal fixture allocation"); if (!mem) return;
     PtcStorage *storage = &mem->storage;
+    ptc_mem_storage_init(mem);
+    PtcStorageVTable with_transient = *storage->vtable;
+    with_transient.write_text_transient = fail_transient_ready;
+    storage->vtable = &with_transient;
+    PtcReasonDetail sample = {0};
+    ready_transient_writes = 0;
+    check_true(!ptc_reason_detail_write(storage, "app", "ready", &sample) && ready_transient_writes == 1 &&
+        !storage->vtable->exists(storage, "app/support/reason-detail-ready.json"),
+        "ready selects the transient replacement and reports failure without a second write");
+    check_true(ptc_reason_detail_write(storage, "app", "request", &sample) &&
+        ptc_reason_detail_write(storage, "app", "ack", &sample) &&
+        storage->vtable->exists(storage, "app/support/reason-detail-request.json") &&
+        storage->vtable->exists(storage, "app/support/reason-detail-ack.json") && ready_transient_writes == 1,
+        "request and ACK retain the durable write");
     for (int mode = 0; mode < 12; ++mode) {
         ptc_mem_storage_init(mem);
         storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");

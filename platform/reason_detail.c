@@ -89,7 +89,12 @@ bool ptc_reason_detail_write(PtcStorage *s, const char *root, const char *kind, 
     ok = json && strlen(json) < sizeof(text);
     if (ok) snprintf(text, sizeof(text), "%s", json);
     cJSON_free(json); cJSON_Delete(j);
-    return ok && s->vtable->write_text_atomic(s, file, text);
+    if (!ok) return false;
+    /* Only readiness may be lost. Readers still require current identity and
+       a fresh lease before offering detail; request and ACK retain commit. */
+    if (!strcmp(kind, "ready") && s->vtable->write_text_transient)
+        return s->vtable->write_text_transient(s, file, text);
+    return s->vtable->write_text_atomic(s, file, text);
 }
 
 bool ptc_reason_detail_fresh(const PtcReasonDetail *v, const char *release, const char *boot, uint64_t ms)

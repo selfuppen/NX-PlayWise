@@ -59,6 +59,8 @@ typedef struct {
     /* Reject oversized lines and read errors; visit the entire file. */
     bool (*read_lines)(PtcStorage *storage, const char *path, char *line, size_t line_size,
                        PtcStorageLineVisitor visit, void *ctx);
+    /* Optional replace for expiring hints that can be lost on interruption. */
+    bool (*write_text_transient)(PtcStorage *storage, const char *path, const char *text);
 } PtcStorageVTable;
 
 struct PtcStorage {

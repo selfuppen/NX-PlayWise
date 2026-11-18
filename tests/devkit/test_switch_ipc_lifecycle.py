@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -189,6 +190,12 @@ def main() -> None:
             brief_render.index("active == this->m_hiddenFrameDrawn && (!active || !changed)") <
             brief_render.index("renderer.startFrame();"),
             "unchanged hidden pixels must not acquire or submit another framebuffer")
+    require("bool read_due = (automatic_enabled_ || brief_notice_.active) &&" in brief,
+            "disabled hidden brief reception must not probe journals in steady state")
+    require(re.search(r"bool reason_suppressed = reason_enabled && !reason_stopping &&\s+"
+                      r"reason_sample\.reliable && reason_sample\.restricted &&\s+"
+                      r"ptc_input_owner_block\(&reason_owner, reason_ns, false\);", sysmodule) is not None,
+            "the backend must probe the notification input owner only for reliable restrictions")
     require(hidden.index("ms < next_detail_poll_ms_") < hidden.index("ms >= next_config_ms_") and
             "next_detail_poll_ms_ = ms + PTC_OVERLAY_HIDDEN_DETAIL_MS;" in hidden and
             "#define PTC_OVERLAY_HIDDEN_DETAIL_MS 250u" in hidden_poll,

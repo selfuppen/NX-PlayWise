@@ -7,13 +7,17 @@
 #include "../../platform/switch/fs_storage.h"
 
 static const char *path = "build/host/fs-append-retry.txt";
-static unsigned opens, writes, closes, sleeps, open_failures;
+static unsigned opens, writes, closes, sleeps, open_failures, commits;
 static int open_error;
 static uint32_t platform_error;
 static bool write_failure, close_failure;
 
 FILE *ptc_test_fopen(const char *name, const char *mode)
 {
+    if (strcmp(mode, "wb") == 0) {
+        assert(strcmp(name, "build/host/fs-append-retry.txt.write") == 0);
+        return fopen(name, mode);
+    }
     assert(strcmp(name, path) == 0 && strcmp(mode, "ab") == 0);
     ++opens;
     if (open_failures) { --open_failures; errno = open_error; return NULL; }
@@ -50,13 +54,13 @@ void svcSleepThread(int64_t nanoseconds)
     ++sleeps;
 }
 
-int fsdevCommitDevice(const char *name) { (void)name; return 0; }
+int fsdevCommitDevice(const char *name) { assert(strcmp(name, "sdmc") == 0); ++commits; return 0; }
 uint32_t fsdevGetLastResult(void) { return platform_error; }
 
 static void reset(void)
 {
     (void)remove(path);
-    opens = writes = closes = sleeps = open_failures = 0;
+    opens = writes = closes = sleeps = open_failures = commits = 0;
     open_error = EBUSY;
     platform_error = UINT32_C(0x12345678);
     write_failure = close_failure = false;
@@ -112,7 +116,14 @@ int main(void)
     assert(opens == 1 && writes == 1 && closes == 1 && sleeps == 0);
     assert(fs.last_append.stage == PTC_STORAGE_APPEND_CLOSE && fs.last_append.system_errno == EIO);
     contents("one\n"); /* A failed close may already have persisted the row. */
+    reset();
+    assert(storage->vtable->write_text_atomic(storage, path, "durable") && commits == 1);
+    assert(storage->vtable->write_text_transient(storage, path, "lease") && commits == 1);
+    contents("lease");
+    close_failure = true;
+    assert(!storage->vtable->write_text_transient(storage, path, "discard") && commits == 1);
+    contents("lease");
     (void)remove(path);
-    puts("PASS append open contention bounds and no replay after write/close failure");
+    puts("PASS append retry bounds and durable/transient replacement");
     return 0;
 }

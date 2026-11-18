@@ -381,7 +381,9 @@ int main(int argc, char **argv)
             reason_config_ns = reason_ns + (reason_enabled ? 1000000000ULL : 5000000000ULL);
         }
         PtcClockSnapshot reason_clock = time_provider.provider.vtable->now(&time_provider.provider);
-        bool reason_suppressed = reason_enabled && ptc_input_owner_block(&reason_owner, reason_ns, false);
+        bool reason_suppressed = reason_enabled && !reason_stopping &&
+            reason_sample.reliable && reason_sample.restricted &&
+            ptc_input_owner_block(&reason_owner, reason_ns, false);
         ptc_reason_notification_tick(&reason_notification, &reason_sample, reason_ns / 1000000,
             reason_clock.unix_seconds, reason_enabled, reason_suppressed, reason_stopping, reason_language);
         uint64_t reason_io_ms = (armTicksToNs(armGetSystemTick()) - reason_ns) / 1000000;

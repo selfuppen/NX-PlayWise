@@ -1350,7 +1350,8 @@ public:
         bool allowed = !blocked && automatic_enabled_ && runtime_known_ && gui_ &&
             gui_->automatic_detail_allowed() && !s_automatic_detail;
         bool dismiss = (keysDown & HidNpadButton_Minus) != 0;
-        bool read_due = ms >= next_brief_read_ms_ || !allowed || dismiss;
+        bool read_due = (automatic_enabled_ || brief_notice_.active) &&
+            (ms >= next_brief_read_ms_ || !allowed || dismiss);
         if (read_due) next_brief_read_ms_ = ms + 250;
         bool changed = ptc_overlay_brief_poll(&brief_notice_, read_due ? ptc_fs_storage_as_storage(&storage_) : nullptr,
             APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, ms, allowed,

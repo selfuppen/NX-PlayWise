@@ -56,13 +56,11 @@ static bool fs_read_text(PtcStorage *storage, const char *path, char *out, size_
     return true;
 }
 
-static bool fs_write_text_atomic(PtcStorage *storage, const char *path, const char *text)
+static bool fs_replace_text(const char *path, const char *text)
 {
     char tmp_path[352];
     FILE *file;
     size_t text_len;
-    (void)storage;
-
     ensure_parent_dirs(path);
     snprintf(tmp_path, sizeof(tmp_path), "%s.write", path);
     file = fopen(tmp_path, "wb");
@@ -84,10 +82,23 @@ static bool fs_write_text_atomic(PtcStorage *storage, const char *path, const ch
         remove(tmp_path);
         return false;
     }
+    return true;
+}
+
+static bool fs_write_text_atomic(PtcStorage *storage, const char *path, const char *text)
+{
+    (void)storage;
+    if (!fs_replace_text(path, text)) return false;
 #ifdef __SWITCH__
     fsdevCommitDevice("sdmc");
 #endif
     return true;
+}
+
+static bool fs_write_text_transient(PtcStorage *storage, const char *path, const char *text)
+{
+    (void)storage;
+    return fs_replace_text(path, text);
 }
 
 static bool fs_append_line(PtcStorage *storage, const char *path, const char *line)
@@ -295,6 +306,7 @@ static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_list_entries,
     fs_remove_tree,
     fs_read_lines,
+    fs_write_text_transient,
 };
 
 void ptc_fs_storage_init(PtcFsStorage *fs)
