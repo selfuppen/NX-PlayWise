@@ -258,7 +258,6 @@ int main(void)
     idle_wake_calls = storage_calls;
     check(!idle_wake_calls, "wake computation performs no storage access");
     free(idle_legacy.mem); free(idle_legacy.core); free(idle_legacy.pctl); free(idle_legacy.clock);
-    free(idle_probe.mem); free(idle_probe.core); free(idle_probe.pctl); free(idle_probe.clock);
 
     snprintf(selection->option_id, sizeof(selection->option_id), "JP");
     selection->count = 4;
@@ -272,10 +271,33 @@ int main(void)
         ptc_calendar_sha256_hex(text, strlen(text), entry->sha256);
         snprintf(path, sizeof(path), "app/calendars/library/JP-%u-%s.json", entry->year, entry->sha256);
         put(mem, path, text);
+        snprintf(path, sizeof(path), "idle/calendars/library/JP-%u-%s.json", entry->year, entry->sha256);
+        put(idle_probe.mem, path, text);
     }
     check(ptc_calendar_index_save(&mem->storage, "app", true, selection), "save four-year calendar");
     uint16_t day;
     check(ptc_day_index_from_date(2027, 12, 31, &day), "fixed calendar day");
+    check(ptc_calendar_index_save(&idle_probe.mem->storage, "idle", true, selection), "select four years for scheduler");
+    put(idle_probe.mem, "idle/rules.json", "{\"version\":1,\"force_docked\":true}");
+    idle_probe.clock->snapshot.day_index = day;
+    (void)ptc_sysmodule_scheduler_tick(idle_probe.core, false);
+    uint64_t reason_revision = idle_probe.core->reason_observation.revision;
+    ++idle_probe.clock->snapshot.unix_seconds;
+    library_reads = 0;
+    check(ptc_sysmodule_tick_due(idle_probe.core, 1000), "television policy triggers the same-minute tick");
+    (void)ptc_sysmodule_scheduler_tick(idle_probe.core, false);
+    check(idle_probe.core->reason_observation.revision == reason_revision + 1 &&
+        idle_probe.core->dock_last_sample_at == idle_probe.clock->snapshot.unix_seconds &&
+        library_reads == 4, "television tick validates every calendar year only once for enforcement");
+    snprintf(path, sizeof(path), "idle/calendars/library/JP-2029-%s.json", selection->entries[3].sha256);
+    put(idle_probe.mem, path, "{}");
+    ++idle_probe.clock->snapshot.minute_of_day;
+    idle_probe.clock->snapshot.unix_seconds += 60;
+    (void)ptc_sysmodule_scheduler_tick(idle_probe.core, false);
+    check(!idle_probe.core->reason_observation.reliable && !idle_probe.core->calendar_runtime.set.count,
+        "later scheduler tick rejects a changed distant-year calendar without stale rules");
+    free(idle_probe.mem); free(idle_probe.core); free(idle_probe.pctl); free(idle_probe.clock);
+    snprintf(path, sizeof(path), "app/calendars/library/JP-2029-%s.json", selection->entries[3].sha256);
     cJSON_Hooks hooks = {json_allocate, free};
     cJSON_InitHooks(&hooks);
     json_allocations = json_allocated_bytes = 0;

@@ -117,6 +117,7 @@ const char *pctl_target_mode_name(PtcPctlTargetMode mode);
 bool sysmodule_environment_fingerprint(PtcSysmodule *sysmodule, char out[65]);
 bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config);
 bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules);
+bool load_rules_for_day(PtcSysmodule *sysmodule, uint16_t day_index, PtcRules *rules);
 bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules);
 bool restore_rules(PtcSysmodule *sysmodule, const PtcRules *rules, bool existed);
 bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state);

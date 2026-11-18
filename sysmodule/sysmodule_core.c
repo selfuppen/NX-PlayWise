@@ -107,7 +107,8 @@ bool eye_care_sample_direct(const PtcRules *rules, PtcRuntimeState *state,
     return true;
 }
 
-int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request)
+static int enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcRules *tick_rules, uint16_t rules_day_index)
 {
     ++sysmodule->reason_observation.revision;
     sysmodule->reason_observation.reliable = false;
@@ -147,7 +148,12 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path)) {
         return 0;
     }
-    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
+    /* Reuse the validated rules on the same day. Preserve a fresh attempt if
+       the scheduler's load failed or enforcement crosses a date boundary. */
+    bool reuse_rules = tick_rules && rules_day_index == now.day_index;
+    if (reuse_rules) rules = *tick_rules;
+    if ((!reuse_rules && !load_rules_for_day(sysmodule, now.day_index, &rules)) ||
+        !load_state(sysmodule, &runtime_state)) {
         append_event(sysmodule, NULL, "result_error", PTC_ERR_RULES_INVALID, "enforce");
         return 0;
     }
@@ -463,6 +469,11 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     if (err == PTC_ERR_OK && !request)
         ptc_sysmodule_note_reason(sysmodule, &rules, &runtime_state, &observed_status, now);
     return 1;
+}
+
+int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request)
+{
+    return enforce_request(sysmodule, request, NULL, 0);
 }
 
 int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
@@ -817,7 +828,8 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     /* 规则/日历每个轮次只加载一次：电视策略采样、护眼到期判断与轮末唤醒提示
        共用这一份。请求已在上面处理完，此后本轮只有 Enforce 可能改写状态。 */
     PtcRules tick_rules;
-    bool rules_ok = load_rules(sysmodule, &tick_rules);
+    uint16_t rules_day_index = sysmodule->time_provider->vtable->now(sysmodule->time_provider).day_index;
+    bool rules_ok = load_rules_for_day(sysmodule, rules_day_index, &tick_rules);
     bool dock_tick = rules_ok && dock_policy_enabled(&tick_rules) &&
         (sysmodule->dock_last_sample_at != now.unix_seconds);
     bool eye_pending = false;
@@ -844,7 +856,7 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
                     current < previous ? "clock_moved_backward" : "clock_jump_forward");
             }
         }
-        actions += ptc_sysmodule_enforce_tick(sysmodule);
+        actions += enforce_request(sysmodule, NULL, rules_ok ? &tick_rules : NULL, rules_day_index);
         if (minute_changed || reload || storage_notified || disable_changed || processed > 0)
             actions += usage_summary_tick(sysmodule, now);
 #endif

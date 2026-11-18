@@ -989,12 +989,17 @@ static bool parse_rules_text(const char *text, PtcRules *rules)
 
 bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
 {
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    return load_rules_for_day(sysmodule, now.day_index, rules);
+}
+
+bool load_rules_for_day(PtcSysmodule *sysmodule, uint16_t day_index, PtcRules *rules)
+{
     char text[6144];
     bool hit;
-    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     ptc_rules_default(rules);
     if (!ptc_calendar_runtime_load(sysmodule->storage, sysmodule->app_root,
-            now.day_index, &sysmodule->calendar_runtime)) return false;
+            day_index, &sysmodule->calendar_runtime)) return false;
     rules->calendar = &sysmodule->calendar_runtime.set;
     if (!read_parsed_source(sysmodule, "rules.json", &sysmodule->rules_meta,
             &sysmodule->rules_cache_valid, text, sizeof(text), &hit)) return false;
