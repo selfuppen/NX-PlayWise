@@ -44,14 +44,14 @@ static bool decimal(const char *text, uint64_t *value)
     return true;
 }
 
-static void read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
+static bool read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
     const char *root, const char *release, const char *boot, uint64_t now_ms,
     bool allowed, unsigned slot)
 {
     static const char *journals[] = {"reason-notification-owned.json", "notification-test-owned.json"};
     char path[320], journal[4096], observed[1536];
     snprintf(path, sizeof(path), "%s/support/%s", root, journals[slot]);
-    if (!storage->vtable->read_text(storage, path, journal, sizeof(journal))) return;
+    if (!storage->vtable->read_text(storage, path, journal, sizeof(journal))) return false;
     cJSON *record = cJSON_ParseWithOpts(journal, NULL, true);
     const char *name = string(record, "file"), *payload = string(record, "payload");
     cJSON *body = cJSON_ParseWithOpts(payload, NULL, true);
@@ -72,6 +72,7 @@ static void read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
         decimal(string(body, "pw_issued_ms"), &issued) &&
         decimal(string(body, "pw_expires_ms"), &expires) &&
         expires > issued && expires - issued == 2000 && now_ms >= issued && now_ms < expires;
+    bool accepted = false;
     if (valid && strcmp(name, notice->seen[slot])) {
         snprintf(path, sizeof(path), "sdmc:/config/ultrahand/notifications/%s", name);
         /* Journal precedes rename. Never draw a stage or a different file. */
@@ -82,23 +83,31 @@ static void read_notice(PtcOverlayBriefNotice *notice, PtcStorage *storage,
                 snprintf(notice->text, sizeof(notice->text), "%s", text);
                 notice->expires_ms = now_ms + 10000;
                 notice->active = true;
+                accepted = true;
             }
         }
     }
     cJSON_Delete(body);
     cJSON_Delete(record);
+    return accepted;
 }
 
-void ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
+bool ptc_overlay_brief_poll(PtcOverlayBriefNotice *notice, PtcStorage *storage,
     const char *root, const char *release, const char *boot, uint64_t now_ms,
     bool allowed, bool dismiss)
 {
+    bool was_active = notice->active;
+    bool accepted = false;
     if (!allowed || dismiss || now_ms < notice->last_ms || now_ms >= notice->expires_ms) {
         notice->active = false;
         notice->title[0] = notice->text[0] = '\0';
     }
     notice->last_ms = now_ms;
-    if (!storage) return;
-    for (unsigned slot = 0; slot < 2; ++slot)
-        read_notice(notice, storage, root, release, boot, now_ms, allowed && !dismiss, slot);
+    if (storage) {
+        for (unsigned slot = 0; slot < 2; ++slot) {
+            if (read_notice(notice, storage, root, release, boot, now_ms, allowed && !dismiss, slot))
+                accepted = true;
+        }
+    }
+    return accepted || was_active != notice->active;
 }

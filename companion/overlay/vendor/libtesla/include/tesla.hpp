@@ -3008,7 +3008,7 @@ namespace tsl {
         virtual u64 hiddenPollInterval() { return UINT64_MAX; }
         virtual bool onHiddenPoll(bool neutral) { return false; }
         virtual bool hasHiddenFrame() { return false; }
-        virtual void onHiddenFrame(bool blocked, u64 keysDown) {}
+        virtual bool onHiddenFrame(bool blocked, u64 keysDown) { return false; }
         virtual void drawHiddenFrame(gfx::Renderer *renderer) {}
         virtual void onFrameRendered() {}
 
@@ -3354,9 +3354,9 @@ namespace tsl {
         }
 
         void loopHiddenFrame(bool blocked, u64 keysDown) {
-            this->onHiddenFrame(blocked, keysDown);
+            bool changed = this->onHiddenFrame(blocked, keysDown);
             bool active = this->hasHiddenFrame();
-            if (!active && !this->m_hiddenFrameDrawn) return;
+            if (active == this->m_hiddenFrameDrawn && (!active || !changed)) return;
             auto &renderer = gfx::Renderer::get();
             renderer.startFrame();
             renderer.clearScreen();

@@ -180,10 +180,19 @@ def main() -> None:
     require(config_begin < config_read < config_end < runtime_begin < runtime_read < runtime_end <
             request_begin < request_read < request_end < hidden.index("if (!read_ok) return false;", request_end),
             "hidden read timing must bracket each actual call and retain failed request reads")
-    brief = overlay[overlay.index("void onHiddenFrame("):overlay.index("bool onHiddenPoll(")]
+    brief = overlay[overlay.index("bool onHiddenFrame("):overlay.index("bool onHiddenPoll(")]
+    brief_render = libtesla[libtesla.index("void loopHiddenFrame("):libtesla.index("bool m_hiddenFrameDrawn")]
     require("requestForeground(" not in brief and "ptc_input_owner_acquire(" not in brief and
-            "renderer.clearScreen();" in libtesla[libtesla.index("void loopHiddenFrame("):libtesla.index("bool m_hiddenFrameDrawn")],
+            "renderer.clearScreen();" in brief_render,
             "hidden brief rendering must release pixels without acquiring input")
+    require("return changed;" in brief and
+            brief_render.index("active == this->m_hiddenFrameDrawn && (!active || !changed)") <
+            brief_render.index("renderer.startFrame();"),
+            "unchanged hidden pixels must not acquire or submit another framebuffer")
+    require(hidden.index("ms < next_detail_poll_ms_") < hidden.index("ms >= next_config_ms_") and
+            "next_detail_poll_ms_ = ms + PTC_OVERLAY_HIDDEN_DETAIL_MS;" in hidden and
+            "#define PTC_OVERLAY_HIDDEN_DETAIL_MS 250u" in hidden_poll,
+            "brief dismissal polling must not accelerate detail cooperation")
     require("UINT64_C(250000000) : UINT64_C(5000000000)" in hidden_poll,
             "hidden Overlay polls every five seconds while reason notifications are off")
     require(loop.index("eventCreate(&shData.comboEvent") < loop.index("threadStart(&backgroundThread)"),

@@ -9,6 +9,7 @@
    身份只在启动或交接时变化，缓存十秒；读不到时每秒重试，避免在后台缺席期间
    以 250ms 反复读取同一个文件。连续五次写入失败后停止自动协作，手动入口保留。 */
 #define PTC_OVERLAY_HIDDEN_FAILURE_LIMIT 5u
+#define PTC_OVERLAY_HIDDEN_DETAIL_MS 250u
 #define PTC_OVERLAY_HIDDEN_CONFIG_MS 5000u
 #define PTC_OVERLAY_HIDDEN_RUNTIME_MS 10000u
 #define PTC_OVERLAY_HIDDEN_RUNTIME_RETRY_MS 1000u

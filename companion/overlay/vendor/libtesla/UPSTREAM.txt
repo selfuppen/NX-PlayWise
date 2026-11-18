@@ -42,3 +42,6 @@ Local resident suppression follow-up (2026-11-14): HOME/POWER signals wake the
 existing combo event so the UI thread clears any hidden frame immediately, then
 returns to blocked idle without foreground acquisition. Manual combo retains
 its existing unblock behavior. Upstream commit remains unchanged.
+Local resident rendering patch: only submit a hidden frame when a brief appears,
+changes or clears; the front buffer presents the static notice between events.
+The brief dismissal cadence does not speed up automatic detail file polling.

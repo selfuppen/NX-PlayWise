@@ -1344,7 +1344,7 @@ public:
 
     bool hasHiddenFrame() override { return brief_notice_.active; }
 
-    void onHiddenFrame(bool blocked, u64 keysDown) override
+    bool onHiddenFrame(bool blocked, u64 keysDown) override
     {
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
         bool allowed = !blocked && automatic_enabled_ && runtime_known_ && gui_ &&
@@ -1352,10 +1352,11 @@ public:
         bool dismiss = (keysDown & HidNpadButton_Minus) != 0;
         bool read_due = ms >= next_brief_read_ms_ || !allowed || dismiss;
         if (read_due) next_brief_read_ms_ = ms + 250;
-        ptc_overlay_brief_poll(&brief_notice_, read_due ? ptc_fs_storage_as_storage(&storage_) : nullptr,
+        bool changed = ptc_overlay_brief_poll(&brief_notice_, read_due ? ptc_fs_storage_as_storage(&storage_) : nullptr,
             APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, ms, allowed,
             dismiss);
         brief_diagnostic(ms, blocked);
+        return changed;
     }
 
     void drawHiddenFrame(tsl::gfx::Renderer *target) override
@@ -1386,6 +1387,8 @@ public:
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
         PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
         if (!gui_ || !gui_->automatic_detail_allowed()) return false;
+        if (ms < next_detail_poll_ms_) return false;
+        next_detail_poll_ms_ = ms + PTC_OVERLAY_HIDDEN_DETAIL_MS;
         ptc_overlay_hidden_timing_poll(&hidden_timing_, ms, neutral);
         /* The preference check does not depend on input: with the five second
            disabled cadence a window without any key is rare during play, and the
@@ -1509,6 +1512,7 @@ public:
     void onHide() override
     {
         ptc_overlay_hidden_timing_init(&hidden_timing_);
+        next_detail_poll_ms_ = 0;
         s_owner_visible = false;
         s_automatic_detail = false;
         s_automatic_detail_confirmed = false;
@@ -1602,7 +1606,7 @@ private:
     PtcOverlayBriefNotice brief_notice_{};
     PtcOverlayHiddenTiming hidden_timing_{};
     uint64_t ui_instance_ms_ = 0, seen_sequence_ = 0, next_ready_ms_ = 0;
-    uint64_t next_brief_read_ms_ = 0;
+    uint64_t next_brief_read_ms_ = 0, next_detail_poll_ms_ = 0;
     uint64_t next_brief_diag_ms_ = 0;
     unsigned brief_diag_key_ = 0, brief_diag_updates_ = 0, brief_diag_failures_ = 0;
     bool brief_diag_sampled_ = false;
