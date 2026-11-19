@@ -44,7 +44,7 @@ Once the daily limit is reached, Nintendo's native restriction dialog may preven
 
 </details>
 
-> The two screenshots above are historical hardware reference captures demonstrating overlay menu entry and launching PlayWise overlay over the HOME menu; actual buttons, confirmation dialogs, and available actions depend on the installed release version. See [Using In-Game Overlay When Restricted](docs/使用/USER_GUIDE.md#using-in-game-overlay-when-restricted) for details.
+> Preview screenshots of the overlay menu and PlayWise overlay; see [Using In-Game Overlay When Restricted](docs/使用/USER_GUIDE.md#using-in-game-overlay-when-restricted) for details.
 
 ### Generating Grant Codes (Parents): Mobile QR Code Scan
 
@@ -62,23 +62,21 @@ In the Switch Parent Portal, navigate to **Offline Grant → Generate on Phone/P
 
 </details>
 
-The QR code in the first screenshot has been replaced with a **public demo configuration** and cannot be used on real home devices. The second image shows a historical web interface preview; actual dates and operations reflect your current device. If the public web app is unreachable under certain network environments, use `playwise-offline.html` from the complete delivery bundle or generate codes directly on the Switch console. Detailed steps and security considerations are documented in [User Guide: Generating on Phone or PC](docs/使用/USER_GUIDE.md#generating-on-phone-or-pc).
+The QR code in the first screenshot uses a **public demo configuration**; do not use it on a real device. If GitHub Pages is unreachable on your network, use `playwise-offline.html` from the complete delivery bundle or generate codes directly on the Switch. Setup and security details are in [User Guide: Generating on Phone or PC](docs/使用/USER_GUIDE.md#generating-on-phone-or-pc).
 
 ## Play Restriction Reminders (Experimental)
 
-When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode rules prevent play, PlayWise can explain the reason automatically. **Detailed view** shows the current state and available actions; **Brief notice** briefly shows the reason, time information at the moment of the notice, and a manual entry to details in the upper-left corner.
+When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode rules prevent play, PlayWise can explain the reason automatically. **Detailed view** shows the current state and available actions; **Brief notice** briefly shows the reason, remaining time at the moment of the notice, and how to open details in the upper-left corner.
 
 | Reminder settings and detailed-view example | Upper-left brief-notice example |
 | --- | --- |
 | ![Play restriction reminders with automatic reasons enabled and a detailed-view preview](docs/images/usage-en/settings/settings-notifications-ready-light.png) | ![Upper-left brief-notice preview in dark settings](docs/images/usage-en/settings/settings-notifications-short-dark.png) |
 
-Open **Play restriction reminders** in setup step two or **Security & Preferences**, then enable **Show restriction reasons automatically** (off by default). **Switch example** changes the preview and its linked guide, not separate feature switches. The numbered **Verify reminders** flow recommends **1 Check setup → 2 Test brief notice**, linked to the setup and result panels. Testing covers brief notices only, not automatic overlay opening. Missing dependencies and failed tests can be skipped with B so setup can continue. The switch and test do not change playtime rules or clear restrictions.
+Enable **Show restriction reasons automatically** (off by default) in setup step two or **Security & Preferences → Play restriction reminders**. Use **1 Check setup → 2 Test brief notice** below to check dependencies and send a test notice without affecting your playtime rules; press `B` to skip if anything is not ready.
 
-Automatic details require PlayWise to be loaded and hidden; they cannot switch from another overlay or interrupt PIN or code entry. If details are not ready, a compatible Ultrahand brief notice is attempted. An enabled notice setting or a sent test does not confirm actual display. Reopen the overlay manager normally if needed; a console reboot is not required for this.
+Automatic details require PlayWise to stay loaded and hidden, and never interrupt PIN or code entry. When the overlay is not ready, PlayWise sends a compatible Ultrahand brief notice instead. If a test notice does not appear, reopen the overlay manager once—no console reboot is needed.
 
-**Hardware testing** used **Ultrahand 2.5.3 + nx-ovlloader 2.0.2**. The acceptance records document brief-notice reception and visibility for each tested scenario. See [Play restriction reminders](docs/使用/USER_GUIDE.md#play-restriction-reminders-experimental) and [Hint previews and setup](docs/使用/USER_GUIDE.md#hint-previews-and-setup).
-
-> These images are generated from current drawing code and fixed sample data, marked `HOST PREVIEW / SAMPLE DATA`. Version 3.1.7 publicly shipped the opt-in experimental reminders. The 3.1.8-beta.1 candidate has completed Host tests, the full Eden matrix, and bounded hardware windows for all four reasons. The batch captured ongoing eye-rest and bedtime notices and a fully bound automatic-detail chain for the TV-mode rule. An earlier candidate also has an automatic-detail ACK for a daily restriction. Complete chains for each reason, independent visibility and game-effect review, and physical lifecycle checks remain pending. Full qualification is `pending`. [Batch acceptance record](docs/开发/验收记录/2026-11/自动化与交互/3.1.8-beta.1合并与完整回归-20261113.md)
+This feature is experimental and tested on **Ultrahand 2.5.3 + nx-ovlloader 2.0.2**. Brief-notice visibility over Nintendo's native lock dialog is still being refined. See [Play restriction reminders](docs/使用/USER_GUIDE.md#play-restriction-reminders-experimental), [Hint previews and setup](docs/使用/USER_GUIDE.md#hint-previews-and-setup), and the [latest hardware test record](docs/开发/验收记录/2026-11/自动化与交互/驻留简要提示修复与远程续验-20261114.md).
 
 ## Key Features
 
@@ -107,26 +105,26 @@ For detailed walkthroughs and [core time control logic](docs/使用/USER_GUIDE.m
 | --- | --- |
 | ![Decision and rules preview](docs/images/usage-en/parent/parent-details-rules-light.png) | ![Overlapping restrictions preview](docs/images/usage-en/parent/today-multiple-limits-light.png) |
 
-Images are generated from current code and fixed sample data, marked `HOST PREVIEW / SAMPLE DATA`. See the User Guide for [normal use, breaks, bedtime and unconfirmed status](docs/使用/USER_GUIDE.md#viewing-todays-rule-details), plus [overlay redemption, PIN checks and usage details](docs/使用/USER_GUIDE.md#in-game-overlay-tesla-overlay).
+UI previews rendered from current code. See the User Guide for [normal use, breaks, bedtime and unconfirmed status](docs/使用/USER_GUIDE.md#viewing-todays-rule-details), plus [overlay redemption, PIN checks and usage details](docs/使用/USER_GUIDE.md#in-game-overlay-tesla-overlay).
 
 </details>
 
 ## FAQ
 
 > [!IMPORTANT]
-> **If an error occurs, first check whether Nintendo system Parental Controls is enabled and the Switch clock has been synchronized.** Verify Parental Controls, date, time and time zone in System Settings. Enable controls if needed; if clock sync is missing or uncertain, you can use DBI / QuickNTP online. Then refresh PlayWise status and retry. PlayWise does not automatically detect successful clock sync. If the issue persists, record both check results and attach diagnostics.
+> **If an error occurs, check that Nintendo Parental Controls is enabled and the Switch clock is synchronized.** Verify Parental Controls, date, time, and time zone in System Settings; sync time online with DBI or QuickNTP if needed, then refresh PlayWise and retry.
 > Steps: [Enable Nintendo Parental Controls](docs/使用/USER_GUIDE.md#enable-nintendo-parental-controls) · [Synchronize the Switch Clock](docs/使用/USER_GUIDE.md#synchronize-the-switch-clock).
 
 **Why is the game still playable when PlayWise shows "Limit Reached" / 0 minutes remaining?**
-First, ensure that Nintendo official Parental Controls is enabled and has not been temporarily unlocked. Next, synchronize the Switch system clock via internet NTP, for example using DBI's "Tools → NTP Time Sync" or [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a non-critical game to confirm that restrictions take effect. Time synchronization is a recommended troubleshooting step, though it may not resolve every edge-case timer inconsistency. See [User Guide: FAQ](docs/使用/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1) for details.
+First verify that Nintendo official Parental Controls is enabled and not temporarily unlocked. Next, synchronize the Switch clock via NTP using DBI's **Tools → NTP Time Sync** or [QuickNTP](https://github.com/ppkantorski/QuickNTP), refresh PlayWise status, and retest with a non-critical game. If the issue persists, export diagnostics and see [User Guide: FAQ](docs/使用/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1).
 
 ## Recommended Environment & Verification Status
 
-The current baseline qualification target is Nintendo Switch OLED, HOS 22.5.0, and Atmosphère 1.11.2. The 2026-08-10 record is historical evidence prior to current PCTL modifications. Build candidates default to `pending`; when the maintainer verifies primary features on real hardware, specifying device model, HOS, and Atmosphère in the packaging command records `manual_verified` in `build.json`. This represents a manual testing declaration; only when the released Zip's SHA-256 matches `qualification.json` in the same directory has the exact build package passed full qualification testing in the documented environment. Packaging details are described in the [Development Environment Guide](docs/开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md#full-switch-build).
+The reference test environment is **Nintendo Switch OLED, HOS 22.5.0, and Atmosphère 1.11.2**. Other HOS / Atmosphère versions (including 23.0.1 / 1.12.1) also work: PlayWise activates once on-device Parental Controls and recovery checks pass, showing a compatibility note when versions differ. Release verification details are recorded in each package's `build.json` and `qualification.json` (see [Development Environment Guide](docs/开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md#full-switch-build)).
 
-We recommend using [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) to manage the PlayWise in-game overlay. You may also refer to community CFW guides such as the [Atmosphère Installation & Setup Guide](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP); related community group: "switch大气层超频折腾群" (QQ Group `1051287661`). These external resources and communities are not bundled with PlayWise packages and do not imply official endorsement.
+We recommend [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) to manage the PlayWise in-game overlay. You may also refer to the community [Atmosphère Installation & Setup Guide](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP) (QQ Group `1051287661`). External tools must be installed separately and are not bundled with PlayWise.
 
-The PlayWise PIN protects only this project's Parent Portal and is completely distinct from the Nintendo official Parental Controls master PIN. PlayWise cannot reset Nintendo's master PIN or unpair the official mobile app. Nintendo's native timer tracks total console screen-on time, meaning active time in HOME menu and System Settings also consumes daily allowance, as noted in [Nintendo Support](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html).
+The PlayWise PIN is separate from Nintendo's official Parental Controls PIN—it protects only PlayWise's Parent Portal and leaves your Nintendo PIN and mobile app link untouched. Nintendo's native timer tracks total screen-on time, including HOME and System Settings ([Nintendo Support](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)).
 
 ## Roadmap
 
@@ -150,7 +148,7 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 | Multiple restricted time slots | TODO; support configuring multiple blackout/curfew intervals per day (e.g. study & dinner hours) | TBD |
 | Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |
 
-Once daily limit or bedtime takes effect, the in-game overlay remains PlayWise's only on-console interactive entry: for daily limits, users can redeem grant codes, or parents can grant temporary minutes or unlimited play for today; for bedtime, users can skip the session, disable the schedule, or restore pre-installation settings. Temporary bypass via Nintendo master PIN in the native dialog remains handled by Nintendo. If the overlay or sysmodule is unavailable, PlayWise does not provide an on-console recovery fallback or auto-write recovery flags.
+Once daily limit or bedtime takes effect, use the in-game overlay for PlayWise actions: redeem grant codes, grant temporary minutes, set unlimited play for today, skip or disable bedtime, or restore pre-installation settings. You can also temporarily unlock Nintendo's native dialog with your official Nintendo PIN, or recover via PC and SD card if both the overlay and background service are unavailable.
 
 ## Documentation
 

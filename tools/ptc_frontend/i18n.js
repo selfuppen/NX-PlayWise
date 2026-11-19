@@ -22,7 +22,7 @@ export const TRANSLATIONS = {
     err_browser_capability: "当前浏览器缺少生成加时码所需的基础能力，请升级浏览器。",
     err_web_crypto: "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。",
     err_selftest: "加时码算法自检失败，已停止生成：",
-    warn_compat_subtle: "当前浏览器无法使用 Web Crypto，已启用内置 HMAC-SHA256 兼容实现；加时码协议和校验结果不变。",
+    warn_compat_subtle: "当前浏览器已启用内置兼容模式，生成的加时码与常规模式完全一致。",
     warn_compat_random: "当前浏览器无法使用安全随机源，将从当天尚未签发的编号中顺序选择；若 Switch 提示代码已使用，请重新生成。",
     warn_compat_storage: "当前打开方式不允许持久保存配置；关闭页面后需要重新导入，且旧代码发生编号碰撞时请重新生成。",
 
@@ -52,7 +52,7 @@ export const TRANSLATIONS = {
     btn_copy_message: "复制分享文字",
     share_message: "任我玩加时码：{code}（{minutes} 分钟）。{device} 主机本地日期 {date} 有效。请在「输入加时码」中输入这 8 位数字。",
     issued_summary: "本浏览器的签发记录",
-    issued_help: "以下记录仅表示这个浏览器已生成加时码，兑换情况请在 Switch 上查看。",
+    issued_help: "这里记录本浏览器生成的加时码，是否已兑换请在 Switch 上查看。",
     issued_entry: "{time} · {minutes} 分钟 · 尾号 {suffix}",
     btn_cancel: "取消",
     btn_confirm_import: "导入此设备",
@@ -97,7 +97,7 @@ export const TRANSLATIONS = {
     faq_5_title: "紧急停用已开启",
     faq_5_p: "紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。",
     faq_6_title: "进一步诊断",
-    faq_6_p: "诊断导出只包含白名单状态，不包含密钥、家长密码、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。",
+    faq_6_p: "诊断包不含家长密码、加时密钥和 8 位码，可发给可信人员排查。如需深入查看日志，可检查 <code>sdmc:/switch/playwise/logs/</code> 和 <code>flags/disable.flag</code>；请勿对外分享 <code>credentials.json</code>、<code>auth.json</code> 或防重复记录。",
 
     footer_p_online: "正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。",
     footer_p_standalone: "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",
@@ -125,7 +125,7 @@ export const TRANSLATIONS = {
     err_browser_capability: "Your browser lacks essential cryptographic features required to generate grant codes. Please upgrade your browser.",
     err_web_crypto: "Web Crypto is unavailable on this page. Please open via HTTPS or localhost.",
     err_selftest: "Grant code algorithm self-test failed; generation aborted: ",
-    warn_compat_subtle: "Web Crypto is unavailable in this environment; using built-in HMAC-SHA256 fallback. Protocol and verification remain identical.",
+    warn_compat_subtle: "Built-in compatibility mode is active; generated grant codes work identically.",
     warn_compat_random: "Secure random generator is unavailable; sequential nonce selection active. If Switch reports code already used, generate a new one.",
     warn_compat_storage: "Persistent storage is not allowed in this environment. Configuration will not be saved across sessions.",
 
@@ -200,7 +200,7 @@ export const TRANSLATIONS = {
     faq_5_title: "Emergency disable active",
     faq_5_p: "Emergency disable prevents new playtime, schedule, and grant code writes, while status, diagnostics, and recovery remain accessible. Parents can deactivate emergency disable in \"Support & Recovery\" after resolving issues.",
     faq_6_title: "Further diagnostics",
-    faq_6_p: "Diagnostic exports contain only allowlisted status info, excluding secrets, PINs, 8-digit codes, full nonces, or pre-install snapshots. For advanced troubleshooting, check <code>sdmc:/switch/playwise/logs/</code>, <code>flags/disable.flag</code>, and recovery states; never disclose <code>credentials.json</code>, <code>auth.json</code>, or ledger.",
+    faq_6_p: "Diagnostic exports exclude PINs, grant secrets, and 8-digit codes. For advanced troubleshooting, inspect <code>sdmc:/switch/playwise/logs/</code> and <code>flags/disable.flag</code>; never share <code>credentials.json</code>, <code>auth.json</code>, or ledger files.",
 
     footer_p_online: "For production deployment, use a trusted HTTPS static site; for local desktop preview, localhost may be used.",
     footer_p_standalone: "This is a standalone offline file. If mobile browsers restrict local HTML execution, please use a trusted HTTPS parent web page.",

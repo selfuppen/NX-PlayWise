@@ -2,7 +2,7 @@
 
 # Custom region holiday calendar format
 
-Create one UTF-8 JSON file per region and year. Save it in SD `/switch/playwise/calendar-import/`, then open Parent Zone → Time Plans → Holiday Schedule → Manage Calendars → Import Files. Preview the file and confirm import. Import updates the library only: select the region in Saved Regions and hold to apply its imported years. Re-importing an active year also requires applying again. Built-in mainland China remains a separate option. Uncovered years fall back to the weekly plan. Imported content is labeled User Import; PlayWise does not verify its official source.
+Create one UTF-8 JSON file per region and year. Save it in SD `/switch/playwise/calendar-import/`, then open Parent Zone → Time Plans → Holiday Schedule → Manage Calendars → Import Files. Preview the file and confirm import. Import updates the library only: select the region in Saved Regions and hold to apply its imported years. Re-importing an active year also requires applying again. Built-in mainland China remains a separate option. Uncovered years fall back to the weekly plan. Imported calendars are labeled User Import; verify local dates yourself.
 
 ## Controls and on-screen help
 
@@ -14,13 +14,13 @@ Import Files always shows brief steps, the SD directory, the separate apply step
 
 | Field | Requirement |
 | --- | --- |
-| `format_version` | Integer `1`; this is a format version, not a content revision. |
+| `format_version` | Integer `1` (file format version; keep it `1` when editing and re-importing). |
 | `region_id` | 2–16 uppercase letters, digits or internal hyphens, such as `JP` or `US-CA`. |
 | `region_name` | Nonempty UTF-8 display name, at most 64 bytes. Use the same name for every year with the same ID. |
 | `year` | Integer from 2020 to 2198. One file covers this year only. |
 | `holidays` | Required array, possibly empty. Each entry contains nonempty `name`, `from` and `to`; both dates are inclusive. |
 | `workdays` | Required array of date strings, possibly empty, for special working days. |
-| `source_note` | Optional nonempty source description, at most 128 bytes. This does not certify official status. |
+| `source_note` | Optional nonempty source description, at most 128 bytes. |
 
 Dates must be real dates in `YYYY-MM-DD` format belonging to `year`. Holiday start must not follow end. Holiday ranges, working dates and their intersections must not overlap or duplicate. At most 64 holiday groups are allowed; file size must not exceed 16 KiB. Filenames consist of 1–75 letters, digits, `-`, `_` or `.` followed by `.json`, without separators or `..`. No quota, bedtime or timezone fields belong in the file. Dates refer to full local days on the Switch; configure quotas and bedtime in Time Plans.
 

@@ -139,13 +139,13 @@
 
       <details id="issuedHistory" class="settings" hidden>
         <summary id="issuedSummary" data-i18n="issued_summary">本浏览器的签发记录</summary>
-        <p data-i18n="issued_help">以下记录仅表示这个浏览器已生成加时码，兑换情况请在 Switch 上查看。</p>
+        <p data-i18n="issued_help">这里记录本浏览器生成的加时码，是否已兑换请在 Switch 上查看。</p>
         <ul id="issuedList"></ul>
       </details>
 
       <details class="settings">
         <summary data-i18n="settings_summary">本机数据与安全说明</summary>
-        <p data-i18n="settings_p">此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。</p>
+        <p data-i18n="settings_p">此页面会保存设备 ID、密钥、常用时长和本浏览器的签发记录。清除本机配置会删除所有已保存的 Switch 与签发记录。</p>
         <button id="clearConfig" class="danger-button" type="button" data-i18n="btn_clear_config">清除本机配置</button>
       </details>
 
@@ -162,7 +162,7 @@
         <h3 data-i18n="faq_5_title">紧急停用已开启</h3>
         <p data-i18n="faq_5_p">紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
         <h3 data-i18n="faq_6_title">进一步诊断</h3>
-        <p data-i18n-html="faq_6_p">诊断导出只包含白名单状态，不包含密钥、家长密码、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
+        <p data-i18n-html="faq_6_p">诊断包不含家长密码、加时密钥和 8 位码，可发给可信人员排查。如需深入查看日志，可检查 <code>sdmc:/switch/playwise/logs/</code> 和 <code>flags/disable.flag</code>；请勿对外分享 <code>credentials.json</code>、<code>auth.json</code> 或防重复记录。</p>
       </details>
     </section>
   </main>

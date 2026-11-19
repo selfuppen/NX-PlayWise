@@ -1,7 +1,7 @@
 PTC_UI_TEXT_VALUE(PTC_UI_T_X_BACKSPACE, "\uE0E2  Backspace")
 PTC_UI_TEXT_VALUE(PTC_UI_T_ENVIRONMENT_CONFIRMED_OVERLAY_VERIFIED, "Environment confirmed, Overlay verified.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_OFFICIAL_SUSPEND_SETTING_CONFIRMED_OVERLAY_VERIFIED, "Parental Controls confirmed enabled; Overlay verified.")
-PTC_UI_TEXT_VALUE(PTC_UI_T_OFFICIAL_SUSPEND_CONFIRMED_SAVE_ACCEPTS_UNVERIFIED_OVERLAY, "Parental Controls confirmed enabled; save accepts unverified Overlay recovery risk.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_OFFICIAL_SUSPEND_CONFIRMED_SAVE_ACCEPTS_UNVERIFIED_OVERLAY, "Nintendo Parental Controls is enabled; verify the overlay opens before saving.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_OPERATION_COMPLETED, "Operation Completed")
 PTC_UI_TEXT_VALUE(PTC_UI_T_BEDTIME_SCHEDULE_SAVED_USE_OVERLAY_TO_RESTORE, "Bedtime schedule saved; use Overlay to restore after restrictions are in effect.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CONSOLE_DATE_PENDING_REFRESH, "Console date pending refresh")

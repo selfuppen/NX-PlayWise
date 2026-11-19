@@ -11,7 +11,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 - Uninstalling or wiping an installation: see [Complete Removal and Reinstallation](使用/USER_GUIDE.md#complete-removal-and-reinstallation) for a four-step fresh reinstall, or expand the full workflow for restoring original settings and keeping backups.
 - Development and validation: start with the [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md), followed by the [Developer Guide](开发/DEVELOPER_GUIDE.md) and [Testing Guide](开发/TESTING_GUIDE.md).
 - Protocol and control behavior: consult the [Protocol Specification](设计/PROTOCOL.md) and [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md). UI styling and palettes follow the [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md). Built-in calendar sources are in [Holiday Calendar Data](设计/节假日日历.md) (Chinese).
-- Exploring capabilities: consult the research records below. Findings and proposed experiments do not establish released features or hardware qualification for the current candidate.
+- Exploring capabilities: research records below summarize technical investigations and historical findings; released behavior is maintained in the Usage and Design docs.
 
 ## Usage — `使用/`
 
@@ -60,7 +60,7 @@ Use the [research index](调研/README.md) (Chinese) to separate reusable refere
 | [Non-PCTL suspension and overlay capabilities](调研/非PCTL暂停与浮窗能力调研.md) | Source-level display, input, process suspension and recovery capabilities | 2026-10-06 |
 | [Overlay memory and freeze risk audit](调研/Overlay内存与死机风险自查.md) | Bounded glyph ownership, resource teardown, thread races and hardware evidence limits | 2026-10-13 |
 | [Eden and Tesla overlay loading capabilities](调研/Eden与Tesla浮窗加载能力调研.md) | Missing CFW/sysmodule support, VI and HID measurements, emulator-only limits | 2026-10-24 |
-| [PCTL1952 feature impact analysis](调研/专题分析/PCTL1952功能影响分析.md) | Cross-feature analysis bound to its original source baseline, not the current backlog | 2026-10-14 |
+| [PCTL1952 feature impact analysis](调研/专题分析/PCTL1952功能影响分析.md) | Cross-feature analysis bound to its original source baseline (historical reference) | 2026-10-14 |
 | [In-app online update proposal](调研/专题分析/应用内在线更新方案.md) | Store source inspection, version checks, signed installation, configuration backup and recovery gaps | 2026-10-28 |
 | [Historical investigations](调研/历史调查/README.md) | Five diagnostic, capability-probe and handoff records with original version and evidence boundaries | 2026-10 |
 
@@ -68,6 +68,6 @@ Use the [research index](调研/README.md) (Chinese) to separate reusable refere
 
 Place new documents in the appropriate category and update both indexes. Keep translations together, link between them, and use relative paths across categories. Commands and source paths measured from the repository root retain their original meaning.
 
-Research records retain dates, source versions and validation limits. Maintain released behavior and stable contracts in the usage, development and design documents. Hardware acceptance records added to the repository belong under `开发/验收记录/` and should be linked from the Testing Guide; research findings do not substitute acceptance evidence.
+Research records retain dates and source versions. Maintain released behavior and stable contracts in the usage, development, and design documents. Hardware acceptance records belong under `开发/验收记录/` and are linked from the Testing Guide.
 
 Keep `images/usage/` and `images/usage-en/` at their existing paths. See [Documentation & Screenshot Maintenance](使用/USER_GUIDE.md#documentation--screenshot-maintenance) for preview synchronization. The two legacy calendar-format paths in this directory provide navigation for help URLs in released applications; maintain their content only under `使用/`.
