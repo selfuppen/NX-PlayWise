@@ -5,6 +5,7 @@
     int page_identity_ = -1;
     bool page_changed_ = false;
     int flow_y_ = 0;
+    int promoted_parent_action_ = -1;
     OverlayNavbarScheme navbar_scheme_ = OverlayNavbarScheme::Default;
     PtcRestrictionReason child_drawn_reason_ = PTC_REASON_NONE;
 
@@ -64,7 +65,8 @@
     }
 
     void draw_button(tsl::gfx::Renderer *renderer, PtcOverlayRect rect,
-        const char *text, tsl::Color color, bool emphasized = false, int size = PTC_OVERLAY_FONT_BTN, bool focused = false)
+        const char *text, tsl::Color color, bool emphasized = false, int size = PTC_OVERLAY_FONT_BTN,
+        bool focused = false, bool solid = false)
     {
         const auto &pal = current_palette();
         const bool danger = color.r == pal.danger.r && color.g == pal.danger.g && color.b == pal.danger.b;
@@ -72,10 +74,10 @@
         const auto tone = focused ? pal.accent : color;
         const auto soft = danger ? pal.danger_soft : warning ? pal.warning_soft : pal.accent_soft;
         const bool emp = emphasized || focused;
-        draw_dashboard_surface(renderer, rect, emp ? soft : pal.card_raised,
+        draw_dashboard_surface(renderer, rect, solid ? pal.accent : emp ? soft : pal.card_raised,
             focused ? pal.accent : emp ? tone : pal.border_control, emp);
         if (focused) {
-            draw_focus_ring(renderer, rect, pal.accent);
+            draw_focus_ring(renderer, rect, solid ? pal.text_primary : pal.accent);
         }
         const auto lines = overlay_button_lines(renderer, text, rect.w - 24, rect.h - 8, size);
         const int step = (size * 6 + 4) / 5;
@@ -83,7 +85,7 @@
         renderer->enableScissoring(rect.x + 12, rect.y + 4, rect.w - 24, rect.h - 8);
         for (size_t i = 0; i < lines.size(); ++i)
             overlay_text(renderer, lines[i].c_str(), rect.x + 12, top + static_cast<int>(i) * step,
-                rect.w - 24, size, focused ? pal.accent : color, true);
+                rect.w - 24, size, solid ? pal.panel_bg : focused ? pal.accent : color, true);
         renderer->disableScissoring();
     }
 
@@ -723,18 +725,19 @@
             return;
         }
         if (parent_view_ == ParentView::Actions) {
-            // Groups answer "what am I trying to change today?" and stay in the
-            // same order as ptc_overlay_parent_action_order() so focus never jumps.
             const PtcUiTextId groups[] = {PTC_UI_T_OVERLAY_GROUP_TODAY_ALLOWANCE,
-                PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES, PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY};
+                PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES, PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY,
+                PTC_UI_T_OVERLAY_CURRENT_RESTRICTION};
             const PtcUiTextId hints[] = {PTC_UI_T_OVERLAY_GROUP_TODAY_ALLOWANCE_HINT,
                 PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES_HINT, PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY_HINT};
-            const int *order = ptc_overlay_parent_action_order();
+            int last_group = -1;
             for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
-                const int group = ptc_overlay_parent_action_group(slot);
-                const int index = order[slot];
-                if (group >= 0 && (slot == 0 || ptc_overlay_parent_action_group(slot - 1) != group)) {
-                    const auto group_color = group == 2 ? pal.danger : group == 1 ? pal.warning : pal.accent;
+                const int index = ptc_overlay_parent_action_at(slot, promoted_parent_action_);
+                const bool promoted = index == promoted_parent_action_;
+                const int group = promoted ? 3 : ptc_overlay_parent_action_group(ptc_overlay_parent_action_slot(index));
+                if (group != last_group) {
+                    last_group = group;
+                    const auto group_color = group >= 2 ? pal.danger : group == 1 ? pal.warning : pal.accent;
                     if (slot != 0) {
                         flow_y_ += 4;
                         renderer->drawRect(page_layout_.viewport.x + 4,
@@ -749,12 +752,14 @@
                         label_y, page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION, group_color);
                     flow_y_ += overlay_text_height(renderer, ptc_ui_text(groups[group]),
                         page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION);
-                    // The hint is context only; it never becomes a hit target.
-                    overlay_text(renderer, ptc_ui_text(hints[group]), page_layout_.viewport.x + 16,
-                        flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 24,
-                        PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
-                    flow_y_ += overlay_text_height(renderer, ptc_ui_text(hints[group]),
-                        page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION) + 6;
+                    if (!promoted) {
+                        overlay_text(renderer, ptc_ui_text(hints[group]), page_layout_.viewport.x + 16,
+                            flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 24,
+                            PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+                        flow_y_ += overlay_text_height(renderer, ptc_ui_text(hints[group]),
+                            page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION);
+                    }
+                    flow_y_ += 6;
                 }
                 const auto action = static_cast<PtcOverlayParentAction>(index);
                 const char *reason = parent_action_reason(action);
@@ -772,7 +777,8 @@
                     value = line;
                 }
                 const int start = flow_y_;
-                const auto tone = reason ? pal.text_disabled : parent_action_requires_hold(action) ? pal.danger : pal.accent;
+                const auto tone = reason ? pal.text_disabled :
+                    (promoted || parent_action_requires_hold(action)) ? pal.danger : pal.accent;
                 page_layout_.actions[index] = flow_card(renderer, ptc_ui_text(parent_action_label_id(index)), value, note,
                     PTC_OVERLAY_FONT_BTN, reason ? pal.text_disabled : pal.text_primary,
                     tone, action, parent_action_ == index, reason != nullptr);
@@ -783,7 +789,7 @@
                 }
             }
             end_page(renderer);
-            if (page_changed_) page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
+            if (page_changed_ && parent_action_ >= 0) page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
                 page_layout_.viewport, page_layout_.actions[parent_action_], 0, page_layout_.scroll_max));
             page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
             page_layout_.secondary = {};
@@ -989,15 +995,14 @@
         const int left_width = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
         if (left_width + static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_SECONDARY).first) + 40 <= cw)
             draw_localized_right(renderer, age, cx + cw - 14, cy + status_y, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
-        const int total = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W + (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
         for (unsigned i = 0; i < PTC_OVERLAY_CODE_SYMBOLS; ++i) {
-            const int x = cx + (cw - total) / 2 + static_cast<int>(i) * (PTC_OVERLAY_SLOT_W + PTC_OVERLAY_SLOT_GAP);
+            const auto slot = ptc_overlay_code_slot_rect(cx, cy, cw, i);
             const bool cursor = input_->length < PTC_OVERLAY_CODE_SYMBOLS && i == input_->length;
             const bool entered = i < input_->length;
-            draw_dashboard_surface(renderer, ptc_overlay_rect(x, cy + PTC_OVERLAY_SLOT_Y, PTC_OVERLAY_SLOT_W, PTC_OVERLAY_SLOT_H),
-                cursor ? pal.accent_soft : pal.card_raised, cursor ? pal.accent : pal.border_control, cursor);
-            const char symbol[] = {entered ? input_->symbols[i] : cursor ? '_' : '|', '\0'};
-            draw_localized_center(renderer, symbol, x, cy + PTC_OVERLAY_SLOT_Y, PTC_OVERLAY_SLOT_W, PTC_OVERLAY_SLOT_H,
+            draw_dashboard_surface(renderer, slot, cursor ? pal.accent_soft : entered ? pal.success_soft : pal.card_raised,
+                cursor ? pal.accent : entered ? pal.success : pal.border_control, cursor);
+            const char symbol[] = {entered ? input_->symbols[i] : cursor ? '_' : ' ', '\0'};
+            draw_localized_center(renderer, symbol, slot.x, slot.y, slot.w, slot.h,
                 PTC_OVERLAY_FONT_CODE, entered ? pal.text_primary : cursor ? pal.accent : pal.text_disabled);
         }
         std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_INPUT_COUNT), input_->length);
@@ -1025,11 +1030,16 @@
         page_layout_.primary = ptc_overlay_submit_rect(cx, cy, cw);
         const bool unavailable = has_status_snapshot_ && !status_is_stale() &&
             (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped || summary.dock_unlimited_capped);
-        const bool ready = !unavailable && !bridge_->waiting && ptc_overlay_input_can_submit(input_);
-        const char *submit = ptc_ui_text(unavailable ? PTC_UI_T_OVERLAY_CODE_UNAVAILABLE :
-            bridge_->waiting ? PTC_UI_T_BACKGROUND_PROCESSING : ready ? PTC_UI_T_OVERLAY_SUBMIT : PTC_UI_T_OVERLAY_NEED_CODE);
+        const bool ready = !control_disabled() && !unavailable && !bridge_->waiting && ptc_overlay_input_can_submit(input_);
+        char remaining[64];
+        std::snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_OVERLAY_NEED_CODE),
+            static_cast<unsigned>(PTC_OVERLAY_CODE_SYMBOLS - input_->length));
+        const char *submit = control_disabled() ? current_state_line(false).text :
+            unavailable ? ptc_ui_text(PTC_UI_T_OVERLAY_CODE_UNAVAILABLE) :
+            bridge_->waiting ? ptc_ui_text(PTC_UI_T_BACKGROUND_PROCESSING) :
+            ready ? ptc_ui_text(PTC_UI_T_OVERLAY_SUBMIT) : remaining;
         draw_button(renderer, page_layout_.primary, submit, ready ? pal.accent : unavailable ? pal.warning : pal.text_secondary,
-            ready, PTC_OVERLAY_FONT_SECONDARY, keypad_nav_focus_ == 13);
+            ready, fit_rail_button_size(renderer, submit, page_layout_.primary.w), keypad_nav_focus_ == 13, ready);
         page_layout_.secondary = ptc_overlay_keypad_nav_back_rect(cx, cy);
         page_layout_.parent = ptc_overlay_keypad_nav_parent_rect(cx, cy, cw);
         draw_button(renderer, page_layout_.secondary, ptc_ui_text(PTC_UI_T_B_CANCEL_2), pal.text_primary, false, PTC_OVERLAY_FONT_BTN, keypad_nav_focus_ == 12);
@@ -1323,8 +1333,10 @@
         const int parent_w = text_width(renderer, parent_text, PTC_OVERLAY_FONT_SECONDARY) + 24;
         const int language_w = text_width(renderer, language_text, PTC_OVERLAY_FONT_SECONDARY) + 24;
         page_layout_.refresh = ptc_overlay_rect(cx + cw - 8 - refresh_w, cy, refresh_w, 40);
-        page_layout_.parent = ptc_overlay_rect(page_layout_.refresh.x - 6 - parent_w, cy, parent_w, 40);
-        page_layout_.language = ptc_overlay_rect(page_layout_.parent.x - 6 - language_w, cy, language_w, 40);
+        page_layout_.parent = restricted ? ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H) :
+            ptc_overlay_rect(page_layout_.refresh.x - 6 - parent_w, cy, parent_w, 40);
+        const int language_right = restricted ? page_layout_.refresh.x : page_layout_.parent.x;
+        page_layout_.language = ptc_overlay_rect(language_right - 6 - language_w, cy, language_w, 40);
         const int brand_x = cx + pad_x, brand_w = page_layout_.language.x - brand_x - 8;
         const char *brand = ptc_ui_text(PTC_UI_T_PLAYWISE);
         // Native system fonts can be wider than the host preview font. Keep
@@ -1359,7 +1371,7 @@
 
         // Scrolling area: ask-a-parent hint, rule chain and the status row.
         const int button_h = PTC_OVERLAY_RAIL_H;
-        const int bottom = restricted ? cy + PTC_OVERLAY_RAIL_BOTTOM : cy + PTC_OVERLAY_RAIL_Y - 8;
+        const int bottom = cy + PTC_OVERLAY_RAIL_Y - 8;
         page_layout_.viewport = ptc_overlay_rect(cx, banner_bottom + 8, cw, bottom - (banner_bottom + 8));
         flow_y_ = page_layout_.viewport.y;
         renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);

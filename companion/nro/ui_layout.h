@@ -17,6 +17,7 @@ typedef enum {
     PTC_UI_HIT_CHILD_BUFFER,
     PTC_UI_HIT_CHILD_PARENT,
     PTC_UI_HIT_CHILD_EXIT,
+    PTC_UI_HIT_CHILD_FORECAST,
     PTC_UI_HIT_ERROR_RETRY,
     PTC_UI_HIT_ERROR_BACK,
     PTC_UI_HIT_SETUP_LANGUAGE,
@@ -179,6 +180,7 @@ PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_time_status_bar_rect(void);
 PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model);
+bool ptc_ui_time_status_compact(const PtcUiModel *model);
 PtcUiRect ptc_ui_header_language_rect(void);
 PtcUiRect ptc_ui_parent_footer_details_rect(void);
 PtcUiRect ptc_ui_parent_footer_rules_rect(void);
@@ -210,6 +212,7 @@ PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
 PtcUiRect ptc_ui_child_hero_rect(void);
 PtcUiRect ptc_ui_child_forecast_rect(void);
+PtcUiRect ptc_ui_child_forecast_day_rect(int offset, int count);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
 PtcUiRect ptc_ui_home_details_body_rect(void);
 PtcUiRect ptc_ui_home_details_guide_rect(void);
@@ -255,6 +258,7 @@ PtcUiRect ptc_ui_eye_care_rest_inc_rect(void);
 PtcUiRect ptc_ui_eye_care_page_save_rect(void);
 PtcUiRect ptc_ui_eye_care_page_skip_rect(void);
 PtcUiRect ptc_ui_quick_add_option_rect(int index);
+uint16_t ptc_ui_quick_add_option_minutes(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);
 PtcUiRect ptc_ui_bedtime_master_switch_rect(void);

@@ -18,6 +18,23 @@
       <strong data-i18n="brand_name">任我玩</strong>
     </div>
     <div class="header-actions">
+      <label class="appearance">
+        <span class="sr-only" data-i18n="appearance">配色</span>
+        <select id="appearance">
+          <option value="slate" data-i18n="appearance_slate">石墨</option>
+          <option value="paper" data-i18n="appearance_paper">纸墨</option>
+          <option value="teal" data-i18n="appearance_teal">雾青</option>
+          <option value="dusk" data-i18n="appearance_dusk">暮霭</option>
+        </select>
+      </label>
+      <label class="appearance">
+        <span class="sr-only" data-i18n="color_mode">亮暗模式</span>
+        <select id="colorMode">
+          <option value="system" data-i18n="color_system">跟随系统</option>
+          <option value="light" data-i18n="color_light">浅色</option>
+          <option value="dark" data-i18n="color_dark">深色</option>
+        </select>
+      </label>
       <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language">
         <svg class="globe-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10"></circle>
@@ -35,7 +52,6 @@
       <div class="intro">
         <div>
           <h1 id="pageTitle" data-i18n="page_title">生成今日加时码</h1>
-          <p class="slogan" data-i18n="slogan">Play Wise. Play More.</p>
           <p data-i18n="intro_p">加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。</p>
         </div>
         <div class="intro-actions">
@@ -53,33 +69,41 @@
       </div>
       <div id="importError" class="notice danger" role="alert" hidden></div>
 
-      <section class="pairing-tools" aria-labelledby="pairingTitle">
-        <div>
-          <h2 id="pairingTitle" data-i18n="pairing_title">配对 Switch</h2>
-          <p data-i18n-html="pairing_p">可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
-        </div>
-        <label class="file-button secondary compact">
-          <span data-i18n="import_file_button">导入配置文件</span>
-          <input id="importFile" type="file" accept="application/json,.json" hidden>
-        </label>
-      </section>
-
       <form id="generator">
-        <div class="fields">
-          <label>
-            <span data-i18n="label_device">Switch 设备 ID</span>
-            <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_-]{1,32}" autocomplete="off" required>
-          </label>
+        <label id="savedDevices" hidden>
+          <span data-i18n="saved_devices">已保存的 Switch</span>
+          <select id="devicePicker"></select>
+        </label>
+        <details id="pairingSettings" class="settings pairing-settings" open>
+          <summary data-i18n="pairing_title">配对 Switch</summary>
+          <section class="pairing-tools">
+            <div>
+              <p data-i18n-html="pairing_p">可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
+            </div>
+            <label class="file-button secondary compact">
+              <span data-i18n="import_file_button">导入配置文件</span>
+              <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
+            </label>
+          </section>
 
-          <label>
-            <span data-i18n="label_secret">加时密钥</span>
-            <span class="secret-field">
-              <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
-              <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
-            </span>
-            <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
-          </label>
+          <div class="fields">
+            <label>
+              <span data-i18n="label_device">Switch 设备 ID</span>
+              <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_\-]{1,32}" autocomplete="off" required>
+            </label>
 
+            <label>
+              <span data-i18n="label_secret">加时密钥</span>
+              <span class="secret-field">
+                <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
+                <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
+              </span>
+              <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
+            </label>
+          </div>
+        </details>
+
+        <div class="fields issue-fields">
           <label>
             <span data-i18n="label_date">生效日期（Switch 主机本地日期）</span>
             <input id="date" name="date" type="date" required>
@@ -90,19 +114,34 @@
             <select id="tierMinutes" name="tier_minutes"></select>
           </label>
         </div>
+        <div id="dateShortcuts" class="shortcuts" role="group" data-i18n-aria="label_date">
+          <button type="button" class="secondary compact" data-days="0" data-i18n="date_today">今天</button>
+          <button type="button" class="secondary compact" data-days="1" data-i18n="date_tomorrow">明天</button>
+        </div>
+        <p class="date-help" data-i18n="date_help">请以 Switch 的本地日期为准。每个加时码仅在所选日期有效。</p>
+        <div id="tierShortcuts" class="shortcuts" role="group" data-i18n-aria="label_tier"></div>
 
         <button id="generate" class="primary" type="submit" data-i18n="btn_generate">生成 8 位数字加时码</button>
       </form>
 
       <div id="error" class="notice danger" role="alert" hidden></div>
 
-      <section id="result" class="result" aria-live="polite" hidden>
+      <section id="result" class="result" aria-label="生成结果" data-i18n-aria="result_label" aria-live="polite" tabindex="-1" hidden>
         <p class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
-        <p id="code" class="code"></p>
+        <p id="code" class="code"><span></span><span></span></p>
         <p id="meta" class="meta"></p>
-        <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
+        <div class="result-actions">
+          <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
+          <button id="copyMessage" class="secondary" type="button" data-i18n="btn_copy_message">复制分享文字</button>
+        </div>
         <p class="collision-note" data-i18n="collision_note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
       </section>
+
+      <details id="issuedHistory" class="settings" hidden>
+        <summary id="issuedSummary" data-i18n="issued_summary">本浏览器的签发记录</summary>
+        <p data-i18n="issued_help">以下记录仅表示这个浏览器已生成加时码，兑换情况请在 Switch 上查看。</p>
+        <ul id="issuedList"></ul>
+      </details>
 
       <details class="settings">
         <summary data-i18n="settings_summary">本机数据与安全说明</summary>
@@ -129,6 +168,7 @@
   </main>
 
   <footer>
+    <p data-i18n="slogan">Play Wise. Play More.</p>
     <p data-i18n="footer_p">正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。</p>
     <nav aria-label="项目链接" data-i18n-aria="footer_nav_aria">
       <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer" data-i18n="footer_author">作者 GitHub</a>
@@ -145,7 +185,7 @@
         <div><dt data-i18n="pairing_dialog_device">设备 ID</dt><dd id="pairingDevice"></dd></div>
         <div><dt data-i18n="pairing_dialog_secret">加时密钥</dt><dd id="pairingSecret"></dd></div>
       </dl>
-      <p id="pairingReplace" class="notice danger" hidden data-i18n="pairing_dialog_replace">确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。</p>
+      <p id="pairingReplace" class="notice danger" hidden data-i18n="pairing_dialog_replace">确认后将更新同名设备的密钥。已有签发记录会保留。</p>
       <div class="dialog-actions">
         <button id="cancelPairing" class="secondary" value="cancel" data-i18n="btn_cancel">取消</button>
         <button id="confirmPairing" class="primary no-margin" value="confirm" data-i18n="btn_confirm_import">导入此设备</button>

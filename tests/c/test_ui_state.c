@@ -4762,6 +4762,33 @@ static void test_data_freshness_and_software_update(void)
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
 }
 
+static void test_child_forecast_focus(void)
+{
+    PtcUiModel model = {0};
+    model.view = PTC_UI_CHILD;
+    model.status_loaded = model.forecast_available = true;
+    model.status_updated_at = 1000;
+    model.day_index = 2380;
+    model.forecast[0].day_index = 2380;
+    model.forecast[3].day_index = 2383;
+    PtcUiRect card = ptc_ui_child_forecast_day_rect(3, 1);
+    check_hit(ptc_ui_hit_test_at(&model, card.x + 10, card.y + 10, 1000),
+        PTC_UI_HIT_CHILD_FORECAST, 3, "child forecast shares display and touch geometry");
+    ptc_ui_move_child_forecast_focus(&model, 1, 1000);
+    check_int(model.child_forecast_focus, 1, "down enters on the first available date");
+    ptc_ui_move_child_forecast_focus(&model, 1, 1000);
+    check_int(model.child_forecast_focus, 4, "directional focus skips missing dates");
+    model.weekly_baseline_available = true;
+    ptc_ui_move_child_forecast_focus(&model, -1, 1000);
+    check_int(model.child_forecast_focus, 3, "directional focus includes a saved weekly baseline");
+    check_int(ptc_ui_child_forecast_source(&model, 2, 1000), PTC_UI_CHILD_FORECAST_WEEKLY,
+        "missing future dates keep the weekly-source label");
+    check_hit(ptc_ui_hit_test_at(&model, card.x + 10, card.y + 10, 1121),
+        PTC_UI_HIT_NONE, 0, "stale forecasts have no touch target");
+    ptc_ui_move_child_forecast_focus(&model, 1, 1121);
+    check_int(model.child_forecast_focus, 0, "stale forecasts release navigation focus");
+}
+
 static void test_online_update_layout(void)
 {
     PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
@@ -4840,6 +4867,7 @@ int main(void)
     test_today_settings_links();
     test_config_backup_layout();
     test_data_freshness_and_software_update();
+    test_child_forecast_focus();
     test_online_update_layout();
     test_dock_ui();
     test_dock_editor_preview();

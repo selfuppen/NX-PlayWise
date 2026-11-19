@@ -1454,12 +1454,27 @@ static void test_overlay_layout_geometry(void)
         "system recovery stays the last group");
     check_int(ptc_overlay_parent_action_group(ptc_overlay_parent_action_slot(
         PTC_OVERLAY_PARENT_WAIVE_DOCK)), 1, "TV waiver sits with the active rules");
+    const int prioritized = PTC_OVERLAY_PARENT_WAIVE_DOCK;
+    check_int(ptc_overlay_parent_action_at(0, prioritized), prioritized, "active waiver moves to the first slot");
+    check_int(ptc_overlay_parent_action_at(1, prioritized), PTC_OVERLAY_PARENT_ADD_MINUTES, "quick add follows the promoted action");
+    check_int(ptc_overlay_parent_action_move_with_priority(PTC_OVERLAY_PARENT_ADD_MINUTES, -1, prioritized),
+        prioritized, "up from quick add follows the visible order");
+    check_int(ptc_overlay_parent_action_at(PTC_OVERLAY_PARENT_ACTION_COUNT - 1, prioritized),
+        PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, "recovery stays last after promotion");
     PtcOverlayRect viewport = ptc_overlay_rect(16, 104, 416, 452);
     PtcOverlayRect first = ptc_overlay_rect(20, 104, 404, 104);
     PtcOverlayRect last = ptc_overlay_rect(20, 1004, 404, 156);
     int maximum = ptc_overlay_scroll_max(last.y + last.h - viewport.y, viewport.h);
     check_int(maximum, 604, "scroll maximum comes from actual content height");
     check_int(ptc_overlay_scroll_max(104, 452), 0, "short content needs no scrolling");
+    PtcOverlayPageLayout snap = {0};
+    snap.viewport = viewport;
+    snap.scroll_max = 604;
+    snap.actions[4] = ptc_overlay_rect(20, 304, 404, 90);
+    check_int(ptc_overlay_snap_parent_scroll(&snap, 220), 200, "snap shows the whole leading action");
+    check_int(ptc_overlay_snap_parent_scroll(&snap, 272), 290, "snap crosses a card scrolled mostly out of view");
+    check_int(ptc_overlay_snap_parent_scroll(&snap, 294), 294, "group gaps keep their scroll position");
+    check_int(ptc_overlay_snap_parent_scroll(&snap, 604), 604, "end of the list remains reachable");
     PtcOverlayGesture gesture = {0};
     PtcOverlayGestureEvent touch = ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
     check_true(!touch.clicked, "touch-down never executes an action");
@@ -1494,9 +1509,12 @@ static void test_overlay_layout_geometry(void)
     check_int(PTC_OVERLAY_FONT_SECONDARY, 24, "overlay supporting text uses large type");
     check_int(PTC_OVERLAY_FONT_BODY_LG, 32, "confirmation explanations approach twice the old size");
     check_int(PTC_OVERLAY_FONT_CODE, 40, "code slot digits use their own large token");
-    int slots_width = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
-        (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
-    check_int(slots_width, 387, "all eight code slots fit the sidebar");
+    PtcOverlayRect first_slot = ptc_overlay_code_slot_rect(16, 12, 416, 0);
+    PtcOverlayRect last_slot = ptc_overlay_code_slot_rect(16, 12, 416, 7);
+    PtcOverlayRect fourth_slot = ptc_overlay_code_slot_rect(16, 12, 416, 3);
+    PtcOverlayRect fifth_slot = ptc_overlay_code_slot_rect(16, 12, 416, 4);
+    check_int(fifth_slot.x - fourth_slot.x - fourth_slot.w, 14, "code groups have a visible center gap");
+    check_int(first_slot.x - 16, 432 - last_slot.x - last_slot.w, "both code groups fit with symmetric margins");
     check_int(PTC_OVERLAY_SLOT_H, 64, "code slots have room for 40px digits");
     check_int(PTC_OVERLAY_SLOT_Y, 104, "code slots sit below the path header");
     check_int(PTC_OVERLAY_KEYPAD_Y, 232, "keypad starts below count and date");

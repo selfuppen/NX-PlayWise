@@ -32,6 +32,28 @@ static void draw_child_calendar_icon(uint32_t *pixels, uint32_t stride, int cx, 
     draw_line(pixels, stride, cx + 4, cy - 10, cx + 4, cy - 7, 2, color);
 }
 
+static bool child_forecast_unlimited_today(const PtcUiModel *model, int offset)
+{
+    return offset == 0 && (model->unrestricted_today == 1 ||
+        model->eye_care_unlimited_capped || model->dock_unlimited_capped);
+}
+
+static PtcDayRule child_forecast_rule(const PtcUiModel *model, int offset, PtcUiChildForecastSource source)
+{
+    if (source == PTC_UI_CHILD_FORECAST_WEEKLY)
+        return model->current_week[ptc_weekday_from_day_index(model->day_index + offset)];
+    const PtcResultForecastDay *day = &model->forecast[offset];
+    return (PtcDayRule){child_forecast_unlimited_today(model, offset) ?
+        PTC_RULE_MODE_UNLIMITED : (PtcRuleMode)day->mode, day->minutes};
+}
+
+static const char *child_forecast_label(const PtcUiModel *model, int offset, PtcUiChildForecastSource source)
+{
+    if (source == PTC_UI_CHILD_FORECAST_WEEKLY) return ptc_ui_text(PTC_UI_T_WEEKLY_BASELINE);
+    return ui_rule_source_label(child_forecast_unlimited_today(model, offset) ?
+        model->rule_source : model->forecast[offset].rule_source);
+}
+
 static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, UiRect container)
 {
     fill_round_rect(pixels, stride, container, 16, UI_RGB(UI_BLENDED(surface)));
@@ -41,8 +63,25 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
     draw_child_calendar_icon(pixels, stride, container.x + 28, container.y + 20, UI_ACCENT);
     int title_x = container.x + 46;
     int heading_width = container.width - 62;
-    char title[192], summary[128];
-    fit_text(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_REST_AS_PLANNED), 13, heading_width / 2);
+    char title[192], summary[128], detail[128];
+    int64_t now = ptc_ui_render_now();
+    int focused_offset = model->child_forecast_focus - 1;
+    PtcUiChildForecastSource focused_source = ptc_ui_child_forecast_source(model, focused_offset, now);
+    const char *summary_text = ptc_ui_text(PTC_UI_T_REST_AS_PLANNED);
+    if (focused_source != PTC_UI_CHILD_FORECAST_UNKNOWN) {
+        PtcDayRule rule = child_forecast_rule(model, focused_offset, focused_source);
+        char date[32], quota[40];
+        ptc_format_date(model->day_index + focused_offset, date);
+        if (rule.mode == PTC_RULE_MODE_LIMIT)
+            snprintf(quota, sizeof(quota), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)rule.minutes);
+        else
+            snprintf(quota, sizeof(quota), "%s", ptc_ui_text(rule.mode == PTC_RULE_MODE_UNLIMITED ?
+                PTC_UI_T_ADJUST_BADGE_UNLIMITED : PTC_UI_T_DISABLED));
+        snprintf(detail, sizeof(detail), "%s  |  %s  |  %s", date, quota,
+            child_forecast_label(model, focused_offset, focused_source));
+        summary_text = detail;
+    }
+    fit_text(summary, sizeof(summary), summary_text, 13, heading_width / 2);
     int summary_width = measure_text(summary, 13);
     int summary_x = container.x + container.width - 16 - summary_width;
     fit_text(title, sizeof(title), ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST), 16,
@@ -50,17 +89,23 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
     draw_text(pixels, stride, title_x, container.y + 26, title, 16, UI_RGB(UI_BLENDED(text_primary)));
     draw_text(pixels, stride, summary_x, container.y + 26, summary, 13, UI_MUTED);
 
-    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
-    const int start_x = container.x + 16;
-    const int card_w = 114;
-    const int gap = 11;
-    const int card_y = container.y + 40;
-    /* 预测框高度由布局给出：面板让出的高度直接收在卡片上，40px 标题栏和 14px 内边距不变。 */
-    const int card_h = container.height - 54;
-
-    for (int i = 0; i < 7; ++i) {
-        UiRect card = {start_x + i * (card_w + gap), card_y, card_w, card_h};
+    for (int i = 0; i < (int)PTC_RESULT_FORECAST_DAYS; ++i) {
+        UiRect card = to_uirect(ptc_ui_child_forecast_day_rect(i, 1));
         uint16_t target_day = model->day_index + (uint16_t)i;
+        PtcUiChildForecastSource source = ptc_ui_child_forecast_source(model, i, now);
+        if (source == PTC_UI_CHILD_FORECAST_UNKNOWN) {
+            int end = i + 1;
+            while (end < (int)PTC_RESULT_FORECAST_DAYS &&
+                ptc_ui_child_forecast_source(model, end, now) == PTC_UI_CHILD_FORECAST_UNKNOWN) ++end;
+            card = to_uirect(ptc_ui_child_forecast_day_rect(i, end - i));
+            draw_plan_card(pixels, stride, card, false);
+            char fitted[160];
+            fit_text(fitted, sizeof(fitted), ptc_ui_text(end - i == 1 ? PTC_UI_T_TO_BE_CONFIRMED :
+                PTC_UI_T_REFRESH_STATUS_TO_VIEW_FORECAST_DATA), 16, card.width - 24);
+            draw_text_center(pixels, stride, card, fitted, 16, UI_MUTED);
+            i = end - 1;
+            continue;
+        }
         uint16_t yr = 0;
         uint8_t mo = 0, da = 0;
         bool date_ok = ptc_date_from_day_index(target_day, &yr, &mo, &da);
@@ -69,10 +114,12 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
         bool is_tomorrow = (i == 1);
         bool is_today = (i == 0);
 
-        uint32_t card_bg = is_tomorrow ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised));
-        uint32_t border_col = is_tomorrow ? UI_ACCENT : (is_weekend ? UI_SUCCESS_BORDER : UI_BORDER);
+        bool focused = focused_offset == i;
+        uint32_t card_bg = focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised));
+        uint32_t border_col = is_weekend ? UI_SUCCESS_BORDER : UI_BORDER;
         fill_round_rect(pixels, stride, card, 10, card_bg);
-        draw_rect_outline(pixels, stride, card, 10, is_tomorrow ? 2 : 1, border_col);
+        if (focused) draw_focus_ring(pixels, stride, card, 10);
+        else draw_rect_outline(pixels, stride, card, 10, 1, border_col);
 
         /* 星期与特殊标签 */
         char day_title[32];
@@ -96,26 +143,15 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
         char val_str[32];
         char unit_str[16] = "";
         uint32_t val_color = UI_INK;
-        bool available = fresh && model->forecast_available && i < 7 &&
-            model->forecast[i].day_index == target_day;
-
-        if (available && i == 0 && (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped))) {
+        PtcDayRule rule = child_forecast_rule(model, i, source);
+        if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
             snprintf(val_str, sizeof(val_str), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
             val_color = UI_SUCCESS;
-        } else if (available) {
-            const PtcResultForecastDay *day = &model->forecast[i];
-            if (day->mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(val_str, sizeof(val_str), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
-                val_color = UI_SUCCESS;
-            } else if (day->mode == PTC_RULE_MODE_LIMIT) {
-                snprintf(val_str, sizeof(val_str), "%u", (unsigned int)day->minutes);
-                snprintf(unit_str, sizeof(unit_str), "%s", ptc_ui_text(PTC_UI_T_MIN));
-            } else {
-                snprintf(val_str, sizeof(val_str), "%s", ptc_ui_text(PTC_UI_T_DISABLED));
-                val_color = UI_MUTED;
-            }
+        } else if (rule.mode == PTC_RULE_MODE_LIMIT) {
+            snprintf(val_str, sizeof(val_str), "%u", (unsigned)rule.minutes);
+            snprintf(unit_str, sizeof(unit_str), "%s", ptc_ui_text(PTC_UI_T_MIN));
         } else {
-            snprintf(val_str, sizeof(val_str), "%s", fresh ? ptc_ui_text(PTC_UI_T_UNAVAILABLE) : ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED));
+            snprintf(val_str, sizeof(val_str), "%s", ptc_ui_text(PTC_UI_T_DISABLED));
             val_color = UI_MUTED;
         }
 
@@ -126,22 +162,16 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
             draw_text_bold(pixels, stride, tx, card.y + 82, val_str, 24, val_color);
             draw_text(pixels, stride, tx + vw + 4, card.y + 80, unit_str, 13, UI_MUTED);
         } else {
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 64, card.width, 30}, val_str, 20, val_color);
+            char fitted[64];
+            fit_text(fitted, sizeof(fitted), val_str, 20, card.width - 12);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 64, card.width, 30}, fitted, 20, val_color);
         }
 
         /* 规则来源标签 */
-        char source[64];
         char fitted_src[64];
-        if (available && i == 0 && (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped))) {
-            snprintf(source, sizeof(source), "%s", ui_rule_source_label(model->rule_source));
-        } else if (available) {
-            snprintf(source, sizeof(source), "%s", ui_rule_source_label(model->forecast[i].rule_source));
-        } else {
-            snprintf(source, sizeof(source), "%s", fresh ? ptc_ui_text(PTC_UI_T_UNAVAILABLE) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
-        }
-        fit_text(fitted_src, sizeof(fitted_src), source, 11, card.width - 12);
+        fit_text(fitted_src, sizeof(fitted_src), child_forecast_label(model, i, source), 11, card.width - 12);
         draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 114, card.width - 12, 20}, fitted_src, 11,
-                         available ? (is_tomorrow ? UI_ACCENT : UI_MUTED) : UI_MUTED);
+                         is_tomorrow ? UI_ACCENT : UI_MUTED);
 
         /* 底部装饰指示条 */
         UiRect pill = {card.x + 14, card.y + card.height - 8, card.width - 28, 4};
@@ -158,7 +188,6 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     char remaining[64];
     char today[64];
     char line[160];
-    char age[64];
     bool ring_available;
     bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
     bool eye_resting = model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0;
@@ -175,8 +204,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     ptc_ui_format_today_mode(model, today, sizeof(today));
 
     /* --- 上半部：今日调度态势看板 (896x260) --- */
-    draw_card_shadow(pixels, stride, top_box, 16);
-    fill_round_rect(pixels, stride, top_box, 16, UI_RGB(UI_BLENDED(hero)));
+    draw_plan_card(pixels, stride, top_box, false);
+    UiRect quota_box = {top_box.x + 8, top_box.y + 8, 338, top_box.height - 16};
+    fill_round_rect(pixels, stride, quota_box, 12, UI_RGB(UI_BLENDED(hero)));
 
     /* 呼吸脉冲提醒边框 */
     if ((model->remaining_available && model->unrestricted_today != 1 &&
@@ -184,7 +214,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         bedtime_enforcing || eye_resting) {
         int phase = get_breathing_phase();
         uint32_t breath_c = bedtime_enforcing ? UI_BLENDED(night) : (eye_resting ? UI_BLENDED(warning) : UI_BLENDED(danger));
-        draw_rect_outline(pixels, stride, top_box, 16, 2,
+        draw_rect_outline(pixels, stride, quota_box, 12, 2,
                           UI_RGB(ui_mix_rgb(breath_c, 0xFFFFFF, phase * 3)));
     }
 
@@ -251,15 +281,11 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     }
     if (gauge_left[0]) {
         uint32_t gauge_color = bedtime_enforcing ? UI_NIGHT : UI_RGB(UI_BLENDED(hero_secondary));
-        int label_width = measure_text(gauge_left, gauge_label_size);
-        draw_text(pixels, stride, slot.x, slot.y + 28, gauge_left, gauge_label_size, gauge_color);
+        char fitted_left[64];
         /* 剩余分钟是这一屏最该被读到的数字：右侧加粗，并在空间不足时先裁剪左侧「已玩」标签。 */
         int right_width = measure_text(gauge_right, gauge_label_size);
-        int available = slot.width - right_width;
-        if (label_width > available) {
-            fit_text(gauge_left, sizeof(gauge_left), gauge_left, gauge_label_size, available - 8);
-            draw_text(pixels, stride, slot.x, slot.y + 28, gauge_left, gauge_label_size, gauge_color);
-        }
+        fit_text(fitted_left, sizeof(fitted_left), gauge_left, gauge_label_size, slot.width - right_width - 8);
+        draw_text(pixels, stride, slot.x, slot.y + 28, fitted_left, gauge_label_size, gauge_color);
         draw_text_bold(pixels, stride, slot.x + slot.width - right_width, slot.y + 28,
                        gauge_right, gauge_label_size, bedtime_enforcing ? UI_NIGHT : UI_RGB(UI_BLENDED(on_hero)));
     }
@@ -271,10 +297,8 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TODAY_S_S), today,
                  model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
     }
-    draw_text(pixels, stride, top_box.x + 28, top_box.y + 222, line, 14, UI_RGB(UI_BLENDED(hero_secondary)));
-
-    format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, top_box.x + 28, top_box.y + 274, age, 11, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_wrapped_text(pixels, stride, top_box.x + 28, top_box.y + 222, line,
+        14, quota_box.width - 40, 20, 2, UI_RGB(UI_BLENDED(hero_secondary)));
 
     /* 右列 (x: 408, w: 508)：三大守护策略卡片（护眼周期、就寝计划、电视限制）
      * 守护卡说明行是孩子判断“为什么现在不能玩”的主要依据，因此标题 16px、说明 15px；
@@ -289,9 +313,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
 
     /* 守护卡 1：护眼休息周期 */
     UiRect card1 = {c_x, top_box.y + 16, c_w, c_h};
-    fill_round_rect(pixels, stride, card1, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
-    draw_rect_outline(pixels, stride, card1, 10, 1, eye_resting ? UI_DANGER : UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
-    draw_text(pixels, stride, card1.x + 16, card1.y + 26, ptc_ui_text(PTC_UI_T_EYE_CARE), card_title_size, UI_RGB(UI_BLENDED(on_hero)));
+    fill_round_rect(pixels, stride, card1, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, card1, 10, 1, eye_resting ? UI_DANGER : UI_BORDER);
+    draw_text(pixels, stride, card1.x + 16, card1.y + 26, ptc_ui_text(PTC_UI_T_EYE_CARE), card_title_size, UI_INK);
 
     const char *eye_b_label = !model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_ENABLED));
@@ -311,7 +335,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     }
     fit_text(fitted_eye, sizeof(fitted_eye), eye_str, card_detail_size, card1.width - 32);
     draw_text(pixels, stride, card1.x + 16, card1.y + 58, fitted_eye, card_detail_size,
-              eye_resting ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+              eye_resting ? UI_DANGER : UI_MUTED);
 
     PtcPolicyStatus policies;
     ptc_ui_render_policy_status(model, &policies);
@@ -323,9 +347,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     uint32_t bed_bg = bed_policy->state == PTC_POLICY_ACTIVE ? UI_NIGHT_SOFT :
         bed_policy->state == PTC_POLICY_PENDING || bed_policy->state == PTC_POLICY_WAITING ||
         bed_policy->state == PTC_POLICY_EXHAUSTED ? UI_WARNING_SOFT : UI_ACCENT_SOFT;
-    fill_round_rect(pixels, stride, card2, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
-    draw_rect_outline(pixels, stride, card2, 10, 1, bed_fg);
-    draw_text(pixels, stride, card2.x + 16, card2.y + 26, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), card_title_size, UI_RGB(UI_BLENDED(on_hero)));
+    fill_round_rect(pixels, stride, card2, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, card2, 10, 1, bed_policy->state == PTC_POLICY_ACTIVE ? bed_fg : UI_BORDER);
+    draw_text(pixels, stride, card2.x + 16, card2.y + 26, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), card_title_size, UI_INK);
 
     const char *bed_badge = ptc_ui_text(bed_policy->badge);
     int bed_badge_w = measure_text(bed_badge, card_badge_size) + 16;
@@ -336,7 +360,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     char fitted_bed[256];
     fit_text(fitted_bed, sizeof(fitted_bed), bed_policy->detail, card_detail_size, card2.width - 32);
     draw_text(pixels, stride, card2.x + 16, card2.y + 58, fitted_bed, card_detail_size,
-        bed_policy->state == PTC_POLICY_ACTIVE ? UI_NIGHT : UI_RGB(UI_BLENDED(on_hero)));
+        bed_policy->state == PTC_POLICY_ACTIVE ? UI_NIGHT : UI_MUTED);
 
     /* 守护卡 3：电视/底座限制（更高，末行单独承载规则摘要说明） */
     const PtcPolicyDisplay *dock_policy = &policies.dock;
@@ -345,11 +369,11 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     uint32_t dock_bg = dock_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT :
         dock_policy->state == PTC_POLICY_PENDING || dock_policy->state == PTC_POLICY_WAITING ||
         dock_policy->state == PTC_POLICY_EXHAUSTED ? UI_WARNING_SOFT : UI_ACCENT_SOFT;
-    fill_round_rect(pixels, stride, card3, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
-    draw_rect_outline(pixels, stride, card3, 10, 1, dock_fg);
+    fill_round_rect(pixels, stride, card3, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, card3, 10, 1, dock_policy->state == PTC_POLICY_ACTIVE ? dock_fg : UI_BORDER);
 
     const char *dock_title = ptc_ui_text(PTC_UI_T_DOCK_TITLE);
-    draw_text(pixels, stride, card3.x + 16, card3.y + 26, dock_title, card_title_size, UI_RGB(UI_BLENDED(on_hero)));
+    draw_text(pixels, stride, card3.x + 16, card3.y + 26, dock_title, card_title_size, UI_INK);
 
     int mode_x = card3.x + 16 + measure_text(dock_title, card_title_size) + 10;
     char mode[96];
@@ -360,17 +384,17 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     draw_text_center(pixels, stride, dock_pill, dock_badge, card_badge_size, dock_fg);
 
     fit_text(mode, sizeof(mode), ptc_ui_text(policies.mode), 13, dock_pill.x - mode_x - 8);
-    draw_text(pixels, stride, mode_x, card3.y + 26, mode, 13, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, mode_x, card3.y + 26, mode, 13, UI_MUTED);
 
     /* 电视规则是孩子最常看的一行，说明与规则摘要都使用和护眼、就寝一致的 15px。 */
     char fitted_dock[256];
     fit_text(fitted_dock, sizeof(fitted_dock), dock_policy->detail, card_detail_size, card3.width - 32);
     draw_text(pixels, stride, card3.x + 16, card3.y + 58, fitted_dock, card_detail_size,
-        dock_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER : UI_RGB(UI_BLENDED(on_hero)));
+        dock_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER : UI_INK);
 
     fit_text(fitted_dock, sizeof(fitted_dock), policies.dock_rule, card_detail_size, card3.width - 32);
     draw_text(pixels, stride, card3.x + 16, card3.y + 82, fitted_dock, card_detail_size,
-              UI_RGB(UI_BLENDED(hero_secondary)));
+              UI_MUTED);
     /* --- 下半部：未来本周每天额度周历预报 --- */
     draw_child_forecast_columns(pixels, stride, model, bottom_box);
 }
@@ -448,7 +472,6 @@ static void draw_child_status_card(uint32_t *pixels, uint32_t stride, const PtcU
         (model->waiting ? UI_WARNING : (alert ? UI_WARNING : UI_SUCCESS));
     uint32_t background = (error || model->disable_flag_present) ? UI_DANGER_SOFT :
         (model->waiting ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface_raised)));
-    char age[64];
     const char *title = alert ? (runtime[0] ? runtime : (error ? ptc_ui_text(PTC_UI_T_OPERATION_INCOMPLETE) :
         (model->waiting ? ptc_ui_text(PTC_UI_T_SYNCHRONIZING) : ptc_ui_text(PTC_UI_T_STATUS_PROMPT)))) : ptc_ui_text(PTC_UI_T_STATUS_AUTOMATIC_SYNCHRONIZATION);
     const char *detail = ptc_ui_text(PTC_UI_T_TODAY_S_SCHEDULE_SYNCS_IN_BACKGROUND);
@@ -468,9 +491,6 @@ static void draw_child_status_card(uint32_t *pixels, uint32_t stride, const PtcU
                       card.width - 52, 18, 1, accent);
     draw_wrapped_text(pixels, stride, card.x + 14, card.y + 54, detail, 12,
                       card.width - 28, 17, 3, UI_MUTED);
-    format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, card.x + card.width - 14 - measure_text(age, 11),
-              card.y + card.height - 10, age, 11, UI_MUTED);
 }
 
 void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

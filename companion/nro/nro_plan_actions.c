@@ -114,6 +114,8 @@ void apply_pending_navigation(UiState *ui)
         }
         if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
             submit_status(ui);
+        } else if (ui->model.parent_page == PTC_UI_PARENT_GRANT) {
+            (void)load_redemption_history(ui);
         } else if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
             refresh_album_restriction(ui);
         }

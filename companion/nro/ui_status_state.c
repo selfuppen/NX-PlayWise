@@ -27,7 +27,7 @@ void ptc_ui_format_usage_history(const PtcUiModel *model, bool direct, char *out
         direct && !model->usage_latest_available ? ptc_ui_text(PTC_UI_T_HISTORY_READ_FAILED) : "");
 }
 
-static bool direct_grant_preview(const PtcUiModel *model, uint64_t *base, uint64_t *target)
+static bool direct_grant_preview(const PtcUiModel *model, uint16_t minutes, uint64_t *base, uint64_t *target)
 {
     const uint64_t minute_ns = UINT64_C(60000000000);
     uint64_t used_ceiling;
@@ -40,7 +40,7 @@ static bool direct_grant_preview(const PtcUiModel *model, uint64_t *base, uint64
     used_ceiling = model->usage_ns / minute_ns + (model->usage_ns % minute_ns != 0);
     if (used_ceiling > *base) *base = used_ceiling;
     if (*base > 1440) *base = 1440;
-    *target = *base + model->draft_minutes;
+    *target = *base + minutes;
     if (*target > 1440) *target = 1440;
     return true;
 }
@@ -50,7 +50,21 @@ int ptc_ui_preview_effective_add_minutes(const PtcUiModel *model)
     uint64_t base, target;
     if (!model || model->operation != PTC_UI_OPERATION_ADD_TODAY_MINUTES) return -1;
     if (!model->usage_present) return model->draft_minutes;
-    return direct_grant_preview(model, &base, &target) ? (int)(target - base) : -1;
+    return direct_grant_preview(model, model->draft_minutes, &base, &target) ? (int)(target - base) : -1;
+}
+
+int ptc_ui_preview_added_remaining_minutes(const PtcUiModel *model, uint16_t minutes)
+{
+    if (model->usage_present) {
+        const uint64_t minute_ns = UINT64_C(60000000000);
+        uint64_t base, target;
+        if (!direct_grant_preview(model, minutes, &base, &target)) return -1;
+        return target * minute_ns > model->usage_ns
+            ? (int)((target * minute_ns - model->usage_ns) / minute_ns) : 0;
+    }
+    if (model->remaining_available && model->remaining_minutes >= 0)
+        return model->remaining_minutes + (int)minutes;
+    return -1;
 }
 
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
@@ -61,17 +75,7 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
     }
 
     if (model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
-        if (model->usage_present) {
-            const uint64_t minute_ns = UINT64_C(60000000000);
-            uint64_t base, target;
-            if (!direct_grant_preview(model, &base, &target)) return -1;
-            return target * minute_ns > model->usage_ns
-                ? (int)((target * minute_ns - model->usage_ns) / minute_ns) : 0;
-        }
-        if (model->remaining_available && model->remaining_minutes >= 0) {
-            return model->remaining_minutes + (int)model->draft_minutes;
-        }
-        return -1;
+        return ptc_ui_preview_added_remaining_minutes(model, model->draft_minutes);
     }
 
     if (!model->played_minutes_available || model->played_minutes < 0) {
@@ -115,6 +119,30 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
          (model->usage_captured_at > 0 && now >= model->usage_captured_at &&
           now - model->usage_captured_at <= 120)) &&
         strcmp(model->result_status, "error") != 0;
+}
+
+PtcUiChildForecastSource ptc_ui_child_forecast_source(const PtcUiModel *model, int offset, int64_t now)
+{
+    if (!ptc_ui_status_is_fresh(model, now) || offset < 0 || offset >= (int)PTC_RESULT_FORECAST_DAYS ||
+        offset > UINT16_MAX - model->day_index) return PTC_UI_CHILD_FORECAST_UNKNOWN;
+    if (model->forecast_available && model->forecast[offset].day_index == model->day_index + offset)
+        return PTC_UI_CHILD_FORECAST_CONFIRMED;
+    if (offset > 0 && model->weekly_baseline_available) return PTC_UI_CHILD_FORECAST_WEEKLY;
+    return PTC_UI_CHILD_FORECAST_UNKNOWN;
+}
+
+void ptc_ui_move_child_forecast_focus(PtcUiModel *model, int direction, int64_t now)
+{
+    const int start = model->child_forecast_focus - 1;
+    const int step = direction < 0 ? -1 : 1;
+    for (int i = start + step; i >= 0 && i < (int)PTC_RESULT_FORECAST_DAYS; i += step) {
+        if (ptc_ui_child_forecast_source(model, i, now) != PTC_UI_CHILD_FORECAST_UNKNOWN) {
+            model->child_forecast_focus = i + 1;
+            return;
+        }
+    }
+    if (ptc_ui_child_forecast_source(model, start, now) == PTC_UI_CHILD_FORECAST_UNKNOWN)
+        model->child_forecast_focus = 0;
 }
 
 static int today_min(int a, int b) { return a < b ? a : b; }

@@ -4,7 +4,9 @@ import {
   acknowledgeDemoRisk,
   clearFrontendState,
   demoRiskAcknowledged,
+  issuedFor,
   loadConfig,
+  loadDevices,
   loadLanguage,
   rememberNonce,
   saveConfig,
@@ -38,6 +40,12 @@ const errorOutput = document.getElementById("error");
 const securityError = document.getElementById("securityError");
 const selfTestError = document.getElementById("selfTestError");
 const copyButton = document.getElementById("copy");
+const copyMessage = document.getElementById("copyMessage");
+const devicePicker = document.getElementById("devicePicker");
+const pairingSettings = document.getElementById("pairingSettings");
+const dateShortcuts = document.querySelectorAll("#dateShortcuts button");
+const tierShortcuts = document.getElementById("tierShortcuts");
+const issuedHistory = document.getElementById("issuedHistory");
 const installButton = document.getElementById("install");
 const demoWarning = document.getElementById("demoWarning");
 const importError = document.getElementById("importError");
@@ -51,6 +59,8 @@ let installPrompt = null;
 
 let lastResultDate = "";
 let lastResultMinutes = 0;
+let lastResultDevice = "";
+let generating = false;
 
 function createMemoryStorage() {
   const values = new Map();
@@ -91,6 +101,64 @@ for (const minutes of tierOptions) {
   tierInput.append(option);
 }
 
+for (const minutes of [15, 30, 45, 60, 90, 120]) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary compact";
+  button.value = String(minutes);
+  button.addEventListener("click", () => {
+    tierInput.value = button.value;
+    refreshShortcuts();
+  });
+  tierShortcuts.append(button);
+}
+
+function localDateAfter(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return todayLocal(date.getTime());
+}
+
+function refreshShortcuts() {
+  for (const button of dateShortcuts) {
+    button.setAttribute("aria-pressed", String(dateInput.value === localDateAfter(Number(button.dataset.days))));
+  }
+  for (const button of tierShortcuts.children) {
+    button.textContent = t("minutes_unit", {m: Number(button.value)}, currentLang);
+    button.setAttribute("aria-pressed", String(tierInput.value === button.value));
+  }
+}
+
+function refreshDevices(collapse = false) {
+  const devices = loadDevices(frontendStorage);
+  devicePicker.replaceChildren();
+  for (const id of devices.keys()) devicePicker.add(new Option(id, id));
+  devicePicker.value = deviceInput.value.trim();
+  devicePicker.closest("label").hidden = devices.size === 0;
+  if (collapse) pairingSettings.open = !devices.has(devicePicker.value);
+}
+
+function refreshHistory() {
+  const records = issuedFor(frontendStorage, deviceInput.value.trim(), dateInput.value);
+  const list = document.getElementById("issuedList");
+  list.replaceChildren();
+  issuedHistory.hidden = records.length === 0;
+  const clock = new Intl.DateTimeFormat(currentLang === "zh" ? "zh-CN" : "en", {hour: "numeric", minute: "2-digit"});
+  for (const record of records) {
+    const row = document.createElement("li");
+    row.textContent = t("issued_entry", {
+      time: clock.format(record.time), minutes: record.minutes, suffix: record.suffix,
+    }, currentLang);
+    list.append(row);
+  }
+}
+
+function refreshIssueDate() {
+  result.hidden = true;
+  refreshShortcuts();
+  refreshHistory();
+}
+
 function applyTranslations(lang) {
   currentLang = lang;
   saveLanguage(frontendStorage, lang);
@@ -108,8 +176,8 @@ function applyTranslations(lang) {
     } else if (key === "btn_toggle_secret_show" || key === "btn_toggle_secret_hide") {
       const visible = secretInput.type === "text";
       element.textContent = t(visible ? "btn_toggle_secret_hide" : "btn_toggle_secret_show", {}, lang);
-    } else if (key === "btn_copy" || key === "btn_copied") {
-      element.textContent = t(copyButton.dataset.copied === "true" ? "btn_copied" : "btn_copy", {}, lang);
+    } else if (key === "btn_copy" || key === "btn_copy_message") {
+      element.textContent = t(element.dataset.copied === "true" ? "btn_copied" : key, {}, lang);
     } else {
       element.textContent = t(key, {}, lang);
     }
@@ -148,8 +216,12 @@ function applyTranslations(lang) {
   tierInput.value = currentTier;
 
   if (!result.hidden && lastResultDate && lastResultMinutes) {
-    metaOutput.textContent = t("result_meta", {date: lastResultDate, minutes: lastResultMinutes}, lang);
+    metaOutput.textContent = t("result_meta_device", {
+      device: lastResultDevice, date: lastResultDate, minutes: lastResultMinutes,
+    }, lang);
   }
+  refreshShortcuts();
+  refreshHistory();
 }
 
 if (langToggle) {
@@ -182,6 +254,7 @@ function syncDemoWarning() {
 
 function dialogDecision(dialog) {
   return new Promise(resolve => {
+    dialog.returnValue = "";
     dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), {once: true});
     dialog.showModal();
   });
@@ -191,18 +264,21 @@ async function confirmPairing(pairing, source) {
   document.getElementById("pairingSource").textContent = source;
   document.getElementById("pairingDevice").textContent = pairing.deviceId;
   document.getElementById("pairingSecret").textContent = maskedSecret(pairing.secret);
-  const current = loadConfig(frontendStorage);
-  document.getElementById("pairingReplace").hidden =
-    current.deviceId === pairing.deviceId && current.secret === pairing.secret;
+  const current = loadDevices(frontendStorage).get(pairing.deviceId);
+  document.getElementById("pairingReplace").hidden = !current || current.secret === pairing.secret;
   if (!await dialogDecision(pairingDialog)) return false;
   deviceInput.value = pairing.deviceId;
   secretInput.value = pairing.secret;
   saveConfig(frontendStorage, {
     deviceId: pairing.deviceId,
     secret: pairing.secret,
-    tierMinutes: Number(tierInput.value),
+    tierMinutes: current?.tierMinutes ?? DEFAULT_CONFIG.tierMinutes,
   });
+  tierInput.value = String(current?.tierMinutes ?? DEFAULT_CONFIG.tierMinutes);
+  hideSecret();
   syncDemoWarning();
+  refreshDevices(true);
+  refreshIssueDate();
   form.scrollIntoView({behavior: "smooth", block: "start"});
   return true;
 }
@@ -214,25 +290,26 @@ async function acceptDemoRiskIfNeeded(secret) {
   return true;
 }
 
-function resetToDefaults() {
-  deviceInput.value = DEFAULT_CONFIG.deviceId;
-  secretInput.value = DEFAULT_CONFIG.secret;
-  tierInput.value = String(DEFAULT_CONFIG.tierMinutes);
-  dateInput.value = todayLocal();
-  syncDemoWarning();
-}
-
-function loadSavedForm() {
-  const config = loadConfig(frontendStorage);
+function showDevice(config) {
   deviceInput.value = config.deviceId;
   secretInput.value = config.secret;
   tierInput.value = String(config.tierMinutes);
-  dateInput.value = todayLocal();
+  hideSecret();
   syncDemoWarning();
+  refreshDevices(true);
+  refreshIssueDate();
+}
+
+function hideSecret() {
+  secretInput.type = "password";
+  const button = document.getElementById("toggleSecret");
+  button.textContent = t("btn_toggle_secret_show", {}, currentLang);
+  button.setAttribute("aria-pressed", "false");
 }
 
 async function initialize() {
-  loadSavedForm();
+  dateInput.value = todayLocal();
+  showDevice(loadConfig(frontendStorage));
   applyTranslations(currentLang);
   let fragmentPairing = null;
   try {
@@ -286,6 +363,9 @@ async function initialize() {
 
 form.addEventListener("submit", async event => {
   event.preventDefault();
+  if (generating || generateButton.disabled) return;
+  generating = true;
+  form.inert = true;
   generateButton.disabled = true;
   errorOutput.hidden = true;
   result.hidden = true;
@@ -298,20 +378,34 @@ form.addEventListener("submit", async event => {
     if (!await acceptDemoRiskIfNeeded(secret)) return;
     const tierIndex = tierForMinutes(tierMinutes);
     const dayIndex = dayIndexFor(dateText);
-    const used = usedNoncesFor(frontendStorage, deviceId, dateText);
-    const nonce = chooseUnusedNonce(used);
-    const code = await encodeToken({deviceId, secret, dayIndex, tierIndex, nonce});
+    const issue = async () => {
+      saveConfig(frontendStorage, {deviceId, secret, tierMinutes});
+      for (;;) {
+        const nonce = chooseUnusedNonce(usedNoncesFor(frontendStorage, deviceId, dateText));
+        const code = await encodeToken({deviceId, secret, dayIndex, tierIndex, nonce});
+        const receipt = {time: Date.now(), minutes: tierMinutes, suffix: code.slice(4)};
+        if (rememberNonce(frontendStorage, deviceId, dateText, nonce, receipt)) return code;
+      }
+    };
+    const code = navigator.locks
+      ? await navigator.locks.request("playwise.issue", issue)
+      : await issue();
 
-    saveConfig(frontendStorage, {deviceId, secret, tierMinutes});
-    rememberNonce(frontendStorage, deviceId, dateText, nonce);
-    codeOutput.textContent = code;
+    codeOutput.children[0].textContent = code.slice(0, 4);
+    codeOutput.children[1].textContent = code.slice(4);
     lastResultDate = dateText;
     lastResultMinutes = tierMinutes;
-    metaOutput.textContent = t("result_meta", {date: dateText, minutes: tierMinutes}, currentLang);
+    lastResultDevice = deviceId;
+    metaOutput.textContent = t("result_meta_device", {device: deviceId, date: dateText, minutes: tierMinutes}, currentLang);
+    refreshDevices(true);
+    refreshHistory();
     result.hidden = false;
+    result.focus();
   } catch (error) {
     showError(errorOutput, error instanceof Error ? error.message : String(error));
   } finally {
+    generating = false;
+    form.inert = false;
     if (selfTestError.hidden && securityError.hidden) generateButton.disabled = false;
   }
 });
@@ -324,7 +418,53 @@ document.getElementById("toggleSecret").addEventListener("click", event => {
   button.setAttribute("aria-pressed", visible ? "false" : "true");
 });
 
-secretInput.addEventListener("input", syncDemoWarning);
+secretInput.addEventListener("input", () => {
+  syncDemoWarning();
+  result.hidden = true;
+});
+form.addEventListener("invalid", event => {
+  if (pairingSettings.contains(event.target)) pairingSettings.open = true;
+}, true);
+deviceInput.addEventListener("input", () => {
+  refreshDevices();
+  refreshIssueDate();
+});
+devicePicker.addEventListener("change", () => {
+  const config = loadDevices(frontendStorage).get(devicePicker.value);
+  if (!config) return;
+  saveConfig(frontendStorage, config);
+  showDevice(config);
+});
+dateInput.addEventListener("input", refreshIssueDate);
+tierInput.addEventListener("change", refreshShortcuts);
+for (const button of dateShortcuts) {
+  button.addEventListener("click", () => {
+    dateInput.value = localDateAfter(Number(button.dataset.days));
+    refreshIssueDate();
+  });
+}
+
+for (const [id, values] of Object.entries({
+  appearance: ["slate", "paper", "teal", "dusk"],
+  colorMode: ["system", "light", "dark"],
+})) {
+  const picker = document.getElementById(id);
+  const key = `ptc.frontend.${id}.v1`;
+  const saved = frontendStorage.getItem(key);
+  picker.value = values.includes(saved) ? saved : values[0];
+  const systemDark = id === "colorMode" ? matchMedia("(prefers-color-scheme: dark)") : null;
+  const apply = () => {
+    document.documentElement.dataset[id] = systemDark && picker.value === "system"
+      ? (systemDark.matches ? "dark" : "light")
+      : picker.value;
+  };
+  apply();
+  systemDark?.addEventListener?.("change", apply);
+  picker.addEventListener("change", () => {
+    apply();
+    frontendStorage.setItem(key, picker.value);
+  });
+}
 
 importFile.addEventListener("change", async () => {
   clearError(importError);
@@ -341,24 +481,36 @@ importFile.addEventListener("change", async () => {
   }
 });
 
-copyButton.addEventListener("click", async () => {
+async function copyResult(button, value) {
   try {
-    await navigator.clipboard.writeText(codeOutput.textContent || "");
-    copyButton.dataset.copied = "true";
-    copyButton.textContent = t("btn_copied", {}, currentLang);
-    setTimeout(() => {
-      copyButton.dataset.copied = "false";
-      copyButton.textContent = t("btn_copy", {}, currentLang);
+    await navigator.clipboard.writeText(value);
+    button.dataset.copied = "true";
+    button.textContent = t("btn_copied", {}, currentLang);
+    clearTimeout(Number(button.dataset.copyTimer));
+    button.dataset.copyTimer = setTimeout(() => {
+      button.dataset.copied = "false";
+      button.textContent = t(button.dataset.i18n, {}, currentLang);
     }, 1500);
   } catch {
     showError(errorOutput, t("err_copy_failed", {}, currentLang));
   }
+}
+
+copyButton.addEventListener("click", () => copyResult(copyButton, codeOutput.textContent));
+copyMessage.addEventListener("click", () => {
+  copyResult(copyMessage, t("share_message", {
+    code: codeOutput.textContent,
+    device: lastResultDevice,
+    date: lastResultDate,
+    minutes: lastResultMinutes,
+  }, currentLang));
 });
 
 document.getElementById("clearConfig").addEventListener("click", () => {
+  if (generating) return;
   clearFrontendState(frontendStorage);
-  resetToDefaults();
-  result.hidden = true;
+  dateInput.value = todayLocal();
+  showDevice(DEFAULT_CONFIG);
   errorOutput.hidden = true;
 });
 

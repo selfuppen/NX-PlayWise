@@ -64,6 +64,10 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_CONFIRM);
         submit_status(ui);
         break;
+    case PTC_UI_HIT_CHILD_FORECAST:
+        ui->model.child_forecast_focus = hit.index + 1;
+        ptc_audio_play(PTC_SE_FOCUS);
+        break;
     case PTC_UI_HIT_CHILD_BUFFER:
         if (!ui->waiting && ui->model.daily_buffer_available) {
             ptc_audio_play(PTC_SE_CLAIM_BUFFER);
@@ -466,7 +470,6 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_QUICK_ADD_OPTION:
         ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
-        handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_BEDTIME_SECTION:
         ptc_audio_play(PTC_SE_TAB);

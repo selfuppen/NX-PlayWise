@@ -1,4 +1,5 @@
     PtcOverlayGesture gesture_{};
+    bool parent_stick_scrolling_ = false;
 
     bool page_hit(PtcOverlayRect rect, int x, int y) const
     {
@@ -19,13 +20,19 @@
         const int x = raw.x > 400 ? static_cast<int>(raw.x) - 880 : static_cast<int>(raw.x);
         const int y = static_cast<int>(raw.y);
         HidTouchState click{};
-        const auto event = ptc_overlay_gesture_update(&gesture_, down, x, y, page_identity(), page_layout_.viewport);
+        const int page = page_identity();
+        const bool drag_released = !down && gesture_.active && gesture_.dragged &&
+            gesture_.scrollable && gesture_.page == page;
+        const auto event = ptc_overlay_gesture_update(&gesture_, down, x, y, page, page_layout_.viewport);
         if (event.scroll_delta) {
             page_scroll_target_ = std::clamp(page_scroll_target_ + event.scroll_delta,
                 0.0f, static_cast<float>(page_layout_.scroll_max));
             page_scroll_ = page_scroll_target_;
             ptc_overlay_hold_reset(&confirm_hold_);
         }
+        if (drag_released && parent_view_ == ParentView::Actions && !language_confirm_active_)
+            page_scroll_target_ = static_cast<float>(ptc_overlay_snap_parent_scroll(
+                &page_layout_, static_cast<int>(page_scroll_target_)));
         if (event.clicked) { click.x = event.x; click.y = event.y; }
         return click;
     }
@@ -84,10 +91,17 @@
         const int tx = static_cast<int>(touch.x), ty = static_cast<int>(touch.y);
         // PIN keeps both sticks as digit input. Other pages use the right stick
         // for scrolling; explanatory pages also use Up/Down without executing.
-        if (parent_view_ != ParentView::Pin && std::abs(right.y) > 16000) {
+        const bool stick_scrolling = parent_view_ != ParentView::Pin && std::abs(right.y) > 16000;
+        const bool can_snap = parent_view_ == ParentView::Actions && !language_confirm_active_ &&
+            page_identity_ == page_identity();
+        if (stick_scrolling) {
             const float delta = -static_cast<float>(right.y) / 32768.0f * std::min(elapsed_ms, 50) * 0.35f;
             page_scroll_target_ = std::clamp(page_scroll_target_ + delta, 0.0f, static_cast<float>(page_layout_.scroll_max));
+        } else if (can_snap && parent_stick_scrolling_ && !gesture_.active) {
+            page_scroll_target_ = static_cast<float>(ptc_overlay_snap_parent_scroll(
+                &page_layout_, static_cast<int>(page_scroll_target_)));
         }
+        parent_stick_scrolling_ = can_snap && stick_scrolling;
         if (gesture_.dragged && gesture_.active) ptc_overlay_hold_reset(&confirm_hold_);
         prev_touch_down_ = false;
         if (language_confirm_active_) {

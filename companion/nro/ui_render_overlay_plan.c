@@ -277,8 +277,18 @@ static void draw_quick_add_overlay(uint32_t *pixels, uint32_t stride, const PtcU
         draw_text_center(pixels, stride, option, LABELS[index], 20,
             selected ? UI_SUCCESS : UI_INK);
     }
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 284,
-        ptc_ui_text(PTC_UI_T_ALSO_DISPLAYS_A_CONFIRMATION_PAGE_AFTER_SELECTION), 16, UI_MUTED);
+    unsigned minutes = ptc_ui_quick_add_option_minutes(model->overlay_selection);
+    int remaining = minutes && !model->waiting && !model->disable_flag_present &&
+        !model->recovery_active && ptc_ui_status_is_fresh(model, ptc_ui_render_now())
+        ? ptc_ui_preview_added_remaining_minutes(model, (uint16_t)minutes) : -1;
+    char preview[160];
+    if (remaining >= 0)
+        snprintf(preview, sizeof(preview), ptc_ui_text(PTC_UI_T_EST_REMAINING_D_MIN), remaining);
+    else
+        snprintf(preview, sizeof(preview), "%s", ptc_ui_text(minutes ?
+            PTC_UI_T_REMAINING_PENDING_REFRESH : PTC_UI_T_ALSO_DISPLAYS_A_CONFIRMATION_PAGE_AFTER_SELECTION));
+    draw_button_label(pixels, stride, (UiRect){dialog.x + 48, dialog.y + 266, dialog.width - 96, 34},
+        preview, 16, remaining >= 0 ? UI_ACCENT : UI_MUTED);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_CANCEL),
         UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_CONTINUE),

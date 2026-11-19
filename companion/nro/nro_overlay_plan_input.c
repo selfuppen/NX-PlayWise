@@ -46,7 +46,6 @@ static int next_bedtime_preset(const PtcBedtimeWindow *window)
 
 static void handle_quick_add_overlay_input(UiState *ui, u64 down)
 {
-    static const uint16_t OPTIONS[] = {15, 30, 60};
     if (down & HidNpadButton_B) {
         ptc_ui_cancel_overlay(&ui->model);
     } else if (down & HidNpadButton_Left) {
@@ -61,7 +60,7 @@ static void handle_quick_add_overlay_input(UiState *ui, u64 down)
             ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
         } else {
             char body[192];
-            ui->model.draft_minutes = OPTIONS[ui->model.overlay_selection];
+            ui->model.draft_minutes = ptc_ui_quick_add_option_minutes(ui->model.overlay_selection);
             snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_ADD_U_MIN_TO_TODAY_S_CURRENT),
                 (unsigned int)ui->model.draft_minutes);
             open_confirm_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT), body);

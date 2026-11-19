@@ -18,6 +18,8 @@ import {
   NONCES_KEY,
   clearFrontendState,
   loadConfig,
+  loadDevices,
+  issuedFor,
   loadLanguage,
   rememberNonce,
   saveConfig,
@@ -136,9 +138,13 @@ assert.throws(() => chooseUnusedNonce(new Set(Array.from({length: 512}, (_, inde
 
 const storage = new MemoryStorage();
 assert.deepEqual(loadConfig(storage), DEFAULT_CONFIG);
+storage.setItem(CONFIG_KEY, JSON.stringify({deviceId: "old-switch", secret: "old-secret", tierMinutes: 3}));
+assert.equal(loadDevices(storage).get("old-switch").tierMinutes, 3);
 saveConfig(storage, {deviceId: "family-switch", secret: "family-secret", tierMinutes: 45});
 assert.deepEqual(loadConfig(storage), {deviceId: "family-switch", secret: "family-secret", tierMinutes: 45});
 assert.ok(storage.getItem(CONFIG_KEY).includes("family-secret"));
+assert.equal(loadDevices(storage).get("old-switch").secret, "old-secret");
+assert.equal(loadDevices(storage).get("family-switch").tierMinutes, 45);
 
 assert.equal(loadLanguage(storage), null);
 saveLanguage(storage, "en");
@@ -155,9 +161,13 @@ assert.equal(DEFAULT_LANG, "zh");
 assert.deepEqual(SUPPORTED_LANGS, ["zh", "en"]);
 
 rememberNonce(storage, "family-switch", "2026-07-08", 7);
-rememberNonce(storage, "family-switch", "2026-07-08", 7);
-rememberNonce(storage, "family-switch", "2026-07-08", 11);
+const receipt = {time: 1783500000000, minutes: 45, suffix: "0009"};
+assert.equal(rememberNonce(storage, "family-switch", "2026-07-08", 7, receipt), false);
+assert.equal(rememberNonce(storage, "family-switch", "2026-07-08", 11, receipt), true);
 assert.deepEqual([...usedNoncesFor(storage, "family-switch", "2026-07-08")], [7, 11]);
+assert.deepEqual(issuedFor(storage, "family-switch", "2026-07-08"), [receipt]);
+assert.deepEqual(issuedFor(storage, "family-switch", "2026-07-09"), []);
+assert.deepEqual(issuedFor(storage, "old-switch", "2026-07-08"), []);
 assert.ok(storage.getItem(NONCES_KEY));
 
 clearFrontendState(storage);
@@ -165,5 +175,6 @@ assert.equal(storage.getItem(CONFIG_KEY), null);
 assert.equal(storage.getItem(NONCES_KEY), null);
 assert.equal(storage.getItem(DEMO_ACK_KEY), null);
 assert.deepEqual(loadConfig(storage), DEFAULT_CONFIG);
+assert.equal(loadDevices(storage).size, 0);
 
 console.log("PTC frontend JavaScript tests passed");

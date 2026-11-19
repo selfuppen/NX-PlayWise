@@ -123,6 +123,14 @@ bool ptc_ui_open_today_settings(PtcUiModel *model, int index);
 bool ptc_ui_return_today_settings(PtcUiModel *model);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
+int ptc_ui_preview_added_remaining_minutes(const PtcUiModel *model, uint16_t minutes);
+typedef enum {
+    PTC_UI_CHILD_FORECAST_UNKNOWN = 0,
+    PTC_UI_CHILD_FORECAST_CONFIRMED,
+    PTC_UI_CHILD_FORECAST_WEEKLY
+} PtcUiChildForecastSource;
+PtcUiChildForecastSource ptc_ui_child_forecast_source(const PtcUiModel *model, int offset, int64_t now);
+void ptc_ui_move_child_forecast_focus(PtcUiModel *model, int direction, int64_t now);
 int ptc_ui_preview_effective_add_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);

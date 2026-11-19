@@ -521,6 +521,11 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
     }
     if (model->view == PTC_UI_CHILD) {
+        for (i = 0; i < (int)PTC_RESULT_FORECAST_DAYS; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_child_forecast_day_rect(i, 1), x, y) &&
+                ptc_ui_child_forecast_source(model, i, now) != PTC_UI_CHILD_FORECAST_UNKNOWN)
+                return make_hit(PTC_UI_HIT_CHILD_FORECAST, i);
+        }
         if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }

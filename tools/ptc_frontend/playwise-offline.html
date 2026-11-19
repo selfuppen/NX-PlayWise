@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#2f5fd0">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-7si8RqAKiIe2yoCvoVRioFMVIEUKea6mO2+CC2dTUSk='; style-src 'sha256-AGEiYScQN2ADrZcblQe26H1qPaPFlfeYe5SXN2jlm9M='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DlAUiexA7E7BX32B3hbLgcaoavfTanVpLM0jCHfdaUw='; style-src 'sha256-qubtU2GdGQndaZy8igpd136F/QcEgINQ//Zov6BQ+UA='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
   <title>任我玩 · PlayWise</title>
   <style>
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg-page);
   color: var(--text-primary);
@@ -17,58 +17,184 @@
   --bg-surface: #fcfcfd;
   --bg-raised: #e9ebef;
   --accent: #2f5fd0;
-  --accent-dark: #1c46ac;
   --on-accent: #ffffff;
   --border: #dde0e5;
   --border-control: #7d8593;
   --text-primary: #171a20;
   --text-secondary: #545b68;
-  --text-disabled: #7e8592;
   --muted: #545b68;
   --danger: #b53a45;
   --danger-bg: #faebec;
   --danger-border: #e2a2a8;
-  --warning: #9a6114;
+  --warning: #83500c;
   --warning-bg: #fbf2e1;
   --warning-border: #e4c17b;
   --success: #2c7a4b;
   --success-bg: #eaf5ee;
   --success-border: #9ad2ae;
-  --night: #5b4cb0;
-  --night-bg: #edeaf9;
-  --night-border: #bdb4e8;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-page: #111111;
-    --bg-surface: #222222;
-    --bg-raised: #333333;
-    --accent: #88aaee;
-    --accent-dark: #bbddff;
-    --on-accent: #112233;
-    --border: #444444;
-    --border-control: #888888;
-    --text-primary: #eeeeee;
-    --text-secondary: #bbbbbb;
-    --text-disabled: #777777;
-    --muted: #bbbbbb;
-    --danger: #ee8899;
-    --danger-bg: #441122;
-    --danger-border: #882233;
-    --warning: #eebb66;
-    --warning-bg: #332211;
-    --warning-border: #775522;
-    --success: #77cc99;
-    --success-bg: #113322;
-    --success-border: #336644;
-    --night: #bbaaff;
-    --night-bg: #221144;
-    --night-border: #554488;
-  }
+:root[data-color-mode="dark"] {
+  color-scheme: dark;
+  --bg-page: #111111;
+  --bg-surface: #222222;
+  --bg-raised: #333333;
+  --accent: #88aaee;
+  --on-accent: #112233;
+  --border: #444444;
+  --border-control: #888888;
+  --text-primary: #eeeeee;
+  --text-secondary: #bbbbbb;
+  --muted: #bbbbbb;
+  --danger: #ee8899;
+  --danger-bg: #441122;
+  --danger-border: #882233;
+  --warning: #eebb66;
+  --warning-bg: #332211;
+  --warning-border: #775522;
+  --success: #77cc99;
+  --success-bg: #113322;
+  --success-border: #336644;
+}
+
+:root[data-appearance="paper"] {
+  --bg-page: #f5f1e8;
+  --bg-surface: #fffdf8;
+  --bg-raised: #ede7da;
+  --accent: #2c4a6e;
+  --on-accent: #ffffff;
+  --border: #e2dacb;
+  --border-control: #8a8172;
+  --text-primary: #211e19;
+  --text-secondary: #5d564b;
+  --muted: #5d564b;
+  --danger: #ae3e38;
+  --danger-bg: #faebe7;
+  --danger-border: #e3a79f;
+  --warning: #7f4f10;
+  --warning-bg: #faf1df;
+  --warning-border: #e3c07e;
+  --success: #3e7a4e;
+  --success-bg: #ebf3e9;
+  --success-border: #a8cda4;
+}
+
+:root[data-appearance="paper"][data-color-mode="dark"] {
+  color-scheme: dark;
+  --bg-page: #111111;
+  --bg-surface: #221111;
+  --bg-raised: #332222;
+  --accent: #99bbdd;
+  --on-accent: #112233;
+  --border: #443333;
+  --border-control: #887777;
+  --text-primary: #ffeedd;
+  --text-secondary: #ccbbaa;
+  --muted: #ccbbaa;
+  --danger: #ee9988;
+  --danger-bg: #441111;
+  --danger-border: #883322;
+  --warning: #eebb66;
+  --warning-bg: #332211;
+  --warning-border: #775522;
+  --success: #88cc99;
+  --success-bg: #113322;
+  --success-border: #336644;
+}
+
+:root[data-appearance="teal"] {
+  --bg-page: #f2f5f2;
+  --bg-surface: #fbfcfa;
+  --bg-raised: #e9efea;
+  --accent: #1f6b5c;
+  --on-accent: #ffffff;
+  --border: #dce4de;
+  --border-control: #768a81;
+  --text-primary: #182420;
+  --text-secondary: #52645c;
+  --muted: #52645c;
+  --danger: #b33b45;
+  --danger-bg: #faecec;
+  --danger-border: #e4a3a8;
+  --warning: #85510b;
+  --warning-bg: #fbf3e3;
+  --warning-border: #e7c27b;
+  --success: #2e7d4f;
+  --success-bg: #eaf5ee;
+  --success-border: #9bd3ae;
+}
+
+:root[data-appearance="teal"][data-color-mode="dark"] {
+  color-scheme: dark;
+  --bg-page: #111111;
+  --bg-surface: #112222;
+  --bg-raised: #223333;
+  --accent: #77ccbb;
+  --on-accent: #002222;
+  --border: #334444;
+  --border-control: #778888;
+  --text-primary: #eeffff;
+  --text-secondary: #aacccc;
+  --muted: #aacccc;
+  --danger: #ee8899;
+  --danger-bg: #441122;
+  --danger-border: #882233;
+  --warning: #eebb66;
+  --warning-bg: #332211;
+  --warning-border: #775522;
+  --success: #77cc99;
+  --success-bg: #113322;
+  --success-border: #336644;
+}
+
+:root[data-appearance="dusk"] {
+  --bg-page: #f4f4f8;
+  --bg-surface: #fcfcfe;
+  --bg-raised: #ececf4;
+  --accent: #54469e;
+  --on-accent: #ffffff;
+  --border: #dcdce8;
+  --border-control: #7b7a93;
+  --text-primary: #181826;
+  --text-secondary: #53536a;
+  --muted: #53536a;
+  --danger: #b03e46;
+  --danger-bg: #faeaec;
+  --danger-border: #e3a3a8;
+  --warning: #7f4f10;
+  --warning-bg: #faf1df;
+  --warning-border: #e3c07e;
+  --success: #2e7d4f;
+  --success-bg: #eaf5ee;
+  --success-border: #9bd3ae;
+}
+
+:root[data-appearance="dusk"][data-color-mode="dark"] {
+  color-scheme: dark;
+  --bg-page: #111111;
+  --bg-surface: #111122;
+  --bg-raised: #222233;
+  --accent: #9988ee;
+  --on-accent: #111133;
+  --border: #333344;
+  --border-control: #666688;
+  --text-primary: #eeeeff;
+  --text-secondary: #aabbcc;
+  --muted: #aabbcc;
+  --danger: #ee8899;
+  --danger-bg: #441122;
+  --danger-border: #882233;
+  --warning: #eebb66;
+  --warning-bg: #332211;
+  --warning-border: #775522;
+  --success: #77cc99;
+  --success-bg: #113322;
+  --success-border: #336644;
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 body { margin: 0; min-height: 100vh; background: var(--bg-page); color: var(--text-primary); }
 
@@ -88,7 +214,8 @@ button { cursor: pointer; }
 
 .site-header strong { font-size: 21px; }
 .eyebrow { margin: 0 0 2px; color: var(--accent); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.header-actions { display: flex; align-items: center; gap: 10px; }
+.header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.appearance select { min-height: 40px; width: auto; font-size: 13px; }
 .lang-toggle {
   display: inline-flex;
   align-items: center;
@@ -120,9 +247,12 @@ main { width: min(100% - 28px, 760px); margin: 36px auto; }
 .intro .intro-actions { display: grid; width: auto; gap: 10px; }
 h1 { margin: 0 0 8px; font-size: clamp(27px, 5vw, 36px); line-height: 1.16; }
 h2 { margin: 0 0 6px; font-size: 19px; }
-.slogan { margin: 0 0 5px !important; color: var(--accent) !important; font-weight: 750; letter-spacing: .02em; }
 .intro p { margin: 0; color: var(--muted); line-height: 1.6; }
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.issue-fields { margin-top: 22px; }
+.shortcuts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.shortcuts button[aria-pressed="true"] { color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
+.date-help { margin: 9px 0 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 label { display: grid; gap: 7px; color: var(--text-primary); font-size: 14px; font-weight: 650; }
 label small { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
 input, select {
@@ -149,6 +279,7 @@ input:focus, select:focus, button:focus-visible, summary:focus-visible { outline
 .pairing-tools { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 20px 0 24px; border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--bg-raised); }
 .pairing-tools p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .file-button { display: inline-flex; align-items: center; justify-content: center; }
+.file-button:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
 dialog { width: min(92vw, 560px); border: 1px solid var(--border); border-radius: 16px; padding: 0; box-shadow: 0 24px 80px rgba(0, 0, 0, .25); background: var(--bg-surface); color: var(--text-primary); }
 dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .dialog-card { padding: 24px; }
@@ -161,12 +292,16 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .no-margin { margin-top: 0; }
 .result { margin-top: 26px; border: 1px solid var(--success-border); border-radius: 14px; background: var(--success-bg); padding: 24px; text-align: center; }
 .result-label { margin: 0; color: var(--muted); font-size: 14px; }
-.code { margin: 10px 0 4px; color: var(--accent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: clamp(38px, 10vw, 54px); font-weight: 800; letter-spacing: .08em; }
+.code { display: flex; justify-content: center; gap: .55em; margin: 10px 0 4px; color: var(--accent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: clamp(24px, 8vw, 54px); font-weight: 800; letter-spacing: .06em; }
+.result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .meta { margin: 0 0 18px; color: var(--muted); }
 .collision-note { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; text-align: left; }
 .settings { margin-top: 26px; border-top: 1px solid var(--border); padding-top: 20px; color: var(--muted); font-size: 14px; }
 .settings summary { cursor: pointer; color: var(--text-primary); font-weight: 700; }
 .settings p { line-height: 1.65; }
+.pairing-settings { margin-top: 14px; padding-top: 12px; }
+#issuedList { padding-inline-start: 22px; }
+#issuedList li + li { margin-top: 8px; }
 .troubleshooting h3 { margin: 18px 0 4px; color: var(--text-primary); font-size: 15px; }
 .troubleshooting code { overflow-wrap: anywhere; }
 .danger-button { border: 1px solid var(--danger-border); background: var(--bg-surface); color: var(--danger); }
@@ -183,6 +318,13 @@ footer a { color: var(--accent); font-weight: 700; }
   .fields { grid-template-columns: 1fr; }
   .pairing-tools { align-items: stretch; flex-direction: column; }
   .compact { width: 100%; }
+  .shortcuts .compact { width: auto; }
+  .site-header { align-items: start; flex-direction: column; }
+}
+
+@media (max-width: 375px) {
+  .result { padding-inline: 12px; }
+  .result-actions { grid-template-columns: 1fr; }
 }
 
 @media (display-mode: standalone) {
@@ -197,6 +339,23 @@ footer a { color: var(--accent); font-weight: 700; }
       <strong data-i18n="brand_name">任我玩</strong>
     </div>
     <div class="header-actions">
+      <label class="appearance">
+        <span class="sr-only" data-i18n="appearance">配色</span>
+        <select id="appearance">
+          <option value="slate" data-i18n="appearance_slate">石墨</option>
+          <option value="paper" data-i18n="appearance_paper">纸墨</option>
+          <option value="teal" data-i18n="appearance_teal">雾青</option>
+          <option value="dusk" data-i18n="appearance_dusk">暮霭</option>
+        </select>
+      </label>
+      <label class="appearance">
+        <span class="sr-only" data-i18n="color_mode">亮暗模式</span>
+        <select id="colorMode">
+          <option value="system" data-i18n="color_system">跟随系统</option>
+          <option value="light" data-i18n="color_light">浅色</option>
+          <option value="dark" data-i18n="color_dark">深色</option>
+        </select>
+      </label>
       <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language">
         <svg class="globe-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10"></circle>
@@ -214,7 +373,6 @@ footer a { color: var(--accent); font-weight: 700; }
       <div class="intro">
         <div>
           <h1 id="pageTitle" data-i18n="page_title">生成今日加时码</h1>
-          <p class="slogan" data-i18n="slogan">Play Wise. Play More.</p>
           <p data-i18n="intro_p">此单文件完全在当前浏览器中生成加时码，不需要 Python、服务器或网络连接。</p>
         </div>
         <div class="intro-actions">
@@ -231,33 +389,41 @@ footer a { color: var(--accent); font-weight: 700; }
       </div>
       <div id="importError" class="notice danger" role="alert" hidden></div>
 
-      <section class="pairing-tools" aria-labelledby="pairingTitle">
-        <div>
-          <h2 id="pairingTitle" data-i18n="pairing_title">配对 Switch</h2>
-          <p data-i18n-html="pairing_p">配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
-        </div>
-        <label class="file-button secondary compact">
-          <span data-i18n="import_file_button">导入配置文件</span>
-          <input id="importFile" type="file" accept="application/json,.json" hidden>
-        </label>
-      </section>
-
       <form id="generator">
-        <div class="fields">
-          <label>
-            <span data-i18n="label_device">Switch 设备 ID</span>
-            <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_-]{1,32}" autocomplete="off" required>
-          </label>
+        <label id="savedDevices" hidden>
+          <span data-i18n="saved_devices">已保存的 Switch</span>
+          <select id="devicePicker"></select>
+        </label>
+        <details id="pairingSettings" class="settings pairing-settings" open>
+          <summary data-i18n="pairing_title">配对 Switch</summary>
+          <section class="pairing-tools">
+            <div>
+              <p data-i18n-html="pairing_p">配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
+            </div>
+            <label class="file-button secondary compact">
+              <span data-i18n="import_file_button">导入配置文件</span>
+              <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
+            </label>
+          </section>
 
-          <label>
-            <span data-i18n="label_secret">加时密钥</span>
-            <span class="secret-field">
-              <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
-              <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
-            </span>
-            <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
-          </label>
+          <div class="fields">
+            <label>
+              <span data-i18n="label_device">Switch 设备 ID</span>
+              <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_\-]{1,32}" autocomplete="off" required>
+            </label>
 
+            <label>
+              <span data-i18n="label_secret">加时密钥</span>
+              <span class="secret-field">
+                <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
+                <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
+              </span>
+              <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
+            </label>
+          </div>
+        </details>
+
+        <div class="fields issue-fields">
           <label>
             <span data-i18n="label_date">生效日期（Switch 主机本地日期）</span>
             <input id="date" name="date" type="date" required>
@@ -268,19 +434,34 @@ footer a { color: var(--accent); font-weight: 700; }
             <select id="tierMinutes" name="tier_minutes"></select>
           </label>
         </div>
+        <div id="dateShortcuts" class="shortcuts" role="group" data-i18n-aria="label_date">
+          <button type="button" class="secondary compact" data-days="0" data-i18n="date_today">今天</button>
+          <button type="button" class="secondary compact" data-days="1" data-i18n="date_tomorrow">明天</button>
+        </div>
+        <p class="date-help" data-i18n="date_help">请以 Switch 的本地日期为准。每个加时码仅在所选日期有效。</p>
+        <div id="tierShortcuts" class="shortcuts" role="group" data-i18n-aria="label_tier"></div>
 
         <button id="generate" class="primary" type="submit" data-i18n="btn_generate">生成 8 位数字加时码</button>
       </form>
 
       <div id="error" class="notice danger" role="alert" hidden></div>
 
-      <section id="result" class="result" aria-live="polite" hidden>
+      <section id="result" class="result" aria-label="生成结果" data-i18n-aria="result_label" aria-live="polite" tabindex="-1" hidden>
         <p class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
-        <p id="code" class="code"></p>
+        <p id="code" class="code"><span></span><span></span></p>
         <p id="meta" class="meta"></p>
-        <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
+        <div class="result-actions">
+          <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
+          <button id="copyMessage" class="secondary" type="button" data-i18n="btn_copy_message">复制分享文字</button>
+        </div>
         <p class="collision-note" data-i18n="collision_note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
       </section>
+
+      <details id="issuedHistory" class="settings" hidden>
+        <summary id="issuedSummary" data-i18n="issued_summary">本浏览器的签发记录</summary>
+        <p data-i18n="issued_help">以下记录仅表示这个浏览器已生成加时码，兑换情况请在 Switch 上查看。</p>
+        <ul id="issuedList"></ul>
+      </details>
 
       <details class="settings">
         <summary data-i18n="settings_summary">本机数据与安全说明</summary>
@@ -307,6 +488,7 @@ footer a { color: var(--accent); font-weight: 700; }
   </main>
 
   <footer>
+    <p data-i18n="slogan">Play Wise. Play More.</p>
     <p data-i18n="footer_p">这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。</p>
     <nav aria-label="项目链接" data-i18n-aria="footer_nav_aria">
       <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer" data-i18n="footer_author">作者 GitHub</a>
@@ -323,7 +505,7 @@ footer a { color: var(--accent); font-weight: 700; }
         <div><dt data-i18n="pairing_dialog_device">设备 ID</dt><dd id="pairingDevice"></dd></div>
         <div><dt data-i18n="pairing_dialog_secret">加时密钥</dt><dd id="pairingSecret"></dd></div>
       </dl>
-      <p id="pairingReplace" class="notice danger" hidden data-i18n="pairing_dialog_replace">确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。</p>
+      <p id="pairingReplace" class="notice danger" hidden data-i18n="pairing_dialog_replace">确认后将更新同名设备的密钥。已有签发记录会保留。</p>
       <div class="dialog-actions">
         <button id="cancelPairing" class="secondary" value="cancel" data-i18n="btn_cancel">取消</button>
         <button id="confirmPairing" class="primary no-margin" value="confirm" data-i18n="btn_confirm_import">导入此设备</button>
@@ -618,6 +800,8 @@ const CONFIG_KEY = "ptc.frontend.config.v1";
 const NONCES_KEY = "ptc.frontend.nonces.v1";
 const DEMO_ACK_KEY = "ptc.frontend.demo-ack.v1";
 const LANG_KEY = "ptc.frontend.lang.v1";
+const DEVICES_KEY = "ptc.frontend.devices.v1";
+const ISSUED_PREFIX = "issued\0";
 
 const DEFAULT_CONFIG = Object.freeze({
   deviceId: "kid-switch",
@@ -635,25 +819,44 @@ function parseObject(text) {
   }
 }
 
-function loadConfig(storage) {
-  const saved = parseObject(storage.getItem(CONFIG_KEY));
+function normalizedConfig(saved) {
   const tierMinutes = Number(saved.tierMinutes);
   return {
     deviceId: typeof saved.deviceId === "string" && saved.deviceId ? saved.deviceId : DEFAULT_CONFIG.deviceId,
     secret: typeof saved.secret === "string" && saved.secret ? saved.secret : DEFAULT_CONFIG.secret,
     tierMinutes: Number.isInteger(tierMinutes) &&
-        ((tierMinutes >= 5 && tierMinutes <= 120 && tierMinutes % 5 === 0) || [150, 180, 210, 240].includes(tierMinutes))
+        ((tierMinutes >= 1 && tierMinutes < 5) ||
+         (tierMinutes >= 5 && tierMinutes <= 120 && tierMinutes % 5 === 0) ||
+         [150, 180, 210, 240].includes(tierMinutes))
       ? tierMinutes
       : DEFAULT_CONFIG.tierMinutes,
   };
 }
 
+function loadConfig(storage) {
+  return normalizedConfig(parseObject(storage.getItem(CONFIG_KEY)));
+}
+
+function loadDevices(storage) {
+  const devices = new Map();
+  for (const saved of Object.values(parseObject(storage.getItem(DEVICES_KEY)))) {
+    if (saved?.deviceId && saved.secret) devices.set(saved.deviceId, normalizedConfig(saved));
+  }
+  const active = parseObject(storage.getItem(CONFIG_KEY));
+  if (active.deviceId && active.secret) devices.set(active.deviceId, normalizedConfig(active));
+  return devices;
+}
+
 function saveConfig(storage, config) {
-  storage.setItem(CONFIG_KEY, JSON.stringify({
+  const active = {
     deviceId: config.deviceId,
     secret: config.secret,
     tierMinutes: Number(config.tierMinutes),
-  }));
+  };
+  const devices = loadDevices(storage);
+  devices.set(active.deviceId, active);
+  storage.setItem(DEVICES_KEY, JSON.stringify(Object.fromEntries(devices)));
+  storage.setItem(CONFIG_KEY, JSON.stringify(active));
 }
 
 function nonceStorageKey(deviceId, dateText) {
@@ -671,17 +874,28 @@ function usedNoncesFor(storage, deviceId, dateText) {
   return new Set(values.map(Number).filter(value => Number.isInteger(value) && value >= 0 && value <= 511));
 }
 
-function rememberNonce(storage, deviceId, dateText, nonce) {
+function issuedFor(storage, deviceId, dateText) {
+  const records = loadNonceState(storage)[ISSUED_PREFIX + nonceStorageKey(deviceId, dateText)];
+  return Array.isArray(records) ? records.filter(record => record &&
+    Number.isFinite(record.time) && Math.abs(record.time) <= 8.64e15 &&
+    Number.isInteger(record.minutes) && typeof record.suffix === "string" && /^\d{4}$/.test(record.suffix)) : [];
+}
+
+function rememberNonce(storage, deviceId, dateText, nonce, receipt) {
   const state = loadNonceState(storage);
   const key = nonceStorageKey(deviceId, dateText);
   const values = usedNoncesFor(storage, deviceId, dateText);
+  if (values.has(nonce)) return false;
   values.add(nonce);
   state[key] = [...values].sort((left, right) => left - right);
+  if (receipt) state[ISSUED_PREFIX + key] = [receipt, ...issuedFor(storage, deviceId, dateText)];
   storage.setItem(NONCES_KEY, JSON.stringify(state));
+  return true;
 }
 
 function clearFrontendState(storage) {
   storage.removeItem(CONFIG_KEY);
+  storage.removeItem(DEVICES_KEY);
   storage.removeItem(NONCES_KEY);
   storage.removeItem(DEMO_ACK_KEY);
 }
@@ -743,7 +957,26 @@ const TRANSLATIONS = {
     pairing_dialog_title: "导入此设备？",
     pairing_dialog_device: "设备 ID",
     pairing_dialog_secret: "加时密钥",
-    pairing_dialog_replace: "确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。",
+    pairing_dialog_replace: "确认后将更新同名设备的密钥。已有签发记录会保留。",
+    saved_devices: "已保存的 Switch",
+    appearance: "配色",
+    appearance_slate: "石墨",
+    appearance_paper: "纸墨",
+    appearance_teal: "雾青",
+    appearance_dusk: "暮霭",
+    color_mode: "亮暗模式",
+    color_system: "跟随系统",
+    color_light: "浅色",
+    color_dark: "深色",
+    date_today: "今天",
+    date_tomorrow: "明天",
+    date_help: "请以 Switch 的本地日期为准。每个加时码仅在所选日期有效。",
+    result_meta_device: "{device} · {date} · {minutes} 分钟",
+    btn_copy_message: "复制分享文字",
+    share_message: "任我玩加时码：{code}（{minutes} 分钟）。{device} 主机本地日期 {date} 有效。请在「输入加时码」中输入这 8 位数字。",
+    issued_summary: "本浏览器的签发记录",
+    issued_help: "以下记录仅表示这个浏览器已生成加时码，兑换情况请在 Switch 上查看。",
+    issued_entry: "{time} · {minutes} 分钟 · 尾号 {suffix}",
     btn_cancel: "取消",
     btn_confirm_import: "导入此设备",
     pairing_source_qr: "检测到 Switch 二维码中的设备配置，请确认后导入。",
@@ -772,7 +1005,7 @@ const TRANSLATIONS = {
     collision_note: "若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。",
 
     settings_summary: "本机数据与安全说明",
-    settings_p: "此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。",
+    settings_p: "此页面会保存设备 ID、密钥、常用时长和本浏览器的签发记录。清除本机配置会删除所有已保存的 Switch 与签发记录。",
     btn_clear_config: "清除本机配置",
 
     troubleshooting_summary: "常见排错指南",
@@ -827,7 +1060,26 @@ const TRANSLATIONS = {
     pairing_dialog_title: "Import this device?",
     pairing_dialog_device: "Device ID",
     pairing_dialog_secret: "Grant Secret",
-    pairing_dialog_replace: "Confirming will overwrite the currently saved device configuration. Existing nonce history will be preserved.",
+    pairing_dialog_replace: "Confirm to update the secret for this device ID. Issuance history is kept.",
+    saved_devices: "Saved Switch consoles",
+    appearance: "Palette",
+    appearance_slate: "Graphite",
+    appearance_paper: "Paper & Ink",
+    appearance_teal: "Mist Teal",
+    appearance_dusk: "Dusk",
+    color_mode: "Color mode",
+    color_system: "System",
+    color_light: "Light",
+    color_dark: "Dark",
+    date_today: "Today",
+    date_tomorrow: "Tomorrow",
+    date_help: "Use the Switch console’s local date. Each code is valid only on the selected date.",
+    result_meta_device: "{device} · {date} · {minutes} min",
+    btn_copy_message: "Copy sharing text",
+    share_message: "PlayWise code: {code} ({minutes} min). Valid on {device} on {date}, console local date. Enter the eight digits under Enter Extra Time Code.",
+    issued_summary: "Codes issued in this browser",
+    issued_help: "This list shows codes generated in this browser. Check the Switch for redemption status.",
+    issued_entry: "{time} · {minutes} min · ends in {suffix}",
     btn_cancel: "Cancel",
     btn_confirm_import: "Import This Device",
     pairing_source_qr: "Detected device configuration from Switch QR code. Please confirm to import.",
@@ -856,7 +1108,7 @@ const TRANSLATIONS = {
     collision_note: "If the Switch indicates \"Grant code already used\", another device issued the same nonce. Simply generate a new code on this page.",
 
     settings_summary: "Local Data & Security",
-    settings_p: "This page saves device ID, secret, selected duration, and nonces issued today. Clearing browser site data will remove this information.",
+    settings_p: "This page saves device IDs, secrets, preferred durations, and issuance history. Clearing the local configuration removes all saved consoles and history.",
     btn_clear_config: "Clear Local Config",
 
     troubleshooting_summary: "Troubleshooting Guide",
@@ -911,6 +1163,12 @@ const errorOutput = document.getElementById("error");
 const securityError = document.getElementById("securityError");
 const selfTestError = document.getElementById("selfTestError");
 const copyButton = document.getElementById("copy");
+const copyMessage = document.getElementById("copyMessage");
+const devicePicker = document.getElementById("devicePicker");
+const pairingSettings = document.getElementById("pairingSettings");
+const dateShortcuts = document.querySelectorAll("#dateShortcuts button");
+const tierShortcuts = document.getElementById("tierShortcuts");
+const issuedHistory = document.getElementById("issuedHistory");
 const installButton = document.getElementById("install");
 const demoWarning = document.getElementById("demoWarning");
 const importError = document.getElementById("importError");
@@ -924,6 +1182,8 @@ let installPrompt = null;
 
 let lastResultDate = "";
 let lastResultMinutes = 0;
+let lastResultDevice = "";
+let generating = false;
 
 function createMemoryStorage() {
   const values = new Map();
@@ -964,6 +1224,64 @@ for (const minutes of tierOptions) {
   tierInput.append(option);
 }
 
+for (const minutes of [15, 30, 45, 60, 90, 120]) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary compact";
+  button.value = String(minutes);
+  button.addEventListener("click", () => {
+    tierInput.value = button.value;
+    refreshShortcuts();
+  });
+  tierShortcuts.append(button);
+}
+
+function localDateAfter(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return todayLocal(date.getTime());
+}
+
+function refreshShortcuts() {
+  for (const button of dateShortcuts) {
+    button.setAttribute("aria-pressed", String(dateInput.value === localDateAfter(Number(button.dataset.days))));
+  }
+  for (const button of tierShortcuts.children) {
+    button.textContent = t("minutes_unit", {m: Number(button.value)}, currentLang);
+    button.setAttribute("aria-pressed", String(tierInput.value === button.value));
+  }
+}
+
+function refreshDevices(collapse = false) {
+  const devices = loadDevices(frontendStorage);
+  devicePicker.replaceChildren();
+  for (const id of devices.keys()) devicePicker.add(new Option(id, id));
+  devicePicker.value = deviceInput.value.trim();
+  devicePicker.closest("label").hidden = devices.size === 0;
+  if (collapse) pairingSettings.open = !devices.has(devicePicker.value);
+}
+
+function refreshHistory() {
+  const records = issuedFor(frontendStorage, deviceInput.value.trim(), dateInput.value);
+  const list = document.getElementById("issuedList");
+  list.replaceChildren();
+  issuedHistory.hidden = records.length === 0;
+  const clock = new Intl.DateTimeFormat(currentLang === "zh" ? "zh-CN" : "en", {hour: "numeric", minute: "2-digit"});
+  for (const record of records) {
+    const row = document.createElement("li");
+    row.textContent = t("issued_entry", {
+      time: clock.format(record.time), minutes: record.minutes, suffix: record.suffix,
+    }, currentLang);
+    list.append(row);
+  }
+}
+
+function refreshIssueDate() {
+  result.hidden = true;
+  refreshShortcuts();
+  refreshHistory();
+}
+
 function applyTranslations(lang) {
   currentLang = lang;
   saveLanguage(frontendStorage, lang);
@@ -981,8 +1299,8 @@ function applyTranslations(lang) {
     } else if (key === "btn_toggle_secret_show" || key === "btn_toggle_secret_hide") {
       const visible = secretInput.type === "text";
       element.textContent = t(visible ? "btn_toggle_secret_hide" : "btn_toggle_secret_show", {}, lang);
-    } else if (key === "btn_copy" || key === "btn_copied") {
-      element.textContent = t(copyButton.dataset.copied === "true" ? "btn_copied" : "btn_copy", {}, lang);
+    } else if (key === "btn_copy" || key === "btn_copy_message") {
+      element.textContent = t(element.dataset.copied === "true" ? "btn_copied" : key, {}, lang);
     } else {
       element.textContent = t(key, {}, lang);
     }
@@ -1021,8 +1339,12 @@ function applyTranslations(lang) {
   tierInput.value = currentTier;
 
   if (!result.hidden && lastResultDate && lastResultMinutes) {
-    metaOutput.textContent = t("result_meta", {date: lastResultDate, minutes: lastResultMinutes}, lang);
+    metaOutput.textContent = t("result_meta_device", {
+      device: lastResultDevice, date: lastResultDate, minutes: lastResultMinutes,
+    }, lang);
   }
+  refreshShortcuts();
+  refreshHistory();
 }
 
 if (langToggle) {
@@ -1055,6 +1377,7 @@ function syncDemoWarning() {
 
 function dialogDecision(dialog) {
   return new Promise(resolve => {
+    dialog.returnValue = "";
     dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), {once: true});
     dialog.showModal();
   });
@@ -1064,18 +1387,21 @@ async function confirmPairing(pairing, source) {
   document.getElementById("pairingSource").textContent = source;
   document.getElementById("pairingDevice").textContent = pairing.deviceId;
   document.getElementById("pairingSecret").textContent = maskedSecret(pairing.secret);
-  const current = loadConfig(frontendStorage);
-  document.getElementById("pairingReplace").hidden =
-    current.deviceId === pairing.deviceId && current.secret === pairing.secret;
+  const current = loadDevices(frontendStorage).get(pairing.deviceId);
+  document.getElementById("pairingReplace").hidden = !current || current.secret === pairing.secret;
   if (!await dialogDecision(pairingDialog)) return false;
   deviceInput.value = pairing.deviceId;
   secretInput.value = pairing.secret;
   saveConfig(frontendStorage, {
     deviceId: pairing.deviceId,
     secret: pairing.secret,
-    tierMinutes: Number(tierInput.value),
+    tierMinutes: current?.tierMinutes ?? DEFAULT_CONFIG.tierMinutes,
   });
+  tierInput.value = String(current?.tierMinutes ?? DEFAULT_CONFIG.tierMinutes);
+  hideSecret();
   syncDemoWarning();
+  refreshDevices(true);
+  refreshIssueDate();
   form.scrollIntoView({behavior: "smooth", block: "start"});
   return true;
 }
@@ -1087,25 +1413,26 @@ async function acceptDemoRiskIfNeeded(secret) {
   return true;
 }
 
-function resetToDefaults() {
-  deviceInput.value = DEFAULT_CONFIG.deviceId;
-  secretInput.value = DEFAULT_CONFIG.secret;
-  tierInput.value = String(DEFAULT_CONFIG.tierMinutes);
-  dateInput.value = todayLocal();
-  syncDemoWarning();
-}
-
-function loadSavedForm() {
-  const config = loadConfig(frontendStorage);
+function showDevice(config) {
   deviceInput.value = config.deviceId;
   secretInput.value = config.secret;
   tierInput.value = String(config.tierMinutes);
-  dateInput.value = todayLocal();
+  hideSecret();
   syncDemoWarning();
+  refreshDevices(true);
+  refreshIssueDate();
+}
+
+function hideSecret() {
+  secretInput.type = "password";
+  const button = document.getElementById("toggleSecret");
+  button.textContent = t("btn_toggle_secret_show", {}, currentLang);
+  button.setAttribute("aria-pressed", "false");
 }
 
 async function initialize() {
-  loadSavedForm();
+  dateInput.value = todayLocal();
+  showDevice(loadConfig(frontendStorage));
   applyTranslations(currentLang);
   let fragmentPairing = null;
   try {
@@ -1151,6 +1478,9 @@ async function initialize() {
 
 form.addEventListener("submit", async event => {
   event.preventDefault();
+  if (generating || generateButton.disabled) return;
+  generating = true;
+  form.inert = true;
   generateButton.disabled = true;
   errorOutput.hidden = true;
   result.hidden = true;
@@ -1163,20 +1493,34 @@ form.addEventListener("submit", async event => {
     if (!await acceptDemoRiskIfNeeded(secret)) return;
     const tierIndex = tierForMinutes(tierMinutes);
     const dayIndex = dayIndexFor(dateText);
-    const used = usedNoncesFor(frontendStorage, deviceId, dateText);
-    const nonce = chooseUnusedNonce(used);
-    const code = await encodeToken({deviceId, secret, dayIndex, tierIndex, nonce});
+    const issue = async () => {
+      saveConfig(frontendStorage, {deviceId, secret, tierMinutes});
+      for (;;) {
+        const nonce = chooseUnusedNonce(usedNoncesFor(frontendStorage, deviceId, dateText));
+        const code = await encodeToken({deviceId, secret, dayIndex, tierIndex, nonce});
+        const receipt = {time: Date.now(), minutes: tierMinutes, suffix: code.slice(4)};
+        if (rememberNonce(frontendStorage, deviceId, dateText, nonce, receipt)) return code;
+      }
+    };
+    const code = navigator.locks
+      ? await navigator.locks.request("playwise.issue", issue)
+      : await issue();
 
-    saveConfig(frontendStorage, {deviceId, secret, tierMinutes});
-    rememberNonce(frontendStorage, deviceId, dateText, nonce);
-    codeOutput.textContent = code;
+    codeOutput.children[0].textContent = code.slice(0, 4);
+    codeOutput.children[1].textContent = code.slice(4);
     lastResultDate = dateText;
     lastResultMinutes = tierMinutes;
-    metaOutput.textContent = t("result_meta", {date: dateText, minutes: tierMinutes}, currentLang);
+    lastResultDevice = deviceId;
+    metaOutput.textContent = t("result_meta_device", {device: deviceId, date: dateText, minutes: tierMinutes}, currentLang);
+    refreshDevices(true);
+    refreshHistory();
     result.hidden = false;
+    result.focus();
   } catch (error) {
     showError(errorOutput, error instanceof Error ? error.message : String(error));
   } finally {
+    generating = false;
+    form.inert = false;
     if (selfTestError.hidden && securityError.hidden) generateButton.disabled = false;
   }
 });
@@ -1189,7 +1533,53 @@ document.getElementById("toggleSecret").addEventListener("click", event => {
   button.setAttribute("aria-pressed", visible ? "false" : "true");
 });
 
-secretInput.addEventListener("input", syncDemoWarning);
+secretInput.addEventListener("input", () => {
+  syncDemoWarning();
+  result.hidden = true;
+});
+form.addEventListener("invalid", event => {
+  if (pairingSettings.contains(event.target)) pairingSettings.open = true;
+}, true);
+deviceInput.addEventListener("input", () => {
+  refreshDevices();
+  refreshIssueDate();
+});
+devicePicker.addEventListener("change", () => {
+  const config = loadDevices(frontendStorage).get(devicePicker.value);
+  if (!config) return;
+  saveConfig(frontendStorage, config);
+  showDevice(config);
+});
+dateInput.addEventListener("input", refreshIssueDate);
+tierInput.addEventListener("change", refreshShortcuts);
+for (const button of dateShortcuts) {
+  button.addEventListener("click", () => {
+    dateInput.value = localDateAfter(Number(button.dataset.days));
+    refreshIssueDate();
+  });
+}
+
+for (const [id, values] of Object.entries({
+  appearance: ["slate", "paper", "teal", "dusk"],
+  colorMode: ["system", "light", "dark"],
+})) {
+  const picker = document.getElementById(id);
+  const key = `ptc.frontend.${id}.v1`;
+  const saved = frontendStorage.getItem(key);
+  picker.value = values.includes(saved) ? saved : values[0];
+  const systemDark = id === "colorMode" ? matchMedia("(prefers-color-scheme: dark)") : null;
+  const apply = () => {
+    document.documentElement.dataset[id] = systemDark && picker.value === "system"
+      ? (systemDark.matches ? "dark" : "light")
+      : picker.value;
+  };
+  apply();
+  systemDark?.addEventListener?.("change", apply);
+  picker.addEventListener("change", () => {
+    apply();
+    frontendStorage.setItem(key, picker.value);
+  });
+}
 
 importFile.addEventListener("change", async () => {
   clearError(importError);
@@ -1206,24 +1596,36 @@ importFile.addEventListener("change", async () => {
   }
 });
 
-copyButton.addEventListener("click", async () => {
+async function copyResult(button, value) {
   try {
-    await navigator.clipboard.writeText(codeOutput.textContent || "");
-    copyButton.dataset.copied = "true";
-    copyButton.textContent = t("btn_copied", {}, currentLang);
-    setTimeout(() => {
-      copyButton.dataset.copied = "false";
-      copyButton.textContent = t("btn_copy", {}, currentLang);
+    await navigator.clipboard.writeText(value);
+    button.dataset.copied = "true";
+    button.textContent = t("btn_copied", {}, currentLang);
+    clearTimeout(Number(button.dataset.copyTimer));
+    button.dataset.copyTimer = setTimeout(() => {
+      button.dataset.copied = "false";
+      button.textContent = t(button.dataset.i18n, {}, currentLang);
     }, 1500);
   } catch {
     showError(errorOutput, t("err_copy_failed", {}, currentLang));
   }
+}
+
+copyButton.addEventListener("click", () => copyResult(copyButton, codeOutput.textContent));
+copyMessage.addEventListener("click", () => {
+  copyResult(copyMessage, t("share_message", {
+    code: codeOutput.textContent,
+    device: lastResultDevice,
+    date: lastResultDate,
+    minutes: lastResultMinutes,
+  }, currentLang));
 });
 
 document.getElementById("clearConfig").addEventListener("click", () => {
+  if (generating) return;
   clearFrontendState(frontendStorage);
-  resetToDefaults();
-  result.hidden = true;
+  dateInput.value = todayLocal();
+  showDevice(DEFAULT_CONFIG);
   errorOutput.hidden = true;
 });
 

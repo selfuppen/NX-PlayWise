@@ -1,0 +1,3126 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-style="slate">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任我玩 PlayWise · 全端 UI/UX 体验审视与优化方案交互展台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Showcase Shell Meta Palette */
+      --shell-bg: #0b0f17;
+      --shell-surface: #131a26;
+      --shell-elevated: #1b2434;
+      --shell-border: #28344a;
+      --shell-text: #f0f6fc;
+      --shell-muted: #8b9bb4;
+      --shell-accent: #4c8dff;
+      --shell-before: #f0883e;
+      --shell-after: #3fb950;
+
+      /* PlayWise Dynamic Theme Tokens (Default: Graphite Light) */
+      --pw-page-bg: #F3F4F6;
+      --pw-surface: #FCFCFD;
+      --pw-surface-raised: #E9EBEF;
+      --pw-border: #DDE0E5;
+      --pw-border-control: #7D8593;
+      --pw-text-primary: #171A20;
+      --pw-text-secondary: #545B68;
+      --pw-text-disabled: #7E8592;
+      --pw-accent: #2F5FD0;
+      --pw-accent-soft: #E6ECFB;
+      --pw-focus: #1C46AC;
+      --pw-on-accent: #FFFFFF;
+      --pw-hero-bg: #182F5C;
+      --pw-hero-sub: #213B6E;
+      --pw-hero-border: #33528C;
+      --pw-success: #2C7A4B;
+      --pw-success-soft: #EAF5EE;
+      --pw-success-border: #9AD2AE;
+      --pw-warning: #9A6114;
+      --pw-warning-soft: #FBF2E1;
+      --pw-warning-border: #E4C17B;
+      --pw-danger: #B53A45;
+      --pw-danger-soft: #FAEBEC;
+      --pw-danger-border: #E2A2A8;
+      --pw-night: #5B4CB0;
+      --pw-night-soft: #EDEAF9;
+      --pw-night-border: #BDB4E8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--shell-bg);
+      color: var(--shell-text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.5;
+      padding-bottom: 72px;
+    }
+
+    /* Sticky Top Console Bar */
+    .showcase-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background: rgba(11, 15, 23, 0.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--shell-border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2F5FD0, #38B2AC);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 16px;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(47, 95, 208, 0.35);
+      position: relative;
+    }
+
+    .brand-logo::after {
+      content: "";
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #F56565;
+      border: 2px solid var(--shell-bg);
+    }
+
+    .brand-titles h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.2px;
+    }
+
+    .brand-titles p {
+      font-size: 12px;
+      color: var(--shell-muted);
+    }
+
+    .topbar-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ctrl-pill-group {
+      display: inline-flex;
+      background: var(--shell-surface);
+      border: 1px solid var(--shell-border);
+      border-radius: 9px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .ctrl-btn {
+      border: none;
+      background: transparent;
+      color: var(--shell-muted);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ctrl-btn:hover {
+      color: #fff;
+    }
+
+    .ctrl-btn.active {
+      background: var(--shell-elevated);
+      color: #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    }
+
+    .ctrl-btn.mode-before.active {
+      background: rgba(240, 136, 62, 0.2);
+      color: #ffb77c;
+      border: 1px solid rgba(240, 136, 62, 0.45);
+    }
+
+    .ctrl-btn.mode-after.active {
+      background: rgba(63, 185, 80, 0.22);
+      color: #7ee787;
+      border: 1px solid rgba(63, 185, 80, 0.5);
+    }
+
+    .swatch-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* Main Container */
+    .showcase-container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Executive Summary Grid */
+    .audit-overview {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .audit-card {
+      background: var(--shell-surface);
+      border: 1px solid var(--shell-border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .audit-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--shell-border);
+      transition: background 0.2s ease;
+    }
+
+    .audit-card.active {
+      border-color: var(--shell-accent);
+      background: linear-gradient(180deg, rgba(76, 141, 255, 0.1), var(--shell-surface) 60%);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .audit-card.active::before {
+      background: var(--shell-accent);
+    }
+
+    .audit-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .audit-surface-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: rgba(76, 141, 255, 0.15);
+      color: #79b8ff;
+    }
+
+    .audit-card h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .audit-points {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12.5px;
+      color: var(--shell-muted);
+    }
+
+    .audit-points li {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+
+    .audit-points .tag-pain {
+      color: #ffa657;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .audit-points .tag-fix {
+      color: #7ee787;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* Sub-navigation & Comparison Banner */
+    .stage-control-bar {
+      background: var(--shell-surface);
+      border: 1px solid var(--shell-border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .subscene-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .subscene-btn {
+      background: var(--shell-bg);
+      border: 1px solid var(--shell-border);
+      color: var(--shell-muted);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .subscene-btn:hover {
+      color: #fff;
+      border-color: #4c8dff;
+    }
+
+    .subscene-btn.active {
+      background: #2F5FD0;
+      border-color: #58a6ff;
+      color: #fff;
+    }
+
+    /* Callout Insights Strip */
+    .insight-banner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .insight-box {
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .insight-box.before-box {
+      background: rgba(240, 136, 62, 0.08);
+      border: 1px solid rgba(240, 136, 62, 0.35);
+    }
+
+    .insight-box.after-box {
+      background: rgba(63, 185, 80, 0.08);
+      border: 1px solid rgba(63, 185, 80, 0.35);
+    }
+
+    .insight-box-title {
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .before-box .insight-box-title { color: #ffb77c; }
+    .after-box .insight-box-title { color: #7ee787; }
+
+    .insight-list {
+      padding-left: 18px;
+      color: #c9d1d9;
+      font-size: 12.5px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    /* =====================================================================
+       SURFACE 1: NINTENDO SWITCH COMPANION NRO (1280x720 Aspect Ratio)
+       ===================================================================== */
+    .nro-viewport-frame {
+      background: #05070b;
+      border: 2px solid var(--shell-border);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+      margin-bottom: 32px;
+    }
+
+    .nro-screen {
+      width: 100%;
+      max-width: 1280px;
+      margin: 0 auto;
+      aspect-ratio: 16 / 9;
+      background: var(--pw-page-bg);
+      color: var(--pw-text-primary);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      border: 1px solid var(--pw-border);
+      transition: background 0.25s ease, color 0.25s ease;
+      user-select: none;
+    }
+
+    /* 1. Classic 3-Section Console Shell: Header (Y=0..104 => ~14.4%) */
+    .nro-header {
+      height: 14.44%;
+      padding: 0 4.2% 0 4.2%;
+      background: var(--pw-surface);
+      border-bottom: 1px solid var(--pw-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .nro-header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .nro-app-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--pw-accent);
+      color: var(--pw-on-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      position: relative;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+    }
+
+    .nro-app-icon::after {
+      content: "";
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #E06C75;
+      border: 2px solid var(--pw-surface);
+    }
+
+    .nro-title-block h2 {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--pw-text-primary);
+      line-height: 1.15;
+      letter-spacing: -0.3px;
+    }
+
+    .nro-title-block p {
+      font-size: 13.5px;
+      color: var(--pw-text-secondary);
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nro-update-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--pw-accent);
+      background: var(--pw-accent-soft);
+      padding: 1px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .nro-header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nro-lang-pill {
+      border: 1px solid var(--pw-border);
+      background: var(--pw-page-bg);
+      color: var(--pw-text-primary);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .nro-status-capsule {
+      border: 1px solid var(--pw-border);
+      background: var(--pw-page-bg);
+      border-radius: 10px;
+      padding: 7px 14px;
+      min-width: 310px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nro-status-capsule.compact-after {
+      min-width: auto;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: var(--pw-surface-raised);
+    }
+
+    .status-cap-row1 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12.5px;
+    }
+
+    .status-cap-time {
+      font-weight: 800;
+      font-size: 14px;
+      color: var(--pw-text-primary);
+    }
+
+    .pw-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+
+    .pw-chip-accent {
+      background: var(--pw-accent-soft);
+      color: var(--pw-accent);
+      border: 1px solid var(--pw-accent);
+    }
+
+    .pw-chip-success {
+      background: var(--pw-success-soft);
+      color: var(--pw-success);
+      border: 1px solid var(--pw-success-border);
+    }
+
+    .pw-chip-warning {
+      background: var(--pw-warning-soft);
+      color: var(--pw-warning);
+      border: 1px solid var(--pw-warning-border);
+    }
+
+    .pw-chip-danger {
+      background: var(--pw-danger-soft);
+      color: var(--pw-danger);
+      border: 1px solid var(--pw-danger-border);
+    }
+
+    .pw-chip-muted {
+      background: var(--pw-surface-raised);
+      color: var(--pw-text-secondary);
+      border: 1px solid var(--pw-border);
+    }
+
+    /* 2. Main Stage (Y=105..651 => 75.8%) */
+    .nro-stage {
+      flex: 1;
+      padding: 14px 4.2%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    /* Parent 5-Tab Track */
+    .nro-tab-track {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--pw-surface);
+      border: 1px solid var(--pw-border);
+      border-radius: 12px;
+      padding: 4px 10px;
+      height: 42px;
+      flex-shrink: 0;
+    }
+
+    .shoulder-key {
+      width: 32px;
+      height: 26px;
+      border-radius: 6px;
+      background: var(--pw-surface-raised);
+      border: 1px solid var(--pw-border-control);
+      color: var(--pw-text-secondary);
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .nro-tabs-inner {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      flex: 1;
+      margin: 0 14px;
+    }
+
+    .nro-tab-btn {
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: var(--pw-surface-raised);
+      color: var(--pw-text-primary);
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .nro-tab-btn.active {
+      background: var(--pw-accent);
+      color: var(--pw-on-accent);
+      box-shadow: 0 2px 8px rgba(47, 95, 208, 0.28);
+    }
+
+    /* Child Page Layout Grid */
+    .child-stage-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 2.35fr 1fr;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .child-left-col {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    /* Child Hero Card */
+    .child-hero-card {
+      flex: 1.25;
+      background: var(--pw-hero-bg);
+      color: #FFFFFF;
+      border-radius: 14px;
+      padding: 18px 22px;
+      display: grid;
+      grid-template-columns: 1.05fr 1.35fr;
+      gap: 20px;
+      border: 1px solid var(--pw-hero-border);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    }
+
+    /* Enhanced Bento Hero in AFTER mode */
+    .child-hero-card.after-bento {
+      background: var(--pw-surface);
+      color: var(--pw-text-primary);
+      border: 1.5px solid var(--pw-border);
+      padding: 16px 20px;
+    }
+
+    .hero-quota-pane {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .after-bento .hero-quota-pane {
+      background: linear-gradient(145deg, var(--pw-accent), var(--pw-focus));
+      color: var(--pw-on-accent);
+      padding: 16px 18px;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(47, 95, 208, 0.22);
+    }
+
+    .hero-big-num {
+      font-family: 'Outfit', sans-serif;
+      font-size: 52px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -1px;
+    }
+
+    .hero-big-unit {
+      font-size: 18px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+
+    .hero-progress-track {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.22);
+      overflow: hidden;
+      margin: 8px 0 6px;
+    }
+
+    .hero-progress-fill {
+      height: 100%;
+      width: 57%;
+      background: #48BB78;
+      border-radius: 999px;
+    }
+
+    .after-bento .hero-progress-fill {
+      background: #FFFFFF;
+    }
+
+    .hero-progress-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13.5px;
+    }
+
+    .hero-guardians-col {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .hero-subcard {
+      background: var(--pw-hero-sub);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      padding: 9px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .after-bento .hero-subcard {
+      background: var(--pw-page-bg);
+      border: 1px solid var(--pw-border);
+      color: var(--pw-text-primary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .after-bento .hero-subcard:hover {
+      border-color: var(--pw-accent);
+      background: var(--pw-accent-soft);
+    }
+
+    .hero-subcard-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .hero-subcard-desc {
+      font-size: 12.5px;
+      opacity: 0.85;
+    }
+
+    /* 7-Day Forecast Strip */
+    .child-week-card {
+      flex: 0.95;
+      background: var(--pw-surface);
+      border: 1px solid var(--pw-border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .week-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .week-days-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      flex: 1;
+      margin-top: 8px;
+    }
+
+    .day-mini-card {
+      background: var(--pw-surface-raised);
+      border: 1px solid var(--pw-border);
+      border-radius: 10px;
+      padding: 8px 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .day-mini-card.active-day {
+      background: var(--pw-accent-soft);
+      border: 2px solid var(--pw-accent);
+    }
+
+    .day-mini-card.weekend-day {
+      border-color: var(--pw-success-border);
+      background: var(--pw-success-soft);
+    }
+
+    .day-mini-title {
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .day-mini-date {
+      font-size: 10.5px;
+      color: var(--pw-text-secondary);
+    }
+
+    .day-mini-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--pw-text-primary);
+    }
+
+    .day-mini-val.unavailable {
+      font-size: 13px;
+      color: var(--pw-text-disabled);
+      font-weight: 700;
+    }
+
+    .day-mini-tag {
+      font-size: 10.5px;
+      color: var(--pw-text-secondary);
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.05);
+    }
+
+    /* Child Right Column Actions */
+    .child-right-col {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .child-action-btn {
+      border-radius: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--pw-border);
+      background: var(--pw-surface);
+      color: var(--pw-text-primary);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      text-align: left;
+    }
+
+    .child-action-btn.primary-action {
+      background: var(--pw-accent);
+      color: var(--pw-on-accent);
+      border: 2px solid var(--pw-focus);
+      box-shadow: 0 6px 16px rgba(47, 95, 208, 0.28);
+      flex: 1.1;
+    }
+
+    .child-action-btn.soft-action {
+      background: var(--pw-accent-soft);
+      border-color: rgba(47, 95, 208, 0.3);
+      color: var(--pw-accent);
+      flex: 0.95;
+    }
+
+    .child-action-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .key-circle {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.9);
+      color: #171A20;
+      font-size: 12px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Parent Today & Settings Stage Grids */
+    .parent-today-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.12fr 1.88fr;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .parent-left-status {
+      background: var(--pw-hero-bg);
+      color: #fff;
+      border: 1px solid var(--pw-hero-border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .parent-left-status.after-surface {
+      background: var(--pw-surface);
+      color: var(--pw-text-primary);
+      border: 1.5px solid var(--pw-border);
+    }
+
+    .parent-right-groups {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .parent-group-tray {
+      background: var(--pw-surface);
+      border: 1px solid var(--pw-border);
+      border-radius: 14px;
+      padding: 10px 14px 12px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .tray-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--pw-accent);
+      margin-bottom: 6px;
+    }
+
+    .tray-cards-2x2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .pw-action-card {
+      background: var(--pw-surface-raised);
+      border: 1.5px solid var(--pw-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .pw-action-card.focused {
+      background: var(--pw-accent-soft);
+      border: 2px solid var(--pw-accent);
+      box-shadow: 0 0 0 2px var(--pw-focus), 0 6px 16px rgba(47, 95, 208, 0.22);
+    }
+
+    .pw-action-card.disabled-card {
+      opacity: 0.58;
+    }
+
+    .pw-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .pw-card-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--pw-text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pw-card-sub {
+      font-size: 12px;
+      color: var(--pw-text-secondary);
+      margin-top: 4px;
+    }
+
+    .quick-tier-pills {
+      display: flex;
+      gap: 5px;
+      margin-top: 6px;
+    }
+
+    .tier-mini-btn {
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      font-weight: 700;
+      border: 1px solid var(--pw-success-border);
+      background: var(--pw-success-soft);
+      color: var(--pw-success);
+      cursor: pointer;
+    }
+
+    .tier-mini-btn.active {
+      background: var(--pw-success);
+      color: #fff;
+    }
+
+    /* Settings 6-Card Grid + Dynamic Inspector */
+    .settings-stage-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.9fr 1.1fr;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .settings-6grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .inspector-pane {
+      background: var(--pw-surface);
+      border: 1.5px solid var(--pw-border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* 3. Footer Bar (Y=652..720 => ~9.5%) */
+    .nro-footer {
+      height: 9.5%;
+      padding: 0 4.2%;
+      background: var(--pw-surface-raised);
+      border-top: 1px solid var(--pw-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--pw-text-secondary);
+    }
+
+    .footer-hints-left, .footer-hints-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .footer-hint-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+
+    .footer-pill-btn {
+      border: 1px solid var(--pw-border-control);
+      background: var(--pw-surface);
+      color: var(--pw-text-primary);
+      padding: 5px 14px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    /* =====================================================================
+       SURFACE 2: TESLA OVERLAY (448x720 Locked Dark Mode)
+       ===================================================================== */
+    .overlay-comparison-stage {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 448px));
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 32px;
+    }
+
+    .overlay-device-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .overlay-frame-badge {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 5px 14px;
+      border-radius: 999px;
+    }
+
+    .overlay-frame-badge.badge-before {
+      background: rgba(240, 136, 62, 0.16);
+      color: #ffb77c;
+      border: 1px solid rgba(240, 136, 62, 0.4);
+    }
+
+    .overlay-frame-badge.badge-after {
+      background: rgba(63, 185, 80, 0.18);
+      color: #7ee787;
+      border: 1px solid rgba(63, 185, 80, 0.45);
+    }
+
+    .tesla-panel {
+      width: 420px;
+      height: 675px;
+      background: #0d0d0d;
+      border: 2px solid #333333;
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+      color: #EEEEEE;
+      position: relative;
+      user-select: none;
+    }
+
+    .tesla-body {
+      flex: 1;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+    }
+
+    .ovl-banner {
+      border-radius: 8px;
+      padding: 12px 14px;
+      border: 1px solid #553322;
+      background: #2b1d12;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ovl-banner.danger-banner {
+      background: #3a151c;
+      border-color: #882233;
+    }
+
+    .ovl-banner.success-banner {
+      background: #112a1d;
+      border-color: #336644;
+    }
+
+    .ovl-banner::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #EEBB66;
+    }
+
+    .ovl-banner.danger-banner::before { background: #EE8899; }
+    .ovl-banner.success-banner::before { background: #77CC99; }
+
+    .ovl-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+
+    .ovl-top-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .ovl-mini-btn {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid #666;
+      color: #EEE;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .ovl-mini-btn.focused {
+      border: 2px solid #88AAEE;
+      background: #223344;
+    }
+
+    .ovl-hero-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: #EE8899;
+      margin-bottom: 4px;
+    }
+
+    .ovl-hero-countdown {
+      font-family: 'Outfit', sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      color: #EEBB66;
+      line-height: 1.05;
+      margin: 4px 0;
+    }
+
+    /* Overlay 8-Digit Code Slots */
+    .ovl-slots-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      margin: 6px 0;
+    }
+
+    .ovl-slots-row.grouped-4x4 {
+      gap: 5px;
+    }
+
+    .ovl-slot {
+      width: 40px;
+      height: 54px;
+      border-radius: 6px;
+      background: #222222;
+      border: 1.5px solid #444444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Outfit', monospace;
+      font-size: 26px;
+      font-weight: 700;
+      color: #EEEEEE;
+    }
+
+    .ovl-slot.active-slot {
+      border: 2px solid #88AAEE;
+      background: #1B2A3A;
+      color: #88AAEE;
+      box-shadow: 0 0 10px rgba(136, 170, 238, 0.25);
+    }
+
+    .ovl-slot.filled-slot {
+      border-color: #77CC99;
+      background: #14261C;
+    }
+
+    .ovl-slot-sep {
+      font-size: 20px;
+      font-weight: 800;
+      color: #88AAEE;
+      padding: 0 3px;
+    }
+
+    .ovl-keypad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+      margin-top: 4px;
+    }
+
+    .ovl-key {
+      height: 46px;
+      border-radius: 6px;
+      background: #222222;
+      border: 1px solid #444444;
+      color: #EEEEEE;
+      font-size: 20px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.1s ease;
+    }
+
+    .ovl-key:hover, .ovl-key.focused {
+      background: #223344;
+      border: 2px solid #88AAEE;
+      color: #BBDDFF;
+    }
+
+    .ovl-submit-btn {
+      width: 100%;
+      height: 48px;
+      border-radius: 6px;
+      background: #222222;
+      border: 1px solid #555555;
+      color: #999999;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
+    .ovl-submit-btn.ready-glow {
+      background: #2F5FD0;
+      border: 2px solid #BBDDFF;
+      color: #FFFFFF;
+      box-shadow: 0 4px 16px rgba(47, 95, 208, 0.45);
+    }
+
+    .tesla-footer {
+      height: 48px;
+      border-top: 1px solid #444444;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 16px;
+      font-weight: 600;
+      background: #0a0a0a;
+    }
+
+    /* =====================================================================
+       SURFACE 3: PARENT WEB GENERATOR (Mobile & Desktop)
+       ===================================================================== */
+    .web-comparison-stage {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 520px));
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 32px;
+    }
+
+    .phone-mockup {
+      width: 100%;
+      background: var(--pw-page-bg);
+      color: var(--pw-text-primary);
+      border: 2px solid var(--shell-border);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .web-header {
+      background: var(--pw-surface);
+      border-bottom: 1px solid var(--pw-border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .web-body {
+      padding: 18px 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .web-card {
+      background: var(--pw-surface);
+      border: 1px solid var(--pw-border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    /* Paired Device Capsule in AFTER Web UI */
+    .paired-device-bar {
+      background: var(--pw-surface);
+      border: 1.5px solid var(--pw-accent);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .tier-chips-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .web-tier-chip {
+      padding: 10px 8px;
+      border-radius: 10px;
+      border: 1.5px solid var(--pw-border);
+      background: var(--pw-surface-raised);
+      color: var(--pw-text-primary);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s ease;
+    }
+
+    .web-tier-chip.active {
+      background: var(--pw-accent-soft);
+      border-color: var(--pw-accent);
+      color: var(--pw-accent);
+      box-shadow: 0 2px 8px rgba(47, 95, 208, 0.18);
+    }
+
+    .web-ticket-result {
+      background: var(--pw-success-soft);
+      border: 1.5px solid var(--pw-success-border);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .ticket-code-grouped {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Fira Code', monospace;
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--pw-accent);
+      letter-spacing: 0.08em;
+      margin: 8px 0;
+      background: var(--pw-surface);
+      padding: 6px 18px;
+      border-radius: 10px;
+      border: 1px dashed var(--pw-accent);
+    }
+
+    .history-mini-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    .history-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: var(--pw-surface-raised);
+    }
+
+    /* Annotation Callout Badges */
+    .ux-badge-pin {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 800;
+      background: #238636;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      vertical-align: middle;
+    }
+
+    .ux-pain-pin {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 800;
+      background: #d29922;
+      color: #111;
+      vertical-align: middle;
+    }
+
+    @media (max-width: 1024px) {
+      .audit-overview, .insight-banner {
+        grid-template-columns: 1fr;
+      }
+      .nro-screen {
+        aspect-ratio: auto;
+        min-height: 620px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sticky Global Controls -->
+  <header class="showcase-topbar">
+    <div class="brand-cluster">
+      <div class="brand-logo">+∴</div>
+      <div class="brand-titles">
+        <h1>任我玩 PlayWise · 全端布局、配色与交互优化实体展台</h1>
+        <p>覆盖 Switch 主机应用 (NRO) · 游戏内浮窗 (Tesla Overlay) · 家长离线发码网页 (Web)</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <!-- Before / After Switcher -->
+      <div class="ctrl-pill-group" title="切换现行设计与优化方案">
+        <button class="ctrl-btn mode-before" id="btnModeBefore" onclick="setDesignVersion('before')">
+          <span>⚠️ 现行设计 (Before)</span>
+        </button>
+        <button class="ctrl-btn mode-after active" id="btnModeAfter" onclick="setDesignVersion('after')">
+          <span>✨ 优化方案 (After)</span>
+        </button>
+      </div>
+
+      <!-- 4 Official Theme Styles -->
+      <div class="ctrl-pill-group" title="切换四套官方色彩风格">
+        <button class="ctrl-btn active" id="btnStyleSlate" onclick="setPwStyle('slate')">
+          <span class="swatch-dot" style="background:#2F5FD0;"></span>石墨
+        </button>
+        <button class="ctrl-btn" id="btnStyleIndigo" onclick="setPwStyle('indigo')">
+          <span class="swatch-dot" style="background:#2C4A6E;"></span>纸墨
+        </button>
+        <button class="ctrl-btn" id="btnStyleTeal" onclick="setPwStyle('teal')">
+          <span class="swatch-dot" style="background:#1F6B5C;"></span>雾青
+        </button>
+        <button class="ctrl-btn" id="btnStyleAmethyst" onclick="setPwStyle('amethyst')">
+          <span class="swatch-dot" style="background:#54469E;"></span>暮霭
+        </button>
+      </div>
+
+      <!-- Light / Dark Theme -->
+      <div class="ctrl-pill-group">
+        <button class="ctrl-btn active" id="btnThemeLight" onclick="setPwTheme('light')">☀️ 浅色</button>
+        <button class="ctrl-btn" id="btnThemeDark" onclick="setPwTheme('dark')">🌙 深色</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="showcase-container">
+
+    <!-- 3-Surface Executive Diagnostic Cards (Click to switch active surface) -->
+    <section class="audit-overview">
+      <div class="audit-card active" id="surfaceCardNro" onclick="setSurface('nro')">
+        <div class="audit-card-head">
+          <span class="audit-surface-tag">终端 01 · Switch 主机应用 (1280×720)</span>
+          <span style="font-size:12px;color:#7ee787;font-weight:700;">点击预览 ❯</span>
+        </div>
+        <h2>Companion NRO 主机控制台</h2>
+        <ul class="audit-points">
+          <li><span class="tag-pain">[痛点]</span> 顶栏、Hero 卡与右下状态卡三处重复显示“还可玩 51 分钟 / 2秒前刷新”；7日预测后5天全灰“暂不可用”。</li>
+          <li><span class="tag-pain">[痛点]</span> “安全与偏好/离线加时”右侧说明框静态写死，不随左列焦点变化；游玩受限提醒卡内残留旧版“开启/静音”槽。</li>
+          <li><span class="tag-fix">[方案]</span> 顶栏减负解耦 + Bento 清透分舱看板 + 7日周计划智能推演 + 右侧焦点联动动态 Inspector。</li>
+        </ul>
+      </div>
+
+      <div class="audit-card" id="surfaceCardOverlay" onclick="setSurface('overlay')">
+        <div class="audit-card-head">
+          <span class="audit-surface-tag">终端 02 · 游戏内浮窗 (448×720 暗色)</span>
+          <span style="font-size:12px;color:#7ee787;font-weight:700;">点击对比 ❯</span>
+        </div>
+        <h2>Tesla Overlay 游戏内浮窗</h2>
+        <ul class="audit-points">
+          <li><span class="tag-pain">[痛点]</span> 受限页中下部 200px 纯黑空洞，且唯一“R 家长区”塞在右上角小字；8 位码连续方框无分组易串位。</li>
+          <li><span class="tag-pain">[痛点]</span> 家长快捷动作页被 4 张未开启的灰卡占满首屏，真正需要的“今日解除限制”被挤在最底部且顶部文字半截裁切。</li>
+          <li><span class="tag-fix">[方案]</span> 受限页中部双路径自救/家长解限大卡 + 4-4 分段插槽与进度提交键 + 触发限制项智能置顶与闲置折叠。</li>
+        </ul>
+      </div>
+
+      <div class="audit-card" id="surfaceCardWeb" onclick="setSurface('web')">
+        <div class="audit-card-head">
+          <span class="audit-surface-tag">终端 03 · 家长手机/电脑网页端</span>
+          <span style="font-size:12px;color:#7ee787;font-weight:700;">点击体验 ❯</span>
+        </div>
+        <h2>家长离线发码网页 (PWA / 单文件)</h2>
+        <ul class="audit-points">
+          <li><span class="tag-pain">[痛点]</span> 低频配对说明与密钥输入框长期霸占首屏，每次发码需下滑；30+ 项原生下拉框选时长慢；缺少多机切换 UI。</li>
+          <li><span class="tag-pain">[痛点]</span> 生成的 8 位数字连在一起难读，且没有“今日已签发记录”，刷新后找不到刚生成的码。</li>
+          <li><span class="tag-fix">[方案]</span> 已配对设备顶部胶囊（支持多机切换）+ 快捷时长芯片组 + 4-4 分段票据卡 + 今日已签发时间线。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================================================================
+         VIEW 1: NRO CONSOLE APPLICATION (1280x720)
+         ================================================================= -->
+    <section id="viewNro">
+      <div class="stage-control-bar">
+        <div class="subscene-tabs">
+          <span style="font-size:12.5px;color:var(--shell-muted);font-weight:700;margin-right:4px;">切换 NRO 页面场景：</span>
+          <button class="subscene-btn active" id="btnNroChild" onclick="setNroScene('child')">① 孩子区首页 (Child Home)</button>
+          <button class="subscene-btn" id="btnNroParentToday" onclick="setNroScene('parent_today')">② 家长区 · 今日安排 (Today's Schedule)</button>
+          <button class="subscene-btn" id="btnNroSettings" onclick="setNroScene('parent_settings')">③ 家长区 · 安全与偏好 (动态 Inspector 联动)</button>
+        </div>
+        <div style="font-size:12.5px;color:var(--shell-muted);">
+          💡 提示：点击右上角 <strong>「现行设计 (Before)」/「优化方案 (After)」</strong> 或直接点击画面中的卡片体验焦点联动
+        </div>
+      </div>
+
+      <!-- Dynamic Before vs After Explanation Strip -->
+      <div class="insight-banner" id="nroInsightBanner"></div>
+
+      <!-- 1280x720 Switch Console Canvas -->
+      <div class="nro-viewport-frame">
+        <div class="nro-screen" id="nroCanvas">
+          <!-- Rendered dynamically by JS based on scene & Before/After mode -->
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================
+         VIEW 2: TESLA OVERLAY (448x720 Side-by-Side Before & After)
+         ================================================================= -->
+    <section id="viewOverlay" style="display:none;">
+      <div class="stage-control-bar">
+        <div class="subscene-tabs">
+          <span style="font-size:12.5px;color:var(--shell-muted);font-weight:700;margin-right:4px;">切换浮窗页面场景（左右同屏对比）：</span>
+          <button class="subscene-btn active" id="btnOvlRestricted" onclick="setOvlScene('restricted')">① 掌机受限/护眼受限页 (消除 200px 黑洞)</button>
+          <button class="subscene-btn" id="btnOvlCode" onclick="setOvlScene('code')">② 8 位加时码输入页 (4-4 分段插槽 & 进度感知)</button>
+          <button class="subscene-btn" id="btnOvlParent" onclick="setOvlScene('parent')">③ 家长快捷操作列表 (当前限制智能置顶)</button>
+        </div>
+        <div style="font-size:12.5px;color:var(--shell-muted);">
+          💡 浮窗严格锁定深色 4-bit 安全调色板（避免游戏亮画面眩光）；右侧原型支持真实点击交互
+        </div>
+      </div>
+
+      <div class="overlay-comparison-stage" id="overlayComparisonStage">
+        <!-- Rendered dynamically: Left = Before, Right = After -->
+      </div>
+    </section>
+
+    <!-- =================================================================
+         VIEW 3: PARENT WEB PAGE (Side-by-Side Before & After)
+         ================================================================= -->
+    <section id="viewWeb" style="display:none;">
+      <div class="stage-control-bar">
+        <div style="font-size:13.5px;font-weight:700;color:#fff;">
+          📱 家长手机/电脑离线加时码网页 · 现行表单堆叠版 (左) vs 高频工作台优化版 (右)
+        </div>
+        <div style="font-size:12.5px;color:var(--shell-muted);">
+          💡 在右侧点击「+15 / +30 / +45 / +60 分钟」芯片并点击生成，体验 4-4 分段票据、微信口令复制与今日已签发记录
+        </div>
+      </div>
+
+      <div class="web-comparison-stage" id="webComparisonStage">
+        <!-- Rendered dynamically: Left = Before, Right = After -->
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    /* =====================================================================
+       1. OFFICIAL PLAYWISE 4-STYLE x 2-THEME PALETTE ENGINE
+       ===================================================================== */
+    const PW_PALETTES = {
+      slate: {
+        light: {
+          page_bg: "#F3F4F6", surface: "#FCFCFD", surface_raised: "#E9EBEF",
+          border: "#DDE0E5", border_control: "#7D8593",
+          text_primary: "#171A20", text_secondary: "#545B68", text_disabled: "#7E8592",
+          accent: "#2F5FD0", accent_soft: "#E6ECFB", focus: "#1C46AC", on_accent: "#FFFFFF",
+          hero_bg: "#182F5C", hero_sub: "#213B6E", hero_border: "#33528C",
+          success: "#2C7A4B", success_soft: "#EAF5EE", success_border: "#9AD2AE",
+          warning: "#9A6114", warning_soft: "#FBF2E1", warning_border: "#E4C17B",
+          danger: "#B53A45", danger_soft: "#FAEBEC", danger_border: "#E2A2A8"
+        },
+        dark: {
+          page_bg: "#111111", surface: "#222222", surface_raised: "#333333",
+          border: "#444444", border_control: "#888888",
+          text_primary: "#EEEEEE", text_secondary: "#BBBBBB", text_disabled: "#777777",
+          accent: "#88AAEE", accent_soft: "#223344", focus: "#BBDDFF", on_accent: "#112233",
+          hero_bg: "#172A4A", hero_sub: "#222834", hero_border: "#334D77",
+          success: "#77CC99", success_soft: "#113322", success_border: "#336644",
+          warning: "#EEBB66", warning_soft: "#332211", warning_border: "#775522",
+          danger: "#EE8899", danger_soft: "#441122", danger_border: "#882233"
+        }
+      },
+      indigo: {
+        light: {
+          page_bg: "#F5F1E8", surface: "#FFFDF8", surface_raised: "#EDE7DA",
+          border: "#E2DACB", border_control: "#8A8172",
+          text_primary: "#211E19", text_secondary: "#5D564B", text_disabled: "#8A8172",
+          accent: "#2C4A6E", accent_soft: "#E7EDF4", focus: "#1B3350", on_accent: "#FFFFFF",
+          hero_bg: "#233B57", hero_sub: "#2D496A", hero_border: "#446387",
+          success: "#3E7A4E", success_soft: "#EBF3E9", success_border: "#A8CDA4",
+          warning: "#96601A", warning_soft: "#FAF1DF", warning_border: "#E3C07E",
+          danger: "#AE3E38", danger_soft: "#FAEBE7", danger_border: "#E3A79F"
+        },
+        dark: {
+          page_bg: "#111111", surface: "#221D1A", surface_raised: "#332B26",
+          border: "#443A34", border_control: "#887777",
+          text_primary: "#FFEEDD", text_secondary: "#CCBBAA", text_disabled: "#776666",
+          accent: "#99BBDD", accent_soft: "#223344", focus: "#BBDDFF", on_accent: "#112233",
+          hero_bg: "#1D2D3E", hero_sub: "#2A2522", hero_border: "#3B526B",
+          success: "#88CC99", success_soft: "#113322", success_border: "#336644",
+          warning: "#EEBB66", warning_soft: "#332211", warning_border: "#775522",
+          danger: "#EE9988", danger_soft: "#441111", danger_border: "#883322"
+        }
+      },
+      teal: {
+        light: {
+          page_bg: "#F2F5F2", surface: "#FBFCFA", surface_raised: "#E9EFEA",
+          border: "#DCE4DE", border_control: "#768A81",
+          text_primary: "#182420", text_secondary: "#52645C", text_disabled: "#7F8C85",
+          accent: "#1F6B5C", accent_soft: "#E2F0EB", focus: "#124F44", on_accent: "#FFFFFF",
+          hero_bg: "#164A40", hero_sub: "#1E5C50", hero_border: "#2E786A",
+          success: "#2E7D4F", success_soft: "#EAF5EE", success_border: "#9BD3AE",
+          warning: "#9A6212", warning_soft: "#FBF3E3", warning_border: "#E7C27B",
+          danger: "#B33B45", danger_soft: "#FAECEC", danger_border: "#E4A3A8"
+        },
+        dark: {
+          page_bg: "#111111", surface: "#142222", surface_raised: "#223333",
+          border: "#334444", border_control: "#778888",
+          text_primary: "#EEFFFF", text_secondary: "#AACCCC", text_disabled: "#667777",
+          accent: "#77CCBB", accent_soft: "#113333", focus: "#AADDDD", on_accent: "#002222",
+          hero_bg: "#123632", hero_sub: "#1B2E2E", hero_border: "#285952",
+          success: "#77CC99", success_soft: "#113322", success_border: "#336644",
+          warning: "#EEBB66", warning_soft: "#332211", warning_border: "#775522",
+          danger: "#EE8899", danger_soft: "#441122", danger_border: "#882233"
+        }
+      },
+      amethyst: {
+        light: {
+          page_bg: "#F4F4F8", surface: "#FCFCFE", surface_raised: "#ECECF4",
+          border: "#DCDCE8", border_control: "#7B7A93",
+          text_primary: "#181826", text_secondary: "#53536A", text_disabled: "#808098",
+          accent: "#54469E", accent_soft: "#EEEBFA", focus: "#3C307C", on_accent: "#FFFFFF",
+          hero_bg: "#312763", hero_sub: "#3F337A", hero_border: "#5A4B9C",
+          success: "#2E7D4F", success_soft: "#EAF5EE", success_border: "#9BD3AE",
+          warning: "#96601A", warning_soft: "#FAF1DF", warning_border: "#E3C07E",
+          danger: "#B03E46", danger_soft: "#FAEAEC", danger_border: "#E3A3A8"
+        },
+        dark: {
+          page_bg: "#111111", surface: "#171726", surface_raised: "#222233",
+          border: "#333344", border_control: "#666688",
+          text_primary: "#EEEEFF", text_secondary: "#AABBCC", text_disabled: "#666677",
+          accent: "#9988EE", accent_soft: "#222244", focus: "#BBBBFF", on_accent: "#111133",
+          hero_bg: "#241E4A", hero_sub: "#1F1F33", hero_border: "#443A7A",
+          success: "#77CC99", success_soft: "#113322", success_border: "#336644",
+          warning: "#EEBB66", warning_soft: "#332211", warning_border: "#775522",
+          danger: "#EE8899", danger_soft: "#441122", danger_border: "#882233"
+        }
+      }
+    };
+
+    let state = {
+      surface: 'nro',           // 'nro' | 'overlay' | 'web'
+      version: 'after',         // 'before' | 'after'
+      pwStyle: 'slate',         // 'slate' | 'indigo' | 'teal' | 'amethyst'
+      pwTheme: 'light',         // 'light' | 'dark'
+      nroScene: 'child',        // 'child' | 'parent_today' | 'parent_settings'
+      ovlScene: 'restricted',   // 'restricted' | 'code' | 'parent'
+      selectedDayIdx: 0,
+      quickAddTier: 30,
+      focusedSettingIdx: 1,     // Default focus on "游玩受限提醒" to highlight fix
+      ovlDigits: ['4', '8', '2', '9'],
+      webDevice: 'kid-switch-oled',
+      webMinutes: 30,
+      webDateMode: 'today',
+      webCurrentCode: '48291053',
+      webHistory: [
+        { time: '19:42', minutes: 30, code: '4829 - 1053', device: '小明的 Switch OLED' },
+        { time: '14:15', minutes: 15, code: '9031 - 6642', device: '小明的 Switch OLED' }
+      ]
+    };
+
+    function applyPaletteTokens() {
+      const p = PW_PALETTES[state.pwStyle][state.pwTheme];
+      const root = document.documentElement;
+      Object.entries(p).forEach(([k, v]) => {
+        root.style.setProperty(`--pw-${k.replace(/_/g, '-')}`, v);
+      });
+    }
+
+    function setPwStyle(style) {
+      state.pwStyle = style;
+      ['Slate', 'Indigo', 'Teal', 'Amethyst'].forEach(s => {
+        document.getElementById('btnStyle' + s).classList.toggle('active', s.toLowerCase() === style);
+      });
+      applyPaletteTokens();
+      renderAll();
+    }
+
+    function setPwTheme(theme) {
+      state.pwTheme = theme;
+      document.getElementById('btnThemeLight').classList.toggle('active', theme === 'light');
+      document.getElementById('btnThemeDark').classList.toggle('active', theme === 'dark');
+      applyPaletteTokens();
+      renderAll();
+    }
+
+    function setDesignVersion(ver) {
+      state.version = ver;
+      document.getElementById('btnModeBefore').classList.toggle('active', ver === 'before');
+      document.getElementById('btnModeAfter').classList.toggle('active', ver === 'after');
+      renderAll();
+    }
+
+    function setSurface(surf) {
+      state.surface = surf;
+      ['Nro', 'Overlay', 'Web'].forEach(s => {
+        const key = s.toLowerCase();
+        document.getElementById('surfaceCard' + s).classList.toggle('active', key === surf);
+        document.getElementById('view' + s).style.display = key === surf ? 'block' : 'none';
+      });
+      renderAll();
+    }
+
+    function setNroScene(scene) {
+      state.nroScene = scene;
+      document.getElementById('btnNroChild').classList.toggle('active', scene === 'child');
+      document.getElementById('btnNroParentToday').classList.toggle('active', scene === 'parent_today');
+      document.getElementById('btnNroSettings').classList.toggle('active', scene === 'parent_settings');
+      if (scene === 'parent_today' || scene === 'parent_settings') {
+        // Auto-demo dark theme on parent console if user hasn't explicitly toggled
+      }
+      renderNro();
+    }
+
+    function setOvlScene(scene) {
+      state.ovlScene = scene;
+      document.getElementById('btnOvlRestricted').classList.toggle('active', scene === 'restricted');
+      document.getElementById('btnOvlCode').classList.toggle('active', scene === 'code');
+      document.getElementById('btnOvlParent').classList.toggle('active', scene === 'parent');
+      renderOverlay();
+    }
+
+    /* =====================================================================
+       2. RENDER NRO SCENES (BEFORE vs AFTER)
+       ===================================================================== */
+    function renderNro() {
+      const isAfter = state.version === 'after';
+      const banner = document.getElementById('nroInsightBanner');
+      const canvas = document.getElementById('nroCanvas');
+
+      if (state.nroScene === 'child') {
+        banner.innerHTML = `
+          <div class="insight-box before-box">
+            <div class="insight-box-title">⚠️ 现行设计 (Before) 审视发现</div>
+            <ul class="insight-list">
+              <li><strong>三处同屏重复</strong>：顶栏右上角、左侧深蓝 Hero 大卡、右下状态卡同时重复显示「今天还可玩 51 分钟」与「刚刚刷新 / 2秒前」。</li>
+              <li><strong>7 日计划连续 5 个灰块</strong>：周五至周二连续 5 张卡显示大号灰色「暂不可用」，占据底部 70% 面积，孩子无法获知周末常规额度。</li>
+              <li><strong>浅色模式 Hero 内部对比失衡</strong>：深蓝大色块内嵌深蓝子卡，纯白“已关闭”胶囊过亮，而灰色说明字偏暗；底栏左键重复右上“输入加时码”。</li>
+            </ul>
+          </div>
+          <div class="insight-box after-box">
+            <div class="insight-box-title">✨ 优化方案 (After) 核心改进</div>
+            <ul class="insight-list">
+              <li><strong>顶栏减负为「环境与实时状态胶囊」</strong>：在已有大号额度看板的首页，顶栏不再画第二根重复进度条，专注呈现「时间 · 屏幕形态 · 同步绿点」。</li>
+              <li><strong>Bento 清透分舱 Hero 看板</strong>：左侧聚焦高对比额度主卡，右侧三张健康守护卡采用主题清透分层与语义微胶囊，视觉更通透现代。</li>
+              <li><strong>7 日周计划基准推演 & 选中联动</strong>：远期日期自动展示周计划基准额度（标注“周常规”并对周末绿色高亮），点击任意日期可在右侧预览当日安排。</li>
+            </ul>
+          </div>
+        `;
+
+        const days = [
+          { title: '今天安排', date: '07/08 周三', min: 120, tag: '周计划', weekend: false },
+          { title: '明天安排', date: '07/09 周四', min: 90, tag: '周计划', weekend: false },
+          { title: '周五', date: '07/10', min: 90, tag: '周常规', weekend: false },
+          { title: '周六', date: '07/11', min: 150, tag: '周末计划', weekend: true },
+          { title: '周日', date: '07/12', min: 150, tag: '周末计划', weekend: true },
+          { title: '周一', date: '07/13', min: 60, tag: '周常规', weekend: false },
+          { title: '周二', date: '07/14', min: 60, tag: '周常规', weekend: false }
+        ];
+        const selDay = days[state.selectedDayIdx] || days[0];
+
+        canvas.innerHTML = `
+          <!-- Header -->
+          <div class="nro-header">
+            <div class="nro-header-left">
+              <div class="nro-app-icon">+∴</div>
+              <div class="nro-title-block">
+                <h2>⭐ 自律即自由</h2>
+                <p>
+                  <span>合理安排时间，做自己时间的主人</span>
+                  ${isAfter ? `<span class="nro-update-pill">⬇ 软件有新版本 v3.1.8</span>` : ''}
+                </p>
+              </div>
+            </div>
+            <div class="nro-header-right">
+              <div class="nro-lang-pill">🌐 中 / EN</div>
+              ${!isAfter ? `
+                <div class="nro-status-capsule">
+                  <div class="status-cap-row1">
+                    <span><strong class="status-cap-time">08:16</strong> | 7月8日 周三</span>
+                    <span class="pw-chip pw-chip-accent">● 周计划</span>
+                    <span class="pw-chip pw-chip-accent">🎮 掌机模式</span>
+                    <span style="color:var(--pw-text-secondary);font-size:11.5px;">刚刚刷新</span>
+                  </div>
+                  <div style="font-size:12.5px;font-weight:700;">
+                    今天还可玩：<span style="color:var(--pw-success);">51 分钟</span>
+                    <span class="ux-pain-pin" style="margin-left:6px;">重复 ①</span>
+                  </div>
+                  <div style="height:5px;background:var(--pw-surface-raised);border-radius:4px;overflow:hidden;">
+                    <div style="width:57%;height:100%;background:var(--pw-success);"></div>
+                  </div>
+                </div>
+              ` : `
+                <div class="nro-status-capsule compact-after">
+                  <strong class="status-cap-time">08:16</strong>
+                  <span style="color:var(--pw-text-secondary);font-size:12.5px;">7月8日 周三</span>
+                  <span class="pw-chip pw-chip-accent">🎮 掌机模式</span>
+                  <span class="pw-chip pw-chip-success">● 实时同步中</span>
+                  <span class="ux-badge-pin">顶栏减负</span>
+                </div>
+              `}
+            </div>
+          </div>
+
+          <!-- Stage -->
+          <div class="nro-stage">
+            <div class="child-stage-grid">
+              <div class="child-left-col">
+                <!-- Hero Card -->
+                <div class="child-hero-card ${isAfter ? 'after-bento' : ''}">
+                  <div class="hero-quota-pane">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                      <span style="font-size:15px;font-weight:700;opacity:0.92;">今天还可玩</span>
+                      <span class="pw-chip ${isAfter ? 'pw-chip-muted' : ''}" style="${isAfter ? 'background:rgba(255,255,255,0.18);color:#fff;border:none;' : 'background:rgba(255,255,255,0.15);color:#fff;'}">
+                        周计划 · 120 分钟
+                      </span>
+                    </div>
+                    <div style="margin:6px 0;">
+                      <span class="hero-big-num">51</span>
+                      <span class="hero-big-unit">分钟</span>
+                    </div>
+                    <div>
+                      <div class="hero-progress-track">
+                        <div class="hero-progress-fill"></div>
+                      </div>
+                      <div class="hero-progress-labels">
+                        <span style="opacity:0.88;">已玩约 69 分钟</span>
+                        <span style="font-weight:800;">还剩 51 分钟</span>
+                      </div>
+                    </div>
+                    <div style="font-size:12px;opacity:0.8;margin-top:6px;display:flex;align-items:center;justify-content:space-between;">
+                      ${!isAfter ? `
+                        <span>上次刷新：2 秒前 <span class="ux-pain-pin">重复 ②</span></span>
+                      ` : `
+                        <span>✨ 状态良好 · 可自由游玩至额度用尽</span>
+                      `}
+                    </div>
+                  </div>
+
+                  <!-- 3 Health Guardian Subcards -->
+                  <div class="hero-guardians-col">
+                    <div class="hero-subcard">
+                      <div class="hero-subcard-top">
+                        <span>🌿 护眼休息</span>
+                        <span class="pw-chip ${isAfter ? 'pw-chip-success' : 'pw-chip-muted'}">${isAfter ? '每玩40m休10m' : '已关闭'}</span>
+                      </div>
+                      <div class="hero-subcard-desc">
+                        ${isAfter ? '当前连续已玩 18 分钟 · 距离下次护眼休息还有 22 分钟' : '护眼已关闭'}
+                      </div>
+                    </div>
+
+                    <div class="hero-subcard">
+                      <div class="hero-subcard-top">
+                        <span>🌙 就寝时间</span>
+                        <span class="pw-chip ${isAfter ? 'pw-chip-accent' : 'pw-chip-muted'}">${isAfter ? '21:30 生效' : '已关闭'}</span>
+                      </div>
+                      <div class="hero-subcard-desc">
+                        ${isAfter ? '今晚 21:30 – 次日 07:00 休息 · 距就寝还有 13 小时' : '当前关闭'}
+                      </div>
+                    </div>
+
+                    <div class="hero-subcard">
+                      <div class="hero-subcard-top">
+                        <span>📺 电视模式规则 <small style="font-weight:500;opacity:0.8;">🎮 掌机模式</small></span>
+                        <span class="pw-chip pw-chip-muted">未限制</span>
+                      </div>
+                      <div class="hero-subcard-desc">
+                        未启用电视模式限制，掌机与电视均可自由使用
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 7-Day Forecast Card -->
+                <div class="child-week-card">
+                  <div class="week-card-head">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span>📅 未来 7 天时间计划</span>
+                      ${isAfter ? `<span class="ux-badge-pin">智能推演 + 点击预览</span>` : `<span class="ux-pain-pin">后 5 天全灰挫败感</span>`}
+                    </div>
+                    <span style="font-size:12px;color:var(--pw-text-secondary);font-weight:600;">
+                      ${isAfter ? `已选：${selDay.title} (${selDay.date}) · 预计额度 ${selDay.min} 分钟 (${selDay.tag})` : '合理安排休息'}
+                    </span>
+                  </div>
+
+                  <div class="week-days-grid">
+                    ${days.map((d, idx) => {
+                      const isUnavailableBefore = !isAfter && idx >= 2;
+                      const isSelected = state.selectedDayIdx === idx;
+                      return `
+                        <div class="day-mini-card ${isSelected ? 'active-day' : ''} ${isAfter && d.weekend ? 'weekend-day' : ''}"
+                             onclick="state.selectedDayIdx=${idx};renderNro();">
+                          <div>
+                            <div class="day-mini-title" style="${d.weekend && isAfter ? 'color:var(--pw-success);' : ''}">${d.title}</div>
+                            <div class="day-mini-date">${d.date.split(' ')[0]}</div>
+                          </div>
+                          ${isUnavailableBefore ? `
+                            <div class="day-mini-val unavailable">暂不可用</div>
+                            <div class="day-mini-tag">暂不可用</div>
+                          ` : `
+                            <div class="day-mini-val">${d.min}<small style="font-size:11px;font-weight:600;">分</small></div>
+                            <div class="day-mini-tag" style="${d.weekend && isAfter ? 'color:var(--pw-success);font-weight:700;' : ''}">${d.tag}</div>
+                          `}
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column Actions -->
+              <div class="child-right-col">
+                <button class="child-action-btn primary-action">
+                  <span class="key-circle">A</span>
+                  <div>
+                    <div style="font-size:17px;font-weight:800;">🎁 输入加时码</div>
+                    <div style="font-size:12px;opacity:0.88;margin-top:2px;">兑换家长发放的 8 位今日加时码</div>
+                  </div>
+                </button>
+
+                <button class="child-action-btn soft-action">
+                  <span class="key-circle" style="background:var(--pw-accent);color:#fff;">X</span>
+                  <div>
+                    <div style="font-size:15.5px;font-weight:800;">⚡ 领取缓冲 +10分</div>
+                    <div style="font-size:12px;opacity:0.85;margin-top:2px;">每日 1 次自主存档缓冲时间</div>
+                  </div>
+                </button>
+
+                <button class="child-action-btn soft-action">
+                  <span class="key-circle" style="background:var(--pw-accent);color:#fff;">+</span>
+                  <div>
+                    <div style="font-size:15.5px;font-weight:800;">📊 使用详情与规则</div>
+                    <div style="font-size:11.5px;color:var(--pw-text-secondary);margin-top:2px;">查看 24h 作息时间轴、持续推演及四级规则来源</div>
+                  </div>
+                </button>
+
+                <div class="child-action-btn" style="flex:0.85;background:var(--pw-surface-raised);flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;">
+                  ${!isAfter ? `
+                    <div style="font-size:13px;font-weight:700;color:var(--pw-success);">✓ 状态自动同步</div>
+                    <div style="font-size:11.5px;color:var(--pw-text-secondary);">今天的安排会在后台保持更新</div>
+                    <div style="font-size:11px;color:var(--pw-text-disabled);align-self:flex-end;">上次刷新：2 秒前 <span class="ux-pain-pin">重复 ③</span></div>
+                  ` : `
+                    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+                      <span style="font-size:13px;font-weight:700;color:var(--pw-text-primary);">🔐 家长控制台入口</span>
+                      <span class="pw-chip pw-chip-muted">长按 ( - ) 键</span>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--pw-text-secondary);">需验证任我玩家长密码方可调整计划或签发加时码</div>
+                  `}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="nro-footer">
+            <div class="footer-hints-left">
+              <span class="footer-hint-item"><span class="key-circle" style="border:1px solid var(--pw-border-control);">A</span> ${isAfter ? '选择聚焦项' : '🎁 输入加时码'}</span>
+              <span class="footer-hint-item"><span class="key-circle" style="border:1px solid var(--pw-border-control);">X</span> 领取自主缓冲</span>
+              <span class="footer-hint-item"><span class="key-circle" style="border:1px solid var(--pw-border-control);">+</span> 使用详情</span>
+            </div>
+            <div class="footer-hints-right">
+              <span class="footer-hint-item"><span class="key-circle" style="border:1px solid var(--pw-border-control);">-</span> 长按进家长区</span>
+              <span class="footer-hint-item"><span class="key-circle" style="border:1px solid var(--pw-border-control);">Y</span> 🔄 刷新</span>
+              <span class="footer-hint-item"><span class="key-circle" style="border:1px solid var(--pw-border-control);">B</span> 退出</span>
+            </div>
+          </div>
+        `;
+      } else if (state.nroScene === 'parent_today') {
+        banner.innerHTML = `
+          <div class="insight-box before-box">
+            <div class="insight-box-title">⚠️ 现行设计 (Before) 审视发现</div>
+            <ul class="insight-list">
+              <li><strong>左列深蓝看板与右列炭黑卡片色温割裂</strong>：深色模式下左列使用深海军蓝 <code>#172B4D</code>，底部蓝色小字「选择状态卡，按A打开对应设置」对比度不足 3:1，极难辨认。</li>
+              <li><strong>快速加时缺乏即时结果反馈</strong>：点击 <code>+15 / +30 / +60</code> 前无法在卡片上直观看到“加时后预计变成多少分钟、是否触达上限”。</li>
+            </ul>
+          </div>
+          <div class="insight-box after-box">
+            <div class="insight-box-title">✨ 优化方案 (After) 核心改进</div>
+            <ul class="insight-list">
+              <li><strong>统一双主题卡片表面层级 & 提亮可交互导引</strong>：左列看板与右侧操作托盘共享统一表面体系，底部快捷跳转提示改用高对比强调色胶囊。</li>
+              <li><strong>快速加时内联步进预览</strong>：点选 <code>+15 / +30 / +60</code> 胶囊时，卡片副标题即时动态计算并展示「当前还剩 51m → 预计变为 81m (今日总额 150m)」。</li>
+            </ul>
+          </div>
+        `;
+
+        const afterRemain = 51 + state.quickAddTier;
+        const afterTotal = 120 + state.quickAddTier;
+
+        canvas.innerHTML = `
+          <div class="nro-header">
+            <div class="nro-header-left">
+              <div class="nro-app-icon">+∴</div>
+              <div class="nro-title-block">
+                <h2>家长控制台</h2>
+                <p>今日安排 / 今天的额度调整与单次措施</p>
+              </div>
+            </div>
+            <div class="nro-header-right">
+              <div class="nro-lang-pill">🌐 中 / EN</div>
+              <div class="nro-status-capsule ${isAfter ? 'compact-after' : ''}">
+                <strong class="status-cap-time">08:16</strong>
+                <span style="color:var(--pw-text-secondary);font-size:12.5px;">7月8日 周三</span>
+                <span class="pw-chip pw-chip-accent">● 周计划</span>
+                <span class="pw-chip pw-chip-accent">🎮 掌机模式</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="nro-stage">
+            <!-- 5-Tab Track -->
+            <div class="nro-tab-track">
+              <div class="shoulder-key">L</div>
+              <div class="nro-tabs-inner">
+                <button class="nro-tab-btn active">今日安排</button>
+                <button class="nro-tab-btn" onclick="setNroScene('parent_settings')">时间计划</button>
+                <button class="nro-tab-btn" onclick="setNroScene('parent_settings')">离线加时</button>
+                <button class="nro-tab-btn" onclick="setNroScene('parent_settings')">安全与偏好</button>
+                <button class="nro-tab-btn" onclick="setNroScene('parent_settings')">支持与恢复</button>
+              </div>
+              <div class="shoulder-key">R</div>
+            </div>
+
+            <div class="parent-today-grid">
+              <!-- Left Overview Card -->
+              <div class="parent-left-status ${isAfter ? 'after-surface' : ''}">
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:15px;font-weight:700;">今天还可玩</span>
+                    <span class="pw-chip pw-chip-accent">周计划 ❯</span>
+                  </div>
+                  <div style="margin:6px 0;">
+                    <span class="hero-big-num">51</span>
+                    <span class="hero-big-unit">分钟</span>
+                  </div>
+                  <div class="hero-progress-track" style="background:var(--pw-surface-raised);">
+                    <div class="hero-progress-fill" style="background:var(--pw-success);"></div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--pw-surface-raised);color:var(--pw-text-primary);padding:8px 12px;border-radius:8px;margin-top:8px;font-size:12.5px;">
+                    <div><span style="color:var(--pw-text-secondary);">今日额度</span><br><strong>120 分钟</strong></div>
+                    <div><span style="color:var(--pw-text-secondary);">本机已用</span><br><strong>约 69 分钟</strong></div>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+                  <div class="hero-subcard" style="${isAfter ? 'background:var(--pw-surface-raised);color:var(--pw-text-primary);border-color:var(--pw-border);' : ''}">
+                    <div class="hero-subcard-top"><span>🌿 护眼休息</span><span class="pw-chip pw-chip-muted">已关闭 ❯</span></div>
+                  </div>
+                  <div class="hero-subcard" style="${isAfter ? 'background:var(--pw-surface-raised);color:var(--pw-text-primary);border-color:var(--pw-border);' : ''}">
+                    <div class="hero-subcard-top"><span>🌙 就寝时间</span><span class="pw-chip pw-chip-muted">21:30 生效 ❯</span></div>
+                  </div>
+                  <div class="hero-subcard" style="${isAfter ? 'background:var(--pw-surface-raised);color:var(--pw-text-primary);border-color:var(--pw-border);' : ''}">
+                    <div class="hero-subcard-top"><span>📺 电视模式规则</span><span class="pw-chip pw-chip-muted">未启用 ❯</span></div>
+                  </div>
+                </div>
+
+                <div style="font-size:12px;margin-top:6px;${!isAfter ? 'color:#4A80E8;' : 'color:var(--pw-accent);font-weight:700;'}">
+                  ${!isAfter ? '选择状态卡，按A打开对应设置 (深底蓝字对比度低)' : '💡 点按上方任意规则卡可直达对应计划设置'}
+                </div>
+              </div>
+
+              <!-- Right 2x2 + 2x2 Action Trays -->
+              <div class="parent-right-groups">
+                <div class="parent-group-tray">
+                  <div class="tray-header">
+                    <span>今日额度调整（仅今天） <small style="color:var(--pw-text-secondary);font-weight:500;">明日 00:00 自动恢复原计划</small></span>
+                    ${isAfter ? `<span class="ux-badge-pin">内联预计结果预览</span>` : ''}
+                  </div>
+                  <div class="tray-cards-2x2">
+                    <div class="pw-action-card">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">🕒 设置今日额度</span>
+                        <span class="pw-chip pw-chip-muted">未设置</span>
+                      </div>
+                      <div class="pw-card-sub">当前由每周计划生效 (120 分钟)</div>
+                    </div>
+
+                    <div class="pw-action-card focused">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">➕ 快速加时</span>
+                        ${isAfter ? `<span class="pw-chip pw-chip-success">预计剩 ${afterRemain}m</span>` : ''}
+                      </div>
+                      <div class="quick-tier-pills">
+                        ${[15, 30, 60].map(m => `
+                          <button class="tier-mini-btn ${state.quickAddTier === m ? 'active' : ''}"
+                                  onclick="event.stopPropagation();state.quickAddTier=${m};renderNro();">
+                            +${m}
+                          </button>
+                        `).join('')}
+                        <button class="tier-mini-btn">自定义</button>
+                      </div>
+                      ${isAfter ? `
+                        <div class="pw-card-sub" style="color:var(--pw-accent);font-weight:600;">
+                          按 A 确认增加 ${state.quickAddTier} 分钟（今日总额将变为 ${afterTotal} 分钟）
+                        </div>
+                      ` : ''}
+                    </div>
+
+                    <div class="pw-action-card">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">♾️ 今日不限时</span>
+                        <span class="pw-chip pw-chip-muted">未启用</span>
+                      </div>
+                      <div class="pw-card-sub">仅今天不限总额度；就寝与护眼照常</div>
+                    </div>
+
+                    <div class="pw-action-card disabled-card">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">🧹 清除今日调整</span>
+                        <span class="pw-chip pw-chip-muted">无需清除</span>
+                      </div>
+                      <div class="pw-card-sub">今天没有单独额度调整，无需清除</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="parent-group-tray">
+                  <div class="tray-header" style="color:var(--pw-warning);">
+                    <span>其他今日操作 <small style="color:var(--pw-text-secondary);font-weight:500;">就寝、护眼与电视模式各自独立把关</small></span>
+                  </div>
+                  <div class="tray-cards-2x2">
+                    <div class="pw-action-card">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">🌙 跳过本次就寝</span>
+                        <span class="pw-chip pw-chip-accent">今晚 21:30</span>
+                      </div>
+                      <div class="pw-card-sub">单次放行今晚 21:30–07:00 就寝窗口</div>
+                    </div>
+
+                    <div class="pw-action-card disabled-card">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">🌿 跳过本次休息</span>
+                        <span class="pw-chip pw-chip-muted">未在休息</span>
+                      </div>
+                      <div class="pw-card-sub">仅在护眼休息倒计时进行中可用</div>
+                    </div>
+
+                    <div class="pw-action-card">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">⚡ 自主缓冲</span>
+                        <span class="pw-chip pw-chip-success">今日可领 10m</span>
+                      </div>
+                      <div class="pw-card-sub">孩子可在浮窗或孩子区自主领取 1 次</div>
+                    </div>
+
+                    <div class="pw-action-card disabled-card">
+                      <div class="pw-card-top">
+                        <span class="pw-card-title">📺 今日解除电视模式限制</span>
+                        <span class="pw-chip pw-chip-muted">规则未开启</span>
+                      </div>
+                      <div class="pw-card-sub">电视模式规则未启用</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="nro-footer">
+            <div class="footer-hints-left">
+              <span class="footer-hint-item"><span class="key-circle">L</span><span class="key-circle">R</span> 切换顶栏页签</span>
+              <span class="footer-hint-item"><span class="key-circle">B</span> 返回孩子页</span>
+              <span class="footer-hint-item"><span class="key-circle">Y</span> 🔄 刷新</span>
+            </div>
+            <div class="footer-hints-right">
+              <button class="footer-pill-btn"><span class="key-circle">+</span> 📋 今日安排详情</button>
+              <button class="footer-pill-btn"><span class="key-circle">-</span> 🛡️ 限时规则裁决</button>
+            </div>
+          </div>
+        `;
+      } else {
+        // Scene 3: Settings & Dynamic Context Inspector
+        banner.innerHTML = `
+          <div class="insight-box before-box">
+            <div class="insight-box-title">⚠️ 现行设计 (Before) 审视发现</div>
+            <ul class="insight-list">
+              <li><strong>「游玩受限提醒」卡片残留旧版音效伪按钮</strong>：卡片标题是“游玩受限提醒”、右上角写“已关闭”，但卡内却画着喇叭图标和 <code>开启 | 静音</code> 两个按钮槽，语义自相矛盾。</li>
+              <li><strong>右侧说明面板静态写死</strong>：无论焦点移到哪张卡片，右侧永远只显示《【安全审计】家庭活动记录》，浪费了 38% 的黄金舞台宽度。</li>
+              <li><strong>底栏右侧常驻无关大按钮</strong>：在设置页底栏右侧依然放着两个硕大的「+ 今日安排详情」「- 限时规则」胶囊，干扰当前页操作心智。</li>
+            </ul>
+          </div>
+          <div class="insight-box after-box">
+            <div class="insight-box-title">✨ 优化方案 (After) 核心改进（点击左侧任意卡片体验右侧联动！）</div>
+            <ul class="insight-list">
+              <li><strong>清理遗留音效槽，直观外显提醒工作流</strong>：「游玩受限提醒」卡片改为展示 <code>自动浮窗详情 → 简要提示后备</code> 状态链，并提示按 <code>X</code> 键快捷开关。</li>
+              <li><strong>右侧升级为「焦点联动动态预览面板 (Dynamic Context Inspector)」</strong>：光标移到哪张设置卡，右侧即时展示该功能的详细配置摘要、安全说明与快捷操作入口！</li>
+              <li><strong>补齐「配置备份与导入 / 界面语言」直达入口 & 底栏上下文收敛</strong>。</li>
+            </ul>
+          </div>
+        `;
+
+        const settingsCards = [
+          {
+            title: '🔑 修改家长密码',
+            badge: '已启用',
+            badgeClass: 'pw-chip-success',
+            subBefore: '当前已启用',
+            subAfter: '4–64 位独立数字密码 · 连续 5 次输错触发冷却保护',
+            inspectorTag: '【权限与认证安全】',
+            inspectorTitle: '任我玩家长密码 (独立于官方 PIN)',
+            inspectorBullets: [
+              '仅用于保护任我玩家长控制台、浮窗家长快捷操作与配置备份恢复。',
+              '支持手柄左右摇杆八方向盲输（防孩子旁观识破）及触屏数字键盘。',
+              '连续第 5 次输错自动进入递增冷却倒计时，重开应用不会重置冷却。'
+            ],
+            inspectorAction: '按 A 修改家长密码'
+          },
+          {
+            title: '🔔 游玩受限提醒',
+            badge: '已开启',
+            badgeClass: 'pw-chip-accent',
+            subBefore: '<div style="display:flex;gap:6px;margin-top:4px;"><span class="pw-chip pw-chip-muted">开启</span><span class="pw-chip pw-chip-muted">静音</span> <span class="ux-pain-pin">遗留喇叭/静音槽</span></div>',
+            subAfter: '优先展开浮窗详情 · 后备左上角简要提示 (按 X 快切)',
+            inspectorTag: '【实验特性 · 自动原因通知】',
+            inspectorTitle: '玩不了时自动告诉孩子原因',
+            inspectorBullets: [
+              '详细说明优先：当任我玩浮窗已加载并隐藏时，受限瞬间自动展开原因与倒计时。',
+              '简要提示后备：未就绪时通过 Ultrahand 通知在屏幕左上角短暂提示剩余时间与快捷键。',
+              '安全隔离：绝不打断密码或加时码输入，仅控制提醒展示，不改变任何限制规则。'
+            ],
+            inspectorAction: '按 A 检查提醒环境与测试 · 按 X 快捷开关'
+          },
+          {
+            title: '🎮 家长区入口与快捷键',
+            badge: '减号键 (-)',
+            badgeClass: 'pw-chip-muted',
+            subBefore: '当前：减号键 (-)',
+            subAfter: '孩子区长按 (-) 进入家长区 · 浮窗快捷键 L+↓+R3',
+            inspectorTag: '【操控与防误触】',
+            inspectorTitle: '家长区呼出方式与预设组合',
+            inspectorBullets: [
+              '支持预设单键或组合键，避免孩子在首页高频误触弹出密码框。',
+              '同时展示当前 SD 卡中配置的 Tesla / Ultrahand 浮窗呼出快捷键回读状态。'
+            ],
+            inspectorAction: '按 A 更换家长区快捷键预设'
+          },
+          {
+            title: '📊 家庭活动与兑换记录',
+            badge: '最近 200 条',
+            badgeClass: 'pw-chip-muted',
+            subBefore: '最近 200 条',
+            subAfter: '今日已加时 1 次 (+30m) · 7天本机累计 350 分钟',
+            inspectorTag: '【本机安全审计】',
+            inspectorTitle: '家庭活动记录与离线码账本',
+            inspectorBullets: [
+              '完整记录额度修改、8 位加时码兑换、自主缓冲领取、就寝跳过与系统保护事件。',
+              '所有审计日志 100% 存储在 Switch 本地 SD 卡，绝不上传任何外部服务器。',
+              '支持按类型筛选及 L / R 快捷翻页核对。'
+            ],
+            inspectorAction: '按 A 查看完整活动与兑换记录'
+          },
+          {
+            title: '🛡️ 相册与自制程序入口保护',
+            badge: '未开启',
+            badgeClass: 'pw-chip-warning',
+            subBefore: '当前未开启',
+            subAfter: '限制通过相册直接启动未授权 Homebrew 自制程序',
+            inspectorTag: '【防绕过加固】',
+            inspectorTitle: '自制程序菜单 (hbmenu) 入口接管',
+            inspectorBullets: [
+              '防止孩子按住 R 打开相册进入 Homebrew Menu 删改文件或运行其他工具。',
+              '自动维护 override_config.ini 事务备份，卸载前可一键完整恢复原启动方式。'
+            ],
+            inspectorAction: '按 A 配置相册防绕过保护'
+          },
+          {
+            title: '🎨 外观主题与界面语言',
+            badge: `${state.pwTheme === 'light' ? '浅色' : '深色'} · ${state.pwStyle === 'slate' ? '石墨' : state.pwStyle === 'indigo' ? '纸墨' : state.pwStyle === 'teal' ? '雾青' : '暮霭'}`,
+            badgeClass: 'pw-chip-accent',
+            subBefore: '<div style="display:flex;gap:4px;margin-top:4px;"><span class="pw-chip pw-chip-muted">系统</span><span class="pw-chip pw-chip-muted">浅色</span><span class="pw-chip pw-chip-accent">暗色</span></div>',
+            subAfter: '4 套东方微几何配色 × 浅/暗模式 · 简/繁/EN 三语即时切换',
+            inspectorTag: '【视觉与本地化】',
+            inspectorTitle: '双主题四风格调色板与多语言',
+            inspectorBullets: [
+              '内置石墨、纸墨、雾青、暮霭四套高可读性主题，移动焦点即可全屏实时预览。',
+              '支持简体中文、繁體中文、English 与系统语言解耦切换，全端动态文本测量防溢出。'
+            ],
+            inspectorAction: '按 A 打开整页外观与语言设置'
+          }
+        ];
+
+        const activeCard = isAfter ? settingsCards[state.focusedSettingIdx] : settingsCards[3];
+
+        canvas.innerHTML = `
+          <div class="nro-header">
+            <div class="nro-header-left">
+              <div class="nro-app-icon">+∴</div>
+              <div class="nro-title-block">
+                <h2>家长控制台</h2>
+                <p>安全与偏好 / 本地规则与设备安全设置</p>
+              </div>
+            </div>
+            <div class="nro-header-right">
+              <div class="nro-lang-pill">🌐 中 / EN</div>
+              <div class="nro-status-capsule ${isAfter ? 'compact-after' : ''}">
+                <strong class="status-cap-time">08:16</strong>
+                <span style="color:var(--pw-text-secondary);font-size:12.5px;">今天还可玩：<strong style="color:var(--pw-success);">51 分钟</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="nro-stage">
+            <div class="nro-tab-track">
+              <div class="shoulder-key">L</div>
+              <div class="nro-tabs-inner">
+                <button class="nro-tab-btn" onclick="setNroScene('parent_today')">今日安排</button>
+                <button class="nro-tab-btn">时间计划</button>
+                <button class="nro-tab-btn">离线加时</button>
+                <button class="nro-tab-btn active">安全与偏好</button>
+                <button class="nro-tab-btn">支持与恢复</button>
+              </div>
+              <div class="shoulder-key">R</div>
+            </div>
+
+            <div class="settings-stage-grid">
+              <!-- Left 6-Card Grid -->
+              <div class="settings-6grid">
+                ${settingsCards.map((c, idx) => `
+                  <div class="pw-action-card ${state.focusedSettingIdx === idx ? 'focused' : ''}"
+                       onclick="state.focusedSettingIdx=${idx};renderNro();">
+                    <div class="pw-card-top">
+                      <span class="pw-card-title">${c.title}</span>
+                      <span class="pw-chip ${c.badgeClass}">${c.badge}</span>
+                    </div>
+                    <div class="pw-card-sub">
+                      ${isAfter ? c.subAfter : c.subBefore}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+
+              <!-- Right Inspector Panel -->
+              <div class="inspector-pane">
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:12px;font-weight:700;color:var(--pw-accent);">${activeCard.inspectorTag}</span>
+                    ${isAfter ? `<span class="ux-badge-pin">焦点实时联动 Inspector</span>` : `<span class="ux-pain-pin">静态写死不变</span>`}
+                  </div>
+                  <h3 style="font-size:20px;font-weight:800;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--pw-border);">
+                    ${activeCard.inspectorTitle}
+                  </h3>
+                  <ul style="padding-left:18px;font-size:13px;color:var(--pw-text-secondary);display:flex;flex-direction:column;gap:8px;line-height:1.55;">
+                    ${activeCard.inspectorBullets.map(b => `<li>${b}</li>`).join('')}
+                  </ul>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <button class="footer-pill-btn" style="width:100%;justify-content:center;padding:10px;background:var(--pw-accent);color:var(--pw-on-accent);border:none;">
+                    ${activeCard.inspectorAction}
+                  </button>
+                  <div style="font-size:11.5px;color:var(--pw-text-disabled);display:flex;justify-content:space-between;">
+                    <span>离开时按 B 返回孩子页并自动锁定</span>
+                    <span>按 Y 刷新设备状态</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="nro-footer">
+            <div class="footer-hints-left">
+              <span class="footer-hint-item"><span class="key-circle">L</span><span class="key-circle">R</span> 切换页签</span>
+              <span class="footer-hint-item"><span class="key-circle">A</span> 进入所选设置</span>
+              ${isAfter && state.focusedSettingIdx === 1 ? `<span class="footer-hint-item" style="color:var(--pw-accent);"><span class="key-circle">X</span> 快捷开关受限提醒</span>` : ''}
+              <span class="footer-hint-item"><span class="key-circle">B</span> 返回孩子页</span>
+            </div>
+            <div class="footer-hints-right">
+              ${!isAfter ? `
+                <button class="footer-pill-btn"><span class="key-circle">+</span> 📋 今日安排详情 <span class="ux-pain-pin">跨页干扰</span></button>
+                <button class="footer-pill-btn"><span class="key-circle">-</span> 🛡️ 限时规则</button>
+              ` : `
+                <span class="footer-hint-item" style="font-size:12px;color:var(--pw-text-secondary);"><span class="key-circle">+</span> 今日详情 · <span class="key-circle">-</span> 限时规则 <span class="ux-badge-pin">轻量收敛</span></span>
+              `}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    /* =====================================================================
+       3. RENDER TESLA OVERLAY SCENES (SIDE-BY-SIDE BEFORE & AFTER)
+       ===================================================================== */
+    function pressOvlKey(k) {
+      if (k === 'back') {
+        state.ovlDigits.pop();
+      } else if (k === 'clear') {
+        state.ovlDigits = [];
+      } else if (state.ovlDigits.length < 8) {
+        state.ovlDigits.push(String(k));
+      }
+      renderOverlay();
+    }
+
+    function renderOverlay() {
+      const container = document.getElementById('overlayComparisonStage');
+
+      if (state.ovlScene === 'restricted') {
+        container.innerHTML = `
+          <!-- BEFORE: Restricted Overlay -->
+          <div class="overlay-device-col">
+            <span class="overlay-frame-badge badge-before">⚠️ 现行设计 (Before) · 中下部 200px 空洞 & 家长入口隐蔽</span>
+            <div class="tesla-panel">
+              <div class="tesla-body">
+                <div class="ovl-banner danger-banner">
+                  <div class="ovl-top-bar">
+                    <span style="color:#BBBBBB;">自律约定 · <strong style="color:#88AAEE;">任我玩</strong></span>
+                    <div class="ovl-top-btns">
+                      <span class="ovl-mini-btn">文A</span>
+                      <span class="ovl-mini-btn focused">R 家长区</span>
+                      <span class="ovl-mini-btn">Y 刷新</span>
+                    </div>
+                  </div>
+                  <div class="ovl-hero-title">掌机时间用完啦</div>
+                  <div style="font-size:17px;font-weight:700;color:#EEEEEE;margin-bottom:6px;">放回底座连电视，就能继续玩</div>
+                  <div style="font-size:13px;color:#BBBBBB;line-height:1.45;">
+                    掌机和电视共用今日额度。掌机用尽后接电视继续，其他限制仍生效。
+                  </div>
+                </div>
+
+                <div style="font-size:13.5px;color:#BBBBBB;padding:2px 4px;">
+                  想继续玩，请找爸爸妈妈 <span class="ux-pain-pin">下方却无操作入口</span>
+                </div>
+
+                <div style="font-size:12.5px;color:#888888;border-bottom:1px solid #333;padding-bottom:4px;">其他规则</div>
+                <div style="display:flex;justify-content:space-between;font-size:15px;color:#777777;padding:4px 8px;">
+                  <span>● 护眼</span><span>当前关闭</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:15px;color:#777777;padding:4px 8px;">
+                  <span>● 就寝</span><span>当前关闭</span>
+                </div>
+
+                <!-- 200px Dead Black Space -->
+                <div style="flex:1;border:1px dashed rgba(240,136,62,0.4);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#ffb77c;font-size:12.5px;background:rgba(240,136,62,0.05);margin:8px 0;">
+                  ⚠️ Y=360..580 约 200px 纯黑空白区<br>（家长找不到右上角 24px 的“R 家长区”小按钮）
+                </div>
+
+                <div style="border:1px solid #443333;background:#1c1414;border-radius:6px;padding:10px 12px;display:flex;justify-content:space-between;font-size:13.5px;">
+                  <span style="color:#BBBBBB;">命令与状态</span>
+                  <span style="color:#88AAEE;">查看详情 (-)</span>
+                </div>
+              </div>
+              <div class="tesla-footer">
+                <div><strong>B</strong> 返回 &nbsp;&nbsp; <strong>A</strong> 确定</div>
+                <div>12:34</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AFTER: Restricted Overlay -->
+          <div class="overlay-device-col">
+            <span class="overlay-frame-badge badge-after">✨ 优化方案 (After) · 场景化双路径恢复指引 & 醒目动作卡</span>
+            <div class="tesla-panel">
+              <div class="tesla-body">
+                <div class="ovl-banner danger-banner">
+                  <div class="ovl-top-bar">
+                    <span style="color:#BBBBBB;">自律约定 · <strong style="color:#88AAEE;">任我玩</strong></span>
+                    <div class="ovl-top-btns">
+                      <span class="ovl-mini-btn">文A</span>
+                      <span class="ovl-mini-btn">R 家长</span>
+                      <span class="ovl-mini-btn">Y 刷新</span>
+                    </div>
+                  </div>
+                  <div class="ovl-hero-title">掌机时间用完啦</div>
+                  <div style="font-size:16.5px;font-weight:700;color:#EEEEEE;margin-bottom:6px;">放回底座连电视，就能继续玩</div>
+                  <div style="display:flex;gap:8px;margin-top:8px;">
+                    <span style="background:rgba(0,0,0,0.35);padding:3px 9px;border-radius:4px;font-size:12px;color:#EE8899;border:1px solid #882233;">掌机剩余：0 分钟</span>
+                    <span style="background:rgba(17,51,34,0.85);padding:3px 9px;border-radius:4px;font-size:12px;color:#77CC99;border:1px solid #336644;">电视总余额：还剩 51 分钟</span>
+                  </div>
+                </div>
+
+                <!-- New Contextual Recovery Guide Card filling the void meaningfully -->
+                <div style="font-size:12.5px;color:#88AAEE;font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-top:2px;">
+                  <span>怎么继续玩？（任选一种方式）</span>
+                  <span class="ux-badge-pin">消除黑洞 · 明确下一步</span>
+                </div>
+
+                <div style="background:#16241c;border:1.5px solid #336644;border-radius:8px;padding:11px 12px;display:flex;flex-direction:column;gap:4px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:15px;font-weight:800;color:#77CC99;">① 孩子自救：插回电视底座</span>
+                    <span style="font-size:11.5px;background:#113322;color:#77CC99;padding:2px 6px;border-radius:4px;">无需密码</span>
+                  </div>
+                  <div style="font-size:12.5px;color:#BBBBBB;line-height:1.4;">
+                    将 Switch 放入电视底座，大屏模式会自动解除限制，可继续游玩今日剩余的 <strong>51 分钟</strong>。
+                  </div>
+                </div>
+
+                <div style="background:#1b2636;border:2px solid #88AAEE;border-radius:8px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;"
+                     onclick="setOvlScene('parent')">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:15px;font-weight:800;color:#EEEEEE;">② 爸爸妈妈授权：今日解除掌机限制</span>
+                    <span style="font-size:12px;background:#2F5FD0;color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;">按 R 或 A ❯</span>
+                  </div>
+                  <div style="font-size:12.5px;color:#BBBBBB;">
+                    验证任我玩家长密码后，今天在掌机上也能继续用完剩余总额度。
+                  </div>
+                </div>
+
+                <div style="font-size:12px;color:#888888;border-bottom:1px solid #2a2a2a;padding-bottom:3px;margin-top:2px;">其他守护规则（均正常放行）</div>
+                <div style="display:flex;justify-content:space-between;font-size:13.5px;color:#888888;padding:2px 6px;">
+                  <span>○ 护眼休息 · 当前关闭</span>
+                  <span>○ 就寝计划 · 今晚 21:30</span>
+                </div>
+
+                <div style="margin-top:auto;border:1px solid #333333;background:#181818;border-radius:6px;padding:9px 12px;display:flex;justify-content:space-between;font-size:13px;">
+                  <span style="color:#BBBBBB;">状态与本机使用详情</span>
+                  <span style="color:#88AAEE;">按 (-) 查看 ❯</span>
+                </div>
+              </div>
+              <div class="tesla-footer">
+                <div><strong>B</strong> 返回 &nbsp;&nbsp; <strong>A</strong> 进入家长解限</div>
+                <div>12:34</div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (state.ovlScene === 'code') {
+        const len = state.ovlDigits.length;
+        const isReady = len === 8;
+
+        container.innerHTML = `
+          <!-- BEFORE: 8-digit Code Entry -->
+          <div class="overlay-device-col">
+            <span class="overlay-frame-badge badge-before">⚠️ 现行设计 (Before) · 8 格连排无锚点 & 提交栏辨识度弱</span>
+            <div class="tesla-panel">
+              <div class="tesla-body">
+                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333;padding-bottom:8px;">
+                  <span style="font-size:14px;"><strong style="color:#88AAEE;">|</strong> 任我玩 &gt; <strong>加时码</strong></span>
+                  <span class="ovl-mini-btn" style="padding:4px 14px;">Y 刷新</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:15px;">
+                  <span style="color:#77CC99;font-weight:700;">25 分钟</span>
+                  <span style="color:#BBBBBB;font-size:13px;">刚刚刷新</span>
+                </div>
+
+                <!-- 8 ungrouped identical slots -->
+                <div class="ovl-slots-row">
+                  ${[0,1,2,3,4,5,6,7].map(i => {
+                    const ch = state.ovlDigits[i] || '';
+                    const isCur = i === len;
+                    return `<div class="ovl-slot ${isCur ? 'active-slot' : ''}">${ch || (isCur ? '_' : '|')}</div>`;
+                  }).join('')}
+                </div>
+                <div style="font-size:12.5px;color:#BBBBBB;line-height:1.4;">
+                  已输入 ${len}/8 位 <span class="ux-pain-pin">第4/5位容易看串格</span><br>
+                  主机今天 2026-10-05
+                </div>
+
+                <div class="ovl-keypad-grid">
+                  ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="ovl-key ${n===1?'focused':''}" onclick="pressOvlKey(${n})">${n}</button>`).join('')}
+                  <button class="ovl-key" style="color:#EEBB66;font-size:15px;" onclick="pressOvlKey('back')">X 退格</button>
+                  <button class="ovl-key" onclick="pressOvlKey(0)">0</button>
+                  <button class="ovl-key" style="color:#EE8899;font-size:15px;" onclick="pressOvlKey('clear')">清空</button>
+                </div>
+
+                <div class="ovl-submit-btn">
+                  ${isReady ? '+ 核对加时码' : '请输入 8 位加时码'}
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:8px;margin-top:auto;">
+                  <button class="ovl-key" style="height:40px;font-size:15px;">B 取消</button>
+                  <button class="ovl-key focused" style="height:40px;font-size:15px;">R 家长区</button>
+                </div>
+              </div>
+              <div class="tesla-footer">
+                <div><strong>B</strong> 返回 &nbsp;&nbsp; <strong>A</strong> 确定</div>
+                <div>12:34</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AFTER: 8-digit Code Entry (4-4 Grouped + Interactive!) -->
+          <div class="overlay-device-col">
+            <span class="overlay-frame-badge badge-after">✨ 优化方案 (After) · 4-4 分组插槽 & 动态发光提交键（可点击键盘试输！）</span>
+            <div class="tesla-panel">
+              <div class="tesla-body">
+                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333;padding-bottom:8px;">
+                  <span style="font-size:14px;"><strong style="color:#88AAEE;">|</strong> 任我玩 &gt; <strong>加时码</strong></span>
+                  <span class="ovl-mini-btn" style="padding:4px 12px;">Y 刷新</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;">
+                  <span>当前还可玩：<strong style="color:#77CC99;font-size:16px;">25 分钟</strong></span>
+                  <span style="color:#BBBBBB;font-size:12px;">📅 主机日期 10-05</span>
+                </div>
+
+                <!-- 4-4 Grouped Slots with middle separator -->
+                <div class="ovl-slots-row grouped-4x4">
+                  ${[0,1,2,3].map(i => {
+                    const ch = state.ovlDigits[i] || '';
+                    const isCur = i === len;
+                    return `<div class="ovl-slot ${isCur ? 'active-slot' : (ch ? 'filled-slot' : '')}">${ch || (isCur ? '_' : '·')}</div>`;
+                  }).join('')}
+                  <span class="ovl-slot-sep">-</span>
+                  ${[4,5,6,7].map(i => {
+                    const ch = state.ovlDigits[i] || '';
+                    const isCur = i === len;
+                    return `<div class="ovl-slot ${isCur ? 'active-slot' : (ch ? 'filled-slot' : '')}">${ch || (isCur ? '_' : '·')}</div>`;
+                  }).join('')}
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#BBBBBB;">
+                  <span>已输入 <strong>${len} / 8</strong> 位 ${isReady ? '✓ 可提交' : `（还差 ${8-len} 位）`}</span>
+                  <span class="ux-badge-pin">4-4 分段防串格</span>
+                </div>
+
+                <div class="ovl-keypad-grid">
+                  ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="ovl-key" onclick="pressOvlKey(${n})">${n}</button>`).join('')}
+                  <button class="ovl-key" style="color:#EEBB66;font-size:15px;" onclick="pressOvlKey('back')">X 退格</button>
+                  <button class="ovl-key" onclick="pressOvlKey(0)">0</button>
+                  <button class="ovl-key" style="color:#EE8899;font-size:15px;" onclick="pressOvlKey('clear')">清空</button>
+                </div>
+
+                <button class="ovl-submit-btn ${isReady ? 'ready-glow' : ''}"
+                        onclick="${isReady ? 'alert(\'✅ 进入两阶段非消费预览：面额 +30 分钟，兑换后预计剩余 55 分钟！\')' : ''}">
+                  ${isReady ? '⊕ 按 (+) 或点此立即核对加时码 ❯' : `⏳ 请再输入 ${8-len} 位数字（与家长网页 4-4 格式对应）`}
+                </button>
+
+                <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:8px;margin-top:auto;">
+                  <button class="ovl-key" style="height:40px;font-size:14.5px;" onclick="setOvlScene('restricted')">B 返回概览</button>
+                  <button class="ovl-key" style="height:40px;font-size:14.5px;border-color:#88AAEE;color:#88AAEE;" onclick="setOvlScene('parent')">R 家长快捷区</button>
+                </div>
+              </div>
+              <div class="tesla-footer">
+                <div><strong>B</strong> 返回 &nbsp;&nbsp; <strong>A</strong> 输入数字</div>
+                <div>12:34</div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        // Overlay Scene 3: Parent Quick Actions
+        container.innerHTML = `
+          <!-- BEFORE: Parent Actions List -->
+          <div class="overlay-device-col">
+            <span class="overlay-frame-badge badge-before">⚠️ 现行设计 (Before) · 顶部文字被半截腰斩 & 4 张不可用灰卡霸屏</span>
+            <div class="tesla-panel">
+              <div class="tesla-body">
+                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333;padding-bottom:8px;">
+                  <span style="font-size:14px;"><strong style="color:#88AAEE;">|</strong> 任我玩 &gt; <strong>家长区</strong></span>
+                  <span class="ovl-mini-btn" style="padding:4px 12px;">Y 刷新</span>
+                </div>
+
+                <!-- Simulated clipped card at top of scroll viewport -->
+                <div style="background:#16222f;border:1px solid #334455;border-radius:6px;padding:0 12px 8px;height:28px;overflow:hidden;position:relative;">
+                  <div style="margin-top:-10px;font-size:16px;font-weight:700;">♾️ 今日不限时 <span class="ux-pain-pin">滚动半截腰斩</span></div>
+                </div>
+
+                <div style="font-size:13px;color:#EEBB66;font-weight:700;margin-top:4px;">| 现在受限的规则</div>
+                <div style="font-size:12px;color:#999;">临时放开就寝、护眼或电视限制</div>
+
+                <div style="background:#151d26;border:1px solid #2b3947;border-radius:6px;padding:12px;color:#667788;">
+                  <div style="font-size:16px;font-weight:700;">🌙 跳过本次就寝</div>
+                  <div style="font-size:13px;margin-top:4px;">没有可跳过的就寝窗口</div>
+                </div>
+
+                <div style="background:#151d26;border:1px solid #2b3947;border-radius:6px;padding:12px;color:#667788;">
+                  <div style="font-size:16px;font-weight:700;">👁️ 跳过本次休息</div>
+                  <div style="font-size:13px;margin-top:4px;">护眼已关闭，请在时间计划中开启</div>
+                </div>
+
+                <div style="background:#151d26;border:1px solid #2b3947;border-radius:6px;padding:12px;color:#667788;">
+                  <div style="font-size:16px;font-weight:700;">🌙 恢复本次就寝</div>
+                  <div style="font-size:13px;margin-top:4px;">本次就寝未跳过</div>
+                </div>
+
+                <div style="background:#151d26;border:1px solid #2b3947;border-radius:6px;padding:12px;color:#667788;">
+                  <div style="font-size:16px;font-weight:700;">🌙 关闭就寝计划</div>
+                  <div style="font-size:13px;margin-top:4px;">就寝计划未开启</div>
+                </div>
+
+                <div style="background:#1e3042;border:2px solid #88AAEE;border-radius:6px;padding:10px 12px;color:#EEEEEE;">
+                  <div style="font-size:16px;font-weight:700;">📺 今日解除电视模式限制 <span class="ux-pain-pin">被挤在最底</span></div>
+                </div>
+
+                <div style="border:1px solid #443333;background:#241a1a;border-radius:6px;padding:10px;text-align:center;color:#AABBCC;font-size:14px;margin-top:auto;">
+                  A 执行; Y 刷新; B 返回
+                </div>
+              </div>
+              <div class="tesla-footer">
+                <div><strong>B</strong> 返回 &nbsp;&nbsp; <strong>A</strong> 确定</div>
+                <div>12:34</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AFTER: Parent Actions List -->
+          <div class="overlay-device-col">
+            <span class="overlay-frame-badge badge-after">✨ 优化方案 (After) · 当前触发限制智能置顶 + 闲置项单行折叠</span>
+            <div class="tesla-panel">
+              <div class="tesla-body">
+                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333;padding-bottom:8px;">
+                  <span style="font-size:14px;"><strong style="color:#88AAEE;">|</strong> 任我玩 &gt; <strong>家长区 · 快捷操作</strong></span>
+                  <span class="ovl-mini-btn" style="padding:4px 12px;">Y 刷新</span>
+                </div>
+
+                <!-- Pinned Context Banner + Top Priority Action -->
+                <div style="font-size:12.5px;color:#EE8899;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+                  <span>🔥 当前正在生效的限制（优先处理）</span>
+                  <span class="ux-badge-pin">智能置顶</span>
+                </div>
+
+                <div style="background:#261a24;border:2px solid #EE8899;border-left:5px solid #EE8899;border-radius:8px;padding:11px 12px;cursor:pointer;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:16.5px;font-weight:800;color:#FFFFFF;">📺 今日解除电视模式限制</span>
+                    <span style="font-size:11.5px;background:#EE8899;color:#111;padding:2px 7px;border-radius:4px;font-weight:800;">按 A 立即解除</span>
+                  </div>
+                  <div style="font-size:12.5px;color:#EEBBAA;margin-top:4px;">
+                    掌机额度已用尽 · 解除后今天掌机可继续使用剩余的 51 分钟总额度
+                  </div>
+                </div>
+
+                <!-- Group 1: Today's Quota -->
+                <div style="font-size:12.5px;color:#88AAEE;font-weight:700;margin-top:4px;">| 今日额度调整（仅今天生效）</div>
+
+                <div style="background:#182432;border:1.5px solid #446688;border-radius:7px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="font-size:15.5px;font-weight:700;color:#EEEEEE;">➕ 快速加时</div>
+                    <div style="font-size:12px;color:#AABBCC;">左右键调整 · 当前剩余 51m → 81m</div>
+                  </div>
+                  <span style="font-size:15px;font-weight:800;color:#77CC99;background:#113322;padding:4px 10px;border-radius:6px;border:1px solid #336644;">◀ +30 分钟 ▶</span>
+                </div>
+
+                <div style="background:#182432;border:1px solid #334455;border-radius:7px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;">
+                  <span style="font-size:15px;font-weight:700;color:#EEEEEE;">♾️ 今日不限时</span>
+                  <span style="font-size:12px;color:#EEBB66;">长按 A 1秒确认</span>
+                </div>
+
+                <!-- Collapsed Idle Rules (Compact 1-liners instead of 4 giant dead boxes!) -->
+                <div style="font-size:12px;color:#777777;font-weight:700;margin-top:4px;display:flex;justify-content:space-between;">
+                  <span>| 当前无需操作的规则（已自动紧凑折叠）</span>
+                  <span class="ux-badge-pin">省出 45% 空间</span>
+                </div>
+
+                <div style="background:#16181c;border:1px solid #282c34;border-radius:6px;padding:7px 10px;display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:#777777;">
+                  <div style="display:flex;justify-content:space-between;"><span>🌙 跳过 / 恢复 / 关闭就寝</span><span>就寝计划未开启</span></div>
+                  <div style="display:flex;justify-content:space-between;border-top:1px solid #222;padding-top:4px;"><span>🌿 跳过本次护眼休息</span><span>当前未在休息中</span></div>
+                </div>
+
+                <!-- Danger Recovery at Bottom -->
+                <div style="background:#261418;border:1px solid #662233;border-radius:6px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;margin-top:auto;">
+                  <span style="font-size:13.5px;font-weight:700;color:#EE8899;">⚠️ 恢复安装前设置并停用</span>
+                  <span style="font-size:11.5px;color:#BBBBBB;">长按 A 1秒</span>
+                </div>
+              </div>
+              <div class="tesla-footer">
+                <div><strong>B</strong> 返回 &nbsp;&nbsp; <strong>A</strong> 执行所选动作</div>
+                <div>12:34</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    /* =====================================================================
+       4. RENDER PARENT WEB PAGE (SIDE-BY-SIDE BEFORE & AFTER)
+       ===================================================================== */
+    function generateDemoWebCode() {
+      const rand4a = String(Math.floor(1000 + Math.random() * 9000));
+      const rand4b = String(Math.floor(1000 + Math.random() * 9000));
+      state.webCurrentCode = rand4a + rand4b;
+      const now = new Date();
+      const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      const devLabel = state.webDevice === 'kid-switch-oled' ? '小明的 Switch OLED' : '客厅的 Switch 底座机';
+      state.webHistory.unshift({
+        time: hhmm,
+        minutes: state.webMinutes,
+        code: `${rand4a} - ${rand4b}`,
+        device: devLabel
+      });
+      renderWeb();
+    }
+
+    function renderWeb() {
+      const container = document.getElementById('webComparisonStage');
+      const c1 = state.webCurrentCode.slice(0, 4);
+      const c2 = state.webCurrentCode.slice(4, 8);
+      const devLabel = state.webDevice === 'kid-switch-oled' ? '小明的 Switch OLED (kid-switch-1)' : '客厅的 Switch 底座机 (living-switch)';
+
+      container.innerHTML = `
+        <!-- BEFORE: Current Parent Web Page -->
+        <div class="overlay-device-col">
+          <span class="overlay-frame-badge badge-before">⚠️ 现行设计 (Before) · 低频配对说明霸占首屏 & 下拉框选时长慢</span>
+          <div class="phone-mockup">
+            <div class="web-header">
+              <div>
+                <div style="font-size:11px;font-weight:800;color:var(--pw-accent);">PLAYWISE</div>
+                <strong style="font-size:17px;">任我玩</strong>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <span class="pw-chip pw-chip-muted">🌐 English</span>
+                <span class="pw-chip pw-chip-accent">可离线使用</span>
+              </div>
+            </div>
+
+            <div class="web-body">
+              <div class="web-card">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;">
+                  <div>
+                    <h2 style="font-size:22px;font-weight:800;">生成今日加时码</h2>
+                    <div style="font-size:12px;color:var(--pw-accent);font-weight:700;">Play Wise. Play More.</div>
+                    <p style="font-size:12px;color:var(--pw-text-secondary);margin-top:4px;">
+                      加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。
+                    </p>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+                    <span class="pw-chip pw-chip-muted" style="padding:5px 8px;">下载单文件离线版</span>
+                    <span class="pw-chip pw-chip-muted" style="padding:5px 8px;">安装到设备</span>
+                  </div>
+                </div>
+
+                <!-- Huge Static Pairing Box occupying top of screen every single time -->
+                <div style="background:var(--pw-surface-raised);border:1px solid var(--pw-border);border-radius:10px;padding:12px;margin-bottom:14px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <strong style="font-size:14px;">配对 Switch <span class="ux-pain-pin">已配对后仍常驻首屏</span></strong>
+                    <span class="pw-chip pw-chip-muted">导入配置文件</span>
+                  </div>
+                  <p style="font-size:11.5px;color:var(--pw-text-secondary);line-height:1.45;">
+                    可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码...
+                  </p>
+                </div>
+
+                <!-- Raw Inputs exposed every time -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                  <div>
+                    <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Switch 设备 ID</label>
+                    <input value="kid-switch-1" readonly style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--pw-border-control);background:var(--pw-surface);color:var(--pw-text-primary);font-size:13px;">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">加时密钥</label>
+                    <input type="password" value="1234567890" readonly style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--pw-border-control);background:var(--pw-surface);color:var(--pw-text-primary);font-size:13px;">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">生效日期</label>
+                    <input value="2026-11-18" readonly style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--pw-border-control);background:var(--pw-surface);color:var(--pw-text-primary);font-size:13px;">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">加时时长 <span class="ux-pain-pin">30项下拉框</span></label>
+                    <select style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--pw-border-control);background:var(--pw-surface);color:var(--pw-text-primary);font-size:13px;">
+                      <option>30 分钟</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--pw-accent);color:var(--pw-on-accent);font-weight:700;font-size:14px;">
+                  生成 8 位数字加时码
+                </button>
+
+                <!-- Unsegmented 8 digits -->
+                <div style="margin-top:14px;background:var(--pw-success-soft);border:1px solid var(--pw-success-border);border-radius:10px;padding:12px;text-align:center;">
+                  <div style="font-size:12px;color:var(--pw-text-secondary);">请把下面的数字告诉孩子</div>
+                  <div style="font-family:monospace;font-size:32px;font-weight:800;color:var(--pw-accent);letter-spacing:2px;margin:4px 0;">
+                    ${state.webCurrentCode} <span class="ux-pain-pin" style="font-size:11px;letter-spacing:0;">8位连写难读</span>
+                  </div>
+                  <div style="font-size:11.5px;color:var(--pw-text-secondary);">2026-11-18 · +${state.webMinutes} 分钟</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AFTER: Optimized Parent Web Workbench -->
+        <div class="overlay-device-col">
+          <span class="overlay-frame-badge badge-after">✨ 优化方案 (After) · 已配对胶囊 + 快捷时长芯片 + 4-4票据 + 今日记录</span>
+          <div class="phone-mockup">
+            <div class="web-header">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="nro-app-icon" style="width:32px;height:32px;font-size:14px;border-radius:8px;">+∴</div>
+                <div>
+                  <strong style="font-size:16px;">任我玩 · 家长发码台</strong>
+                  <div style="font-size:11px;color:var(--pw-success);font-weight:700;">● 纯本地签名 · 零网络传输</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <span class="pw-chip pw-chip-muted">🌐 中/EN</span>
+              </div>
+            </div>
+
+            <div class="web-body">
+              <!-- 1. Compact Paired Switch Switcher Pill -->
+              <div class="paired-device-bar">
+                <div>
+                  <div style="font-size:11px;color:var(--pw-text-secondary);font-weight:600;">
+                    当前发码目标主机 <span class="ux-badge-pin">支持多机一键切换</span>
+                  </div>
+                  <div style="font-size:14px;font-weight:800;color:var(--pw-text-primary);margin-top:2px;">
+                    🎮 ${devLabel}
+                  </div>
+                </div>
+                <select onchange="state.webDevice=this.value;renderWeb();"
+                        style="padding:6px 10px;border-radius:8px;border:1px solid var(--pw-border-control);background:var(--pw-surface-raised);color:var(--pw-text-primary);font-size:12px;font-weight:700;">
+                  <option value="kid-switch-oled" ${state.webDevice==='kid-switch-oled'?'selected':''}>切换：小明的 OLED</option>
+                  <option value="living-switch" ${state.webDevice==='living-switch'?'selected':''}>切换：客厅底座机</option>
+                </select>
+              </div>
+
+              <!-- 2. High-Frequency Workbench Card -->
+              <div class="web-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                  <label style="font-size:13px;font-weight:800;">① 选择加时时长（点击即选）</label>
+                  <span class="ux-badge-pin">告别 30 项下拉框</span>
+                </div>
+
+                <div class="tier-chips-grid">
+                  ${[15, 30, 45, 60, 90, 120].map(m => `
+                    <button type="button" class="web-tier-chip ${state.webMinutes === m ? 'active' : ''}"
+                            onclick="state.webMinutes=${m};renderWeb();">
+                      +${m} 分钟
+                    </button>
+                  `).join('')}
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--pw-border);">
+                  <div>
+                    <div style="font-size:12.5px;font-weight:700;">② Switch 主机本地日期</div>
+                    <div style="font-size:11.5px;color:var(--pw-text-secondary);">2026-11-18 (周三 · 与手机日期一致)</div>
+                  </div>
+                  <div style="display:flex;gap:6px;">
+                    <button type="button" class="pw-chip ${state.webDateMode==='today'?'pw-chip-accent':'pw-chip-muted'}"
+                            style="cursor:pointer;padding:5px 10px;" onclick="state.webDateMode='today';renderWeb();">今天</button>
+                    <button type="button" class="pw-chip ${state.webDateMode==='tomorrow'?'pw-chip-accent':'pw-chip-muted'}"
+                            style="cursor:pointer;padding:5px 10px;" onclick="state.webDateMode='tomorrow';renderWeb();">明天</button>
+                  </div>
+                </div>
+
+                <button type="button" onclick="generateDemoWebCode()"
+                        style="width:100%;margin-top:14px;padding:13px;border-radius:11px;border:none;background:var(--pw-accent);color:var(--pw-on-accent);font-weight:800;font-size:15px;box-shadow:0 6px 16px rgba(47,95,208,0.28);">
+                  ⚡ 立即生成 +${state.webMinutes} 分钟加时码
+                </button>
+
+                <!-- 3. 4-4 Grouped Ticket Output -->
+                <div class="web-ticket-result" style="margin-top:14px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--pw-success);font-weight:700;">
+                    <span>✓ 已签发单次有效加时码</span>
+                    <span class="ux-badge-pin">4-4 分组对应 Switch 键盘</span>
+                  </div>
+                  <div class="ticket-code-grouped">
+                    <span>${c1}</span>
+                    <span style="opacity:0.4;">-</span>
+                    <span>${c2}</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--pw-text-secondary);margin-bottom:10px;">
+                    仅限 <strong>2026-11-18</strong> 当天在 <strong>${state.webDevice}</strong> 兑换一次 (+${state.webMinutes} 分钟)
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;">
+                    <button type="button" class="footer-pill-btn" style="justify-content:center;"
+                            onclick="navigator.clipboard?.writeText('${state.webCurrentCode}');alert('已复制纯数字：${state.webCurrentCode}')">
+                      📋 复制 8 位数字
+                    </button>
+                    <button type="button" class="footer-pill-btn" style="justify-content:center;border-color:var(--pw-accent);color:var(--pw-accent);"
+                            onclick="alert('已复制微信口令：\\n【任我玩】今日加时 +${state.webMinutes} 分钟，加时码：${c1}-${c2}（在 Switch 按快捷键打开浮窗即可输入兑换）')">
+                      💬 复制微信发码口令
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 4. Today's Issued History Timeline -->
+                <div style="margin-top:12px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--pw-text-secondary);">
+                    <span>🕒 今日当前浏览器已签发记录 (${state.webHistory.length} 枚)</span>
+                    <span class="ux-badge-pin">防遗忘 / 防撞码</span>
+                  </div>
+                  <div class="history-mini-list">
+                    ${state.webHistory.slice(0, 3).map((h, i) => `
+                      <div class="history-row">
+                        <span><strong>${h.time}</strong> · +${h.minutes}分钟 <small style="color:var(--pw-text-secondary);">(${h.device})</small></span>
+                        <code style="font-weight:800;color:var(--pw-accent);">${h.code}</code>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      renderNro();
+      renderOverlay();
+      renderWeb();
+    }
+
+    // Initialize
+    applyPaletteTokens();
+    renderAll();
+  </script>
+</body>
+</html>

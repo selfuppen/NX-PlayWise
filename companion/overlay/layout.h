@@ -6,6 +6,7 @@
 extern "C" {
 #endif
 #include "bridge.h"
+#include "input_model.h"
 #include "../policy_status.h"
 #ifdef __cplusplus
 }
@@ -45,6 +46,7 @@ enum {
     PTC_OVERLAY_SLOT_W = 44,
     PTC_OVERLAY_SLOT_H = 64,
     PTC_OVERLAY_SLOT_GAP = 5,
+    PTC_OVERLAY_SLOT_GROUP_GAP = 14,
     PTC_OVERLAY_KEYPAD_Y = 232,
     PTC_OVERLAY_KEYPAD_H = 248,
     PTC_OVERLAY_KEY_ROW_STEP = 64,
@@ -96,6 +98,22 @@ static inline int ptc_overlay_scroll_to_rect(PtcOverlayRect viewport, PtcOverlay
     if (item.y + item.h > viewport.y + viewport.h + offset)
         offset = item.y + item.h - viewport.y - viewport.h;
     return offset < 0 ? 0 : offset > maximum ? maximum : offset;
+}
+
+static inline int ptc_overlay_snap_parent_scroll(const PtcOverlayPageLayout *layout, int offset)
+{
+    if (offset <= 0 || offset >= layout->scroll_max) return offset;
+    int top = layout->viewport.y + offset;
+    for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
+        PtcOverlayRect item = layout->actions[i];
+        int before = top - item.y;
+        int after = item.h - before;
+        if (before <= 0 || after <= 0) continue;
+        if (after < before && offset + after <= layout->scroll_max) return offset + after;
+        int start = offset - before;
+        return start < 0 ? 0 : start;
+    }
+    return offset;
 }
 
 static inline bool ptc_overlay_scrolled_hit(PtcOverlayRect viewport, PtcOverlayRect item,
@@ -161,6 +179,16 @@ static inline PtcOverlayRect ptc_overlay_rect(int x, int y, int w, int h)
     return rect;
 }
 
+static inline PtcOverlayRect ptc_overlay_code_slot_rect(int x, int y, int width, unsigned int index)
+{
+    const int total = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
+        (PTC_OVERLAY_CODE_SYMBOLS - 2) * PTC_OVERLAY_SLOT_GAP + PTC_OVERLAY_SLOT_GROUP_GAP;
+    int left = x + (width - total) / 2 + (int)index * (PTC_OVERLAY_SLOT_W + PTC_OVERLAY_SLOT_GAP);
+    if (index >= PTC_OVERLAY_CODE_SYMBOLS / 2)
+        left += PTC_OVERLAY_SLOT_GROUP_GAP - PTC_OVERLAY_SLOT_GAP;
+    return ptc_overlay_rect(left, y + PTC_OVERLAY_SLOT_Y, PTC_OVERLAY_SLOT_W, PTC_OVERLAY_SLOT_H);
+}
+
 static inline bool ptc_overlay_rect_contains(PtcOverlayRect rect, int x, int y)
 {
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
@@ -207,6 +235,26 @@ static inline int ptc_overlay_parent_action_move(int action, int direction)
     if (slot < 0) return order[0];
     return order[(slot + (direction < 0 ? PTC_OVERLAY_PARENT_ACTION_COUNT - 1 : 1)) %
         PTC_OVERLAY_PARENT_ACTION_COUNT];
+}
+
+static inline int ptc_overlay_parent_action_at(int slot, int promoted)
+{
+    const int *order = ptc_overlay_parent_action_order();
+    int original = ptc_overlay_parent_action_slot(promoted);
+    if (original < 0) return order[slot];
+    if (slot == 0) return promoted;
+    return order[slot <= original ? slot - 1 : slot];
+}
+
+static inline int ptc_overlay_parent_action_move_with_priority(int action, int direction, int promoted)
+{
+    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+        if (ptc_overlay_parent_action_at(slot, promoted) == action) {
+            int next = (slot + direction + PTC_OVERLAY_PARENT_ACTION_COUNT) % PTC_OVERLAY_PARENT_ACTION_COUNT;
+            return ptc_overlay_parent_action_at(next, promoted);
+        }
+    }
+    return ptc_overlay_parent_action_at(0, promoted);
 }
 
 static inline bool ptc_overlay_remaining_refresh_pending(bool waiting, bool offline_code_request)

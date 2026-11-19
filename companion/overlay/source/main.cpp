@@ -989,7 +989,14 @@ public:
                 pin_length_ = 0;
                 if (auth_status == PTC_AUTH_OK) {
                     parent_authorized_ = true;
-                    parent_action_ = 0;
+                    const auto reason = child_home_reason();
+                    const auto priority = reason == PTC_REASON_BEDTIME ? PTC_OVERLAY_PARENT_SKIP_BEDTIME :
+                        reason == PTC_REASON_EYE ? PTC_OVERLAY_PARENT_SKIP_EYE_CARE :
+                        reason == PTC_REASON_DOCK ? PTC_OVERLAY_PARENT_WAIVE_DOCK : PTC_OVERLAY_PARENT_ADD_MINUTES;
+                    // Freeze the order during this parent session so a refresh cannot move a focused action.
+                    promoted_parent_action_ = priority != PTC_OVERLAY_PARENT_ADD_MINUTES && !parent_action_reason(priority)
+                        ? static_cast<int>(priority) : -1;
+                    parent_action_ = ptc_overlay_parent_action_at(0, promoted_parent_action_);
                     reset_page_scroll();
                     parent_view_ = ParentView::Actions;
                     pin_message_[0] = '\0';
@@ -1039,10 +1046,10 @@ public:
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_RIGHT))
                 daily_add_minutes_ = daily_add_minutes_ >= 120 ? 120 : daily_add_minutes_ + 5;
             if (direction & PTC_OVERLAY_BUTTON_UP) {
-                if (parent_action_ == 0) {
+                if (parent_action_ == ptc_overlay_parent_action_at(0, promoted_parent_action_)) {
                     parent_action_ = -1;
-                } else if (parent_action_ > 0) {
-                    parent_action_ = ptc_overlay_parent_action_move(parent_action_, -1);
+                } else if (parent_action_ >= 0) {
+                    parent_action_ = ptc_overlay_parent_action_move_with_priority(parent_action_, -1, promoted_parent_action_);
                     focus_parent_action();
                 }
                 ptc_overlay_hold_reset(&confirm_hold_);
@@ -1050,10 +1057,10 @@ public:
             }
             if (direction & PTC_OVERLAY_BUTTON_DOWN) {
                 if (parent_action_ == -1) {
-                    parent_action_ = 0;
+                    parent_action_ = ptc_overlay_parent_action_at(0, promoted_parent_action_);
                     focus_parent_action();
                 } else {
-                    parent_action_ = ptc_overlay_parent_action_move(parent_action_, 1);
+                    parent_action_ = ptc_overlay_parent_action_move_with_priority(parent_action_, 1, promoted_parent_action_);
                     focus_parent_action();
                 }
                 ptc_overlay_hold_reset(&confirm_hold_);

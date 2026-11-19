@@ -40,6 +40,9 @@ void submit_status_with_origin(UiState *ui, PtcUiStatusOrigin origin)
     if (!ui || ui->waiting) {
         return;
     }
+    if (ui->model.view == PTC_UI_PARENT && ui->model.parent_page == PTC_UI_PARENT_GRANT &&
+        ui->model.overlay == PTC_UI_OVERLAY_NONE)
+        (void)load_redemption_history(ui);
     if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS)
         ui->model.home_details_refresh_failed = true;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -240,6 +243,7 @@ void load_rule_drafts(UiState *ui)
     }
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     memcpy(ui->model.current_week, rules.week, sizeof(rules.week));
+    ui->model.weekly_baseline_available = false;
     ui->model.today_override_present = false;
     ui->model.holiday_enabled = rules.holiday_enabled;
     ui->model.draft_holiday_enabled = rules.holiday_enabled;
@@ -270,11 +274,18 @@ void load_rule_drafts(UiState *ui)
     }
     week = cJSON_GetObjectItemCaseSensitive(root, "week");
     if (cJSON_IsArray(week) && cJSON_GetArraySize(week) == 7) {
+        bool valid = true;
         for (index = 0; index < 7; ++index) {
             const cJSON *day = cJSON_GetArrayItem(week, (int)index);
-            rules.week[index].mode = parse_rule_mode(rule_json_string(day, "mode"));
+            const char *mode = rule_json_string(day, "mode");
+            const cJSON *minutes = cJSON_GetObjectItemCaseSensitive(day, "minutes");
+            valid = valid && mode && (strcmp(mode, "limit") == 0 || strcmp(mode, "unlimited") == 0) &&
+                cJSON_IsNumber(minutes) && minutes->valuedouble >= 0 && minutes->valuedouble <= 1440 &&
+                minutes->valuedouble == minutes->valueint;
+            rules.week[index].mode = parse_rule_mode(mode);
             rules.week[index].minutes = ptc_ui_clamp_persisted_rule_minutes(rule_json_int(day, "minutes", rules.week[index].minutes));
         }
+        ui->model.weekly_baseline_available = valid;
     }
     override_present = cJSON_GetObjectItemCaseSensitive(root, "today_override_present");
     override_day = cJSON_GetObjectItemCaseSensitive(root, "today_override_day_index");

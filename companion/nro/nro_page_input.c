@@ -616,6 +616,17 @@ bool handle_page_input(UiState *ui, u64 down, u64 held,
         } else if (down & HidNpadButton_Plus) {
             ptc_audio_play(PTC_SE_POPUP);
             ptc_ui_open_home_details(&ui->model);
+        } else if (down & HidNpadButton_Down) {
+            int old = ui->model.child_forecast_focus;
+            if (!old) ptc_ui_move_child_forecast_focus(&ui->model, 1, time(NULL));
+            if (ui->model.child_forecast_focus != old) ptc_audio_play(PTC_SE_FOCUS);
+        } else if (ui->model.child_forecast_focus && (down & HidNpadButton_Up)) {
+            ui->model.child_forecast_focus = 0;
+            ptc_audio_play(PTC_SE_FOCUS);
+        } else if (ui->model.child_forecast_focus && (down & (HidNpadButton_Left | HidNpadButton_Right))) {
+            int old = ui->model.child_forecast_focus;
+            ptc_ui_move_child_forecast_focus(&ui->model, down & HidNpadButton_Left ? -1 : 1, time(NULL));
+            if (ui->model.child_forecast_focus != old) ptc_audio_play(PTC_SE_FOCUS);
         } else if (down & (HidNpadButton_ZL | HidNpadButton_ZR)) {
             ptc_audio_play(PTC_SE_POPUP);
             open_language_overlay(ui);

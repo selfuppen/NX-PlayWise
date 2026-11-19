@@ -461,6 +461,7 @@ typedef struct {
     PtcResultForecastDay forecast[PTC_RESULT_FORECAST_DAYS];
     char forecast_rule_sources[PTC_RESULT_FORECAST_DAYS][32];
     bool forecast_available;
+    int child_forecast_focus; /* 0 leaves the row, 1 to 7 select a forecast day. */
     uint16_t daily_buffer_minutes;
     bool daily_buffer_claimed;
     bool daily_buffer_available;
@@ -607,6 +608,7 @@ typedef struct {
     uint16_t maximum_minutes;
     PtcDayRule draft_week[7];
     PtcDayRule current_week[7];
+    bool weekly_baseline_available;
     bool weekly_dirty;
     int weekly_grid_slot;
     int weekly_last_day_slot;

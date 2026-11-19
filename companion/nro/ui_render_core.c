@@ -247,12 +247,22 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     /* 5. 数据更新时效 (右对齐) */
     draw_text(pixels, stride, fresh_x, box.y + 21, fitted_fresh, 12, UI_MUTED);
 
+    if (model->demo_secret_enabled) {
+        const char *label = ptc_ui_text(PTC_UI_T_DEMO);
+        int width = measure_text(label, 11) + 14;
+        UiRect dbadge = {box.x + box.width - 14 - width, box.y + 27, width, 18};
+        fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
+        draw_text_center(pixels, stride, dbadge, label, 11, UI_DANGER);
+    }
+    if (ptc_ui_time_status_compact(model)) return;
+
     /* --- 第二层：核心游玩额度状态 (前缀次级色与数值高亮加粗) 与 演示模式徽章 --- */
     const char *pfx_zh = ptc_ui_text(PTC_UI_T_ALSO_AVAILABLE_TO_PLAY_TODAY);
     const char *pfx_en = "Available today: ";
     bool is_pfx_zh = strncmp(status.remaining_text, pfx_zh, strlen(pfx_zh)) == 0;
     bool is_pfx_en = strncmp(status.remaining_text, pfx_en, strlen(pfx_en)) == 0;
-    int rem_max_w = box.width - 28 - (model->demo_secret_enabled ? 48 : 0);
+    int rem_max_w = box.width - 28 - (model->demo_secret_enabled ?
+        measure_text(ptc_ui_text(PTC_UI_T_DEMO), 11) + 22 : 0);
     if (is_pfx_zh || is_pfx_en) {
         const char *pfx = is_pfx_zh ? pfx_zh : pfx_en;
         size_t pfx_len = strlen(pfx);
@@ -266,12 +276,6 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         char fitted_rem[64];
         fit_text(fitted_rem, sizeof(fitted_rem), status.remaining_text, 15, rem_max_w);
         draw_text_bold(pixels, stride, box.x + 14, box.y + 43, fitted_rem, 15, color);
-    }
-
-    if (model->demo_secret_enabled) {
-        UiRect dbadge = {box.x + box.width - 14 - 38, box.y + 30, 38, 18};
-        fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
-        draw_text_center(pixels, stride, dbadge, ptc_ui_text(PTC_UI_T_DEMO), 11, UI_DANGER);
     }
 
     /* --- 第三层：全宽精致圆角额度进度槽 (置于卡片下沿基线) --- */

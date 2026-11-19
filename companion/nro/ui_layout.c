@@ -208,6 +208,11 @@ PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
 {
     PtcUiRect rect = ptc_ui_time_status_bar_rect();
     if (!model) return rect;
+    if (ptc_ui_time_status_compact(model)) {
+        rect.y = 28;
+        rect.h = model->demo_secret_enabled ? 50 : 36;
+        return rect;
+    }
     bool policy = model->bedtime_policy.enabled || model->bedtime_status_enabled ||
         model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
     rect.h += (model->eye_care_policy.enabled ? 12 : 0) + (policy ? 16 : 0);
@@ -217,6 +222,14 @@ PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
         if (rect.y < 6) rect.y = 6;
     }
     return rect;
+}
+
+bool ptc_ui_time_status_compact(const PtcUiModel *model)
+{
+    return model && model->overlay == PTC_UI_OVERLAY_NONE &&
+        (model->view == PTC_UI_CHILD ||
+         (model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY &&
+          !model->parent_support_only));
 }
 
 PtcUiRect ptc_ui_parent_footer_details_rect(void)
@@ -451,6 +464,14 @@ PtcUiRect ptc_ui_child_forecast_rect(void)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(false);
     return (PtcUiRect){box.x, box.y + 314, box.w, 210};
+}
+
+PtcUiRect ptc_ui_child_forecast_day_rect(int offset, int count)
+{
+    PtcUiRect panel = ptc_ui_child_forecast_rect();
+    int width = 114, gap = 11;
+    return (PtcUiRect){panel.x + 16 + offset * (width + gap), panel.y + 40,
+        count * (width + gap) - gap, panel.h - 54};
 }
 
 PtcUiRect ptc_ui_today_card_rect(int index)
@@ -1013,6 +1034,12 @@ PtcUiRect ptc_ui_quick_add_option_rect(int index)
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_QUICK_ADD);
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
     return (PtcUiRect){dialog.x + 48 + index * 164, dialog.y + 166, 148, 92};
+}
+
+uint16_t ptc_ui_quick_add_option_minutes(int index)
+{
+    static const uint16_t presets[] = {15, 30, 60};
+    return index >= 0 && index < 3 ? presets[index] : 0;
 }
 
 PtcUiRect ptc_ui_minutes_value_rect(void)
