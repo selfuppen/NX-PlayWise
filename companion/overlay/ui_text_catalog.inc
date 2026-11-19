@@ -65,7 +65,7 @@ PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_TV_BADGE, "PTC_UI_T_DOCK_TV_BADGE", "📺 电视�
 PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_HANDHELD_BADGE, "PTC_UI_T_DOCK_HANDHELD_BADGE", "🎮 掌机模式", "🎮 掌機模式", "🎮 Handheld")
 PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_BLOCKED_BANNER, "PTC_UI_T_DOCK_BLOCKED_BANNER", "掌机时间用尽 · 请连接底座继续游玩", "掌機時間用盡 · 請連接底座繼續遊玩", "Handheld quota exhausted · Connect to dock to continue")
 PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_CARD_FORCE, "PTC_UI_T_DOCK_CARD_FORCE", "视力保护：仅允许电视模式（禁止掌机/桌面小屏）", "視力保護：僅允許電視模式（禁止掌機/桌面小螢幕）", "Eyesight protection: TV mode only (Handheld blocked)")
-PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_CARD_OFF, "PTC_UI_T_DOCK_CARD_OFF", "未启用电视模式限制，掌机与电视均可自由使用", "未啟用電視模式限制，掌機與電視均可自由使用", "TV mode restriction is off; handheld and TV can be used freely")
+PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_CARD_OFF, "PTC_UI_T_DOCK_CARD_OFF", "未启用电视模式限制，掌机与电视均可自由使用", "未啟用電視模式限制，掌機與電視均可自由使用", "TV mode limit is off")
 PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_CARD_WAIVED, "PTC_UI_T_DOCK_CARD_WAIVED", "今日已解除电视模式限制，掌机可自由使用至总额度", "今日已解除電視模式限制，掌機可自由使用至總額度", "TV mode restriction waived today; handheld can be used up to total quota")
 PTC_OVERLAY_TEXT(PTC_UI_T_DOCK_BADGE_QUOTA, "PTC_UI_T_DOCK_BADGE_QUOTA", "限额", "限額", "Quota")
 PTC_OVERLAY_TEXT(PTC_UI_T_TO_BE_CONFIRMED, "PTC_UI_T_TO_BE_CONFIRMED", "待确认", "待確認", "To be confirmed")

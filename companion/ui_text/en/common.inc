@@ -480,7 +480,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED_WITH_UNDOCKED, "Unlimited t
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_BLOCKED_BANNER, "Handheld quota exhausted · Connect to dock to continue")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_CARD_FORCE, "Eyesight protection: TV mode only (Handheld blocked)")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_CARD_LIMIT, "Eyesight protection: Handheld daily limit %d min (~%d min used)")
-PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_CARD_OFF, "TV mode restriction is off; handheld and TV can be used freely")
+PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_CARD_OFF, "TV mode limit is off")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_CARD_WAIVED, "TV mode restriction waived today; handheld can be used up to total quota")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_UNRESTRICTED, "Unrestricted Mode")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT, "Handheld and TV modes can both be used freely")

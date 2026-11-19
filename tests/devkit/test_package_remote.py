@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import struct
@@ -65,6 +66,7 @@ def write_package(
     overlay_data: bytes | None = None,
     *,
     component_marker: bytes = b"",
+    missing_nro_marker: bytes | None = None,
 ) -> dict:
     version = package_remote.PLAYWISE_VERSION
     manifest = (f'{{"schema_version":1,"playwise_version":"{version}","commit":"' + "a" * 40 +
@@ -76,6 +78,9 @@ def write_package(
         "switch/.overlays/playwise.ovl": valid_nro(with_icon=False, embedded_manifest=embedded) if overlay_data is None else overlay_data,
         "atmosphere/contents/4200000000BD2300/exefs.nsp": embedded,
     }
+    if missing_nro_marker is not None:
+        name = "switch/playwise/pctc.nro"
+        components[name] = components[name].replace(missing_nro_marker, b"")
     artifacts = {
         "schema_version": 1,
         "release_id": f"playwise-{version}+aaaaaaaaaaaa",
@@ -304,12 +309,27 @@ def test_container_ssh_key_persistence() -> None:
 
 
 def test_zip_verification() -> None:
+    catalog = (ROOT / "companion/ui_text/zh_hans/common.inc").read_text(encoding="utf-8")
+    title = re.search(r'PTC_UI_TEXT_VALUE\(PTC_UI_T_SOFTWARE_INFO, "([^"]+)"\)', catalog)
+    require(title is not None and title.group(1).encode("utf-8") in package_remote.NRO_INFORMATION_MARKERS,
+            "the artifact marker must match the production software information title")
     with tempfile.TemporaryDirectory(prefix="ptc-package-test-") as tmp_dir:
         root = Path(tmp_dir)
         for prefix, boot2 in package_remote.PACKAGE_EXPECTATIONS.items():
             path = root / f"{prefix}-20260730-120000.zip"
             manifest = write_package(path, boot2)
             package_remote.verify_package_zip(path, prefix, expected_manifest=manifest)
+
+        missing_info = root / "playwise-20260730-120099.zip"
+        missing_manifest = write_package(missing_info, True,
+            missing_nro_marker=title.group(1).encode("utf-8"))
+        try:
+            package_remote.verify_package_zip(missing_info, "playwise", expected_manifest=missing_manifest)
+        except package_remote.PackageError as exc:
+            require("missing software information marker" in str(exc),
+                    "a correctly hashed package without the information page must be rejected")
+        else:
+            raise AssertionError("missing software information marker must not pass the package gate")
 
         invalid_path = root / "playwise-20260730-120001.zip"
         invalid_manifest = write_package(invalid_path, True, overlay_without_assets())

@@ -1266,6 +1266,10 @@ int main(int argc, char **argv) {
                 require(view.page_layout_.viewport.h >= 0, "page header must leave a usable viewport");
                 if (view.parent_view_ == ParentView::Child && !view.status_expanded_ && view.page_layout_.scroll_max) {
                     std::fprintf(stderr, "Child overflow: %s%s (%dpx)\n", folders[language], scenes[scene], view.page_layout_.scroll_max);
+                    std::fprintf(stderr, "Viewport: y=%d height=%d; content bottom=%d\n",
+                        view.page_layout_.viewport.y, view.page_layout_.viewport.h, view.flow_y_);
+                    for (const auto &run : renderer.text_runs)
+                        std::fprintf(stderr, "Text y=%d size=%.0f: %s\n", run.y, run.size, run.text.c_str());
                     ++child_overflows;
                 }
                 if (view.parent_view_ == ParentView::Pin && scene == 20) {

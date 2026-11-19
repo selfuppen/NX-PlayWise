@@ -1,5 +1,7 @@
 # Visual Style and Design Guide
 
+Disabled rules on the Overlay child home page use concise text to state that the corresponding rule is off. During eye rest, the complete rest advice, timer, other rules and status entry must fit on one screen in all three languages, verified by the production preview content-height check.
+
 The configuration backup create page has a separate Restore pre-installation settings button. X, controller focus and touch open the same held confirmation. Theme danger colors and measured text apply. Missing installation snapshots, read-only support, active recovery or hot reload disable the action. Cancelling returns to the backup page.
 
 The PIN Inspector in all three languages follows the authentication constants: 1–64 digits, with cooldown starting on consecutive failure 5. This is a text correction only. Settings and plan card titles use the measured status badge bounds; a title that would collide moves below the badge. Fixed Overlay buttons measure both width and height, keep readable type, and bound future oversized translations to the final line and button clip. Current buffer and grant-code labels remain complete in all three languages, above the Tesla footer.
