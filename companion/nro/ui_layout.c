@@ -3,8 +3,18 @@
 
 PtcUiRect ptc_ui_update_action_rect(int index)
 {
-    if (index < 0 || index >= 8) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + (index % 2) * 592, 430 + (index / 2) * 49, 580, 43};
+    /* Row 0: 4-step update pipeline (0: Check -> 1: Download -> 7: Reopen -> 5: Load) */
+    if (index == 0) return (PtcUiRect){74, 422, 262, 70};
+    if (index == 1) return (PtcUiRect){364, 422, 262, 70};
+    if (index == 7) return (PtcUiRect){654, 422, 262, 70};
+    if (index == 5) return (PtcUiRect){944, 422, 262, 70};
+    /* Row 1: 3 preference and maintenance cards (2: Auto check, 3: Channel, 4: Backups) */
+    if (index == 2) return (PtcUiRect){54, 518, 378, 118};
+    if (index == 3) return (PtcUiRect){451, 518, 378, 118};
+    if (index == 4) return (PtcUiRect){848, 518, 378, 118};
+    /* Footer right: contextual cancel download / recover interrupted install */
+    if (index == 6) return (PtcUiRect){986, 664, 240, 44};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_update_backup_rect(int index)
@@ -13,7 +23,7 @@ PtcUiRect ptc_ui_update_backup_rect(int index)
     return (PtcUiRect){54, 200 + index * 96, 1172, 84};
 }
 
-PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){974, 378, 228, 30}; }
+PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){990, 194, 200, 30}; }
 
 PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model)
 {

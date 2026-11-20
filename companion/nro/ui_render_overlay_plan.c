@@ -1112,29 +1112,42 @@ static void draw_dock_rules_overlay(uint32_t *pixels, uint32_t stride, const Ptc
         PTC_UI_T_DOCK_RULES_EXPLAIN_CORE3,
         PTC_UI_T_DOCK_RULES_EXPLAIN_CORE4
     };
+    const char *emojis[] = {"⏰", "📺", "🌙", "🛡️"};
+    uint32_t accent_colors[] = {UI_ACCENT, UI_WARNING, UI_HERO, UI_SUCCESS};
 
     int card_w = (dialog.width - 68 - 18) / 2;
-    int card_h = 160;
+    int card_h = 166;
     for (int i = 0; i < 4; ++i) {
         int col = i % 2;
         int row = i / 2;
         int cx = dialog.x + 34 + col * (card_w + 18);
-        int cy = dialog.y + 104 + row * (card_h + 16);
+        int cy = dialog.y + 100 + row * (card_h + 16);
         UiRect c = {cx, cy, card_w, card_h};
+        char num[8];
+        char fitted_title[128];
+        snprintf(num, sizeof(num), "0%d", i + 1);
+
         fill_round_rect(pixels, stride, c, 12, UI_PAGE);
+
+        ui_set_vertical_clip(c.y, c.y + 44);
+        fill_round_rect(pixels, stride, c, 12, UI_RAISED);
+        ui_set_vertical_clip(0, SCREEN_HEIGHT);
+        draw_line(pixels, stride, c.x + 1, c.y + 44, c.x + c.width - 1, c.y + 44, 1, UI_BORDER);
+
+        fill_round_rect(pixels, stride, (UiRect){c.x + 4, c.y + 10, 4, c.height - 20}, 2, accent_colors[i]);
         draw_rect_outline(pixels, stride, c, 12, 1, UI_BORDER);
 
-        char num[8];
-        snprintf(num, sizeof(num), "%d", i + 1);
-        UiRect badge = {c.x + 16, c.y + 14, 26, 26};
-        fill_round_rect(pixels, stride, badge, 6, UI_ACCENT_SOFT);
-        draw_text_center(pixels, stride, badge, num, 13, UI_ACCENT);
+        UiRect badge = {c.x + c.width - 14 - 34, c.y + 11, 34, 22};
+        fill_round_rect(pixels, stride, badge, 11, UI_SURFACE);
+        draw_rect_outline(pixels, stride, badge, 11, 1, UI_BORDER);
+        draw_text_center(pixels, stride, badge, num, 11, UI_MUTED);
 
-        draw_text_bold(pixels, stride, c.x + 50, c.y + 32, ptc_ui_text(titles[i]), 15, UI_INK);
-        draw_line(pixels, stride, c.x + 16, c.y + 48, c.x + c.width - 16, c.y + 48, 1, UI_BORDER);
+        draw_text(pixels, stride, c.x + 18, c.y + 29, emojis[i], 16, UI_INK);
+        fit_text(fitted_title, sizeof(fitted_title), ptc_ui_text(titles[i]), 15, badge.x - (c.x + 44) - 10);
+        draw_text_bold(pixels, stride, c.x + 44, c.y + 29, fitted_title, 15, UI_INK);
 
-        draw_wrapped_text(pixels, stride, c.x + 16, c.y + 58,
-                          ptc_ui_text(items[i]), 13, c.width - 32, 20, 4, UI_INK);
+        draw_wrapped_text(pixels, stride, c.x + 18, c.y + 70,
+                          ptc_ui_text(items[i]), 13, c.width - 34, 20, 5, UI_INK);
     }
 
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),

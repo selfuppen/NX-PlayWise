@@ -1411,9 +1411,12 @@ static void draw_parent_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
     draw_footer_button(pixels, stride, back,
         plan_subpage ? ptc_ui_text(model->today_settings_origin ? PTC_UI_T_BACK_TO_TODAY : PTC_UI_T_B_BACK_TO_PLANS_2) :
         ptc_ui_text(PTC_UI_T_B_RETURN_TO_CHILD_PAGE));
-    draw_footer_button(pixels, stride, refresh, ptc_ui_text(PTC_UI_T_Y_REFRESH));
-    if (model->parent_footer_focused && model->parent_footer_selection == 0)
-        draw_rect_outline(pixels, stride, to_uirect(refresh), 12, 3, UI_ACCENT);
+    {
+        int64_t now = ptc_ui_render_now();
+        draw_refresh_footer_button(pixels, stride, refresh, ptc_ui_text(PTC_UI_T_Y_REFRESH),
+            ptc_ui_status_needs_refresh(model, now), ptc_ui_status_refresh_failed(model),
+            model->parent_footer_focused && model->parent_footer_selection == 0, model->waiting);
+    }
     draw_parent_status_footer(pixels, stride, model);
     if (ptc_ui_parent_footer_shortcuts(model)) {
         const PtcUiRect rects[] = {ptc_ui_parent_footer_details_rect(), ptc_ui_parent_footer_rules_rect()};

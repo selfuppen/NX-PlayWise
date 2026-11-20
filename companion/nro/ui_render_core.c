@@ -171,28 +171,35 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     uint32_t color;
     UiActiveRuleBadge badge;
 
-    ptc_ui_project_time_status(model, ptc_ui_render_now(), &status);
+    int64_t now = ptc_ui_render_now();
+    bool needs_refresh = ptc_ui_status_needs_refresh(model, now);
+    bool refresh_failed = ptc_ui_status_refresh_failed(model);
+
+    ptc_ui_project_time_status(model, now, &status);
     bool show_bedtime = model && (model->bedtime_policy.enabled || model->bedtime_status_enabled);
     bool show_dock = model && (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled);
     bool show_policy = show_bedtime || show_dock;
     color = time_projection_color(status.state);
     badge = get_active_rule_badge(model);
-    if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+    if (!ptc_ui_status_is_fresh(model, now)) {
         badge.label = ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED);
         badge.color = UI_MUTED;
         badge.bg_color = UI_PAGE;
     }
 
     fill_round_rect(pixels, stride, box, 14, UI_SURFACE);
-    draw_rect_outline(pixels, stride, box, 14, 1, UI_BORDER);
+    draw_rect_outline(pixels, stride, box, 14, needs_refresh ? 2 : 1,
+        needs_refresh ? (refresh_failed ? UI_DANGER_BORDER : UI_WARNING_BORDER) : UI_BORDER);
 
     /* Reserve the measured data age independently of the software update entry. */
     fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
     int fresh_w = measure_text(fitted_fresh, 12);
-    int fresh_x = box.x + box.width - 14 - fresh_w;
+    int fresh_pill_w = fresh_w + 26;
+    UiRect fresh_pill = {box.x + box.width - 10 - fresh_pill_w, box.y + 6, fresh_pill_w, 20};
+    int fresh_x = needs_refresh ? (fresh_pill.x + 18) : (box.x + box.width - 14 - fresh_w);
     bool compact_dot = ptc_ui_time_status_compact(model);
-    uint32_t dot_color = strcmp(model->result_status, "error") == 0 ? UI_DANGER :
-        (model->waiting || !ptc_ui_status_is_fresh(model, ptc_ui_render_now()) ? UI_WARNING : UI_SUCCESS);
+    uint32_t dot_color = refresh_failed ? UI_DANGER :
+        (model->waiting || !ptc_ui_status_is_fresh(model, now) ? UI_WARNING : UI_SUCCESS);
 
     /* --- 第一层：时钟、日期星期、生效规则胶囊徽章、数据时效 --- */
     /* 1. 时钟显示 (突出粗体) */
@@ -213,7 +220,7 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     int pill_w = badge_text_w + 22;
     if (pill_w < 64) pill_w = 64;
     UiRect pill = {date_x + date_w + 10, box.y + 7, pill_w, 19};
-    int right_limit = fresh_x - (compact_dot ? 18 : 8);
+    int right_limit = needs_refresh ? (fresh_pill.x - 8) : (fresh_x - (compact_dot ? 18 : 8));
     if (pill.x + pill.width > right_limit && pill.width > 50) {
         pill.width = right_limit - pill.x;
     }
@@ -227,7 +234,7 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     draw_text(pixels, stride, pill.x + 15, box.y + 21, fitted_badge, 11, badge.color);
 
     /* 4b. 屏幕形态胶囊徽章 (电视模式 / 掌机桌面) */
-    if (model && model->dock_available && ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+    if (model && model->dock_available && ptc_ui_status_is_fresh(model, now)) {
         bool is_tv = (strcmp(model->operation_mode, "docked") == 0);
         bool is_undocked = (strcmp(model->operation_mode, "undocked") == 0);
         const char *m_label = is_tv ? ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE) :
@@ -247,12 +254,20 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         }
     }
 
-    /* 5. 数据更新时效 (右对齐，紧凑模式下附带实时状态绿/黄/红点) */
-    if (compact_dot) {
-        fill_round_rect(pixels, stride, (UiRect){fresh_x - 11, box.y + 14, 6, 6}, 3, dot_color);
+    /* 5. 数据更新时效 (待刷新时升级为语义软底胶囊 + 状态圆点) */
+    if (needs_refresh) {
+        fill_round_rect(pixels, stride, fresh_pill, 10, refresh_failed ? UI_DANGER_SOFT : UI_WARNING_SOFT);
+        draw_rect_outline(pixels, stride, fresh_pill, 10, 1, refresh_failed ? UI_DANGER_BORDER : UI_WARNING_BORDER);
+        fill_round_rect(pixels, stride, (UiRect){fresh_pill.x + 7, fresh_pill.y + 7, 6, 6}, 3, dot_color);
+        draw_text_bold(pixels, stride, fresh_x, box.y + 20, fitted_fresh, 12,
+            refresh_failed ? UI_DANGER : UI_WARNING_TEXT);
+    } else {
+        if (compact_dot) {
+            fill_round_rect(pixels, stride, (UiRect){fresh_x - 11, box.y + 14, 6, 6}, 3, dot_color);
+        }
+        draw_text(pixels, stride, fresh_x, box.y + 21, fitted_fresh, 12,
+            compact_dot && dot_color != UI_SUCCESS ? dot_color : UI_MUTED);
     }
-    draw_text(pixels, stride, fresh_x, box.y + 21, fitted_fresh, 12,
-        compact_dot && dot_color != UI_SUCCESS ? dot_color : UI_MUTED);
 
     if (model->demo_secret_enabled) {
         const char *label = ptc_ui_text(PTC_UI_T_DEMO);
@@ -556,6 +571,94 @@ void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char
 void draw_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect, const char *label)
 {
     draw_button_label(pixels, stride, to_uirect(rect), label, 18, UI_MUTED);
+}
+
+static void draw_highlighted_refresh_label(
+    uint32_t *pixels, uint32_t stride, UiRect box, const char *label,
+    int size, uint32_t fg_color, uint32_t key_bg, uint32_t key_fg)
+{
+    char localized[512];
+    if (!label || !*label) return;
+    label = ptc_ui_localize(label, localized, sizeof(localized));
+    if ((label[0] == 'A' || label[0] == 'B' || label[0] == 'X' || label[0] == 'Y' ||
+         label[0] == '+' || label[0] == '-') && label[1] == ' ') {
+        char key_buf[2] = {label[0], '\0'};
+        int pfx_len = (label[2] == ' ') ? 3 : 2;
+        const char *rest = label + pfx_len;
+        int key_w = 22 + 8;
+        int cur_size = size;
+        int rest_w = measure_text(rest, cur_size);
+        int total_w = key_w + rest_w;
+        while (total_w > box.width - 14 && cur_size > 11) {
+            --cur_size;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        char fitted_rest[128];
+        if (total_w > box.width - 10) {
+            fit_text(fitted_rest, sizeof(fitted_rest), rest, cur_size, box.width - key_w - 10);
+            rest = fitted_rest;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        int start_x = box.x + (box.width - total_w) / 2;
+        if (start_x < box.x + 4) start_x = box.x + 4;
+        int gly_y = box.y + (box.height - 22) / 2;
+        int baseline = box.y + (box.height + cur_size - 4) / 2;
+        fill_round_rect(pixels, stride, (UiRect){start_x, gly_y, 22, 22}, 11, key_bg);
+        draw_text_center(pixels, stride, (UiRect){start_x, gly_y, 22, 22}, key_buf, 14, key_fg);
+        draw_text_bold(pixels, stride, start_x + key_w, baseline, rest, cur_size, fg_color);
+        return;
+    }
+    draw_text_center(pixels, stride, box, label, size, fg_color);
+}
+
+void draw_refresh_footer_button(
+    uint32_t *pixels, uint32_t stride, PtcUiRect rect, const char *label,
+    bool needs_refresh, bool failed, bool focused, bool disabled)
+{
+    UiRect box = to_uirect(rect);
+    if (!needs_refresh || disabled) {
+        draw_button_label(pixels, stride, box, label, 18, disabled ? UI_DISABLED : UI_MUTED);
+        if (focused && !disabled) {
+            draw_rect_outline(pixels, stride, box, 12, 3, UI_ACCENT);
+        }
+        return;
+    }
+    uint32_t soft = failed ? UI_DANGER_SOFT : UI_WARNING_SOFT;
+    uint32_t accent = failed ? UI_DANGER : UI_WARNING;
+    uint32_t fg = failed ? UI_DANGER : UI_WARNING_TEXT;
+    draw_semantic_pulse_glow(pixels, stride, box, 12, accent);
+    fill_round_rect(pixels, stride, box, 12, soft);
+    if (focused) {
+        draw_focus_ring(pixels, stride, box, 12);
+    } else {
+        draw_rect_outline(pixels, stride, box, 12, 2, accent);
+    }
+    draw_highlighted_refresh_label(pixels, stride, box, label, 17, fg, accent, UI_ON_ACCENT);
+}
+
+void draw_refresh_action_button(
+    uint32_t *pixels, uint32_t stride, PtcUiRect rect, const char *label,
+    bool needs_refresh, bool failed, bool selected, bool disabled)
+{
+    if (!needs_refresh || disabled) {
+        home_button(pixels, stride, rect, label, false, selected, disabled);
+        return;
+    }
+    UiRect box = to_uirect(rect);
+    uint32_t soft = failed ? UI_DANGER_SOFT : UI_WARNING_SOFT;
+    uint32_t accent = failed ? UI_DANGER : UI_WARNING;
+    uint32_t fg = failed ? UI_DANGER : UI_WARNING_TEXT;
+    draw_semantic_pulse_glow(pixels, stride, box, 12, accent);
+    fill_round_rect(pixels, stride, box, 12, soft);
+    if (selected) {
+        draw_focus_ring(pixels, stride, box, 12);
+    } else {
+        draw_rect_outline(pixels, stride, box, 12, 2, accent);
+    }
+    draw_highlighted_refresh_label(pixels, stride, box, label,
+        rect.h <= 48 ? 18 : 20, fg, accent, UI_ON_ACCENT);
 }
 
 void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

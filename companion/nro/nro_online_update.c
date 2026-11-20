@@ -264,9 +264,19 @@ void handle_online_update_input(UiState *ui, u64 down)
     if (down & HidNpadButton_Y) { online_update_action(ui, 8); return; }
     if (down & HidNpadButton_B) { if (!ui->model.update_busy) ptc_ui_cancel_overlay(&ui->model); return; }
     int selection = ui->model.overlay_selection;
-    if (down & HidNpadButton_Up) selection = (selection + 6) % 8;
-    if (down & HidNpadButton_Down) selection = (selection + 2) % 8;
-    if (down & (HidNpadButton_Left | HidNpadButton_Right)) selection ^= 1;
+    if (selection < 0 || selection >= 8) selection = 0;
+    /* Spatial navigation matching the 3-row layout:
+       Row 0 (steps): 0 -> 1 -> 7 -> 5
+       Row 1 (prefs): 2 -> 3 -> 4
+       Row 2 (footer): 6 */
+    static const int nav_left[8]  = {5, 0, 4, 2, 3, 7, 6, 1};
+    static const int nav_right[8] = {1, 7, 3, 4, 2, 0, 6, 5};
+    static const int nav_down[8]  = {2, 3, 6, 6, 6, 4, 0, 4};
+    static const int nav_up[8]    = {6, 6, 0, 1, 5, 6, 4, 6};
+    if (down & HidNpadButton_Left) selection = nav_left[selection];
+    if (down & HidNpadButton_Right) selection = nav_right[selection];
+    if (down & HidNpadButton_Down) selection = nav_down[selection];
+    if (down & HidNpadButton_Up) selection = nav_up[selection];
     ui->model.overlay_selection = selection;
     if (down & HidNpadButton_A) online_update_action(ui, selection);
 }

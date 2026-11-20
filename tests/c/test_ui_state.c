@@ -4813,8 +4813,26 @@ static void test_online_update_layout(void)
     for (int i = 0; i < 8; ++i) {
         PtcUiRect rect = ptc_ui_update_action_rect(i);
         check_hit(hit_center(&model, rect), PTC_UI_HIT_UPDATE_ACTION, i, "update action shares touch geometry");
-        check_true(rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= 1280 && rect.y + rect.h <= 676, "update action fits app viewport");
+        check_true(rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= 1280 && rect.y + rect.h <= 712, "update action fits app viewport");
+        check_true(!rects_overlap(rect, ptc_ui_settings_page_back_rect()), "update action does not overlap footer back");
+        check_true(!rects_overlap(rect, ptc_ui_update_notes_rect()), "update action does not overlap notes button");
         for (int k = i + 1; k < 8; ++k) check_true(!rects_overlap(rect, ptc_ui_update_action_rect(k)), "update actions do not overlap");
+    }
+    /* Refresh attention helper: fresh suppresses highlight; stale/failed trigger it; waiting suppresses it. */
+    {
+        PtcUiModel r = {0};
+        r.status_loaded = true; r.status_updated_at = 1000; snprintf(r.result_status, sizeof(r.result_status), "ok");
+        check_true(!ptc_ui_status_needs_refresh(&r, 1060), "fresh status does not need refresh highlight");
+        check_true(!ptc_ui_status_refresh_failed(&r), "fresh status is not failed");
+        check_true(ptc_ui_status_needs_refresh(&r, 1125), "stale status triggers refresh highlight");
+        r.waiting = true;
+        check_true(!ptc_ui_status_needs_refresh(&r, 1125), "waiting suppresses refresh highlight");
+        r.waiting = false; r.status_updated_at = 1120; r.home_details_refresh_failed = true;
+        check_true(ptc_ui_status_needs_refresh(&r, 1125) && ptc_ui_status_refresh_failed(&r),
+            "home details refresh failure triggers danger refresh highlight");
+        r.home_details_refresh_failed = false; r.quota_refresh_failed = true;
+        check_true(ptc_ui_status_needs_refresh(&r, 1125) && ptc_ui_status_refresh_failed(&r),
+            "quota refresh failure triggers danger refresh highlight");
     }
     model.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
     for (int i = 0; i < 4; ++i) check_hit(hit_center(&model, ptc_ui_update_backup_rect(i)), PTC_UI_HIT_UPDATE_ACTION, i, "backup selection shares touch geometry");

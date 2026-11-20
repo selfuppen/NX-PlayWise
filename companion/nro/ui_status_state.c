@@ -121,6 +121,19 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
         strcmp(model->result_status, "error") != 0;
 }
 
+bool ptc_ui_status_refresh_failed(const PtcUiModel *model)
+{
+    return model && (model->home_details_refresh_failed || model->quota_refresh_failed ||
+        model->error_code != 0 || strcmp(model->result_status, "error") == 0);
+}
+
+bool ptc_ui_status_needs_refresh(const PtcUiModel *model, int64_t now)
+{
+    if (!model || model->waiting) return false;
+    return !ptc_ui_status_is_fresh(model, now) ||
+        model->home_details_refresh_failed || model->quota_refresh_failed;
+}
+
 PtcUiChildForecastSource ptc_ui_child_forecast_source(const PtcUiModel *model, int offset, int64_t now)
 {
     if (!ptc_ui_status_is_fresh(model, now) || offset < 0 || offset >= (int)PTC_RESULT_FORECAST_DAYS ||

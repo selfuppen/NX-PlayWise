@@ -62,6 +62,12 @@ static struct {
     UiRect reference, hint;
 } setup_reference_trace;
 
+static struct {
+    bool enabled, started;
+    const char *title;
+    int body_lines, failed;
+} rules_cards_trace;
+
 void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
 {
     if (!text) return;
@@ -78,6 +84,28 @@ void ptc_ui_preview_record_text(int x, int baseline, const char *text, int size)
         } else if (strcmp(text, setup_reference_trace.hint_text) == 0) {
             setup_reference_trace.hint = bounds;
             ++setup_reference_trace.hint_count;
+        }
+    }
+    if (rules_cards_trace.enabled) {
+        if (!rules_cards_trace.started) {
+            if (rules_cards_trace.title && strcmp(text, rules_cards_trace.title) == 0)
+                rules_cards_trace.started = true;
+        } else if (size == 13) {
+            PtcUiRect dlg = ptc_ui_dialog_rect(1000, 560);
+            const int card_w = (dlg.w - 68 - 18) / 2, card_h = 166;
+            for (int i = 0; i < 4; ++i) {
+                int cx = dlg.x + 34 + (i % 2) * (card_w + 18);
+                int cy = dlg.y + 100 + (i / 2) * (card_h + 16);
+                if (x >= cx && x < cx + card_w && baseline >= cy && baseline <= cy + card_h + 12) {
+                    ++rules_cards_trace.body_lines;
+                    /* Body lines must stay strictly below the 44px tinted header divider and inside card bottom. */
+                    if (bounds.y < cy + 44 + 8 || baseline > cy + card_h - 4 ||
+                        bounds.x + bounds.width > cx + card_w - 10) {
+                        ++rules_cards_trace.failed;
+                    }
+                    break;
+                }
+            }
         }
     }
     if (update_header_trace.enabled) {
@@ -2374,6 +2402,44 @@ static int render_parent_pin_error_previews(const char *directory, const PtcUiMo
     return failed;
 }
 
+static int check_rules_explain_cards(const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+            PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+        for (int kind = 0; kind < 2; ++kind) {
+            PtcUiModel m = *baseline;
+            m.view = PTC_UI_PARENT;
+            m.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+            if (kind == 0) {
+                m.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+                m.rendered_overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+                m.home_details_page = 1;
+                m.rules_dialog_open = true;
+            } else {
+                m.parent_page = PTC_UI_PARENT_PLAN;
+                m.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+                m.overlay = PTC_UI_OVERLAY_DOCK_RULES;
+                m.rendered_overlay = PTC_UI_OVERLAY_DOCK_RULES;
+            }
+            memset(&rules_cards_trace, 0, sizeof(rules_cards_trace));
+            rules_cards_trace.enabled = true;
+            rules_cards_trace.title = ptc_ui_text(kind == 0 ?
+                PTC_UI_T_RULES_EXPLAIN_TITLE : PTC_UI_T_DOCK_RULES_EXPLAIN_TITLE);
+            ptc_ui_graphics_draw(&m, &theme);
+            rules_cards_trace.enabled = false;
+            if (!rules_cards_trace.started || rules_cards_trace.failed || rules_cards_trace.body_lines < 4) {
+                fprintf(stderr, "FAIL: rules explain cards kind=%d dark=%d lang=%d started=%d lines=%d failed=%d\n",
+                    kind, dark, (int)ptc_ui_language_get_resolved(),
+                    rules_cards_trace.started ? 1 : 0, rules_cards_trace.body_lines, rules_cards_trace.failed);
+                ++failed;
+            }
+        }
+    }
+    return failed;
+}
+
 static int render_update_previews(const char *directory, const PtcUiModel *baseline)
 {
     int failed = 0;
@@ -2388,7 +2454,18 @@ static int render_update_previews(const char *directory, const PtcUiModel *basel
         badge.view = PTC_UI_PARENT;
         badge.parent_page = PTC_UI_PARENT_TODAY;
         failed |= save_preview(directory, "parent", "parent-update-available", &badge, dark);
+        {
+            PtcUiModel stale = *baseline;
+            stale.status_updated_at = 879;
+            stale.view = PTC_UI_CHILD;
+            stale.overlay = PTC_UI_OVERLAY_NONE;
+            failed |= save_preview(directory, "child", "child-stale", &stale, dark);
+            stale.view = PTC_UI_PARENT;
+            stale.parent_page = PTC_UI_PARENT_TODAY;
+            failed |= save_preview(directory, "parent", "parent-today-stale", &stale, dark);
+        }
     }
+    failed |= check_rules_explain_cards(baseline);
     return failed;
 }
 

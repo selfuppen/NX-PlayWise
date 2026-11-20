@@ -1192,31 +1192,47 @@ static void draw_rules_help_dialog(uint32_t *pixels, uint32_t stride, const PtcU
         PTC_UI_T_RULES_EXPLAIN_CARD3_BODY,
         PTC_UI_T_RULES_EXPLAIN_CARD4_BODY
     };
-    const char *emojis[] = {"🛡️", "📅", "⚖️", "🌿"};
+    /* All four symbols are verified built-in vector emojis in ui_emoji.h. */
+    const char *emojis[] = {"🛡️", "📅", "🎯", "🌿"};
     uint32_t accent_colors[] = {UI_CORAL, UI_ACCENT, UI_SUCCESS, UI_HERO};
 
     int card_w = (dialog.width - 68 - 18) / 2;
-    int card_h = 160;
+    int card_h = 166;
     for (int i = 0; i < 4; ++i) {
         int col = i % 2;
         int row = i / 2;
         int cx = dialog.x + 34 + col * (card_w + 18);
-        int cy = dialog.y + 104 + row * (card_h + 16);
+        int cy = dialog.y + 100 + row * (card_h + 16);
         UiRect c = {cx, cy, card_w, card_h};
+        char num[8];
+        char fitted_title[128];
+        snprintf(num, sizeof(num), "0%d", i + 1);
+
         fill_round_rect(pixels, stride, c, 12, UI_PAGE);
+
+        /* Tinted header band clipped to the top 44px so top corners stay smoothly rounded. */
+        ui_set_vertical_clip(c.y, c.y + 44);
+        fill_round_rect(pixels, stride, c, 12, UI_RAISED);
+        ui_set_vertical_clip(0, SCREEN_HEIGHT);
+        draw_line(pixels, stride, c.x + 1, c.y + 44, c.x + c.width - 1, c.y + 44, 1, UI_BORDER);
+
+        /* Left domain accent strip and outer border */
+        fill_round_rect(pixels, stride, (UiRect){c.x + 4, c.y + 10, 4, c.height - 20}, 2, accent_colors[i]);
         draw_rect_outline(pixels, stride, c, 12, 1, UI_BORDER);
 
-        /* 左侧领域色条 */
-        fill_round_rect(pixels, stride, (UiRect){c.x + 4, c.y + 12, 4, c.height - 24}, 2, accent_colors[i]);
+        /* Header contents: built-in emoji, fitted bold title, and right-aligned 01..04 badge */
+        UiRect badge = {c.x + c.width - 14 - 34, c.y + 11, 34, 22};
+        fill_round_rect(pixels, stride, badge, 11, UI_SURFACE);
+        draw_rect_outline(pixels, stride, badge, 11, 1, UI_BORDER);
+        draw_text_center(pixels, stride, badge, num, 11, UI_MUTED);
 
-        /* 顶部标题与 Emoji */
-        draw_text(pixels, stride, c.x + 16, c.y + 30, emojis[i], 16, UI_INK);
-        draw_text_bold(pixels, stride, c.x + 42, c.y + 30, ptc_ui_text(titles[i]), 15, UI_INK);
-        draw_line(pixels, stride, c.x + 16, c.y + 44, c.x + c.width - 16, c.y + 44, 1, UI_BORDER);
+        draw_text(pixels, stride, c.x + 18, c.y + 29, emojis[i], 16, UI_INK);
+        fit_text(fitted_title, sizeof(fitted_title), ptc_ui_text(titles[i]), 15, badge.x - (c.x + 44) - 10);
+        draw_text_bold(pixels, stride, c.x + 44, c.y + 29, fitted_title, 15, UI_INK);
 
-        /* 详细解释 */
-        draw_wrapped_text(pixels, stride, c.x + 16, c.y + 54,
-                          ptc_ui_text(items[i]), 13, c.width - 32, 20, 5, UI_INK);
+        /* Body text starts at baseline c.y + 70 (13px glyph top at c.y + 57, clear of c.y + 44 divider) */
+        draw_wrapped_text(pixels, stride, c.x + 18, c.y + 70,
+                          ptc_ui_text(items[i]), 13, c.width - 34, 20, 5, UI_INK);
     }
 
     /* 底部返回/关闭按钮 */
@@ -1281,8 +1297,26 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
     format_status_age(model, age, sizeof(age));
     char age_label[128];
     snprintf(age_label, sizeof(age_label), ptc_ui_text(PTC_UI_T_DETAIL_UPDATED_AGE), age);
-    draw_text_center(pixels, stride, (UiRect){dialog.x + dialog.width - 280, dialog.y + 24, 260, 36}, projection.fresh ? age_label :
-        ptc_ui_text(PTC_UI_T_DETAIL_PENDING), 13, projection.fresh ? UI_MUTED : UI_WARNING);
+    bool needs_refresh = !model->waiting && (!projection.fresh || ptc_ui_status_needs_refresh(model, now));
+    bool refresh_failed = ptc_ui_status_refresh_failed(model);
+    if (needs_refresh) {
+        const char *pending_txt = ptc_ui_text(PTC_UI_T_DETAIL_PENDING);
+        int pw = measure_text(pending_txt, 13) + 34;
+        if (pw > 260) pw = 260;
+        UiRect fresh_pill = {dialog.x + dialog.width - 24 - pw, dialog.y + 28, pw, 28};
+        char fitted_pending[96];
+        fit_text(fitted_pending, sizeof(fitted_pending), pending_txt, 13, pw - 30);
+        fill_round_rect(pixels, stride, fresh_pill, 14, refresh_failed ? UI_DANGER_SOFT : UI_WARNING_SOFT);
+        draw_rect_outline(pixels, stride, fresh_pill, 14, 1, refresh_failed ? UI_DANGER_BORDER : UI_WARNING_BORDER);
+        fill_round_rect(pixels, stride, (UiRect){fresh_pill.x + 10, fresh_pill.y + 11, 6, 6}, 3,
+            refresh_failed ? UI_DANGER : UI_WARNING);
+        draw_text_bold(pixels, stride, fresh_pill.x + 22, fresh_pill.y + 19, fitted_pending, 13,
+            refresh_failed ? UI_DANGER : UI_WARNING_TEXT);
+    } else {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + dialog.width - 280, dialog.y + 24, 260, 36},
+            projection.fresh ? age_label : ptc_ui_text(PTC_UI_T_DETAIL_PENDING), 13,
+            projection.fresh ? UI_MUTED : UI_WARNING);
+    }
 
     if (model->home_details_page == 0) draw_today_plan(pixels, stride, model, &projection, &decision, &status);
     else draw_today_rules(pixels, stride, model, &projection, &decision);
@@ -1295,9 +1329,10 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 : PTC_UI_T_DETAIL_BACK)
             : (model->view == PTC_UI_CHILD ? PTC_UI_T_DETAIL_BACK_CHILD : PTC_UI_T_DETAIL_BACK_TODAY));
     home_button(pixels, stride, ptc_ui_home_details_action_rect(model, 2), back_label,
-        true, model->home_details_focus == 2, false);
-    home_button(pixels, stride, ptc_ui_home_details_action_rect(model, 1), ptc_ui_text(PTC_UI_T_Y_REFRESH),
-        false, model->home_details_focus == 1, model->waiting);
+        !needs_refresh, model->home_details_focus == 2, false);
+    draw_refresh_action_button(pixels, stride, ptc_ui_home_details_action_rect(model, 1),
+        ptc_ui_text(PTC_UI_T_Y_REFRESH), needs_refresh, refresh_failed,
+        model->home_details_focus == 1, model->waiting);
 
     /* 底部右侧文字 */
     char footer[384];
@@ -1377,8 +1412,25 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     format_status_age(model, age_buf, sizeof(age_buf));
     char age_label[128];
     snprintf(age_label, sizeof(age_label), ptc_ui_text(PTC_UI_T_DETAIL_UPDATED_AGE), age_buf);
-    draw_text_center(pixels, stride, (UiRect){906, 56, 260, 36}, fresh ? age_label :
-        ptc_ui_text(PTC_UI_T_DETAIL_PENDING), 13, fresh ? UI_MUTED : UI_WARNING);
+    bool needs_refresh = !model->waiting && (!fresh || ptc_ui_status_needs_refresh(model, now));
+    bool refresh_failed = ptc_ui_status_refresh_failed(model);
+    if (needs_refresh) {
+        const char *pending_txt = ptc_ui_text(PTC_UI_T_DETAIL_PENDING);
+        int pw = measure_text(pending_txt, 13) + 34;
+        if (pw > 256) pw = 256;
+        UiRect fresh_pill = {1172 - pw, 62, pw, 26};
+        char fitted_pending[96];
+        fit_text(fitted_pending, sizeof(fitted_pending), pending_txt, 13, pw - 30);
+        fill_round_rect(pixels, stride, fresh_pill, 13, refresh_failed ? UI_DANGER_SOFT : UI_WARNING_SOFT);
+        draw_rect_outline(pixels, stride, fresh_pill, 13, 1, refresh_failed ? UI_DANGER_BORDER : UI_WARNING_BORDER);
+        fill_round_rect(pixels, stride, (UiRect){fresh_pill.x + 10, fresh_pill.y + 10, 6, 6}, 3,
+            refresh_failed ? UI_DANGER : UI_WARNING);
+        draw_text_bold(pixels, stride, fresh_pill.x + 22, fresh_pill.y + 18, fitted_pending, 13,
+            refresh_failed ? UI_DANGER : UI_WARNING_TEXT);
+    } else {
+        draw_text_center(pixels, stride, (UiRect){906, 56, 260, 36}, fresh ? age_label :
+            ptc_ui_text(PTC_UI_T_DETAIL_PENDING), 13, fresh ? UI_MUTED : UI_WARNING);
+    }
 
     /* 2. 顶部全局提示横幅 (y = 98, h = 24) */
     UiRect banner = {108, 98, 1064, 24};
@@ -1468,10 +1520,10 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     /* 8. 底部导航与按钮 (y = 618) */
     draw_text(pixels, stride, 114, 630, ptc_ui_text(PTC_UI_T_DAY_DECISION_SWITCH_HINT), 11, UI_MUTED);
 
-    home_button(pixels, stride, ptc_ui_day_decision_refresh_rect(), ptc_ui_text(PTC_UI_T_Y_REFRESH),
-                false, false, model->waiting);
+    draw_refresh_action_button(pixels, stride, ptc_ui_day_decision_refresh_rect(),
+                ptc_ui_text(PTC_UI_T_Y_REFRESH), needs_refresh, refresh_failed, false, model->waiting);
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_RETURN),
-                false, true, false);
+                false, !needs_refresh, false);
 
     if (model->rules_dialog_open) {
         draw_rules_help_dialog(pixels, stride, model);
