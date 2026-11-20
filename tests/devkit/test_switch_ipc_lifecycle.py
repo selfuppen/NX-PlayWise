@@ -125,6 +125,21 @@ def main() -> None:
     require(preferences.index("storage->vtable->read_text(") <
             preferences.index("ptc_reason_preferences_update(&reason_preferences, read_ok ? reason_config : NULL)"),
             "IPC refresh must still read current config bytes before checking the parse cache")
+    require("reason_config_ns = reason_ns + 5000000000ULL;" in preferences,
+            "presentation preference rereads use five seconds even when enabled")
+    navigation = overlay[overlay.index("bool should_refresh_on_nav()"):overlay.index("bool maybe_refresh_on_nav(")]
+    require("bridge_->waiting" in navigation and "status_is_stale()" in navigation and
+            "has_status_snapshot_" in navigation and "last_refresh_tick_ == 0" in navigation and
+            "threshold_ns" not in navigation,
+            "navigation must reuse the normal snapshot freshness gate and avoid overlapping requests")
+    require("begin_status_refresh(PTC_UI_STATUS_COUNTDOWN_END)" in overlay and
+            "(void)begin_status_refresh();" in overlay,
+            "countdown end and explicit refresh must bypass navigation reuse")
+    nro_redemption = (ROOT / "companion/nro/nro_redemption.c").read_text(encoding="utf-8")
+    require("ptc_companion_poll_recovered_result(" in overlay and
+            "ptc_companion_poll_recovered_result(" in nro_redemption and
+            "ptc_companion_read_result(" not in nro_redemption,
+            "both clients must use the tested bounded recovery reader")
     # Switch-only wiring that Host C tests cannot compile: the production loop must
     # enable sampled-state coalescing, flush it before the handoff freezes writes and
     # after the loop ends, and keep the freeze ledger free of periodic I/O.

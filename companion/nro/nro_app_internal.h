@@ -165,6 +165,7 @@ typedef struct {
     bool today_limit_save_pending;
     PtcUiQuotaRecheckSnapshot quota_before;
     PtcPendingRedemption pending_redemption;
+    PtcCompanionResultPoll redemption_result_poll;
     bool recovering_redemption;
     AuthRetryAction auth_retry_action;
     PtcUiOverlay auth_return_overlay;

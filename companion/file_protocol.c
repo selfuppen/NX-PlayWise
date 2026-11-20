@@ -289,6 +289,25 @@ PtcCompanionStatus ptc_companion_read_result(
     return PTC_COMPANION_OK;
 }
 
+PtcCompanionStatus ptc_companion_poll_recovered_result(
+    PtcCompanionResultPoll *poll, PtcCompanionFileClient *client, const char *request_id,
+    uint64_t now_ms, char *out, size_t out_size)
+{
+    if (!poll || !client || !client->storage || !ptc_request_id_is_valid(request_id) ||
+        strlen(request_id) >= sizeof(poll->request_id) || !out || !out_size)
+        return PTC_COMPANION_BAD_ARGUMENT;
+    if (strcmp(poll->request_id, request_id) != 0 || now_ms < poll->last_ms) {
+        snprintf(poll->request_id, sizeof(poll->request_id), "%s", request_id);
+        poll->delay_ms = 0;
+    }
+    if (poll->delay_ms && now_ms - poll->last_ms < poll->delay_ms) return PTC_COMPANION_PENDING;
+    poll->last_ms = now_ms;
+    poll->delay_ms = ptc_companion_result_poll_delay(poll->delay_ms);
+    /* Missing, unreadable and malformed receipts all retain the original ID.
+       Never resubmit an unknown redemption or spin on a persistent SD error. */
+    return ptc_companion_read_result(client, request_id, 0, -1, out, out_size);
+}
+
 PtcCompanionStatus ptc_companion_parse_result_summary(const char *result_json, PtcCompanionResultSummary *out)
 {
     return ptc_companion_result_summary_parse(result_json, out)

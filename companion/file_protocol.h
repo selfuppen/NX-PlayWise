@@ -26,6 +26,19 @@ typedef struct {
     PtcStorage *storage;
 } PtcCompanionFileClient;
 
+/* Read-only recovery polling; reset automatically when the request changes. */
+typedef struct {
+    char request_id[80];
+    uint64_t last_ms;
+    unsigned delay_ms;
+} PtcCompanionResultPoll;
+
+static inline unsigned ptc_companion_result_poll_delay(unsigned previous_ms)
+{
+    if (previous_ms == 0) return 100;
+    return previous_ms >= 500 ? 1000 : previous_ms * 2;
+}
+
 typedef struct {
     char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     int64_t confirmed_at;
@@ -64,6 +77,9 @@ PtcCompanionStatus ptc_companion_read_result(
     char *out,
     size_t out_size);
 PtcCompanionStatus ptc_companion_parse_result_summary(const char *result_json, PtcCompanionResultSummary *out);
+PtcCompanionStatus ptc_companion_poll_recovered_result(
+    PtcCompanionResultPoll *poll, PtcCompanionFileClient *client, const char *request_id,
+    uint64_t now_ms, char *out, size_t out_size);
 const char *ptc_companion_status_name(PtcCompanionStatus status);
 
 #endif

@@ -543,12 +543,9 @@ public:
 
     void poll_pending_redemption()
     {
-        const u64 now = armGetSystemTick();
-        if (recovery_last_poll_tick_ != 0 &&
-            armTicksToNs(now - recovery_last_poll_tick_) < 250000000ULL) return;
-        recovery_last_poll_tick_ = now;
-        PtcCompanionStatus status = ptc_companion_read_result(
-            &bridge_->transport.file, pending_redemption_.request_id, 0, -1,
+        PtcCompanionStatus status = ptc_companion_poll_recovered_result(
+            &recovery_result_poll_, &bridge_->transport.file, pending_redemption_.request_id,
+            armTicksToNs(armGetSystemTick()) / 1000000ULL,
             bridge_->result_json, sizeof(bridge_->result_json));
         if (status != PTC_COMPANION_OK) return;
         if (ptc_companion_parse_result_summary(bridge_->result_json, &bridge_->summary) != PTC_COMPANION_OK ||
@@ -590,19 +587,17 @@ public:
         return true;
     }
 
-    bool should_refresh_on_nav(u64 threshold_ns = 5000000000ULL) const
+    bool should_refresh_on_nav() const
     {
         if (!bridge_ || bridge_->waiting) return false;
-        if (!has_status_snapshot_ || last_refresh_tick_ == 0 || status_is_stale()) return true;
-        const u64 tick = armGetSystemTick();
-        return tick < last_refresh_tick_ ||
-            armTicksToNs(tick - last_refresh_tick_) >= threshold_ns;
+        // Navigation reuses the normal 30s snapshot. Explicit refresh and
+        // countdown-end checks bypass this gate; action freshness is unchanged.
+        return !has_status_snapshot_ || last_refresh_tick_ == 0 || status_is_stale();
     }
 
-    bool maybe_refresh_on_nav(PtcUiStatusOrigin origin = PTC_UI_STATUS_OTHER,
-                              u64 threshold_ns = 5000000000ULL)
+    bool maybe_refresh_on_nav(PtcUiStatusOrigin origin = PTC_UI_STATUS_OTHER)
     {
-        if (should_refresh_on_nav(threshold_ns)) {
+        if (should_refresh_on_nav()) {
             return begin_status_refresh(origin);
         }
         return false;
@@ -1294,7 +1289,7 @@ private:
     PtcOverlayHoldState confirm_hold_{};
     char pending_code_[9]{};
     PtcPendingRedemption pending_redemption_{};
-    u64 recovery_last_poll_tick_ = 0;
+    PtcCompanionResultPoll recovery_result_poll_ = {};
     bool prev_touch_down_ = false;
     u64 prev_stick_keys_ = 0;
     ParentView parent_view_ = ParentView::Child;

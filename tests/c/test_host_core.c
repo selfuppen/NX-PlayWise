@@ -4659,8 +4659,11 @@ static void test_power_ledger(void)
         "a monotonic regression only rebuilds the baseline");
 }
 
+#include "test_result_polling.inc"
+
 int main(void)
 {
+    test_result_polling();
     test_reason_events();
     test_overlay_brief();
     test_overlay_brief_suppression();

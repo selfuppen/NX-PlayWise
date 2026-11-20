@@ -57,8 +57,9 @@ void poll_pending_redemption(UiState *ui)
 {
     PtcCompanionStatus status;
     if (!ui || !ui->recovering_redemption || ui->transport.suspended) return;
-    status = ptc_companion_read_result(
-        &ui->client, ui->pending_redemption.request_id, 0, -1,
+    status = ptc_companion_poll_recovered_result(
+        &ui->redemption_result_poll, &ui->client, ui->pending_redemption.request_id,
+        (uint64_t)ptc_ui_anim_now_ms(),
         ui->last_result, sizeof(ui->last_result));
     if (status != PTC_COMPANION_OK) {
         if (status == PTC_COMPANION_RESULT_INVALID || status == PTC_COMPANION_RESULT_MISMATCH) {

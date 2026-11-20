@@ -124,9 +124,9 @@ PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *cli
     if (client->elapsed_ms < client->next_file_poll_ms) return PTC_COMPANION_PENDING;
     status = ptc_companion_read_result(&client->file, client->active_request_id, client->elapsed_ms, timeout_ms, out, out_size);
     if (status == PTC_COMPANION_PENDING) {
-        /* SDMC result checks are cheap; keep the fallback responsive instead
-         * of adding up to seconds of exponential backoff to every refresh. */
-        client->file_poll_delay_ms = 100;
+        /* Only receipt discovery backs off; accepted requests are never replayed.
+           Keep the first check at 100ms and cap added discovery latency at 1s. */
+        client->file_poll_delay_ms = ptc_companion_result_poll_delay(client->file_poll_delay_ms);
         client->next_file_poll_ms = client->file_poll_delay_ms > INT_MAX - client->elapsed_ms
             ? INT_MAX : client->elapsed_ms + client->file_poll_delay_ms;
     }

@@ -385,7 +385,9 @@ int main(int argc, char **argv)
             bool read_ok = storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json",
                 reason_config, sizeof(reason_config));
             ptc_reason_preferences_update(&reason_preferences, read_ok ? reason_config : NULL);
-            reason_config_ns = reason_ns + (reason_preferences.enabled ? 1000000000ULL : 5000000000ULL);
+            /* Presentation preferences may lag five seconds after an external SD
+               edit; IPC notification still forces a fresh read immediately. */
+            reason_config_ns = reason_ns + 5000000000ULL;
         }
         PtcClockSnapshot reason_clock = time_provider.provider.vtable->now(&time_provider.provider);
         bool reason_suppressed = reason_preferences.enabled && !reason_stopping &&
