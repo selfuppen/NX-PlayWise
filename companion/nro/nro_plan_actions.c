@@ -98,12 +98,12 @@ void apply_pending_navigation(UiState *ui)
                 (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 1 : 3);
         }
         ui->model.parent_footer_focused = false;
-        submit_status(ui);
+        refresh_status_on_navigation(ui);
     } else if (ui->pending_leave_parent) {
         ptc_ui_return_from_parent(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_HAS_RETURNED_TO_THE_MAIN_PAGE));
         if (ui->model.view == PTC_UI_CHILD) {
-            submit_status(ui);
+            refresh_status_on_navigation(ui);
         }
     } else if (ui->pending_parent_page >= 0) {
         ui->model.today_settings_origin = false;
@@ -113,7 +113,7 @@ void apply_pending_navigation(UiState *ui)
             ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
         }
         if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
-            submit_status(ui);
+            refresh_status_on_navigation(ui);
         } else if (ui->model.parent_page == PTC_UI_PARENT_GRANT) {
             (void)load_redemption_history(ui);
         } else if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {

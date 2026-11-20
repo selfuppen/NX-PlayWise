@@ -47,7 +47,7 @@ static void enter_parent_area_unlocked(UiState *ui)
     }
 #endif
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
-        submit_status(ui);
+        refresh_status_on_navigation(ui);
     }
 }
 

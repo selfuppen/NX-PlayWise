@@ -254,6 +254,7 @@ void open_offline_code_input(UiState *ui);
 void begin_wait(UiState *ui, const char *type, const char *message);
 void submit_transport_empty(UiState *ui, const char *type, const char *ok_message, const char *fail_prefix);
 void submit_status(UiState *ui);
+void refresh_status_on_navigation(UiState *ui);
 void submit_status_with_origin(UiState *ui, PtcUiStatusOrigin origin);
 void activate_parent_status(UiState *ui);
 void enter_child_area(UiState *ui);

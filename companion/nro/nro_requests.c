@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "nro_app_internal.h"
 
 void begin_wait(UiState *ui, const char *type, const char *message)
@@ -33,6 +34,24 @@ void submit_transport_empty(UiState *ui, const char *type, const char *ok_messag
 void submit_status(UiState *ui)
 {
     submit_status_with_origin(ui, PTC_UI_STATUS_OTHER);
+}
+
+void refresh_status_on_navigation(UiState *ui)
+{
+    time_t now;
+    struct tm local;
+    uint16_t day;
+    if (!ui || ui->waiting || ui->recovering_redemption || ui->status_refresh_pending) return;
+    now = time(NULL);
+    /* Navigation may reuse display data, never an action's safety precheck.
+     * Keep the original timestamp so the visible age/manual refresh stay true. */
+    if (!ui->model.home_details_refresh_failed &&
+        strcmp(ui->model.result_status, "ok") == 0 &&
+        ptc_ui_status_is_fresh(&ui->model, (int64_t)now) &&
+        localtime_r(&now, &local) &&
+        ptc_day_index_from_date((uint16_t)(local.tm_year + 1900), (uint8_t)(local.tm_mon + 1),
+            (uint8_t)local.tm_mday, &day) && day == ui->model.day_index) return;
+    submit_status(ui);
 }
 
 void submit_status_with_origin(UiState *ui, PtcUiStatusOrigin origin)
@@ -83,7 +102,7 @@ void enter_child_area(UiState *ui)
         return;
     }
     ui->model.view = PTC_UI_CHILD;
-    submit_status(ui);
+    refresh_status_on_navigation(ui);
 }
 
 void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)

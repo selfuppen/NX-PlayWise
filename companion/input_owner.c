@@ -289,8 +289,12 @@ static bool owner_block(PtcInputOwnerReader *r, uint64_t now, bool non_neutral, 
     int binding;
     if (!r || !r->context.storage) return false;
     if (!now || now < r->last_ns) { r->blocked = r->needs_neutral = true; return true; }
-    if (!non_neutral && now < r->next_poll_ns) return r->blocked || r->needs_neutral;
     r->last_ns = now;
+    /* Reusing a denial cannot dispatch input. Keep auditing blocked/unknown
+     * owners at the idle cadence even while a key is held; an allowed physical
+     * input still requires fresh files, including the first key after release. */
+    if (now < r->next_poll_ns && (!non_neutral || r->blocked || r->needs_neutral))
+        return r->blocked || r->needs_neutral;
     r->next_poll_ns = now <= UINT64_MAX - PTC_INPUT_OWNER_POLL_NS ? now + PTC_INPUT_OWNER_POLL_NS : now;
     binding = runtime(&r->context, boot, use_read_status);
     if (binding == -1) unknown = true;

@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "nro_app_internal.h"
 #include "../../common/protocol/request_schema.h"
 #include "../../platform/host/mem_storage.h"
@@ -38,13 +39,8 @@ void ptc_ui_graphics_language_changed(void) { ++glyph_refreshes; }
 static int64_t monotonic_offset_ms;
 int64_t ptc_ui_anim_now_ms(void) { return fixed_time * 1000 + monotonic_offset_ms; }
 void refresh_security_state(UiState *ui) { (void)ui; }
-void cancel_bedtime_navigation(UiState *ui) { (void)ui; }
-void finish_bedtime_navigation(UiState *ui) { (void)ui; }
 void finish_quota_recheck(UiState *ui, bool success) { (void)ui; (void)success; }
 void finish_today_limit_refresh(UiState *ui, bool success) { (void)ui; (void)success; }
-void update_weekly_dirty(UiState *ui) { (void)ui; }
-void update_holiday_dirty(UiState *ui) { (void)ui; }
-void update_bedtime_dirty(UiState *ui) { (void)ui; }
 void show_pending_redemption(UiState *ui) { (void)ui; }
 void calendar_manager_refresh(UiState *ui) { (void)ui; }
 void open_redemption_history(UiState *ui) { (void)ui; }
@@ -52,11 +48,12 @@ void open_activity_history(UiState *ui) { (void)ui; }
 void open_offline_code_input(UiState *ui) { (void)ui; }
 bool load_redemption_history(UiState *ui) { (void)ui; return false; }
 void handle_today_action_ready(UiState *ui, int index) { (void)ui; (void)index; }
-void apply_pending_navigation(UiState *ui) { (void)ui; }
 void submit_eye_care_policy(UiState *ui) { (void)ui; }
 void save_dock_from_page(UiState *ui) { (void)ui; }
 void request_dock_waiver(UiState *ui) { (void)ui; }
-void save_bedtime_from_page(UiState *ui) { (void)ui; }
+void submit_bedtime_confirmation(UiState *ui) { (void)ui; }
+void submit_bedtime_policy(UiState *ui) { (void)ui; }
+void dock_page_action(UiState *ui, int action, int delta) { (void)ui; (void)action; (void)delta; }
 bool pin_input(UiState *ui, const char *title, const char *guide, char *out, size_t size)
 {
     ptc_ui_pin_open(&ui->model, title, guide);
@@ -663,6 +660,130 @@ static void test_config_backup_ui(void)
         "PIN restore leaves parent session and cleans owned preview");
 }
 
+static unsigned navigation_reads, navigation_writes;
+static const PtcStorageVTable *navigation_io;
+static bool navigation_read(PtcStorage *storage, const char *path, char *out, size_t size)
+{
+    ++navigation_reads;
+    return navigation_io->read_text(storage, path, out, size);
+}
+static bool navigation_write(PtcStorage *storage, const char *path, const char *text)
+{
+    ++navigation_writes;
+    return navigation_io->write_text_atomic(storage, path, text);
+}
+static void navigation_fixture(UiState *ui, PtcMemStorage *mem)
+{
+    init(ui, mem);
+    time_t now = (time_t)fixed_time;
+    struct tm local;
+    check(localtime_r(&now, &local) &&
+        ptc_day_index_from_date((uint16_t)(local.tm_year + 1900), (uint8_t)(local.tm_mon + 1),
+            (uint8_t)local.tm_mday, &ui->model.day_index), "navigation local date fixture");
+    ui->model.status_loaded = true;
+    ui->model.status_updated_at = fixed_time - 30;
+    ui->model.view = PTC_UI_PARENT;
+    ui->model.parent_page = PTC_UI_PARENT_TODAY;
+    ui->model.setup_wizard_completed = true;
+    strcpy(ui->model.setup_phase, "active");
+    strcpy(ui->model.result_status, "ok");
+}
+
+static void test_navigation_status_reuse(void)
+{
+    static PtcMemStorage mem;
+    UiState ui;
+    navigation_fixture(&ui, &mem);
+    navigation_io = mem.storage.vtable;
+    PtcStorageVTable counted = *navigation_io;
+    counted.read_text = navigation_read;
+    counted.write_text_atomic = navigation_write;
+    mem.storage.vtable = &counted;
+    navigation_reads = navigation_writes = 0;
+    int64_t captured = ui.model.status_updated_at;
+    for (int i = 0; i < 50; ++i) {
+        ui.model.view = PTC_UI_PARENT;
+        request_parent_navigation(&ui, PTC_UI_PARENT_PLAN, false);
+        request_parent_navigation(&ui, PTC_UI_PARENT_TODAY, false);
+        request_parent_navigation(&ui, -1, true);
+        enter_child_area(&ui);
+    }
+    check(!ui.waiting && !navigation_reads && !navigation_writes &&
+        ui.model.status_updated_at == captured && !ui.active_request_id[0],
+        "50 page round trips reuse the dated snapshot without file I/O or status requests");
+    printf("NRO navigation: 50 round trips, reads=%u, writes=%u, status requests=0\n",
+        navigation_reads, navigation_writes);
+    ui.model.status_updated_at = fixed_time - 120;
+    refresh_status_on_navigation(&ui);
+    check(!ui.waiting, "navigation includes the existing 120 second freshness boundary");
+    submit_status(&ui);
+    check(ui.waiting && navigation_writes > 0, "explicit refresh bypasses a reusable navigation snapshot");
+    char pending[80]; snprintf(pending, sizeof(pending), "%s", ui.active_request_id);
+    unsigned writes = navigation_writes;
+    refresh_status_on_navigation(&ui);
+    check(!strcmp(pending, ui.active_request_id) && writes == navigation_writes,
+        "navigation does not replace or duplicate an in-flight request");
+
+    for (int scenario = 0; scenario < 8; ++scenario) {
+        navigation_fixture(&ui, &mem);
+        switch (scenario) {
+        case 0: ui.model.status_loaded = false; break;
+        case 1: ui.model.status_updated_at = fixed_time - 121; break;
+        case 2: ui.model.status_updated_at = fixed_time + 1; break;
+        case 3: --ui.model.day_index; break;
+        case 4: ui.model.error_code = PTC_ERR_PCTL_READ_FAILED; break;
+        case 5: strcpy(ui.model.result_status, "error"); break;
+        case 6: ui.model.home_details_refresh_failed = true; break;
+        case 7:
+            ui.model.usage_present = ui.model.played_minutes_available = true;
+            ui.model.usage_captured_at = fixed_time - 121;
+            break;
+        }
+        refresh_status_on_navigation(&ui);
+        check(ui.waiting, "missing, stale, failed, cross-day or reversed-clock data requests fresh status");
+    }
+    navigation_fixture(&ui, &mem);
+    ui.status_refresh_pending = true;
+    ui.status_refresh_origin = PTC_UI_STATUS_FOCUS;
+    refresh_status_on_navigation(&ui);
+    check(!ui.waiting && ui.status_refresh_pending, "navigation leaves focus refresh to its original owner");
+    trigger_resume_status_refresh(&ui, NULL);
+    check(ui.waiting && !ui.status_refresh_pending, "focus refresh still submits with fresh cached data");
+
+    navigation_fixture(&ui, &mem);
+    ui.recovering_redemption = true;
+    ui.model.status_loaded = false;
+    refresh_status_on_navigation(&ui);
+    check(!ui.waiting, "navigation does not interrupt unresolved redemption recovery");
+
+    navigation_fixture(&ui, &mem);
+    ui.model.status_updated_at = fixed_time - 121;
+    mem.fail_writes = true;
+    refresh_status_on_navigation(&ui);
+    check(!ui.waiting && !strcmp(ui.model.result_status, "error"), "failed refresh submission remains a failure");
+    mem.fail_writes = false;
+    refresh_status_on_navigation(&ui);
+    check(ui.waiting, "next navigation retries fresh status after a submission failure");
+
+    navigation_fixture(&ui, &mem);
+    check(ptc_companion_auth_set_pin(&ui.auth, "1234", fixed_time, switch_random, NULL) == PTC_AUTH_OK,
+        "navigation authentication fixture");
+    ui.model.view = PTC_UI_CHILD;
+    pin_values[0] = "1234";
+    captured = ui.model.status_updated_at;
+    enter_parent_area(&ui);
+    check(pin_opens == 1 && ui.setup_parent_authorized && ui.model.view == PTC_UI_PARENT &&
+        !ui.waiting && ui.model.status_updated_at == captured, "fresh navigation still requires the parent PIN");
+
+    navigation_fixture(&ui, &mem);
+    ui.model.parent_page = PTC_UI_PARENT_PLAN;
+    ui.model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
+    ui.model.weekly_dirty = true;
+    request_parent_navigation(&ui, PTC_UI_PARENT_TODAY, false);
+    check(ui.model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE && ui.model.weekly_dirty && !ui.waiting,
+        "snapshot reuse cannot bypass unsaved draft confirmation");
+}
+
 static void test_today_detail_refresh(void)
 {
     static PtcMemStorage mem;
@@ -1030,6 +1151,7 @@ int main(void)
     test_config_backup_ui();
     test_bedtime_legacy_optional_windows();
     test_today_detail_refresh();
+    test_navigation_status_reuse();
     test_parent_pin_error();
     test_theme_draft_commit();
     {

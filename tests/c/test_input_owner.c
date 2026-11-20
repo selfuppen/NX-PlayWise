@@ -153,29 +153,81 @@ static void test_fresh_byte_cache(void)
     unsigned cold_allocations = parse_allocations;
     check(cold_allocations > 0 && fresh_reads == 3, "cold parse reads all three files");
     parse_allocations = fresh_reads = 0;
-    for (unsigned i = 0; i < 100; ++i) {
-        check(ptc_input_owner_block(&reader, START + 2 + i, true), "cached reader remains blocked");
-        check(ptc_input_owner_accept(&writer, START + 2 + i), "fresh writer identity accepted");
+    uint64_t now = START + 1;
+    for (unsigned i = 0; i < 32; ++i) {
+        now += PTC_INPUT_OWNER_POLL_NS;
+        check(ptc_input_owner_block(&reader, now, true), "cached reader remains blocked");
+        check(ptc_input_owner_accept(&writer, now), "fresh writer identity accepted");
     }
-    check(parse_allocations == 0 && fresh_reads == 400,
-        "100 repeated reader/writer checks allocate no JSON but retain 400 fresh reads");
+    check(parse_allocations == 0 && fresh_reads == 128,
+        "32 due reader/writer checks allocate no JSON but retain 128 fresh reads");
     printf("input-owner cache: cold=%u allocations, repeated=0 allocations, fresh_reads=%u\n",
         cold_allocations, fresh_reads);
     mem.fail_read_path_contains = "runtime-ready";
-    check(!ptc_input_owner_accept(&writer, START + 102), "failed read cannot use cached runtime");
-    check(ptc_input_owner_block(&reader, START + 102, true), "failed runtime remains unknown");
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(!ptc_input_owner_accept(&writer, now), "failed read cannot use cached runtime");
+    check(ptc_input_owner_block(&reader, now, true), "failed runtime remains unknown");
     mem.fail_read_path_contains = NULL;
-    ptc_input_owner_release(&writer, START + 103);
-    check(ptc_input_owner_block(&reader, START + 104, true), "new release bytes drain held input");
-    check(!ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 105, false),
+    ptc_input_owner_release(&writer, now + 1);
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(ptc_input_owner_block(&reader, now, true), "new release bytes drain held input");
+    now += PTC_INPUT_OWNER_POLL_NS;
+    check(!ptc_input_owner_block(&reader, now, false),
         "neutral input observes fresh release bytes");
     put(SLOT0, "{}");
-    check(ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 106, true),
+    check(ptc_input_owner_block(&reader, now + 1, true),
         "malformed replacement never reuses cached release");
     runtime(RELEASE, "fedcba9876543210");
-    check(!ptc_input_owner_block(&reader, START + 2 * PTC_INPUT_OWNER_POLL_NS + 107, false) &&
+    check(!ptc_input_owner_block(&reader, now + PTC_INPUT_OWNER_POLL_NS + 1, false) &&
         !strcmp(reader.context.boot, "fedcba9876543210"), "same-sized boot change rebinds and invalidates slots");
     cJSON_InitHooks(NULL);
+}
+
+static void test_blocked_input_read_budget(void)
+{
+    fixture();
+    check(ptc_input_owner_acquire(&writer, START), "acquire before held-input budget");
+    hooked.read_text = count_read;
+    hooked.metadata = count_metadata;
+    fresh_reads = runtime_stats = slot_stats = 0;
+    int before_writes = writes;
+    for (unsigned i = 0; i < 50; ++i)
+        check(ptc_input_owner_block(&reader, START + 1 + i * UINT64_C(20000000), true),
+            "every held-input frame stays blocked");
+    check(fresh_reads == 12 && runtime_stats == 4 && slot_stats == 8 && writes == before_writes,
+        "50 blocked frames audit four times: 12 reads plus 12 metadata checks, no writes");
+    printf("input-owner held frames: 50, audits=%u, reads=%u, metadata=%u\n",
+        runtime_stats, fresh_reads, runtime_stats + slot_stats);
+
+    uint64_t now = START + UINT64_C(1000000000);
+    ptc_input_owner_release(&writer, now);
+    unsigned before_reads = fresh_reads;
+    check(ptc_input_owner_block(&reader, now + 1, true) && fresh_reads == before_reads,
+        "release cannot turn a cached denial into an accepted held key");
+    check(ptc_input_owner_block(&reader, now + 2, false), "early neutral frame keeps the denial");
+    now = reader.next_poll_ns;
+    check(!ptc_input_owner_block(&reader, now, false), "due neutral frame reads and acknowledges release");
+    before_reads = fresh_reads;
+    check(!ptc_input_owner_block(&reader, now + 1, true) && fresh_reads == before_reads + 3,
+        "allowed physical input always freshly reads runtime and both slots");
+    check(ptc_input_owner_acquire(&writer, now + 2), "new Overlay can take ownership inside polling window");
+    check(ptc_input_owner_block(&reader, now + 3, true), "first key sees new ownership immediately");
+
+    ptc_input_owner_release(&writer, now + 4);
+    mem.fail_read_path_contains = "runtime-ready";
+    now = reader.next_poll_ns;
+    check(ptc_input_owner_block(&reader, now, false), "read failure cannot unblock a released owner");
+    before_reads = fresh_reads;
+    for (unsigned i = 1; i < 100; ++i)
+        check(ptc_input_owner_block(&reader, now + i, true), "unknown owner keeps blocking held input");
+    check(fresh_reads == before_reads, "unknown ownership also has bounded retry reads");
+    check(ptc_input_owner_block(&reader, now + 98, false) && reader.last_ns == now + 99,
+        "clock rollback between skipped polls is detected and remains blocked");
+    mem.fail_read_path_contains = NULL;
+    check(ptc_input_owner_block(&reader, now + PTC_INPUT_OWNER_POLL_NS, true),
+        "successful retry still requires neutral input");
+    check(!ptc_input_owner_block(&reader, now + 2 * PTC_INPUT_OWNER_POLL_NS, false),
+        "repaired storage and a due neutral frame restore input");
 }
 
 int main(void)
@@ -288,9 +340,9 @@ int main(void)
     change(SLOT0, "expires_mono_ns", cJSON_CreateString("18446744073709551616"));
     check(ptc_input_owner_block(&reader, START + 1, true), "overflow deadline is unknown, not expired");
     change(SLOT0, "expires_mono_ns", cJSON_CreateString("032000000000"));
-    check(ptc_input_owner_block(&reader, START + 2, true), "noncanonical time is rejected");
+    check(ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 2, true), "noncanonical time is rejected");
     put(SLOT0, "{\"schema_version\":1,\"schema_version\":1}");
-    check(ptc_input_owner_block(&reader, START + 3, true), "duplicate keys are rejected");
+    check(ptc_input_owner_block(&reader, START + 2 * PTC_INPUT_OWNER_POLL_NS + 3, true), "duplicate keys are rejected");
     fixture();
     check(!ptc_input_owner_acquire(&writer, UINT64_MAX), "overflowing lease cannot enable Overlay");
     fixture();
@@ -305,7 +357,7 @@ int main(void)
     check(ptc_input_owner_acquire(&writer, START), "lease before future record");
     check(ptc_input_owner_block(&reader, START - 1, true), "future lease timestamp is unknown, not inactive");
     change(SLOT0, "backend_boot_id", cJSON_CreateString("fedcba9876543210"));
-    check(ptc_input_owner_block(&reader, START + 1, true), "wrong-boot lease in current path is rejected");
+    check(ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 1, true), "wrong-boot lease in current path is rejected");
     check(!ptc_input_owner_maintain(&writer, START + PTC_INPUT_OWNER_RENEW_NS), "wrong-boot slot stops renewal");
     fixture();
     check(ptc_input_owner_acquire(&writer, START), "lease before an immediate backend change");
@@ -320,6 +372,7 @@ int main(void)
           "producer cannot silently renew an unexpected released record");
     test_notification_suppression_reads();
     test_fresh_byte_cache();
+    test_blocked_input_read_budget();
     if (failures) return 1;
     puts("PASS: bounded Overlay ownership, notification runtime read, atomic-gap protection and NRO neutral drain");
     return 0;
