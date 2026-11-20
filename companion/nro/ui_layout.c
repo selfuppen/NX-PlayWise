@@ -118,7 +118,16 @@ PtcUiRect ptc_ui_setup_language_rect(int index)
 PtcUiRect ptc_ui_setup_primary_rect(void) { return (PtcUiRect){946, 664, 280, 44}; }
 PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 664, 188, 44}; }
 PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){256, 664, 312, 44}; }
-PtcUiRect ptc_ui_setup_review_rect(int index) { return (PtcUiRect){164, 358 + index * 72, 952, 56}; }
+PtcUiRect ptc_ui_setup_review_rect(int index)
+{
+    switch (index) {
+    case 0: return (PtcUiRect){54, 462, 576, 86};
+    case 1: return (PtcUiRect){650, 462, 576, 86};
+    case 2: return (PtcUiRect){54, 664, 248, 44};
+    case 3: return (PtcUiRect){318, 664, 290, 44};
+    default: return (PtcUiRect){0, 0, 0, 0};
+    }
+}
 PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){74, 274, 538, 86}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){0, 0, 0, 0}; }
 PtcUiRect ptc_ui_setup_notifications_rect(void) { return (PtcUiRect){668, 506, 538, 98}; }

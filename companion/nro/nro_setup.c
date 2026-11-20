@@ -421,6 +421,7 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
         else if (down & HidNpadButton_X) setup_review_action(ui, 3);
         else if (down & HidNpadButton_Up) ui->model.setup_review_selection = (ui->model.setup_review_selection + 3) % 4;
         else if (down & HidNpadButton_Down) ui->model.setup_review_selection = (ui->model.setup_review_selection + 1) % 4;
+        else if (down & (HidNpadButton_Left | HidNpadButton_Right)) ui->model.setup_review_selection ^= 1;
         else if (down & HidNpadButton_A) setup_review_action(ui, ui->model.setup_review_selection);
         return;
     }

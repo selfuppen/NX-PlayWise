@@ -1679,6 +1679,15 @@ static void test_release_hit_targets(void)
     check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_eye_care_rect()), "columns do not overlap");
     check_true(!rects_overlap(ptc_ui_setup_eye_care_rect(), ptc_ui_setup_bedtime_rect()), "switches do not overlap");
     check_true(!rects_overlap(ptc_ui_setup_bedtime_rect(), ptc_ui_setup_notifications_rect()), "bedtime and notifications do not overlap");
+    model.setup_review_active = true;
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_setup_review_rect(i)), PTC_UI_HIT_SETUP_PRIMARY, i,
+                  "setup review button touch target");
+        for (int j = i + 1; j < 4; ++j)
+            check_true(!rects_overlap(ptc_ui_setup_review_rect(i), ptc_ui_setup_review_rect(j)),
+                       "setup review buttons do not overlap");
+    }
+    model.setup_review_active = false;
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");

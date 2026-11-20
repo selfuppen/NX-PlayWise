@@ -940,6 +940,18 @@ static int render_setup_previews(const char *directory, const PtcUiModel *baseli
     ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_PROGRESS, PTC_ERR_STORAGE_WRITE_FAILED);
     snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_SESSION_ONLY));
     failed |= save_preview(directory, "setup", "setup-error", &model, dark);
+    {
+        PtcUiModel review = *baseline;
+        review.view = PTC_UI_SETUP;
+        review.overlay = PTC_UI_OVERLAY_NONE;
+        review.setup_options_loaded = review.setup_review_active = review.setup_wizard_completed = true;
+        review.setup_review_selection = 0;
+        memset(review.setup_option_versions, 0, sizeof(review.setup_option_versions));
+        for (int i = 0; i < PTC_UI_SETUP_OPTION_NOTIFICATIONS; ++i)
+            review.setup_option_versions[i] = ptc_ui_setup_option_revision(i);
+        review.message[0] = '\0';
+        failed |= save_preview(directory, "setup", "setup-review", &review, dark);
+    }
     return failed;
 }
 

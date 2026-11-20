@@ -155,27 +155,274 @@ static void setup_draw_footer_cta(uint32_t *pixels, uint32_t stride, PtcUiRect r
     draw_button_label(pixels, stride, r, label, size, fg);
 }
 
+static const char *setup_review_emoji(int item)
+{
+    switch (item) {
+    case PTC_UI_SETUP_OPTION_LANGUAGE: return "🌐";
+    case PTC_UI_SETUP_OPTION_THEME: return "🎨";
+    case PTC_UI_SETUP_OPTION_SHORTCUT: return "🎮";
+    case PTC_UI_SETUP_OPTION_NOTIFICATIONS: return "🔔";
+    case PTC_UI_SETUP_OPTION_EYE_CARE: return "🌿";
+    case PTC_UI_SETUP_OPTION_BEDTIME: return "🌙";
+    default: return "✨";
+    }
+}
+
+static PtcUiTextId setup_review_category(int item)
+{
+    switch (item) {
+    case PTC_UI_SETUP_OPTION_LANGUAGE:
+    case PTC_UI_SETUP_OPTION_THEME: return PTC_UI_T_SETUP_REVIEW_CAT_DISPLAY;
+    case PTC_UI_SETUP_OPTION_SHORTCUT: return PTC_UI_T_SETUP_REVIEW_CAT_ACCESS;
+    case PTC_UI_SETUP_OPTION_NOTIFICATIONS: return PTC_UI_T_SETUP_REVIEW_CAT_ALERTS;
+    case PTC_UI_SETUP_OPTION_EYE_CARE: return PTC_UI_T_SETUP_REVIEW_CAT_HEALTH;
+    case PTC_UI_SETUP_OPTION_BEDTIME: return PTC_UI_T_SETUP_REVIEW_CAT_SLEEP;
+    default: return PTC_UI_T_SETUP_REVIEW_CAT_DISPLAY;
+    }
+}
+
+static PtcUiTextId setup_review_desc(int item)
+{
+    switch (item) {
+    case PTC_UI_SETUP_OPTION_LANGUAGE: return PTC_UI_T_SETUP_REVIEW_DESC_LANG;
+    case PTC_UI_SETUP_OPTION_THEME: return PTC_UI_T_SETUP_REVIEW_DESC_THEME;
+    case PTC_UI_SETUP_OPTION_SHORTCUT: return PTC_UI_T_SETUP_REVIEW_DESC_SHORTCUT;
+    case PTC_UI_SETUP_OPTION_NOTIFICATIONS: return PTC_UI_T_SETUP_REVIEW_DESC_NOTIF;
+    case PTC_UI_SETUP_OPTION_EYE_CARE: return PTC_UI_T_SETUP_REVIEW_DESC_EYE;
+    case PTC_UI_SETUP_OPTION_BEDTIME: return PTC_UI_T_SETUP_REVIEW_DESC_BEDTIME;
+    default: return PTC_UI_T_SETUP_REVIEW_BODY;
+    }
+}
+
+static void setup_review_tone(int item, uint32_t *soft, uint32_t *border, uint32_t *accent)
+{
+    switch (item) {
+    case PTC_UI_SETUP_OPTION_NOTIFICATIONS:
+        *soft = UI_WARNING_SOFT; *border = UI_WARNING_BORDER; *accent = UI_WARNING_TEXT;
+        break;
+    case PTC_UI_SETUP_OPTION_EYE_CARE:
+        *soft = UI_SUCCESS_SOFT; *border = UI_SUCCESS_BORDER; *accent = UI_SUCCESS;
+        break;
+    case PTC_UI_SETUP_OPTION_BEDTIME:
+        *soft = UI_NIGHT_SOFT; *border = UI_NIGHT_BORDER; *accent = UI_NIGHT;
+        break;
+    default:
+        *soft = UI_ACCENT_SOFT; *border = UI_ACCENT; *accent = UI_ACCENT;
+        break;
+    }
+}
+
+static void setup_review_format_current(const PtcUiModel *model, int item, char *out, size_t out_size)
+{
+    switch (item) {
+    case PTC_UI_SETUP_OPTION_LANGUAGE:
+        if (model->language_preference == PTC_UI_LANGUAGE_SIMPLIFIED)
+            snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HANS));
+        else if (model->language_preference == PTC_UI_LANGUAGE_TRADITIONAL)
+            snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HANT));
+        else if (model->language_preference == PTC_UI_LANGUAGE_ENGLISH)
+            snprintf(out, out_size, "English");
+        else
+            snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM));
+        break;
+    case PTC_UI_SETUP_OPTION_THEME:
+        snprintf(out, out_size, "%s / %s",
+            ptc_ui_theme_preference_label(g_theme.preference),
+            ptc_ui_theme_style_label(g_theme.style));
+        break;
+    case PTC_UI_SETUP_OPTION_SHORTCUT:
+        snprintf(out, out_size, "%s",
+            model->custom_shortcut_label[0] ? model->custom_shortcut_label : "(-)");
+        break;
+    case PTC_UI_SETUP_OPTION_NOTIFICATIONS:
+        snprintf(out, out_size, "%s",
+            ptc_ui_text(model->reason_notifications_enabled ? PTC_UI_T_ENABLED : PTC_UI_T_DISABLED_2));
+        break;
+    case PTC_UI_SETUP_OPTION_EYE_CARE: {
+        bool eye_on = model->eye_care_policy.enabled || model->draft_eye_care_policy.enabled;
+        snprintf(out, out_size, "%s",
+            ptc_ui_text(eye_on ? PTC_UI_T_ENABLED : PTC_UI_T_DISABLED));
+        break;
+    }
+    case PTC_UI_SETUP_OPTION_BEDTIME: {
+        bool bed_on = model->bedtime_status_enabled || model->bedtime_policy.enabled ||
+            model->draft_bedtime_policy.enabled;
+        snprintf(out, out_size, "%s",
+            ptc_ui_text(bed_on ? PTC_UI_T_ENABLED : PTC_UI_T_DISABLED));
+        break;
+    }
+    default:
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DISABLED));
+        break;
+    }
+}
+
 static void draw_setup_review(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     int item = ptc_ui_setup_next_option(model);
     if (item < 0) return;
-    draw_header(pixels, stride, ptc_ui_text(PTC_UI_T_SETUP_REVIEW_TITLE), ptc_ui_text(PTC_UI_T_SETUP_REVIEW_INTRO));
-    UiRect card = {124, 156, 1032, 486};
-    fill_round_rect(pixels, stride, card, 16, UI_SURFACE);
-    draw_rect_outline(pixels, stride, card, 16, 1, UI_BORDER);
-    draw_wrapped_text(pixels, stride, card.x + 40, card.y + 58,
-        ptc_ui_text(ptc_ui_setup_option_title(item)), 28, card.width - 80, 38, 2, UI_INK);
-    draw_wrapped_text(pixels, stride, card.x + 40, card.y + 128,
-        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_BODY), 18, card.width - 80, 26, 2, UI_MUTED);
-    const PtcUiTextId actions[] = {PTC_UI_T_SETUP_REVIEW_CONFIGURE, PTC_UI_T_SETUP_REVIEW_KEEP,
-        PTC_UI_T_SETUP_REVIEW_SKIP, PTC_UI_T_SETUP_REVIEW_SKIP_ALL};
-    for (int i = 0; i < 4; ++i)
-        setup_button(pixels, stride, ptc_ui_setup_review_rect(i), ptc_ui_text(actions[i]),
-            model->setup_review_selection == i, false);
+
+    int pending_indices[PTC_UI_SETUP_OPTION_COUNT];
+    int pending_count = 0;
+    for (int i = 0; i < PTC_UI_SETUP_OPTION_COUNT; ++i) {
+        if (model->setup_option_versions[i] < ptc_ui_setup_option_revision(i)) {
+            pending_indices[pending_count++] = i;
+        }
+    }
+
+    draw_header(pixels, stride, ptc_ui_text(PTC_UI_T_SETUP_REVIEW_TITLE),
+        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_INTRO));
+    char rem_badge[64];
+    snprintf(rem_badge, sizeof(rem_badge), ptc_ui_text(PTC_UI_T_SETUP_REVIEW_REMAINING), pending_count);
+    setup_draw_header_badge(pixels, stride, rem_badge);
+
+    /* Top Queue Strip (Y=116..164) */
+    UiRect queue_bar = {54, 116, 1172, 48};
+    setup_draw_surface_card(pixels, stride, queue_bar, 14);
+    const char *q_lbl = ptc_ui_text(PTC_UI_T_SETUP_REVIEW_QUEUE_LABEL);
+    draw_text(pixels, stride, queue_bar.x + 20, queue_bar.y + 29, q_lbl, 13, UI_MUTED);
+    int qx = queue_bar.x + 20 + measure_text(q_lbl, 13) + 14;
+    const char *once_hint = ptc_ui_text(PTC_UI_T_SETUP_REVIEW_ONCE_HINT);
+    int once_w = measure_text(once_hint, 12);
+    int queue_right_limit = queue_bar.x + queue_bar.width - 20 - once_w - 18;
+    draw_text(pixels, stride, queue_bar.x + queue_bar.width - 20 - once_w, queue_bar.y + 28,
+        once_hint, 12, UI_MUTED);
+
+    int drawn_chips = 0;
+    for (int p = 0; p < pending_count; ++p) {
+        int qi = pending_indices[p];
+        bool cur = (qi == item);
+        char chip_text[96];
+        snprintf(chip_text, sizeof(chip_text), "%s %s", setup_review_emoji(qi),
+            ptc_ui_text(ptc_ui_setup_option_title(qi)));
+        int cw = measure_text(chip_text, 13) + 22;
+        if (qx + cw > queue_right_limit) {
+            int hidden = pending_count - drawn_chips;
+            if (hidden > 0 && qx + 48 <= queue_right_limit) {
+                char more_buf[16];
+                snprintf(more_buf, sizeof(more_buf), "+%d", hidden);
+                (void)setup_draw_pill(pixels, stride, qx, queue_bar.y + 10, 28, more_buf, 12,
+                    UI_RAISED, UI_BORDER, UI_MUTED);
+            }
+            break;
+        }
+        (void)setup_draw_pill(pixels, stride, qx, queue_bar.y + 10, 28, chip_text, 13,
+            cur ? UI_ACCENT_SOFT : UI_RAISED, cur ? UI_ACCENT : UI_BORDER,
+            cur ? UI_ACCENT : UI_MUTED);
+        qx += cw + 8;
+        ++drawn_chips;
+    }
+
+    /* Main Spotlight Card (Y=180..442, H=262) */
+    uint32_t tone_soft, tone_border, tone_accent;
+    setup_review_tone(item, &tone_soft, &tone_border, &tone_accent);
+    UiRect card = {54, 180, 1172, 262};
+    setup_draw_surface_card(pixels, stride, card, 16);
+
+    /* Left Identity Panel (W=408) */
+    UiRect left_pane = {card.x + 1, card.y + 1, 408, card.height - 2};
+    fill_round_rect(pixels, stride, left_pane, 15, tone_soft);
+    /* Square off the right half of left_pane so it meets the divider cleanly */
+    fill_rect(pixels, stride, (UiRect){left_pane.x + left_pane.width - 16, left_pane.y, 16, left_pane.height}, tone_soft);
+    fill_rect(pixels, stride, (UiRect){left_pane.x + left_pane.width, card.y + 1, 1, card.height - 2}, UI_BORDER);
+
+    UiRect icon_box = {card.x + 26, card.y + 24, 56, 56};
+    fill_round_rect(pixels, stride, icon_box, 14, UI_SURFACE);
+    draw_rect_outline(pixels, stride, icon_box, 14, 1, tone_border);
+    draw_text_center(pixels, stride, icon_box, setup_review_emoji(item), 28, tone_accent);
+
+    (void)setup_draw_pill_right(pixels, stride, left_pane.x + left_pane.width - 24,
+        card.y + 36, 28, ptc_ui_text(setup_review_category(item)), 13,
+        UI_SURFACE, tone_border, tone_accent);
+
+    draw_wrapped_text(pixels, stride, card.x + 26, card.y + 124,
+        ptc_ui_text(ptc_ui_setup_option_title(item)), 23, 356, 30, 2, UI_INK);
+
+    /* Current Value Box */
+    UiRect cur_box = {card.x + 26, card.y + 186, 356, 52};
+    fill_round_rect(pixels, stride, cur_box, 10, UI_SURFACE);
+    draw_rect_outline(pixels, stride, cur_box, 10, 1, UI_BORDER);
+    const char *cur_lbl = ptc_ui_text(PTC_UI_T_SETUP_REVIEW_CURRENT_LABEL);
+    int cur_lbl_w = measure_text(cur_lbl, 13);
+    draw_text(pixels, stride, cur_box.x + 14, cur_box.y + 31, cur_lbl, 13, UI_MUTED);
+    char cur_val[96], cur_fitted[96];
+    setup_review_format_current(model, item, cur_val, sizeof(cur_val));
+    int val_max_w = cur_box.width - cur_lbl_w - 40;
+    if (val_max_w < 80) val_max_w = 80;
+    fit_text(cur_fitted, sizeof(cur_fitted), cur_val, 14, val_max_w);
+    int val_w = measure_text(cur_fitted, 14);
+    draw_text(pixels, stride, cur_box.x + cur_box.width - 14 - val_w, cur_box.y + 31,
+        cur_fitted, 14, UI_INK);
+
+    /* Right Explanation Panel (X=488..1198, W=710) */
+    int rx = card.x + 436;
+    int rw = card.width - 464;
+    draw_text(pixels, stride, rx, card.y + 42,
+        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_PURPOSE_LABEL), 13, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, rx, card.y + 78,
+        ptc_ui_text(setup_review_desc(item)), 17, rw, 27, 3, UI_INK);
+
+    UiRect guide_box = {rx, card.y + 174, rw, 64};
+    fill_round_rect(pixels, stride, guide_box, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, guide_box, 10, 1, UI_BORDER);
+    draw_wrapped_text(pixels, stride, guide_box.x + 16, guide_box.y + 24,
+        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_BODY), 13, guide_box.width - 32, 20, 2, UI_MUTED);
+
+    /* Primary & Secondary Large Action Cards (Actions 0 and 1, Y=462..548) */
+    const PtcUiTextId primary_titles[2] = {
+        PTC_UI_T_SETUP_REVIEW_CONFIGURE,
+        PTC_UI_T_SETUP_REVIEW_KEEP
+    };
+    const PtcUiTextId primary_descs[2] = {
+        PTC_UI_T_SETUP_REVIEW_CONFIG_DESC,
+        PTC_UI_T_SETUP_REVIEW_KEEP_DESC
+    };
+    for (int i = 0; i < 2; ++i) {
+        UiRect r = to_uirect(ptc_ui_setup_review_rect(i));
+        bool sel = (model->setup_review_selection == i);
+        bool is_primary = (i == 0);
+        uint32_t fill = is_primary ? UI_ACCENT : (sel ? UI_ACCENT_SOFT : UI_SURFACE);
+        uint32_t title_col = is_primary ? UI_ON_ACCENT : (sel ? UI_ACCENT : UI_INK);
+        uint32_t desc_col = is_primary ? UI_ON_ACCENT : UI_MUTED;
+        if (!sel) draw_card_shadow(pixels, stride, r, 14);
+        fill_round_rect(pixels, stride, r, 14, fill);
+        if (sel) {
+            draw_focus_ring(pixels, stride, r, 14);
+        } else {
+            draw_rect_outline(pixels, stride, r, 14, 1, is_primary ? UI_ACCENT : UI_BORDER);
+        }
+        char fitted_t[128], fitted_d[160];
+        int text_w = r.width - 48;
+        fit_text(fitted_t, sizeof(fitted_t), ptc_ui_text(primary_titles[i]), 18, text_w);
+        fit_text(fitted_d, sizeof(fitted_d), ptc_ui_text(primary_descs[i]), 13, text_w);
+        draw_text(pixels, stride, r.x + 24, r.y + 38, fitted_t, 18, title_col);
+        draw_text(pixels, stride, r.x + 24, r.y + 66, fitted_d, 13, desc_col);
+    }
+
+    /* Non-blocking Save Failure Banner strictly outside all 4 buttons (Y=566..606) */
     if (model->message[0]) {
-        char fitted[256];
-        fit_text(fitted, sizeof(fitted), model->message, 15, 1032);
-        draw_text(pixels, stride, 124, 675, fitted, 15, UI_WARNING_TEXT);
+        UiRect warn_bar = {54, 566, 1172, 42};
+        fill_round_rect(pixels, stride, warn_bar, 10, UI_WARNING_SOFT);
+        draw_rect_outline(pixels, stride, warn_bar, 10, 1, UI_WARNING_BORDER);
+        char fitted_msg[256];
+        fit_text(fitted_msg, sizeof(fitted_msg), model->message, 14, warn_bar.width - 40);
+        draw_text(pixels, stride, warn_bar.x + 20, warn_bar.y + 26, fitted_msg, 14, UI_WARNING_TEXT);
+    }
+
+    /* Footer Actions 2 & 3 (Y=664..708) */
+    setup_draw_footer_cta(pixels, stride, ptc_ui_setup_review_rect(2),
+        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_SKIP), false, model->setup_review_selection == 2);
+    setup_draw_footer_cta(pixels, stride, ptc_ui_setup_review_rect(3),
+        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_SKIP_ALL), false, model->setup_review_selection == 3);
+
+    const char *f_hint = ptc_ui_text(PTC_UI_T_SETUP_REVIEW_FOOTER_HINT);
+    PtcUiRect r3 = ptc_ui_setup_review_rect(3);
+    int hint_max_w = 1226 - (r3.x + r3.w + 24);
+    if (hint_max_w > 120) {
+        char fitted_hint[128];
+        fit_text(fitted_hint, sizeof(fitted_hint), f_hint, 13, hint_max_w);
+        int fw = measure_text(fitted_hint, 13);
+        draw_text(pixels, stride, 1226 - fw, 691, fitted_hint, 13, UI_MUTED);
     }
 }
 

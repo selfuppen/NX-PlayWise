@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PlayWise NRO 页面优化真机效果预览与方案对比</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --tag-bg: rgba(56, 139, 253, 0.15);
+      --tag-border: rgba(56, 139, 253, 0.4);
+      --success: #3fb950;
+      --warning: #d29922;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: rgba(22, 27, 34, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 28px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-badge {
+      background: var(--tag-bg);
+      border: 1px solid var(--tag-border);
+      color: var(--accent);
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .segmented {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      display: flex;
+      gap: 2px;
+    }
+    .segmented button {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .segmented button.active {
+      background: #21262d;
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .segmented button:hover:not(.active) {
+      color: var(--text);
+    }
+    main {
+      flex: 1;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 1440px;
+      margin: 0 auto;
+      width: 100%;
+      gap: 24px;
+    }
+    .page-nav-tabs {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      width: 100%;
+      padding-bottom: 4px;
+      justify-content: center;
+    }
+    .page-nav-tabs button {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .page-nav-tabs button:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+    .page-nav-tabs button.active {
+      background: #1f242c;
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px rgba(88, 166, 255, 0.2);
+    }
+    .info-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 24px;
+      width: 100%;
+      max-width: 1280px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .info-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .info-header h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .info-points {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 6px;
+    }
+    .info-item {
+      background: #0d1117;
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    .info-item strong {
+      color: var(--accent);
+      display: block;
+      margin-bottom: 2px;
+    }
+    /* Switch Screen Canvas Simulator */
+    .screen-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+    .switch-frame {
+      background: #12151a;
+      border: 12px solid #24292f;
+      border-radius: 24px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
+      line-height: 0;
+      max-width: 100%;
+      transition: all 0.3s ease;
+    }
+    .switch-frame.pure {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+    .switch-img {
+      display: block;
+      width: 1280px;
+      height: 720px;
+      max-width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      image-rendering: auto;
+    }
+    .badge-scheme {
+      background: rgba(63, 185, 80, 0.15);
+      border: 1px solid rgba(63, 185, 80, 0.4);
+      color: var(--success);
+      font-size: 0.8rem;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 18px 24px;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: #161b22;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand-title">
+      <span>🎮 PlayWise NRO</span>
+      <span class="brand-badge">实机渲染效果</span>
+    </div>
+    <div class="controls">
+      <!-- Frame mode -->
+      <div class="segmented">
+        <button id="btn-frame-on" class="active" onclick="setFrame(true)">Switch 外框</button>
+        <button id="btn-frame-off" onclick="setFrame(false)">纯净画面</button>
+      </div>
+
+      <!-- Language Switcher -->
+      <div class="segmented">
+        <button id="btn-lang-zh" class="active" onclick="setLang('zh')">简体中文</button>
+        <button id="btn-lang-en" onclick="setLang('en')">English</button>
+      </div>
+
+      <!-- Theme Switcher (for review & notifications) -->
+      <div class="segmented" id="theme-switcher">
+        <button id="btn-theme-light" class="active" onclick="setTheme('light')">浅色模式</button>
+        <button id="btn-theme-dark" onclick="setTheme('dark')">深色模式</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Navigation Tabs -->
+    <div class="page-nav-tabs">
+      <button id="tab-step-1" class="active" onclick="switchPage('step-1')">
+        <span>🌐</span> 首次设置 Step 1：环境核对
+      </button>
+      <button id="tab-step-2" onclick="switchPage('step-2')">
+        <span>🛡️</span> 首次设置 Step 2：家长与守护
+      </button>
+      <button id="tab-step-3" onclick="switchPage('step-3')">
+        <span>📋</span> 首次设置 Step 3：确认与生效
+      </button>
+      <button id="tab-review" onclick="switchPage('review')">
+        <span>🔔</span> 更新引导：新增设置项确认
+      </button>
+      <button id="tab-notifications" onclick="switchPage('notifications')">
+        <span>📢</span> 更新引导：通知偏好设置
+      </button>
+    </div>
+
+    <!-- Info Card -->
+    <div class="info-card">
+      <div class="info-header">
+        <h2 id="page-title">首次设置向导 · 第一步：环境与核对 (Step 1)</h2>
+        <span class="badge-scheme" id="page-scheme">方案 1A 已落地 · 1280×720 原生真机渲染</span>
+      </div>
+      <p id="page-desc" style="font-size: 0.9rem; color: var(--text-muted);">
+        直观双列轻盈卡片流，顶部带完成状态的三步进度指示。左侧核对事项，右侧运行环境与版本检测。
+      </p>
+      <div class="info-points" id="page-points">
+        <div class="info-item">
+          <strong>结构重构 · 消除嵌套</strong>
+          剥离原有的外层框套灰卡、灰卡套白卡的三层结构，采用最新现代微圆角卡片，视觉通透自然。
+        </div>
+        <div class="info-item">
+          <strong>职责解耦 · 直觉分类</strong>
+          左列「核对准备」专属引导用户确认时间与系统设置；右列「本机环境」独立呈现 HOS/AMS 与家长控制状态。
+        </div>
+        <div class="info-item">
+          <strong>动线引导 · A 键聚焦</strong>
+          底部操作栏保留 Y 切换语言、X 系统支持与 A 下一步，主操作按钮采用品牌实心主色高亮。
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen Stage Simulator -->
+    <div class="screen-stage">
+      <div class="switch-frame" id="switchFrame">
+        <img id="screenImg" class="switch-img" src="../images/usage/setup/setup-step-1-light.png" alt="Switch Render View" />
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    PlayWise Switch NRO 页面重构 · 严格遵循双主题与高质感视觉规范 · 1280×720 纯 CPU 软件光栅化渲染真机图
+  </footer>
+
+  <script>
+    let currentLang = 'zh';
+    let currentTheme = 'light';
+    let currentPage = 'step-1';
+
+    const pageData = {
+      'step-1': {
+        titleZh: '首次设置向导 · 第一步：环境核对与语言设定',
+        titleEn: 'Setup Wizard · Step 1: Environment & Language',
+        scheme: '方案 1A 已落地 (轻盈卡片流)',
+        descZh: '消除三层嵌套，以左侧准备核对 + 右侧本机运行环境双列展开。顶部展示清晰的三步节点进度条。',
+        descEn: 'Removed redundant 3-level box nesting. Left side for checklist and right side for detected console environment.',
+        pointsZh: [
+          { label: '结构优化', text: '去掉了冗余外框，改为左右双列卡片，层次更清晰，有效减少新用户心智负担。' },
+          { label: '环境解耦', text: '系统版本（HOS/AMS/型号）与官方家长控制状态清晰独立呈现，不再混杂。' },
+          { label: '动线顺畅', text: '底部右侧实心 A 键下一步，Y 键语言即时切换，X 键系统支持，按键提示两端对齐防溢出。' }
+        ],
+        pointsEn: [
+          { label: 'Layout Refinement', text: 'Replaced multi-nested boxes with clean dual-column cards to ease user cognitive load.' },
+          { label: 'Decoupled Environment', text: 'Console versions (HOS/AMS/Model) and Nintendo Parental Control status are cleanly isolated.' },
+          { label: 'Intuitive Navigation', text: 'Right-aligned primary A button, dynamic key layout avoiding label truncation.' }
+        ],
+        hasDark: false,
+        img: (lang, theme) => `../images/usage${lang === 'en' ? '-en' : ''}/setup/setup-step-1-light.png`
+      },
+      'step-2': {
+        titleZh: '首次设置向导 · 第二步：家长安全与健康守护',
+        titleEn: 'Setup Wizard · Step 2: Parent Security & Wellness',
+        scheme: '方案 1A 已落地 (密码与入口 + 健康守护)',
+        descZh: '将散落的设置项归位：左侧专注入门密码与快捷键安全，右侧统一承载受限提醒、护眼与就寝三大健康守护。',
+        descEn: 'Unified setup: Left card focuses on Master PIN & Quick Shortcut, Right card holds Notifications, Eye Care & Bedtime.',
+        pointsZh: [
+          { label: '逻辑归位', text: '将原本错误塞在密码卡最底部的「游玩受限提醒」移到右侧「健康守护」首位，语义更契合。' },
+          { label: '消除重复', text: '修复原先快捷键设置中重复绘制两次 (-) 的界面缺陷，文案测量留白更精准。' },
+          { label: '规则胶囊', text: '左侧 4 条独立安全要点采用轻底色胶囊化排版，消除了旧版文字墙的压迫感。' }
+        ],
+        pointsEn: [
+          { label: 'Proper Hierarchy', text: 'Relocated Limit Warning toggle to the Wellness card where it naturally belongs.' },
+          { label: 'Fixed Glitches', text: 'Resolved duplicated (-) icons in shortcut configuration with strict spacing measurements.' },
+          { label: 'Clean Security Badges', text: 'Transformed verbose security text into 4 structured, soft-tinted rule cards.' }
+        ],
+        hasDark: false,
+        img: (lang, theme) => `../images/usage${lang === 'en' ? '-en' : ''}/setup/setup-step-2-light.png`
+      },
+      'step-3': {
+        titleZh: '首次设置向导 · 第三步：配置确认与安全保障',
+        titleEn: 'Setup Wizard · Step 3: Review & Activation',
+        scheme: '方案 1A 已落地 (6格微卡 + 3列安全保障)',
+        descZh: '汇总前两步的全部配置。上方采用 2×3 微质感卡片清晰罗列，下方提供三列安心保障承诺与主色生效按钮。',
+        descEn: 'Summarizes all configurations with a 2x3 micro-card grid and 3 safety assurance pillars before final activation.',
+        pointsZh: [
+          { label: '清晰可读', text: '2×3 网格呈现语言、主题、密码、受限提醒、护眼和就寝，数值与标签两端对齐。' },
+          { label: '安心保障', text: '底部分列展示「保留当前可用时间」「系统配置自动备份」「随时在设置中修改」，给家长充足的安全感。' },
+          { label: '高亮完成', text: '主按钮采用鲜明强调色高亮引导，配合底部非阻断式状态提示，确保异常时也能平稳进入。' }
+        ],
+        pointsEn: [
+          { label: 'Structured Overview', text: '2x3 grid displaying language, theme, PIN, reminders, eye care, and bedtime.' },
+          { label: 'Peace of Mind', text: '3 assurance cards guaranteeing zero-loss playtime, automatic backup, and easy modification.' },
+          { label: 'Clear CTA', text: 'Vibrant primary button with non-blocking error display for guaranteed smooth onboarding.' }
+        ],
+        hasDark: false,
+        img: (lang, theme) => `../images/usage${lang === 'en' ? '-en' : ''}/setup/setup-step-3-light.png`
+      },
+      'review': {
+        titleZh: '更新引导 · 新增设置项引导确认 (补充设置引导)',
+        titleEn: 'Upgrade Setup Review · New Options Walkthrough',
+        scheme: '方案 2A 已落地 (待办队列 + 当前设置值 + 4层操作)',
+        descZh: '重构原先单调的全宽白色长条。增加顶部待办队列胶囊、专属彩色图标、当前配置值盒子与清晰主次按钮。',
+        descEn: 'Reconstructed the monotonous flat white list. Added progress queue pills, custom color icons, current value cards, and hierarchical buttons.',
+        pointsZh: [
+          { label: '待办队列', text: '顶部展示项目序号与待办队列（如 1/3），给用户明确的心理预期与掌控感。' },
+          { label: '当前值呈现', text: '左侧突出展示「当前设置值」盒子，让用户清楚“保留当前设置”究竟会保留什么，告别盲盒感。' },
+          { label: '4 层分明操作', text: '配置此项（强调色主按钮）、保留当前设置（次级按钮）、B跳过单项与X跳过全部（辅助动作），层级分明。' },
+          { label: '全新 🔔 图标', text: '内置 🔔 彩色 Emoji 程序化渲染支持，通知提醒专属呈现，兼顾深色与浅色双主题。' }
+        ],
+        pointsEn: [
+          { label: 'Review Queue', text: 'Shows progress indicator pills (e.g. 1/3) providing clear visibility of remaining items.' },
+          { label: 'Current Value Box', text: 'Prominently shows current value so users know exactly what "Keep Current" preserves.' },
+          { label: '4-Tier Actions', text: 'Primary "Configure", secondary "Keep", plus B & X skip actions properly categorized.' },
+          { label: 'New Bell Emoji', text: 'Built-in procedural 🔔 color emoji with flawless dual-theme light/dark contrast.' }
+        ],
+        hasDark: true,
+        img: (lang, theme) => `../images/usage${lang === 'en' ? '-en' : ''}/setup/setup-review-${theme}.png`
+      },
+      'notifications': {
+        titleZh: '更新引导 · 驻留提醒与通知偏好设置',
+        titleEn: 'Notification Preferences & Resident Notice Setup',
+        scheme: '方案 2A 延伸 · 浅深双色真机渲染',
+        descZh: '版本更新引入新通知机制时的专项偏好引导。提供开关、触发阈值与详细说明。',
+        descEn: 'Walkthrough screen when new notification features are introduced in updates, showing toggles, thresholds, and guide text.',
+        pointsZh: [
+          { label: '专属呈现', text: '大号 🔔 彩色矢量图标与微质感徽章，让新功能通俗易懂。' },
+          { label: '双主题实测', text: '在浅色（白/柔灰）与深色（石墨/暗黑）下均经过对比度测量，保证高可读性与无刺眼光感。' }
+        ],
+        pointsEn: [
+          { label: 'Dedicated Focus', text: 'Large color bell icon and soft badges making new notification mechanisms immediately clear.' },
+          { label: 'Dual-Theme Validated', text: 'Contrast checked for both Light and Dark themes to ensure optimal readability.' }
+        ],
+        hasDark: true,
+        img: (lang, theme) => `../images/usage${lang === 'en' ? '-en' : ''}/setup/setup-notifications-${theme}.png`
+      }
+    };
+
+    function updateView() {
+      const data = pageData[currentPage];
+      const themeSwitcher = document.getElementById('theme-switcher');
+      if (data.hasDark) {
+        themeSwitcher.style.display = 'flex';
+      } else {
+        themeSwitcher.style.display = 'none';
+        currentTheme = 'light';
+        document.getElementById('btn-theme-light').classList.add('active');
+        document.getElementById('btn-theme-dark').classList.remove('active');
+      }
+
+      document.getElementById('page-title').textContent = currentLang === 'zh' ? data.titleZh : data.titleEn;
+      document.getElementById('page-desc').textContent = currentLang === 'zh' ? data.descZh : data.descEn;
+      document.getElementById('page-scheme').textContent = data.scheme;
+
+      const pointsContainer = document.getElementById('page-points');
+      pointsContainer.innerHTML = '';
+      const points = currentLang === 'zh' ? data.pointsZh : data.pointsEn;
+      points.forEach(pt => {
+        const div = document.createElement('div');
+        div.className = 'info-item';
+        div.innerHTML = `<strong>${pt.label}</strong>${pt.text}`;
+        pointsContainer.appendChild(div);
+      });
+
+      const imgEl = document.getElementById('screenImg');
+      imgEl.src = data.img(currentLang, currentTheme);
+    }
+
+    function switchPage(pageKey) {
+      currentPage = pageKey;
+      document.querySelectorAll('.page-nav-tabs button').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(`tab-${pageKey}`);
+      if (activeBtn) activeBtn.classList.add('active');
+      updateView();
+    }
+
+    function setLang(lang) {
+      currentLang = lang;
+      document.getElementById('btn-lang-zh').classList.toggle('active', lang === 'zh');
+      document.getElementById('btn-lang-en').classList.toggle('active', lang === 'en');
+      updateView();
+    }
+
+    function setTheme(theme) {
+      currentTheme = theme;
+      document.getElementById('btn-theme-light').classList.toggle('active', theme === 'light');
+      document.getElementById('btn-theme-dark').classList.toggle('active', theme === 'dark');
+      updateView();
+    }
+
+    function setFrame(hasFrame) {
+      const frame = document.getElementById('switchFrame');
+      document.getElementById('btn-frame-on').classList.toggle('active', hasFrame);
+      document.getElementById('btn-frame-off').classList.toggle('active', !hasFrame);
+      if (hasFrame) {
+        frame.classList.remove('pure');
+      } else {
+        frame.classList.add('pure');
+      }
+    }
+
+    // Init
+    updateView();
+  </script>
+</body>
+</html>
