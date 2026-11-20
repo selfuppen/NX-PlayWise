@@ -454,11 +454,23 @@ static void draw_text_raw(uint32_t *pixels, uint32_t stride, int x, int baseline
         if (!entry) {
             continue;
         }
+        int glyph_x = pen_x + entry->bearing_x;
+        int glyph_y = baseline - entry->bearing_y;
+        int left = glyph_x, top = glyph_y;
+        int right = glyph_x + entry->width, bottom = glyph_y + entry->height;
+        ui_clip_raster_bounds(&left, &top, &right, &bottom);
+        /* Fetch and advance even when clipped, preserving metrics and retries. */
+        int first_column = left - glyph_x, last_column = right - glyph_x;
+        int first_row = top - glyph_y, last_row = bottom - glyph_y;
+        if (left >= right || top >= bottom) {
+            pen_x += entry->advance;
+            continue;
+        }
         if (entry->is_color) {
             const uint32_t *src_pixels = (const uint32_t *)entry->bitmap;
-            for (row = 0; row < entry->height; ++row) {
+            for (row = first_row; row < last_row; ++row) {
                 int column;
-                for (column = 0; column < entry->width; ++column) {
+                for (column = first_column; column < last_column; ++column) {
                     uint32_t px = src_pixels[(size_t)row * entry->width + column];
                     uint8_t a = (uint8_t)(px >> 24);
                     if (a > 0) {
@@ -473,10 +485,10 @@ static void draw_text_raw(uint32_t *pixels, uint32_t stride, int x, int baseline
                 }
             }
         } else {
-            for (row = 0; row < entry->height; ++row) {
+            for (row = first_row; row < last_row; ++row) {
                 const uint8_t *line = entry->bitmap + (size_t)row * entry->width;
                 int column;
-                for (column = 0; column < entry->width; ++column) {
+                for (column = first_column; column < last_column; ++column) {
                     if (line[column]) {
                         blend_pixel(
                             pixels,

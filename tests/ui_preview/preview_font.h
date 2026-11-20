@@ -65,7 +65,12 @@ static inline unsigned long preview_map_pua(stbtt_fontinfo *info, unsigned long 
     }
 }
 static inline FT_UInt FT_Get_Char_Index(FT_Face face, unsigned long code)
-{ return (FT_UInt)stbtt_FindGlyphIndex(&face->info, (int)preview_map_pua(&face->info, code)); }
+{
+#ifdef PTC_RESOURCE_TEST
+    if (code == 0x1f3ae) return 1;
+#endif
+    return (FT_UInt)stbtt_FindGlyphIndex(&face->info, (int)preview_map_pua(&face->info, code));
+}
 static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
 {
 #ifdef PTC_RESOURCE_TEST
@@ -75,6 +80,23 @@ static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
     int advance, bearing, w, h, x, y;
     free(face->slot.bitmap.buffer);
     memset(&face->slot, 0, sizeof(face->slot));
+#ifdef PTC_RESOURCE_TEST
+    if (code == 0x1f3ae) {
+        /* Fixed BGRA glyph exercises production color conversion and clipping. */
+        static const unsigned char bgra[] = {5, 10, 20, 255, 30, 40, 50, 127,
+            60, 70, 80, 1, 90, 100, 110, 0};
+        face->slot.bitmap.buffer = malloc(sizeof(bgra));
+        if (!face->slot.bitmap.buffer) return 1;
+        memcpy(face->slot.bitmap.buffer, bgra, sizeof(bgra));
+        face->slot.bitmap.width = face->slot.bitmap.rows = 2;
+        face->slot.bitmap.pitch = 8;
+        face->slot.bitmap.pixel_mode = FT_PIXEL_MODE_BGRA;
+        face->slot.bitmap_left = -1;
+        face->slot.bitmap_top = 2;
+        face->slot.advance.x = 4 * 64;
+        return 0;
+    }
+#endif
     stbtt_GetCodepointHMetrics(&face->info, (int)mapped, &advance, &bearing);
     face->slot.advance.x = (long)(advance * face->scale + 0.5f) * 64;
     if (flags == FT_LOAD_RENDER) {

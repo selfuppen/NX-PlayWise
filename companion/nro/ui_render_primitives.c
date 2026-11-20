@@ -104,6 +104,14 @@ void ui_set_vertical_clip(int top, int bottom)
     ui_clip_bottom = bottom > SCREEN_HEIGHT ? SCREEN_HEIGHT : bottom;
 }
 
+void ui_clip_raster_bounds(int *left, int *top, int *right, int *bottom)
+{
+    if (*left < 0) *left = 0;
+    if (*top < ui_clip_top) *top = ui_clip_top;
+    if (*right > SCREEN_WIDTH) *right = SCREEN_WIDTH;
+    if (*bottom > ui_clip_bottom) *bottom = ui_clip_bottom;
+}
+
 static void set_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color)
 {
     if ((unsigned int)x >= SCREEN_WIDTH || (unsigned int)y >= SCREEN_HEIGHT || y < ui_clip_top || y >= ui_clip_bottom) {
@@ -227,6 +235,8 @@ static void paint_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect,
     uint32_t resolved = resolve_color(color);
     int first_y = rect.y < 0 ? 0 : rect.y;
     int last_y = rect.y + rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height;
+    if (first_y < ui_clip_top) first_y = ui_clip_top;
+    if (last_y > ui_clip_bottom) last_y = ui_clip_bottom;
     for (int y = first_y; y < last_y; ++y) {
         int local_y = y - rect.y;
         if (local_y >= band && local_y < rect.height - band) {
@@ -279,6 +289,8 @@ static void paint_round_rect_gradient(uint32_t *pixels, uint32_t stride, UiRect 
     int last_y = rect.y + rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height;
     int band = radius;
 
+    if (first_y < ui_clip_top) first_y = ui_clip_top;
+    if (last_y > ui_clip_bottom) last_y = ui_clip_bottom;
     for (int y = first_y; y < last_y; ++y) {
         int local_y = y - rect.y;
         int percent = (local_y * 100) / (rect.height > 0 ? rect.height : 1);
@@ -716,10 +728,13 @@ void draw_circle_outline(
     if (radius <= 0 || width <= 0) return;
     int inner_radius = radius - width;
     uint32_t resolved = resolve_color(color);
+    int left = center_x - radius, right = center_x + radius + 1;
+    int top = center_y - radius, bottom = center_y + radius + 1;
+    ui_clip_raster_bounds(&left, &top, &right, &bottom);
     int y;
-    for (y = -radius; y <= radius; ++y) {
+    for (y = top - center_y; y < bottom - center_y; ++y) {
         int x;
-        for (x = -radius; x <= radius; ++x) {
+        for (x = left - center_x; x < right - center_x; ++x) {
             int dx = (x < 0 ? -x : x) * 8, dy = (y < 0 ? -y : y) * 8;
             int coverage = disk_coverage(dx, dy, radius * 8);
             if (inner_radius > 0) {
@@ -836,10 +851,7 @@ void draw_line(
     int y;
     if (width <= 0) return;
     if (length_sq < 0.000001f) length_sq = 1.0f;
-    if (x_start < 0) x_start = 0;
-    if (y_start < 0) y_start = 0;
-    if (x_end > SCREEN_WIDTH) x_end = SCREEN_WIDTH;
-    if (y_end > SCREEN_HEIGHT) y_end = SCREEN_HEIGHT;
+    ui_clip_raster_bounds(&x_start, &y_start, &x_end, &y_end);
     for (y = y_start; y < y_end; ++y) {
         for (x = x_start; x < x_end; ++x) {
             float fx = (float)x + 0.5f - px0;

@@ -58,6 +58,61 @@ static void check_blend_pixels(void)
     ui_set_vertical_clip(0, SCREEN_HEIGHT);
 }
 
+static void draw_clip_case(uint32_t *pixels, uint32_t stride, int kind, int x, int y)
+{
+    UiRect rect = {x, y, 83, 57};
+    switch (kind) {
+    case 0: fill_round_rect(pixels, stride, rect, 17, UI_ACCENT); break;
+    case 1: draw_rect_outline(pixels, stride, rect, 17, 3, UI_ACCENT); break;
+    case 2: fill_round_rect_gradient(pixels, stride, rect, 17, UI_ACCENT, UI_SURFACE); break;
+    case 3: draw_circle_outline(pixels, stride, x, y, 29, 4, UI_ACCENT); break;
+    case 4: draw_line(pixels, stride, x - 30, y - 20, x + 55, y + 45, 7, UI_ACCENT); break;
+    case 5: draw_text(pixels, stride, x, y, "PlayWise 今日 • 🎮", 24, UI_INK); break;
+    case 6: draw_text_bold(pixels, stride, x, y, "PlayWise 今日 • 🎮", 24, UI_INK); break;
+    default: draw_text(pixels, stride, x, y, "🎮", 24, UI_INK); break;
+    }
+}
+
+static void check_clipped_draws(void)
+{
+    const unsigned stride = SCREEN_WIDTH + 7;
+    const size_t count = stride * SCREEN_HEIGHT;
+    const uint32_t untouched = 0x2351472bu;
+    const int origins[][2] = {{-20, -12}, {33, 60}, {1255, 703}, {100, 740}, {0, 49}, {1280, 50}};
+    const int clips[][2] = {{0, 720}, {48, 85}, {0, 0}, {100, 20}, {-80, -5}, {725, 800}, {-5, 40}, {690, 800}};
+    uint32_t *full = malloc(count * sizeof(*full)), *clipped = malloc(count * sizeof(*clipped));
+    check(full && clipped, "clip fixture allocation");
+    if (!full || !clipped) { free(full); free(clipped); return; }
+    for (int language = PTC_UI_LANGUAGE_SIMPLIFIED; language <= PTC_UI_LANGUAGE_ENGLISH; ++language) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)language);
+        ui_glyph_cache_clear();
+        for (int kind = 0; kind < 8; ++kind) {
+            for (unsigned origin = 0; origin < sizeof(origins) / sizeof(origins[0]); ++origin) {
+                for (size_t p = 0; p < count; ++p) full[p] = untouched;
+                ui_set_vertical_clip(0, SCREEN_HEIGHT);
+                draw_clip_case(full, stride, kind, origins[origin][0], origins[origin][1]);
+                for (unsigned clip = 0; clip < sizeof(clips) / sizeof(clips[0]); ++clip) {
+                    for (size_t p = 0; p < count; ++p) clipped[p] = untouched;
+                    ui_set_vertical_clip(clips[clip][0], clips[clip][1]);
+                    draw_clip_case(clipped, stride, kind, origins[origin][0], origins[origin][1]);
+                    bool same = true;
+                    for (int y = 0; y < SCREEN_HEIGHT && same; ++y) {
+                        for (unsigned x = 0; x < stride; ++x) {
+                            size_t p = (size_t)y * stride + x;
+                            uint32_t expected = y >= clips[clip][0] && y < clips[clip][1] ? full[p] : untouched;
+                            if (clipped[p] != expected) { same = false; break; }
+                        }
+                    }
+                    check(same, "clipped primitives and glyphs equal masked full render, including padding");
+                }
+            }
+        }
+    }
+    ui_set_vertical_clip(0, SCREEN_HEIGHT);
+    ui_glyph_cache_clear();
+    free(full); free(clipped);
+}
+
 int main(int argc, char **argv)
 {
     const UiRect rects[] = {{108,176,1064,400}, {0,0,1,1}, {1,2,17,9}, {-10,-5,43,28},
@@ -115,6 +170,7 @@ int main(int argc, char **argv)
     fclose(font);
     check(FT_New_Memory_Face(NULL, bytes, length, 0, &g_ui.face) == 0, "load pinned font");
     g_ui.font_ready = true;
+    check_clipped_draws();
     int widths[3];
     for (int i = 0; i < 3; ++i) widths[i] = measure_text("PlayWise 123", 18 + i * 6);
     ptc_resource_font_sizes = ptc_resource_font_loads = 0;
