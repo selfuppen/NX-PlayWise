@@ -1394,7 +1394,11 @@ int main(int argc, char **argv) {
                     !view.language_confirm_active_ &&
                     (!view.is_keypad_mode() || view.child_is_restricted());
                 if (!child_root_page) {
-                    const bool full_vp_page = (view.parent_view_ == ParentView::Actions) || view.status_expanded_;
+                    // A result can cover an expanded details page without clearing its state.
+                    // Only the visible page owns the viewport and fixed action rail.
+                    const bool full_vp_page = !view.language_confirm_active_ &&
+                        (view.access_recovery_visible() ? view.parent_view_ == ParentView::Actions :
+                            !view.success_visible_ && !view.preview_ready_ && view.status_expanded_);
                     const int expected_vp_bottom = full_vp_page ?
                         PTC_OVERLAY_FULL_VIEWPORT_BOTTOM : PTC_OVERLAY_VIEWPORT_BOTTOM;
                     require(view.page_layout_.viewport.y == PTC_OVERLAY_CONTENT_Y +
