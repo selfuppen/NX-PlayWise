@@ -2,6 +2,7 @@
 #include "ui_language.h"
 
 #include <stdio.h>
+#include <limits.h>
 #include <string.h>
 
 #include "../common/protocol/request_schema.h"
@@ -95,7 +96,8 @@ PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *cli
 {
     PtcCompanionStatus status;
     if (!client || client->active == PTC_TRANSPORT_NONE || !out || out_size == 0) return PTC_COMPANION_BAD_ARGUMENT;
-    if (elapsed_ms > 0) client->elapsed_ms += elapsed_ms;
+    if (elapsed_ms > 0) client->elapsed_ms = elapsed_ms > INT_MAX - client->elapsed_ms
+        ? INT_MAX : client->elapsed_ms + elapsed_ms;
     if (timeout_ms >= 0 && client->elapsed_ms >= timeout_ms) return PTC_COMPANION_TIMEOUT;
     if (client->active == PTC_TRANSPORT_IPC && client->ipc) {
         int event_status = client->ipc->event_status ? client->ipc->event_status(client->ipc_ctx, client->wait_token) : -1;
@@ -125,7 +127,8 @@ PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *cli
         /* SDMC result checks are cheap; keep the fallback responsive instead
          * of adding up to seconds of exponential backoff to every refresh. */
         client->file_poll_delay_ms = 100;
-        client->next_file_poll_ms = client->elapsed_ms + client->file_poll_delay_ms;
+        client->next_file_poll_ms = client->file_poll_delay_ms > INT_MAX - client->elapsed_ms
+            ? INT_MAX : client->elapsed_ms + client->file_poll_delay_ms;
     }
     return status;
 }

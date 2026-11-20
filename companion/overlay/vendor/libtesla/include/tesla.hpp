@@ -54,6 +54,7 @@
 #include "stb_truetype.h"
 #include "playwise_glyph_cache.hpp"
 #include "playwise_poll_policy.hpp"
+#include "playwise_blend.hpp"
 
 #pragma GCC diagnostic pop
 
@@ -630,16 +631,10 @@ namespace tsl {
                 if (offset == UINT32_MAX)
                     return;
 
-                Color src((static_cast<u16*>(this->getCurrentFramebuffer()))[offset]);
-                Color dst(color);
-                Color end(0);
-
-                end.r = this->blendColor(src.r, dst.r, dst.a);
-                end.g = this->blendColor(src.g, dst.g, dst.a);
-                end.b = this->blendColor(src.b, dst.b, dst.a);
-                end.a = std::min(dst.a + src.a, 0xF);
-
-                this->setPixel(x, y, end);
+                auto *pixels = static_cast<Color*>(this->getCurrentFramebuffer());
+                // Opaque pixels need neither a destination read nor blending.
+                // Reuse the checked swizzled offset for the final store.
+                pixels[offset] = color.a == 0xF ? color : detail::blendDestination(pixels[offset], color);
             }
 
             /**

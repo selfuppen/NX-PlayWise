@@ -5,6 +5,7 @@ void begin_wait(UiState *ui, const char *type, const char *message)
     ui->request_view = ui->model.view;
     ui->waiting = true;
     ui->elapsed_ms = 0;
+    ui->result_poll_at_ms = ptc_ui_anim_now_ms();
     ui->last_result[0] = '\0';
     ui->model.result_status[0] = '\0';
     ui->model.feedback_detail[0] = '\0';

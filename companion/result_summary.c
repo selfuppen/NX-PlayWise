@@ -37,6 +37,12 @@ static unsigned long long u64_value(const cJSON *object, const char *key)
 
 bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionResultSummary *out)
 {
+    return ptc_companion_result_summary_parse_document(result_json, out, NULL);
+}
+
+bool ptc_companion_result_summary_parse_document(const char *result_json,
+    PtcCompanionResultSummary *out, cJSON **document)
+{
     cJSON *root;
     const cJSON *state;
     const cJSON *error;
@@ -45,6 +51,7 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     const cJSON *eye_care;
     const cJSON *restriction_reasons;
     const char *status;
+    if (document) *document = NULL;
     if (!out || !result_json || ptc_result_validate(result_json) != PTC_ERR_OK) {
         return false;
     }
@@ -242,7 +249,8 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->unlock_observed = out->ok && strcmp(out->type, "offline_code") == 0 &&
         out->play_timer_enabled == 1 && out->restricted_now == 0;
     out->valid = true;
-    cJSON_Delete(root);
+    if (document) *document = root;
+    else cJSON_Delete(root);
     return true;
 }
 

@@ -35,7 +35,8 @@ void setExit(void) {}
 int appletGetFocusState(void) { return system_focus_state; }
 void randomGet(void *out, size_t size) { memset(out, 0x35, size); }
 void ptc_ui_graphics_language_changed(void) { ++glyph_refreshes; }
-int64_t ptc_ui_anim_now_ms(void) { return fixed_time * 1000; }
+static int64_t monotonic_offset_ms;
+int64_t ptc_ui_anim_now_ms(void) { return fixed_time * 1000 + monotonic_offset_ms; }
 void refresh_security_state(UiState *ui) { (void)ui; }
 void cancel_bedtime_navigation(UiState *ui) { (void)ui; }
 void finish_bedtime_navigation(UiState *ui) { (void)ui; }
@@ -725,6 +726,7 @@ static void test_today_detail_refresh(void)
     snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
     mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
     ptc_ui_home_details_back(&ui.model); ptc_ui_home_details_back(&ui.model);
+    monotonic_offset_ms += 100;
     poll_result(&ui, false);
     check(!ui.model.played_minutes_available && ui.model.played_minutes == -1,
         "refreshed unknown consumption does not inherit a cached reading");
@@ -737,6 +739,7 @@ static void test_today_detail_refresh(void)
     snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
     mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
     ui.model.played_minutes_available = true; ui.model.played_minutes = 69;
+    monotonic_offset_ms += 100;
     poll_result(&ui, false);
     check(ui.model.day_index == 2 && !ui.model.played_minutes_available,
         "next-day refresh never carries yesterday's consumption forward");
@@ -926,7 +929,10 @@ int main(void)
     check(ui.waiting && ui.model.setup_activation_pending, "activation submits once");
     setup_primary(&ui);
     check(strcmp(request_id, ui.active_request_id) == 0, "repeat activation does not submit again");
-    ui.elapsed_ms = REQUEST_TIMEOUT_MS;
+    for (int i = 0; i < 100; ++i) poll_result(&ui, false);
+    check(ui.elapsed_ms == 0 && ui.transport.elapsed_ms == 0,
+          "same-tick polling does not accelerate activation timeout");
+    monotonic_offset_ms += REQUEST_TIMEOUT_MS;
     poll_result(&ui, false);
     check(ui.waiting && ui.model.setup_activation_pending && ui.model.setup_wizard_completed &&
           ui.model.parent_page == PTC_UI_PARENT_SUPPORT, "activation timeout enters support while retaining pending result");
@@ -947,11 +953,13 @@ int main(void)
         mem.storage.vtable->write_text_atomic(&mem.storage, path, wrong_text);
         free(wrong_text);
         cJSON_Delete(wrong_type);
+        monotonic_offset_ms += 1000;
         poll_result(&ui, false);
         check(ui.waiting && ui.model.setup_activation_pending && strcmp(ui.active_request_id, request_id) == 0,
               "unrelated result type retains original activation request");
         mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
     }
+    monotonic_offset_ms += 1000;
     poll_result(&ui, false);
     check(!ui.waiting && !ui.model.setup_activation_pending && strcmp(ui.model.setup_phase, "active") == 0 &&
           ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.diagnostic_status == PTC_UI_DIAGNOSTIC_SUCCESS,
@@ -966,6 +974,7 @@ int main(void)
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},"
         "\"setup\":{\"phase\":\"failed\"},\"completed_at\":1800000000}", ui.active_request_id);
     mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
+    monotonic_offset_ms += 100;
     poll_result(&ui, false);
     check(!ui.waiting && !ui.model.setup_activation_pending && ui.model.error_code == 401 &&
           ui.model.setup_wizard_completed && ui.model.parent_page == PTC_UI_PARENT_SUPPORT &&
@@ -989,6 +998,7 @@ int main(void)
         snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
         mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
         snprintf(ui.model.setup_phase, sizeof(ui.model.setup_phase), "active");
+        monotonic_offset_ms += 100;
         poll_result(&ui, false);
         check(!ui.waiting && ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.setup_phase[0] == '\0',
               "missing activation evidence cannot reuse an old active phase");

@@ -6,6 +6,20 @@
 
 static PtcUiLanguagePreference g_resolved_language = PTC_UI_LANGUAGE_SIMPLIFIED;
 
+typedef struct {
+    const char *name;
+    PtcUiTextId id;
+} TextReference;
+static TextReference g_text_references[64];
+
+static TextReference *text_reference_slot(const char *value)
+{
+    uint32_t hash = UINT32_C(2166136261);
+    for (const unsigned char *p = (const unsigned char *)value; *p; ++p)
+        hash = (hash ^ *p) * UINT32_C(16777619);
+    return &g_text_references[hash % 64];
+}
+
 #if defined(PLAYWISE_EDEN) || defined(PTC_UI_PREVIEW_ANIM_CLOCK_MS)
 #define PTC_UI_COMPILED_TEXT(key, value) value
 #else
@@ -47,8 +61,14 @@ const char *ptc_ui_text(PtcUiTextId id)
 const char *ptc_ui_text_resolve(const char *value)
 {
     if (!value || strncmp(value, "PTC_UI_T_", 9) != 0) return value;
+    TextReference *cached = text_reference_slot(value);
+    if (cached->name && !strcmp(value, cached->name)) return ptc_ui_text(cached->id);
     for (size_t i = 0; i < sizeof(OVERLAY_TEXT) / sizeof(OVERLAY_TEXT[0]); ++i)
-        if (strcmp(value, OVERLAY_TEXT[i].name) == 0) return ptc_ui_text(OVERLAY_TEXT[i].id);
+        if (strcmp(value, OVERLAY_TEXT[i].name) == 0) {
+            cached->name = OVERLAY_TEXT[i].name;
+            cached->id = OVERLAY_TEXT[i].id;
+            return ptc_ui_text(cached->id);
+        }
     return "[missing text]";
 }
 #else
@@ -92,8 +112,16 @@ const char *ptc_ui_text(PtcUiTextId id)
 const char *ptc_ui_text_resolve(const char *value)
 {
     if (!value || strncmp(value, "PTC_UI_T_", 9) != 0) return value;
+    TextReference *cached = text_reference_slot(value);
+    if (cached->name && !strcmp(value, cached->name)) return ptc_ui_text(cached->id);
     for (size_t i = 0; i < PTC_UI_TEXT_COUNT; ++i)
-        if (strcmp(value, UI_TEXT_NAMES[i]) == 0) return ptc_ui_text((PtcUiTextId)i);
+        if (strcmp(value, UI_TEXT_NAMES[i]) == 0) {
+            /* Own only catalog pointers, never a caller's transient buffer.
+             * Resolve the ID each time so language changes are immediate. */
+            cached->name = UI_TEXT_NAMES[i];
+            cached->id = (PtcUiTextId)i;
+            return ptc_ui_text(cached->id);
+        }
     return "[missing text]";
 }
 

@@ -164,6 +164,7 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
     int touch_x = -1;
     int touch_y = -1;
     int draw_elapsed_ms = DRAW_INTERVAL_MS;
+    int audio_elapsed_ms = 0;
     HidTouchScreenState initial_touch;
     if (!ui || !out || out_size == 0 || !g_active_pad) return false;
     out[0] = '\0';
@@ -173,6 +174,7 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
     ignore_touch_until_release =
         hidGetTouchScreenStates(&initial_touch, 1) && initial_touch.count > 0;
     touch_was_active = ignore_touch_until_release;
+    int64_t loop_at_ms = ptc_ui_anim_now_ms();
     while (appletMainLoop() && !ui->exit_requested) {
         u64 buttons_down;
         u64 buttons_held;
@@ -328,13 +330,19 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
             touch_plus_was_held = false;
         }
         if (touch_allowed) touch_was_active = touch_active;
-        draw_elapsed_ms += INPUT_LOOP_MS;
+        int elapsed_ms = ptc_loop_elapsed_ms(&loop_at_ms, ptc_ui_anim_now_ms());
+        audio_elapsed_ms = ptc_loop_add_ms(audio_elapsed_ms, elapsed_ms);
+        if (audio_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
+            ptc_audio_poll();
+            audio_elapsed_ms = 0;
+        }
+        draw_elapsed_ms = ptc_loop_add_ms(draw_elapsed_ms, elapsed_ms);
         if (draw_elapsed_ms >= (ui->animating ? DRAW_INTERVAL_FAST_MS : DRAW_INTERVAL_MS)) {
             ui->animating = update_animations(&ui->model);
             draw(ui);
             draw_elapsed_ms = 0;
         }
-        svcSleepThread(ui->animating ? INPUT_LOOP_SLEEP_FAST_NS : INPUT_LOOP_SLEEP_NS);
+        svcSleepThread(INPUT_LOOP_SLEEP_NS);
     }
     ptc_ui_pin_finish(&ui->model);
     return false;

@@ -12,6 +12,13 @@ extern "C" {
 #define PTC_INPUT_OWNER_POLL_NS UINT64_C(250000000)
 
 typedef struct {
+    char owner[33];
+    uint64_t issued;
+    uint64_t expires;
+    bool visible;
+} PtcInputOwnerLease;
+
+typedef struct {
     PtcStorage *storage;
     char root[192];
     char release[128];
@@ -19,6 +26,12 @@ typedef struct {
     char boot[17];
     char paths[2][256];
     bool bound;
+    /* Parsed values only: every use still requires a successful fresh read.
+     * Storage failures/missing records never fall back to these bytes. */
+    char runtime_text[768];
+    char runtime_boot[17];
+    char lease_text[2][512];
+    PtcInputOwnerLease leases[2];
 } PtcInputOwnerContext;
 
 typedef struct {

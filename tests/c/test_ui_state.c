@@ -3743,6 +3743,24 @@ static void test_language_and_short_weekly_limits(void)
         "manual english language overrides Switch language");
 
     /* Static labels resolve by key in each language. */
+    {
+        char key[256];
+        static const char *const keys[] = {
+#define PTC_UI_TEXT_KEY(id) #id,
+#include "../../companion/ui_text_keys.inc"
+#undef PTC_UI_TEXT_KEY
+        };
+        for (int language = PTC_UI_LANGUAGE_SIMPLIFIED; language <= PTC_UI_LANGUAGE_ENGLISH; ++language) {
+            ptc_ui_language_set_resolved((PtcUiLanguagePreference)language);
+            for (unsigned id = 0; id < PTC_UI_TEXT_COUNT; ++id) {
+                snprintf(key, sizeof(key), "%s", keys[id]);
+                check_true(strcmp(ptc_ui_text_resolve(key), ptc_ui_text((PtcUiTextId)id)) == 0, "all text references resolve after language change");
+                check_true(strcmp(ptc_ui_text_resolve(key), ptc_ui_text((PtcUiTextId)id)) == 0, "warm text reference resolves current language");
+            }
+        }
+        snprintf(key, sizeof(key), "%s", "PTC_UI_T_UNKNOWN_KEY");
+        check_true(strcmp(ptc_ui_text_resolve(key), "[missing text]") == 0, "reused mutable key buffer cannot hit stale ID");
+    }
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
     check_true(strcmp(ptc_ui_text(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE),
         "匯出供手機或電腦使用的設定檔") == 0, "traditional terminology uses reviewed catalog text");

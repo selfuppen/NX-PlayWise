@@ -188,6 +188,7 @@ int main(int argc, char **argv)
         submit_status(&ui);
     }
 
+    int64_t loop_at_ms = ptc_ui_anim_now_ms();
     while (appletMainLoop() && running) {
         u64 down;
         u64 held;
@@ -413,11 +414,13 @@ int main(int argc, char **argv)
             running = false;
         }
 
-        background_poll_elapsed_ms += INPUT_LOOP_MS;
+        int elapsed_ms = ptc_loop_elapsed_ms(&loop_at_ms, ptc_ui_anim_now_ms());
+        background_poll_elapsed_ms = ptc_loop_add_ms(background_poll_elapsed_ms, elapsed_ms);
 #ifdef PLAYWISE_EDEN
         ptc_eden_trace_stage(PTC_EDEN_TRACE_DISPATCH_DONE, 0);
 #endif
         if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
+            ptc_audio_poll();
             poll_notification_test(&ui);
 #ifdef PLAYWISE_EDEN
             ptc_eden_trace_stage(PTC_EDEN_TRACE_TICK_BEGIN, 0);
@@ -447,13 +450,14 @@ int main(int argc, char **argv)
 #endif
             background_poll_elapsed_ms = 0;
         }
-        draw_elapsed_ms += INPUT_LOOP_MS;
+        draw_elapsed_ms = ptc_loop_add_ms(draw_elapsed_ms, elapsed_ms);
         if (draw_elapsed_ms >= (ui.animating ? DRAW_INTERVAL_FAST_MS : DRAW_INTERVAL_MS)) {
             ui.animating = update_animations(&ui.model);
             draw(&ui);
             draw_elapsed_ms = 0;
         }
-        svcSleepThread(ui.animating ? INPUT_LOOP_SLEEP_FAST_NS : INPUT_LOOP_SLEEP_NS);
+        /* Sample-count holds/repeat must not accelerate during animations. */
+        svcSleepThread(INPUT_LOOP_SLEEP_NS);
     }
 
 #ifndef PLAYWISE_EDEN

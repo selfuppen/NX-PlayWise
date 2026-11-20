@@ -38,6 +38,7 @@
 #include "ui_layout.h"
 #include "../ui_language.h"
 #include "ptc_audio.h"
+#include "loop_clock.h"
 #ifndef PLAYWISE_EDEN
 #include "hot_reload.h"
 #include "online_update.h"
@@ -60,7 +61,6 @@
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 30000
 #define INPUT_LOOP_SLEEP_NS 20000000LL
-#define INPUT_LOOP_SLEEP_FAST_NS 5000000LL
 #define INPUT_LOOP_MS 20
 #define DRAW_INTERVAL_MS 40
 #define DRAW_INTERVAL_FAST_MS 20
@@ -129,6 +129,7 @@ typedef struct {
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char last_result[RESULT_TEXT_SIZE];
     int elapsed_ms;
+    int64_t result_poll_at_ms;
     int hidden_ticks;
     PtcUiShortcutHoldState custom_shortcut_hold;
     PtcUiConfirmHoldState confirm_hold;

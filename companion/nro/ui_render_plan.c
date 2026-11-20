@@ -1000,10 +1000,10 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         return;
     }
 
+    PtcRules rules;
+    ptc_ui_build_plan_rules(model, PTC_UI_PLAN_WEEKLY, &rules);
     for (index = 0; index < (int)PTC_RESULT_FORECAST_DAYS; ++index) {
         const PtcResultForecastDay *day = &model->forecast[index];
-        PtcRules rules;
-        ptc_ui_build_plan_rules(model, PTC_UI_PLAN_WEEKLY, &rules);
         PtcEffectiveBedtime bedtime = ptc_bedtime_resolve_start_day(
             &rules,
             day->day_index, ptc_weekday_from_day_index(day->day_index));

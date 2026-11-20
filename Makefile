@@ -393,3 +393,19 @@ $(HOST_BUILD_DIR)/resource_overlay: tests/runtime_resources/overlay.cpp tests/ru
 test-runtime-resources: $(HOST_BUILD_DIR)/resource_backend $(HOST_BUILD_DIR)/resource_nro $(HOST_BUILD_DIR)/resource_overlay
 	$(STAGE_TIMER) global test-host -- python3 tests/runtime_resources/run.py $(HOST_BUILD_DIR) $(RESOURCE_FONT)
 test-host: test-runtime-resources
+
+$(HOST_BUILD_DIR)/test_loop_clock: tests/c/test_loop_clock.c companion/nro/loop_clock.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+
+.PHONY: test-loop-clock
+test-loop-clock: $(HOST_BUILD_DIR)/test_loop_clock
+	$(STAGE_TIMER) global test-host -- $<
+test-host: test-loop-clock
+
+$(HOST_BUILD_DIR)/test_audio_lifecycle: tests/audio/test.c tests/audio/switch.h companion/nro/ptc_audio.c companion/nro/ptc_audio.h companion/nro/ptc_audio_data.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/audio -o $@ tests/audio/test.c companion/nro/ptc_audio.c
+
+.PHONY: test-audio-lifecycle
+test-audio-lifecycle: $(HOST_BUILD_DIR)/test_audio_lifecycle
+	$(STAGE_TIMER) global test-host -- $<
+test-host: test-audio-lifecycle

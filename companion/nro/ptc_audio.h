@@ -50,6 +50,9 @@ void ptc_audio_play(PtcSoundEffect se);
  */
 void ptc_audio_stop(void);
 
+/* Bounded UI poll (100ms): stop the output once all queued audio is released. */
+void ptc_audio_poll(void);
+
 /**
  * Enable or disable sound effects.
  */

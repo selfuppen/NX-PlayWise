@@ -32,6 +32,7 @@ extern "C" {
 #include "companion/overlay/layout.h"
 #include "companion/overlay/source/render_types.hpp"
 #include "wrap_reference.inc"
+#include "companion/overlay/vendor/libtesla/include/playwise_blend.hpp"
 
 static int failures;
 static void check(bool value, const char *label) {
@@ -39,6 +40,17 @@ static void check(bool value, const char *label) {
 }
 
 int main(int argc, char **argv) {
+    for (unsigned sa = 0; sa < 16; ++sa)
+        for (unsigned da = 0; da < 16; ++da)
+            for (unsigned s = 0; s < 16; ++s)
+                for (unsigned d = 0; d < 16; ++d) {
+                    tsl::Color src{s, 15-s, s, sa}, dst{d, 15-d, d, da};
+                    auto result = tsl::gfx::detail::blendDestination(src, dst);
+                    unsigned expected = (d * da + s * (15-da)) / float(15);
+                    unsigned green = ((15-d) * da + (15-s) * (15-da)) / float(15);
+                    check(result.r == expected && result.g == green && result.b == expected &&
+                        result.a == std::min(sa + da, 15u), "pinned destination blend pixel equivalence");
+                }
     if (argc != 2) return 2;
     tsl::gfx::Renderer renderer(argv[1]);
     std::string long_word(900, 'W');

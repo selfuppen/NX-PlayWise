@@ -101,6 +101,10 @@ typedef struct {
 } PtcCompanionResultSummary;
 
 bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionResultSummary *out);
+struct cJSON;
+/* Same validation as parse; on success the caller owns the optional tree. */
+bool ptc_companion_result_summary_parse_document(const char *result_json,
+    PtcCompanionResultSummary *out, struct cJSON **document);
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size);
 /* Expires consumption only; keep runtime flags and the observation timestamp. */
 void ptc_companion_result_summary_expire_usage(PtcCompanionResultSummary *summary, int64_t now);

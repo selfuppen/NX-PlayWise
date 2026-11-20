@@ -317,12 +317,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     const char *type;
     bool status_context;
     bool setup_activated = false;
-    if (!model || !text || ptc_companion_parse_result_summary(text, &summary) != PTC_COMPANION_OK) {
-        return false;
-    }
-    root = cJSON_Parse(text);
-    if (!cJSON_IsObject(root)) {
-        cJSON_Delete(root);
+    if (!model || !text || !ptc_companion_result_summary_parse_document(text, &summary, &root)) {
         return false;
     }
     status = summary.status;

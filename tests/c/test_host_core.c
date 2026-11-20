@@ -889,6 +889,18 @@ static void test_result_summary_unlimited_state(void)
     char formatted[256];
 
     check_true(ptc_companion_result_summary_parse(result, &summary), "unlimited result summary parses");
+    {
+        cJSON *document = NULL;
+        PtcCompanionResultSummary shared;
+        check_true(ptc_companion_result_summary_parse_document(result, &shared, &document) &&
+            document && !memcmp(&summary, &shared, sizeof(summary)) &&
+            cJSON_GetObjectItemCaseSensitive(document, "state"),
+            "shared result tree preserves validated summary and caller owns document");
+        cJSON_Delete(document);
+        document = (cJSON *)&shared;
+        check_true(!ptc_companion_result_summary_parse_document("{}", &shared, &document) && !document,
+            "invalid result clears document without weakening validation");
+    }
     check_int(summary.unrestricted_today, 1, "unlimited state reaches compact result summary");
     check_int(summary.day_index, 2380, "result summary carries the console day index for code generation");
     check_true(ptc_companion_result_summary_format(&summary, formatted, sizeof(formatted)) &&

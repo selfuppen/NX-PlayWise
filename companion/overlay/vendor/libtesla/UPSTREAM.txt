@@ -48,3 +48,7 @@ The brief dismissal cadence does not speed up automatic detail file polling.
 Local notification wake patch: the hidden UI can also wait on a readable IPC
 event. The combo event wins when both are ready, HOME/POWER blocks the optional
 event, and wait errors return to timed file polling. Upstream commit unchanged.
+Local destination blend patch (2026-11-19): reuse the checked pixel offset and
+write opaque colors directly. Partial alpha retains pinned float rounding and
+alpha accumulation; playwise_blend.hpp is covered by exhaustive Host channel
+tests. No upstream files synced; pinned upstream commit remains unchanged.

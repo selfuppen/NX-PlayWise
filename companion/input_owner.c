@@ -4,12 +4,7 @@
 #include <string.h>
 #include "../third_party/cjson/cJSON.h"
 
-typedef struct {
-    char owner[33];
-    uint64_t issued;
-    uint64_t expires;
-    bool visible;
-} Lease;
+typedef PtcInputOwnerLease Lease;
 
 static const char *string(const cJSON *value, const char *key)
 {
@@ -91,12 +86,20 @@ static int runtime(PtcInputOwnerContext *c, char boot[17], bool use_read_status)
         if (metadata.type != PTC_STORAGE_ENTRY_FILE ||
             !io->read_text(c->storage, c->runtime_path, text, sizeof(text))) return -1;
     }
+    if (c->runtime_text[0] && !strcmp(text, c->runtime_text)) {
+        memcpy(boot, c->runtime_boot, 17);
+        return 1;
+    }
     value = object(text);
     if (!value || !hex(string(value, "boot_id"), 16) || strcmp(string(value, "profile"), "release")) {
         cJSON_Delete(value); return -1;
     }
     result = strcmp(string(value, "release_id"), c->release) ? 0 : 1;
-    if (result == 1) snprintf(boot, 17, "%s", string(value, "boot_id"));
+    if (result == 1) {
+        snprintf(boot, 17, "%s", string(value, "boot_id"));
+        memcpy(c->runtime_boot, boot, 17);
+        snprintf(c->runtime_text, sizeof(c->runtime_text), "%s", text);
+    }
     cJSON_Delete(value);
     return result;
 }
@@ -105,6 +108,7 @@ static bool bind(PtcInputOwnerContext *c, const char boot[17])
 {
     unsigned slot;
     for (slot = 0; slot < 2; ++slot) {
+        c->lease_text[slot][0] = '\0';
         int n = snprintf(c->paths[slot], sizeof(c->paths[slot]), "%s/support/overlay-input-%s-%u.json", c->root, boot, slot);
         if (n < 0 || (size_t)n >= sizeof(c->paths[slot])) { c->bound = false; return false; }
     }
@@ -125,6 +129,10 @@ static int read_lease(PtcInputOwnerContext *c, unsigned slot, Lease *lease)
     if (metadata.type == PTC_STORAGE_ENTRY_MISSING) return 0;
     if (metadata.type != PTC_STORAGE_ENTRY_FILE ||
         !c->storage->vtable->read_text(c->storage, c->paths[slot], text, sizeof(text))) return -1;
+    if (c->lease_text[slot][0] && !strcmp(text, c->lease_text[slot])) {
+        *lease = c->leases[slot];
+        return 1;
+    }
     value = object(text);
     version = cJSON_GetObjectItemCaseSensitive(value, "schema_version");
     visible = cJSON_GetObjectItemCaseSensitive(value, "visible");
@@ -136,6 +144,8 @@ static int read_lease(PtcInputOwnerContext *c, unsigned slot, Lease *lease)
     if (ok) {
         snprintf(lease->owner, sizeof(lease->owner), "%s", string(value, "owner_id"));
         lease->visible = cJSON_IsTrue(visible);
+        c->leases[slot] = *lease;
+        snprintf(c->lease_text[slot], sizeof(c->lease_text[slot]), "%s", text);
     }
     cJSON_Delete(value);
     return ok ? 1 : -1;

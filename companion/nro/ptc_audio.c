@@ -19,6 +19,8 @@ static u8 g_audio_pcm_pools[PTC_AUDIO_BUFFER_COUNT][PTC_AUDIO_BUFFER_SIZE] __att
 static AudioOutBuffer g_audio_buffers[PTC_AUDIO_BUFFER_COUNT];
 static bool g_audio_buffer_busy[PTC_AUDIO_BUFFER_COUNT];
 static int g_current_buffer_idx = 0;
+static bool g_audio_started;
+static bool g_audio_discard_pending;
 
 static void reap_audio_buffers(void)
 {
@@ -54,15 +56,9 @@ static void reap_audio_buffers(void)
 bool ptc_audio_init(void)
 {
 #if defined(__SWITCH__)
+    if (g_audio_initialized) return true;
     Result rc = audoutInitialize();
     if (R_FAILED(rc)) {
-        g_audio_initialized = false;
-        return false;
-    }
-
-    rc = audoutStartAudioOut();
-    if (R_FAILED(rc)) {
-        audoutExit();
         g_audio_initialized = false;
         return false;
     }
@@ -71,6 +67,7 @@ bool ptc_audio_init(void)
     memset(g_audio_buffers, 0, sizeof(g_audio_buffers));
     memset(g_audio_buffer_busy, 0, sizeof(g_audio_buffer_busy));
     g_current_buffer_idx = 0;
+    g_audio_started = g_audio_discard_pending = false;
     g_audio_initialized = true;
     return true;
 #else
@@ -83,9 +80,10 @@ void ptc_audio_exit(void)
 {
 #if defined(__SWITCH__)
     if (g_audio_initialized) {
-        audoutStopAudioOut();
+        if (g_audio_started) audoutStopAudioOut();
         audoutExit();
         g_audio_initialized = false;
+        g_audio_started = g_audio_discard_pending = false;
     }
 #else
     g_audio_initialized = false;
@@ -95,6 +93,7 @@ void ptc_audio_exit(void)
 void ptc_audio_set_enabled(bool enabled)
 {
     g_audio_enabled = enabled;
+    if (!enabled) ptc_audio_stop();
 }
 
 bool ptc_audio_is_enabled(void)
@@ -106,12 +105,29 @@ void ptc_audio_stop(void)
 {
 #if defined(__SWITCH__)
     if (g_audio_initialized) {
-        audoutStopAudioOut();
+        g_audio_discard_pending = true;
+        if (g_audio_started && R_FAILED(audoutStopAudioOut())) return;
+        g_audio_started = false;
         bool flushed = false;
-        audoutFlushAudioOutBuffers(&flushed);
+        if (R_FAILED(audoutFlushAudioOutBuffers(&flushed))) return;
         reap_audio_buffers();
-        audoutStartAudioOut();
+        for (int i = 0; i < PTC_AUDIO_BUFFER_COUNT; ++i)
+            if (g_audio_buffer_busy[i]) return;
+        g_audio_discard_pending = false;
     }
+#endif
+}
+
+void ptc_audio_poll(void)
+{
+#if defined(__SWITCH__)
+    if (!g_audio_initialized) return;
+    if (g_audio_discard_pending) { ptc_audio_stop(); return; }
+    if (!g_audio_started) return;
+    reap_audio_buffers();
+    for (int i = 0; i < PTC_AUDIO_BUFFER_COUNT; ++i)
+        if (g_audio_buffer_busy[i]) return;
+    if (R_SUCCEEDED(audoutStopAudioOut())) g_audio_started = false;
 #endif
 }
 
@@ -125,6 +141,11 @@ void ptc_audio_play(PtcSoundEffect se)
     const PtcAudioPcmClip *clip = ptc_audio_get_clip((int)se);
     if (!clip || !clip->samples || clip->sample_count == 0) {
         return;
+    }
+
+    if (g_audio_discard_pending) {
+        ptc_audio_stop();
+        if (g_audio_discard_pending) return;
     }
 
     reap_audio_buffers();
@@ -141,6 +162,10 @@ void ptc_audio_play(PtcSoundEffect se)
     if (buf_idx < 0) {
         /* Never mutate a descriptor or PCM pool that audout still owns. */
         return;
+    }
+    if (!g_audio_started) {
+        if (R_FAILED(audoutStartAudioOut())) return;
+        g_audio_started = true;
     }
     g_current_buffer_idx = (buf_idx + 1) % PTC_AUDIO_BUFFER_COUNT;
 
@@ -174,6 +199,6 @@ void ptc_audio_play(PtcSoundEffect se)
     Result rc = audoutAppendAudioOutBuffer(&g_audio_buffers[buf_idx]);
     if (R_SUCCEEDED(rc)) {
         g_audio_buffer_busy[buf_idx] = true;
-    }
+    } else ptc_audio_poll();
 #endif
 }

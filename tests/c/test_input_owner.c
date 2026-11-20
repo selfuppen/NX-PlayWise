@@ -133,6 +133,51 @@ static void test_notification_suppression_reads(void)
         !strcmp(reader.context.boot, "fedcba9876543210"), "next poll binds a different boot from disk");
 }
 
+static unsigned parse_allocations, fresh_reads;
+static void *count_json_alloc(size_t size) { ++parse_allocations; return malloc(size); }
+static bool count_read(PtcStorage *storage, const char *path, char *out, size_t size)
+{
+    ++fresh_reads;
+    return original->read_text(storage, path, out, size);
+}
+
+static void test_fresh_byte_cache(void)
+{
+    fixture();
+    check(ptc_input_owner_acquire(&writer, START), "acquire for parsed cache");
+    hooked.read_text = count_read;
+    cJSON_Hooks hooks = {count_json_alloc, free};
+    cJSON_InitHooks(&hooks);
+    parse_allocations = fresh_reads = 0;
+    check(ptc_input_owner_block(&reader, START + 1, true), "warm reader remains blocked");
+    unsigned cold_allocations = parse_allocations;
+    check(cold_allocations > 0 && fresh_reads == 3, "cold parse reads all three files");
+    parse_allocations = fresh_reads = 0;
+    for (unsigned i = 0; i < 100; ++i) {
+        check(ptc_input_owner_block(&reader, START + 2 + i, true), "cached reader remains blocked");
+        check(ptc_input_owner_accept(&writer, START + 2 + i), "fresh writer identity accepted");
+    }
+    check(parse_allocations == 0 && fresh_reads == 400,
+        "100 repeated reader/writer checks allocate no JSON but retain 400 fresh reads");
+    printf("input-owner cache: cold=%u allocations, repeated=0 allocations, fresh_reads=%u\n",
+        cold_allocations, fresh_reads);
+    mem.fail_read_path_contains = "runtime-ready";
+    check(!ptc_input_owner_accept(&writer, START + 102), "failed read cannot use cached runtime");
+    check(ptc_input_owner_block(&reader, START + 102, true), "failed runtime remains unknown");
+    mem.fail_read_path_contains = NULL;
+    ptc_input_owner_release(&writer, START + 103);
+    check(ptc_input_owner_block(&reader, START + 104, true), "new release bytes drain held input");
+    check(!ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 105, false),
+        "neutral input observes fresh release bytes");
+    put(SLOT0, "{}");
+    check(ptc_input_owner_block(&reader, START + PTC_INPUT_OWNER_POLL_NS + 106, true),
+        "malformed replacement never reuses cached release");
+    runtime(RELEASE, "fedcba9876543210");
+    check(!ptc_input_owner_block(&reader, START + 2 * PTC_INPUT_OWNER_POLL_NS + 107, false) &&
+        !strcmp(reader.context.boot, "fedcba9876543210"), "same-sized boot change rebinds and invalidates slots");
+    cJSON_InitHooks(NULL);
+}
+
 int main(void)
 {
     char text[512], foreign[512];
@@ -274,6 +319,7 @@ int main(void)
     check(!ptc_input_owner_maintain(&writer, START + PTC_INPUT_OWNER_RENEW_NS),
           "producer cannot silently renew an unexpected released record");
     test_notification_suppression_reads();
+    test_fresh_byte_cache();
     if (failures) return 1;
     puts("PASS: bounded Overlay ownership, notification runtime read, atomic-gap protection and NRO neutral drain");
     return 0;

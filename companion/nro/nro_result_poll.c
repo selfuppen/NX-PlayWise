@@ -84,8 +84,13 @@ void poll_eden_ready_result(UiState *ui)
     if (ui->waiting && ui->active_request_id[0] && ui->client.storage) {
         int n = snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui->active_request_id);
         if (n > 0 && (size_t)n < sizeof(path) &&
-            ui->client.storage->vtable->exists(ui->client.storage, path))
+            ui->client.storage->vtable->exists(ui->client.storage, path)) {
+            /* Exact ready evidence bypasses the file backoff, not elapsed time.
+             * Keep production polling and request deadlines unchanged. */
+            if (ui->transport.active == PTC_TRANSPORT_FILE)
+                ui->transport.next_file_poll_ms = ui->transport.elapsed_ms;
             poll_result(ui, false);
+        }
     }
     ui->model.waiting = ui->waiting;
 }
@@ -119,12 +124,11 @@ void poll_result(UiState *ui, bool force)
         }
         return;
     }
-    if (ui->waiting) {
-        ui->elapsed_ms += BACKGROUND_POLL_INTERVAL_MS;
-    }
+    int elapsed_ms = ptc_loop_elapsed_ms(&ui->result_poll_at_ms, ptc_ui_anim_now_ms());
+    ui->elapsed_ms = ptc_loop_add_ms(ui->elapsed_ms, elapsed_ms);
     status = ptc_companion_transport_poll(
         &ui->transport,
-        BACKGROUND_POLL_INTERVAL_MS,
+        elapsed_ms,
         ui->model.setup_activation_pending ? -1 : REQUEST_TIMEOUT_MS,
         ui->last_result,
         sizeof(ui->last_result));
