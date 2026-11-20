@@ -39,6 +39,14 @@ def verify_main(output: Path) -> None:
         ui = read(output / f"checkpoints/{name}.json")["ui"]
         require(all(ui.get(k) == v for k, v in expected.items()), f"main-flow checkpoint differs: {name}")
     reopen = read(output / "assertions/business_reopen.json")
+    bedtime = read(output / "assertions/bedtime_journey.json")
+    if bedtime.get("concurrent_daily_checked") is True:
+        for name, active, skipped in (("daily-and-bedtime", True, False),
+                                      ("daily-after-bedtime-skip", True, True)):
+            ui = read(output / f"checkpoints/{name}.json")["ui"]
+            require(ui.get("daily_restriction_active") is True and ui.get("restricted_now") == 1 and
+                    ui.get("bedtime_active") is active and ui.get("bedtime_skipped") is skipped,
+                    f"concurrent daily/bedtime checkpoint differs: {name}")
     require(digest(output / "app-final/ledger/used_nonces.jsonl") == reopen["ledger_sha256"],
             "business reopen lost consumed nonce")
     rows = [read(p) for p in (output / "receipts").glob("*.json")]
@@ -296,6 +304,8 @@ class MainFlow:
                                     "natural deadline restores simulated availability", "disable persists"])
 
     def bedtime_journey(self) -> None:
+        self.today(1)
+        self.refresh(daily_restriction_active=True, restricted_now=1)
         self.plan(3, page=3)
         self.action(target="bedtime_master")
         before = self.ids()
@@ -307,14 +317,18 @@ class MainFlow:
         # The in-process bridge does not rescan the SD queue. Bedtime entry is
         # enforced by the next natural scheduler minute, not the save receipt.
         self.wait_policy(85, bedtime_active=True, bedtime_skipped=False, restricted_now=1)
-        self.refresh(bedtime_active=True, bedtime_skipped=False, restricted_now=1)
+        self.refresh(bedtime_active=True, bedtime_skipped=False, daily_restriction_active=True, restricted_now=1)
+        self.capture("daily-and-bedtime")
         before = self.ids()
         self.action(target="card_4")
         self.wait_ui(overlay=22)
         self.enter_pin("110")
         self.confirm()
         self.submitted("skip_bedtime", before)
-        self.refresh(bedtime_skipped=True, restricted_now=0)
+        self.refresh(bedtime_skipped=True, daily_restriction_active=True, restricted_now=1)
+        self.capture("daily-after-bedtime-skip")
+        self.today_action(2, "disable_today_limit")
+        self.refresh(bedtime_skipped=True, daily_restriction_active=False, restricted_now=0)
         self.plan(3, page=3)
         self.action(target="bedtime_master")
         before = self.ids()
@@ -322,8 +336,9 @@ class MainFlow:
         self.submitted("set_bedtime_policy", before)
         self.action(button="B")
         self.wait_ui(plan_page=0)
-        self.checked("bedtime_journey", ["normal UI activates fixture window", "PIN skip clears current simulated limit",
-                                        "disable saves without recovery failure"])
+        self.checked("bedtime_journey", ["normal UI activates fixture window with concurrent daily exhaustion",
+                                        "PIN skip preserves daily restriction", "unlimited clears the last reason",
+                                        "disable saves without recovery failure"], concurrent_daily_checked=True)
 
     def dock_journey(self) -> None:
         self.today_action(2, "disable_today_limit")

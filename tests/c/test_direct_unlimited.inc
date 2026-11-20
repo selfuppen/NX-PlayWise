@@ -92,6 +92,84 @@ static void test_direct_dock_daily_reason_projection(void)
     free(f.mem);
 }
 
+static void test_direct_concurrent_daily_reason_projection(void)
+{
+    /* Exercise both temporary owners independently and together. Native zero
+       balance is deliberately present even when the independent total fails. */
+    for (unsigned owners = 1; owners <= 3; ++owners) {
+        Fixture f;
+        PtcRules rules;
+        PtcRuntimeState state, before;
+        PtcResultState result;
+        PtcCompanionResultSummary summary;
+        char json[8192];
+        seed_direct_grant(&f, 30 * PTC_USAGE_MINUTE_NS, 1);
+        expect(load_rules(&f.core, &rules) && load_state(&f.core, &state),
+            "load concurrent daily reason fixture");
+        rules.bedtime.enabled = (owners & 1) != 0;
+        for (unsigned i = 0; i < 7; ++i) {
+            rules.bedtime.week[i].enabled = true;
+            rules.bedtime.week[i].start_minute = 600;
+            rules.bedtime.week[i].end_minute = 500;
+        }
+        rules.eye_care.enabled = state.eye_care_resting = (owners & 2) != 0;
+        state.eye_care_rest_deadline = f.clock.snapshot.unix_seconds + 60;
+        state.eye_usage_counter.source = PTC_USAGE_SOURCE_PCTL_1952;
+        f.pctl.status.limited_today = false;
+        f.pctl.status.blocked_today = true;
+        f.pctl.status.configured_minutes = 0;
+        f.pctl.status.play_timer_enabled = false;
+        before = state;
+        unsigned writes = f.pctl.apply_target_calls, starts = f.pctl.start_timer_calls;
+        PtcPctlStatus valid = f.pctl.status;
+        for (unsigned observation = 0; observation < 12; ++observation) {
+            PtcPctlStatus status = valid;
+            switch (observation) {
+                case 1: status.usage_available = false; break;
+                case 2: status.usage_result = 1; break;
+                case 3: --status.usage_day_index; break;
+                case 4: ++status.usage_day_index; break;
+                case 5: status.usage_captured_at -= 11; break;
+                case 6: ++status.usage_captured_at; break;
+                case 7: status.usage_captured_at = 0; break;
+                case 8: status.usage_supported = false; break;
+                case 9: status.usage_ns = (uint64_t)INT64_MAX + 1; break;
+                case 10: status.usage_ns = PTC_USAGE_MINUTE_NS - 1; break;
+                case 11:
+                    status.usage_ns = PTC_USAGE_MINUTE_NS;
+                    status.usage_captured_at -= 10;
+                    break;
+            }
+            result_state_from_pctl(&result, f.clock.snapshot.day_index, &status);
+            fill_extended_result_state(&f.core, &result, &rules, &state, &status, f.clock.snapshot);
+            expect(result.daily_restriction_active == (observation == 0 || observation == 11),
+                "only a fresh same-day total proves daily exhaustion beneath temporary restrictions");
+            expect(result.bedtime_active == rules.bedtime.enabled &&
+                (strcmp(result.eye_care_phase, "resting") == 0) == state.eye_care_resting,
+                "daily evidence does not hide independent bedtime or rest reasons");
+            expect(ptc_result_ok_json(json, sizeof(json), "concurrent-daily", "status", "release", true,
+                &result, f.clock.snapshot.unix_seconds) == 0 && ptc_companion_result_summary_parse(json, &summary) &&
+                summary.daily_restriction_active == result.daily_restriction_active &&
+                summary.bedtime_active == rules.bedtime.enabled &&
+                (strcmp(summary.eye_care_phase, "resting") == 0) == state.eye_care_resting,
+                "concurrent daily result survives serialization and Companion parsing");
+        }
+        for (unsigned i = 0; i < 7; ++i) rules.week[i].mode = PTC_RULE_MODE_UNLIMITED;
+        fill_extended_result_state(&f.core, &result, &rules, &state, &valid, f.clock.snapshot);
+        expect(!result.daily_restriction_active, "temporary zero target never exhausts an unlimited daily rule");
+        for (unsigned i = 0; i < 7; ++i) rules.week[i].mode = PTC_RULE_MODE_LIMIT;
+        /* A same-day explicit allowance must win over the exhausted weekly rule. */
+        rules.today_override.present = true;
+        rules.today_override.day_index = f.clock.snapshot.day_index;
+        rules.today_override.rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 60};
+        fill_extended_result_state(&f.core, &result, &rules, &state, &valid, f.clock.snapshot);
+        expect(!result.daily_restriction_active, "daily reason resolves the current effective allowance");
+        expect(memcmp(&state, &before, sizeof(state)) == 0 && f.pctl.apply_target_calls == writes &&
+            f.pctl.start_timer_calls == starts, "concurrent projection never changes consumption or writes PCTL");
+        free(f.mem);
+    }
+}
+
 static void test_direct_unlimited_lifecycle(void)
 {
     Fixture f;

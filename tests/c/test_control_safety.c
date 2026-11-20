@@ -2495,6 +2495,7 @@ int ptc_test_control_safety(void)
     test_sampled_state_boundaries();
     test_direct_unlimited_lifecycle();
     test_direct_dock_daily_reason_projection();
+    test_direct_concurrent_daily_reason_projection();
     test_direct_unlimited_reason_recovery();
     test_eden_direct_unlimited_counter();
     test_positive_subminute_runtime();
