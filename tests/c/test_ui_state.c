@@ -1643,12 +1643,12 @@ static void test_release_hit_targets(void)
     check_true(!rects_overlap(ptc_ui_setup_pctl_help_rect(), ptc_ui_setup_time_help_rect()),
                "parental control and clock help targets do not overlap");
     /* The step-1 cards and the footer must keep their measured bands: the help
-       button stays inside the parental-control row (452..490), the clock help
-       stays inside the console-time band (536..612), and neither touches the
+       button stays inside the parental-control card (384..492), the clock help
+       stays inside the console-time card (508..612), and neither touches the
        fixed footer at Y=664. */
-    check_true(ptc_ui_setup_pctl_help_rect().y >= 432 && ptc_ui_setup_pctl_help_rect().y + ptc_ui_setup_pctl_help_rect().h <= 524,
+    check_true(ptc_ui_setup_pctl_help_rect().y >= 384 && ptc_ui_setup_pctl_help_rect().y + ptc_ui_setup_pctl_help_rect().h <= 492,
                "parental control help stays inside its step-1 row");
-    check_true(ptc_ui_setup_time_help_rect().y >= 524 && ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h <= 618,
+    check_true(ptc_ui_setup_time_help_rect().y >= 508 && ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h <= 618,
                "clock help stays inside the console-time band");
     check_true(ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h < ptc_ui_setup_primary_rect().y,
                "clock help never reaches the fixed footer");
@@ -1674,8 +1674,11 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_setup_shortcut_rect()), PTC_UI_HIT_SETUP_SHORTCUT, 0, "setup shortcut target");
     check_hit(hit_center(&model, ptc_ui_setup_eye_care_rect()), PTC_UI_HIT_SETUP_EYE_CARE, 0, "eye care toggle target");
     check_hit(hit_center(&model, ptc_ui_setup_bedtime_rect()), PTC_UI_HIT_SETUP_BEDTIME, 0, "bedtime toggle target");
-    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_shortcut_rect()), "columns do not overlap");
+    check_hit(hit_center(&model, ptc_ui_setup_notifications_rect()), PTC_UI_HIT_SETUP_NOTIFICATIONS, 0, "notifications card target");
+    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_shortcut_rect()), "left column controls do not overlap");
+    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_eye_care_rect()), "columns do not overlap");
     check_true(!rects_overlap(ptc_ui_setup_eye_care_rect(), ptc_ui_setup_bedtime_rect()), "switches do not overlap");
+    check_true(!rects_overlap(ptc_ui_setup_bedtime_rect(), ptc_ui_setup_notifications_rect()), "bedtime and notifications do not overlap");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");

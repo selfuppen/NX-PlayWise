@@ -207,10 +207,10 @@ static int check_setup_reference(const PtcUiModel *baseline)
                     bool separated = reference.y == hint.y ? reference.x + reference.width + 24 <= hint.x :
                         reference.y + reference.height + 6 <= hint.y;
                     bool fits = setup_reference_trace.reference_count == 1 && setup_reference_trace.hint_count == 1 &&
-                        reference.x >= 94 && reference.x + reference.width <= 1186 &&
-                        hint.x >= 94 && hint.x + hint.width <= 1186 &&
-                        reference.y >= 387 && hint.y >= 387 &&
-                        reference.y + reference.height <= 424 && hint.y + hint.height <= 424 && separated;
+                        reference.x >= 774 && reference.x + reference.width <= 1206 &&
+                        hint.x >= 774 && hint.x + hint.width <= 1206 &&
+                        reference.y >= 464 && hint.y >= 464 &&
+                        reference.y + reference.height <= 552 && hint.y + hint.height <= 552 && separated;
                     if (!fits) {
                         fprintf(stderr, "FAIL: setup reference lang=%d style=%d dark=%d state=%d reference=%d [%d,%d,%d,%d] hint=%d [%d,%d,%d,%d]\n",
                             lang, style, dark, state, setup_reference_trace.reference_count,
