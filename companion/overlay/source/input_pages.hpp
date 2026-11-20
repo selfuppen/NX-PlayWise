@@ -39,8 +39,8 @@
 
     void focus_parent_action()
     {
-        page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(page_layout_.viewport,
-            page_layout_.actions[parent_action_], static_cast<int>(page_scroll_target_), page_layout_.scroll_max));
+        page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_parent_action(
+            &page_layout_, parent_action_, static_cast<int>(page_scroll_target_)));
     }
 
     bool handleInput(u64 keysDown, u64 keysHeld, const HidTouchState &raw_touch,

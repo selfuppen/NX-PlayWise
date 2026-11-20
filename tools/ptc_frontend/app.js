@@ -41,11 +41,16 @@ const securityError = document.getElementById("securityError");
 const selfTestError = document.getElementById("selfTestError");
 const copyButton = document.getElementById("copy");
 const copyMessage = document.getElementById("copyMessage");
+const pairedBar = document.getElementById("pairedBar");
+const pairedDeviceName = document.getElementById("pairedDeviceName");
+const pairedStatusBadge = document.getElementById("pairedStatusBadge");
+const togglePairingBtn = document.getElementById("togglePairingBtn");
 const devicePicker = document.getElementById("devicePicker");
 const pairingSettings = document.getElementById("pairingSettings");
 const dateShortcuts = document.querySelectorAll("#dateShortcuts button");
 const tierShortcuts = document.getElementById("tierShortcuts");
 const issuedHistory = document.getElementById("issuedHistory");
+const issuedSummary = document.getElementById("issuedSummary");
 const installButton = document.getElementById("install");
 const demoWarning = document.getElementById("demoWarning");
 const importError = document.getElementById("importError");
@@ -104,7 +109,7 @@ for (const minutes of tierOptions) {
 for (const minutes of [15, 30, 45, 60, 90, 120]) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "secondary compact";
+  button.className = "tier-chip";
   button.value = String(minutes);
   button.addEventListener("click", () => {
     tierInput.value = button.value;
@@ -124,18 +129,31 @@ function refreshShortcuts() {
     button.setAttribute("aria-pressed", String(dateInput.value === localDateAfter(Number(button.dataset.days))));
   }
   for (const button of tierShortcuts.children) {
-    button.textContent = t("minutes_unit", {m: Number(button.value)}, currentLang);
+    button.textContent = `+${t("minutes_unit", {m: Number(button.value)}, currentLang)}`;
     button.setAttribute("aria-pressed", String(tierInput.value === button.value));
+  }
+  const mins = Number(tierInput.value);
+  if (Number.isInteger(mins) && mins > 0) {
+    generateButton.textContent = t("btn_generate_minutes", {m: mins}, currentLang);
   }
 }
 
 function refreshDevices(collapse = false) {
   const devices = loadDevices(frontendStorage);
+  const activeId = deviceInput.value.trim();
+  const isPaired = devices.has(activeId);
+  const demo = isDemoSecret(secretInput.value);
   devicePicker.replaceChildren();
   for (const id of devices.keys()) devicePicker.add(new Option(id, id));
-  devicePicker.value = deviceInput.value.trim();
-  devicePicker.closest("label").hidden = devices.size === 0;
-  if (collapse) pairingSettings.open = !devices.has(devicePicker.value);
+  devicePicker.value = activeId;
+  devicePicker.closest("label").hidden = devices.size <= 1;
+  pairedBar.hidden = !isPaired;
+  if (isPaired) {
+    pairedDeviceName.textContent = activeId;
+    pairedStatusBadge.textContent = t(demo ? "demo_badge" : "paired_badge", {}, currentLang);
+    pairedStatusBadge.classList.toggle("is-demo", demo);
+  }
+  if (collapse) pairingSettings.open = !isPaired || demo;
 }
 
 function refreshHistory() {
@@ -143,12 +161,25 @@ function refreshHistory() {
   const list = document.getElementById("issuedList");
   list.replaceChildren();
   issuedHistory.hidden = records.length === 0;
+  if (records.length > 0) {
+    issuedSummary.textContent = t("issued_summary_count", {n: records.length}, currentLang);
+  }
   const clock = new Intl.DateTimeFormat(currentLang === "zh" ? "zh-CN" : "en", {hour: "numeric", minute: "2-digit"});
   for (const record of records) {
     const row = document.createElement("li");
-    row.textContent = t("issued_entry", {
-      time: clock.format(record.time), minutes: record.minutes, suffix: record.suffix,
-    }, currentLang);
+    row.className = "history-row";
+    const meta = document.createElement("span");
+    meta.className = "history-row-meta";
+    const timeEl = document.createElement("strong");
+    timeEl.textContent = clock.format(record.time);
+    const minEl = document.createElement("span");
+    minEl.className = "history-min-pill";
+    minEl.textContent = `+${t("minutes_unit", {m: record.minutes}, currentLang)}`;
+    meta.append(timeEl, minEl);
+    const suffixEl = document.createElement("code");
+    suffixEl.className = "history-suffix";
+    suffixEl.textContent = `···· - ${record.suffix}`;
+    row.append(meta, suffixEl);
     list.append(row);
   }
 }
@@ -220,6 +251,7 @@ function applyTranslations(lang) {
       device: lastResultDevice, date: lastResultDate, minutes: lastResultMinutes,
     }, lang);
   }
+  refreshDevices();
   refreshShortcuts();
   refreshHistory();
 }
@@ -420,8 +452,15 @@ document.getElementById("toggleSecret").addEventListener("click", event => {
 
 secretInput.addEventListener("input", () => {
   syncDemoWarning();
+  refreshDevices();
   result.hidden = true;
 });
+if (togglePairingBtn) {
+  togglePairingBtn.addEventListener("click", () => {
+    pairingSettings.open = !pairingSettings.open;
+    if (pairingSettings.open) pairingSettings.scrollIntoView({behavior: "smooth", block: "nearest"});
+  });
+}
 form.addEventListener("invalid", event => {
   if (pairingSettings.contains(event.target)) pairingSettings.open = true;
 }, true);

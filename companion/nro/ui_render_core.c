@@ -190,6 +190,9 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
     int fresh_w = measure_text(fitted_fresh, 12);
     int fresh_x = box.x + box.width - 14 - fresh_w;
+    bool compact_dot = ptc_ui_time_status_compact(model);
+    uint32_t dot_color = strcmp(model->result_status, "error") == 0 ? UI_DANGER :
+        (model->waiting || !ptc_ui_status_is_fresh(model, ptc_ui_render_now()) ? UI_WARNING : UI_SUCCESS);
 
     /* --- 第一层：时钟、日期星期、生效规则胶囊徽章、数据时效 --- */
     /* 1. 时钟显示 (突出粗体) */
@@ -210,7 +213,7 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     int pill_w = badge_text_w + 22;
     if (pill_w < 64) pill_w = 64;
     UiRect pill = {date_x + date_w + 10, box.y + 7, pill_w, 19};
-    int right_limit = fresh_x - 8;
+    int right_limit = fresh_x - (compact_dot ? 18 : 8);
     if (pill.x + pill.width > right_limit && pill.width > 50) {
         pill.width = right_limit - pill.x;
     }
@@ -244,8 +247,12 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         }
     }
 
-    /* 5. 数据更新时效 (右对齐) */
-    draw_text(pixels, stride, fresh_x, box.y + 21, fitted_fresh, 12, UI_MUTED);
+    /* 5. 数据更新时效 (右对齐，紧凑模式下附带实时状态绿/黄/红点) */
+    if (compact_dot) {
+        fill_round_rect(pixels, stride, (UiRect){fresh_x - 11, box.y + 14, 6, 6}, 3, dot_color);
+    }
+    draw_text(pixels, stride, fresh_x, box.y + 21, fitted_fresh, 12,
+        compact_dot && dot_color != UI_SUCCESS ? dot_color : UI_MUTED);
 
     if (model->demo_secret_enabled) {
         const char *label = ptc_ui_text(PTC_UI_T_DEMO);

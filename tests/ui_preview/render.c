@@ -1259,6 +1259,11 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
 
         ptc_ui_cancel_overlay(&model);
         model.parent_page = PTC_UI_PARENT_GRANT;
+        model.redemption_history_available = true;
+        model.redemption_history_count = 1;
+        model.redemption_history[0] = (PtcRedemptionHistoryRecord){
+            .day_index = model.day_index, .grant_minutes = 30, .effective_add_minutes = 30
+        };
         failed |= save_preview(directory, "grant", "grant-entry", &model, dark);
         model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
         model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
@@ -2461,6 +2466,7 @@ int main(int argc, char **argv)
     ptc_rules_default(&baseline_rules);
     memcpy(model.current_week, baseline_rules.week, sizeof(model.current_week));
     memcpy(model.draft_week, baseline_rules.week, sizeof(model.draft_week));
+    model.weekly_baseline_available = true;
     model.current_week[ptc_weekday_from_day_index(model.day_index)].minutes = 120;
     model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 120;
     model.holiday_enabled = model.draft_holiday_enabled = baseline_rules.holiday_enabled;

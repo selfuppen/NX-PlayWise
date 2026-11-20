@@ -78,21 +78,23 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     ptc_ui_format_home_remaining(model, ptc_ui_render_now(), remaining, sizeof(remaining));
     ptc_ui_format_today_mode(model, today, sizeof(today));
     draw_card_shadow(pixels, stride, box, 16);
-    fill_round_rect(pixels, stride, box, 16, UI_RGB(UI_BLENDED(hero)));
+    fill_round_rect(pixels, stride, box, 16, UI_SURFACE);
     bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
     bool eye_resting = model->eye_care_policy.enabled &&
         strcmp(model->eye_care_phase, "resting") == 0;
-    /* 剩余告急或就寝生效时描边随呼吸相位脉冲。 */
+    /* 剩余告急或就寝生效时描边随呼吸相位脉冲；正常状态与右侧托盘保持同一表面层级。 */
     if ((model->remaining_available && model->unrestricted_today != 1 &&
          model->remaining_minutes >= 0 && model->remaining_minutes <= 10) ||
          bedtime_enforcing || eye_resting) {
         int phase = get_breathing_phase();
         draw_rect_outline(pixels, stride, box, 16, 2,
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
+    } else {
+        draw_rect_outline(pixels, stride, box, 16, 1, UI_BORDER);
     }
     const char *header_title = bedtime_enforcing ? ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY_BEDTIME_ACTIVE) :
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY));
-    draw_text(pixels, stride, x, box.y + 36, header_title, 20, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, x, box.y + 36, header_title, 19, UI_MUTED);
 
     /* 规则来源作为今日状态的一部分。 */
     char rule_label[64];
@@ -111,19 +113,21 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     if (rw > rule_rect.w) rw = rule_rect.w;
     rule_badge.x = rule_rect.x + rule_rect.w - rw;
     rule_badge.width = rw;
-    fill_round_rect(pixels, stride, rule_badge, 10, UI_RGB(UI_BLENDED(surface_raised)));
-    draw_rect_outline(pixels, stride, rule_badge, 10, 1, UI_RGB(UI_BLENDED(border_control)));
-    draw_button_label(pixels, stride, rule_badge, rule_label, 13, UI_RGB(UI_BLENDED(text_secondary)));
+    uint32_t rule_bg = bedtime_enforcing ? UI_NIGHT_SOFT : UI_ACCENT_SOFT;
+    uint32_t rule_fg = bedtime_enforcing ? UI_NIGHT : UI_ACCENT;
+    fill_round_rect(pixels, stride, rule_badge, 10, rule_bg);
+    draw_rect_outline(pixels, stride, rule_badge, 10, 1, rule_fg);
+    draw_button_label(pixels, stride, rule_badge, rule_label, 13, rule_fg);
 
     /* 主数值：剩余分钟数 */
     int minutes;
     if (ptc_ui_home_remaining_minutes(model, ptc_ui_render_now(), &minutes)) {
         snprintf(remaining, sizeof(remaining), "%d", minutes);
         int num_w = measure_text(remaining, 76);
-        draw_text_bold(pixels, stride, x, box.y + 104, remaining, 76, UI_RGB(UI_BLENDED(on_hero)));
+        draw_text_bold(pixels, stride, x, box.y + 104, remaining, 76, UI_INK);
         int unit_x = x + num_w + 10;
         const char *unit_label = ptc_ui_text(PTC_UI_T_MIN);
-        draw_text(pixels, stride, unit_x, box.y + 100, unit_label, 22, UI_RGB(UI_BLENDED(hero_secondary)));
+        draw_text(pixels, stride, unit_x, box.y + 100, unit_label, 22, UI_MUTED);
         if (minutes >= 60) {
             char duration_str[64];
             if (minutes % 60 == 0)
@@ -131,24 +135,23 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
             else
                 snprintf(duration_str, sizeof(duration_str), ptc_ui_text(PTC_UI_T_D_HR_D_MIN_2), minutes / 60, minutes % 60);
             int dur_x = unit_x + measure_text(unit_label, 22) + 12;
-            draw_text(pixels, stride, dur_x, box.y + 100, duration_str, 18, UI_RGB(UI_BLENDED(hero_secondary)));
+            draw_text(pixels, stride, dur_x, box.y + 100, duration_str, 18, UI_MUTED);
         }
     } else {
         if (eye_resting) {
             char cycle[128], fitted_cycle[128];
             ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
             fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 26, box.width - 48);
-            draw_text_bold(pixels, stride, x, box.y + 98, fitted_cycle, 26,
-                           UI_RGB(UI_BLENDED(on_hero)));
+            draw_text_bold(pixels, stride, x, box.y + 98, fitted_cycle, 26, UI_WARNING_TEXT);
         } else {
             draw_wrapped_text(pixels, stride, x, box.y + 98, remaining, 36,
-                              box.width - 48, 44, 2, UI_RGB(UI_BLENDED(on_hero)));
+                              box.width - 48, 44, 2, UI_INK);
         }
     }
     /* 今日额度进度槽 (Time Progress Gauge) */
     UiRect gauge_bg = {box.x + 24, box.y + 122, box.width - 48, 8};
-    fill_round_rect(pixels, stride, gauge_bg, 4, UI_GAUGE_SLOT);
-    draw_rect_outline(pixels, stride, gauge_bg, 4, 1, UI_GAUGE_SLOT_BORDER);
+    fill_round_rect(pixels, stride, gauge_bg, 4, UI_RAISED);
+    draw_rect_outline(pixels, stride, gauge_bg, 4, 1, UI_BORDER);
 
     uint32_t health_color = UI_SUCCESS;
     bool status_fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
@@ -178,15 +181,13 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         }
     }
 
-    /* 下方信息承载面板 (三维时空态势中枢) */
+    /* 下方信息承载区（与左卡表面统一，不再套双层外框） */
     UiRect lower = {box.x + 12, box.y + 144, box.width - 24, box.height - 156};
-    fill_round_rect(pixels, stride, lower, 16, UI_SURFACE);
-    draw_rect_outline(pixels, stride, lower, 16, 1, UI_BORDER);
 
     /* 周期 1：今日额度与用量看板（一体化纯信息看板，无按钮化独立卡片，不可获焦） */
-    UiRect info_shelf = {lower.x + 10, lower.y + 10, lower.width - 20, 52};
-    fill_round_rect(pixels, stride, info_shelf, 8, UI_RGB(UI_BLENDED(page_bg)));
-    draw_rect_outline(pixels, stride, info_shelf, 8, 1, UI_BORDER);
+    UiRect info_shelf = {lower.x + 10, lower.y + 8, lower.width - 20, 52};
+    fill_round_rect(pixels, stride, info_shelf, 10, UI_PAGE);
+    draw_rect_outline(pixels, stride, info_shelf, 10, 1, UI_BORDER);
 
     int mid_x = info_shelf.x + info_shelf.width / 2;
     draw_line(pixels, stride, mid_x, info_shelf.y + 10, mid_x, info_shelf.y + info_shelf.height - 10, 1, UI_BORDER);
@@ -285,7 +286,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     fit_text(fitted_dock, sizeof(fitted_dock), policies.dock_rule, 11, dock_card.width - 24);
     draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 59, fitted_dock, 11, UI_MUTED);
 
-    draw_text(pixels, stride, lower.x + 14, lower.y + 288, ptc_ui_text(PTC_UI_T_STATUS_OPEN_SETTINGS), 11, UI_ACCENT);
+    draw_text(pixels, stride, lower.x + 14, lower.y + 288, ptc_ui_text(PTC_UI_T_STATUS_OPEN_SETTINGS), 12, UI_ACCENT);
 }
 
 static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
@@ -577,9 +578,28 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         }
         action.title = title;
         action.subtitle = subtitle;
+        char quick_preview[48] = "";
+        int quick_badge_w = 0;
+        if (index == 1 && !disabled && !unavailable && fresh) {
+            int est = ptc_ui_preview_added_remaining_minutes(model, 30);
+            if (est >= 0) {
+                snprintf(quick_preview, sizeof(quick_preview), ptc_ui_text(PTC_UI_T_QUICK_GRANT_PREVIEW_BADGE), est);
+                quick_badge_w = measure_text(quick_preview, 11) + 16;
+                if (quick_badge_w > 136) quick_badge_w = 136;
+            }
+        }
         draw_action_card(pixels, stride, box, &action, focused,
                          disabled ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE,
-                         (index == 0 || index >= 2) ? (is_en ? 76 : 82) : 0, (UiRect){0});
+                         index == 1 ? (quick_badge_w > 0 ? quick_badge_w + 10 : 0) :
+                         ((index == 0 || index >= 2) ? (is_en ? 76 : 82) : 0), (UiRect){0});
+        if (index == 1 && quick_preview[0]) {
+            UiRect qbadge = {box.x + box.width - quick_badge_w - 10, box.y + 10, quick_badge_w, 22};
+            fill_round_rect(pixels, stride, qbadge, 6, UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, qbadge, 6, 1, UI_SUCCESS_BORDER);
+            char fitted_q[48];
+            fit_text(fitted_q, sizeof(fitted_q), quick_preview, 11, qbadge.width - 10);
+            draw_text_center(pixels, stride, qbadge, fitted_q, 11, UI_SUCCESS);
+        }
         if (index == 1 && unavailable)
             draw_text(pixels, stride, box.x + 78, box.y + 88,
                       ptc_ui_text(PTC_UI_T_TO_RESTORE_LIMIT_USE_SET_TODAY_LIMIT), 12, UI_DISABLED);
@@ -649,29 +669,118 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect panel = {842, 176, 384, 452};
-    (void)model;
-    fill_round_rect(pixels, stride, panel, 16, UI_RGB(UI_BLENDED(surface)));
-    draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, 868, 222, ptc_ui_text(PTC_UI_T_GRANT_CODE_GUIDE), 24, UI_RGB(UI_BLENDED(text_primary)));
-    char fitted_grant_sub[128];
-    fit_text(fitted_grant_sub, sizeof(fitted_grant_sub),
-             ptc_ui_text(PTC_UI_T_NO_HOST_NETWORKING_REQUIRED_OFFLINE_SECURE_SIGNATURE),
-             14, panel.width - 52);
-    draw_text(pixels, stride, 868, 258, fitted_grant_sub, 14, UI_MUTED);
+    draw_plan_card(pixels, stride, panel, false);
 
-    /* 3 个步骤卡片 */
-    const char *STEP_TITLES[] = {ptc_ui_text(PTC_UI_T_1_SELECT_EXTRA_TIME), ptc_ui_text(PTC_UI_T_2_VERIFY_PIN_GENERATE), ptc_ui_text(PTC_UI_T_3_CHILD_ENTERS_8_DIGIT_CODE)};
-    const char *STEP_HINTS[] = {ptc_ui_text(PTC_UI_T_SUPPORTS_15_30_60_MINUTES_OR_CUSTOM), ptc_ui_text(PTC_UI_T_THE_SIGNATURE_KEY_IS_CALCULATED_LOCALLY_EFFECTIVELY), ptc_ui_text(PTC_UI_T_CHILDREN_ENTER_8_DIGIT_PURE_NUMBERS_ON)};
-    for (int s = 0; s < 3; ++s) {
-        UiRect step_box = {864, 280 + s * 72, panel.width - 44, 62};
-        fill_round_rect(pixels, stride, step_box, 10, UI_RAISED);
-        draw_rect_outline(pixels, stride, step_box, 10, 1, UI_BORDER);
-        draw_text(pixels, stride, step_box.x + 14, step_box.y + 24, STEP_TITLES[s], 17, UI_RGB(UI_BLENDED(text_primary)));
-        char fitted_hint[128];
-        fit_text(fitted_hint, sizeof(fitted_hint), STEP_HINTS[s], 13, step_box.width - 28);
-        draw_text(pixels, stride, step_box.x + 14, step_box.y + 48, fitted_hint, 13, UI_MUTED);
+    int sel = model ? model->selected_index : 0;
+    if (sel < 0 || sel > 3) sel = 0;
+
+    const char *tag = ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS);
+    const char *title = ptc_ui_text(PTC_UI_T_HOST_GENERATION);
+    const char *status_text = ptc_ui_text(PTC_UI_T_NATIVE_SIGNATURE_8_BIT_CODE);
+    uint32_t status_color = UI_ACCENT;
+    const char *desc1 = "";
+    const char *desc2 = "";
+    const char *desc3 = "";
+    const char *action_hint = ptc_ui_text(PTC_UI_T_GRANT_INSPECTOR_OPEN);
+
+    switch (sel) {
+    case 0: /* 主机生成 */
+        tag = ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS);
+        title = ptc_ui_text(PTC_UI_T_GENERATE_CODE_ON_CONSOLE);
+        status_text = ptc_ui_text(PTC_UI_T_NATIVE_SIGNATURE_8_BIT_CODE);
+        status_color = UI_SUCCESS;
+        desc1 = ptc_ui_text(PTC_UI_T_PARENTS_CAN_DIRECTLY_SELECT_THE_SHORTCUT_TIME);
+        desc2 = ptc_ui_text(PTC_UI_T_THE_EXTRA_TIME_CODE_INCLUDES_ANTI_REPLAY);
+        desc3 = ptc_ui_text(PTC_UI_T_PIN_WILL_BE_VERIFIED_AGAIN_BEFORE_GENERATION);
+        break;
+    case 1: /* 手机 / 电脑生成 */
+        tag = ptc_ui_text(PTC_UI_T_PHONE_PC_PAIRING);
+        title = ptc_ui_text(PTC_UI_T_MOBILE_PC_GENERATOR);
+        status_text = ptc_ui_text(PTC_UI_T_AVAILABLE_OFFLINE_ACROSS_DEVICES);
+        status_color = UI_ACCENT;
+        desc1 = ptc_ui_text(PTC_UI_T_RECOMMENDED_SOLUTION_ONE_SCAN_THE_QR_CODE);
+        desc2 = ptc_ui_text(PTC_UI_T_NO_NETWORK_REQUIRED_FOR_DAILY_GENERATION_NO);
+        desc3 = ptc_ui_text(PTC_UI_T_THE_QR_CODE_CONTAINS_A_TIME_CODE);
+        break;
+    case 2: /* 生成设置 */
+        tag = ptc_ui_text(PTC_UI_T_GRANT_SECRET_MANAGEMENT);
+        title = ptc_ui_text(PTC_UI_T_GRANT_SETTINGS);
+        status_text = model && model->demo_secret_enabled
+            ? ptc_ui_text(PTC_UI_T_DEMO) : ptc_ui_text(PTC_UI_T_DEVICE_AND_KEY_CONFIGURED);
+        status_color = model && model->demo_secret_enabled ? UI_WARNING : UI_SUCCESS;
+        desc1 = ptc_ui_text(PTC_UI_T_VIEW_ENTER_OR_RANDOMLY_GENERATE_DEVICE_NAMES);
+        desc2 = ptc_ui_text(PTC_UI_T_IT_IS_RECOMMENDED_TO_USE_RANDOM_GENERATION);
+        desc3 = ptc_ui_text(PTC_UI_T_FILE_CONTAINS_A_TIME_CODED_KEY_AND);
+        break;
+    case 3: /* 使用记录 */
+    default: {
+        tag = ptc_ui_text(PTC_UI_T_SECURITY_AUDIT);
+        title = ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_USAGE_RECORD);
+        bool available = model && model->redemption_history_available &&
+            ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+        if (available) {
+            status_text = ptc_ui_text(PTC_UI_T_LAST_100);
+            status_color = UI_ACCENT;
+        } else {
+            status_text = ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED);
+            status_color = UI_MUTED;
+        }
+        desc1 = ptc_ui_text(PTC_UI_T_ONLY_DISPLAYS_THE_LAST_100_SUCCESSFULLY_REDEEMED);
+        desc2 = ptc_ui_text(PTC_UI_T_THE_EXTRA_TIME_CODE_INCLUDES_ANTI_REPLAY);
+        desc3 = ptc_ui_text(PTC_UI_T_NOTE_THE_EXTRA_TIME_CODE_IS_ONLY);
+        break;
     }
-    draw_wrapped_text(pixels, stride, 868, 524, ptc_ui_text(PTC_UI_T_NOTE_THE_EXTRA_TIME_CODE_IS_ONLY), 14, 332, 20, 3, UI_RGB(UI_BLENDED(text_secondary)));
+    }
+
+    char fitted_title[128];
+    fit_text(fitted_title, sizeof(fitted_title), title, 22, panel.width - 48);
+    draw_text(pixels, stride, panel.x + 24, panel.y + 72, fitted_title, 22, UI_RGB(UI_BLENDED(text_primary)));
+
+    char fitted_badge[96], fitted_tag[96];
+    int tag_w = measure_text(tag, 14);
+    int max_badge_w = panel.width - 48 - tag_w - 28;
+    if (max_badge_w < 120) max_badge_w = 120;
+    if (max_badge_w > panel.width - 140) max_badge_w = panel.width - 140;
+    fit_text(fitted_badge, sizeof(fitted_badge), status_text, 12, max_badge_w);
+    int badge_width = measure_text(fitted_badge, 12) + 16;
+    UiRect badge = {panel.x + panel.width - 24 - badge_width, panel.y + 24, badge_width, 26};
+    fit_text(fitted_tag, sizeof(fitted_tag), tag, 14, badge.x - panel.x - 36);
+    fill_round_rect(pixels, stride, badge, 6,
+        status_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
+        (status_color == UI_WARNING ? UI_WARNING_SOFT :
+        (status_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
+    draw_rect_outline(pixels, stride, badge, 6, 1,
+        status_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
+        (status_color == UI_WARNING ? UI_WARNING_BORDER : status_color));
+    draw_text_center(pixels, stride, badge, fitted_badge, 12, status_color);
+    draw_text(pixels, stride, panel.x + 24, panel.y + 42, fitted_tag, 14, UI_ACCENT);
+
+    UiRect div = {panel.x + 24, panel.y + 92, panel.width - 48, 1};
+    fill_round_rect(pixels, stride, div, 0, UI_BORDER);
+
+    const char *descs[3] = {desc1, desc2, desc3};
+    int desc_y = panel.y + 122;
+    for (int i = 0; i < 3; ++i) {
+        const char *text = descs[i];
+        if (!text || !*text) continue;
+        /* Strip leading UTF-8 bullet ("• ") so draw_wrapped_text never orphans the bullet on its own line. */
+        if ((unsigned char)text[0] == 0xE2 && (unsigned char)text[1] == 0x80 && (unsigned char)text[2] == 0xA2) {
+            text += 3;
+            while (*text == ' ') ++text;
+        }
+        fill_round_rect(pixels, stride, (UiRect){panel.x + 24, desc_y - 8, 5, 5}, 2, UI_ACCENT);
+        desc_y = draw_wrapped_text(pixels, stride, panel.x + 36, desc_y, text, 14,
+                                   panel.width - 60, 18, 3, UI_RGB(UI_BLENDED(text_secondary))) + 6;
+    }
+
+    UiRect hint_box = {panel.x + 24, panel.y + 300, panel.width - 48, 44};
+    fill_round_rect(pixels, stride, hint_box, 10, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, hint_box, 10, 1, UI_ACCENT);
+    draw_button_label(pixels, stride, hint_box, action_hint, 15, UI_ACCENT);
+
+    draw_wrapped_text(pixels, stride, panel.x + 24, panel.y + panel.height - 76,
+                      ptc_ui_text(PTC_UI_T_NOTE_THE_EXTRA_TIME_CODE_IS_ONLY), 12,
+                      panel.width - 48, 16, 4, UI_MUTED);
 }
 
 static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -835,6 +944,24 @@ static UiRect parent_action_badge(uint32_t *pixels, uint32_t stride, const PtcUi
         fill_round_rect(pixels, stride, badge, 6, st_bg);
         draw_rect_outline(pixels, stride, badge, 6, 1, st_bd);
         draw_text_center(pixels, stride, badge, state_label, 12, state_color);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 0) {
+        const char *state_label = ptc_ui_text(PTC_UI_T_ENABLED);
+        int pw = measure_text(state_label, 12) + 16;
+        if (pw < 62) pw = 62;
+        UiRect badge = {card.x + card.width - pw - 14, card.y + 8, pw, 24};
+        if (!paint) return badge;
+        fill_round_rect(pixels, stride, badge, 6, UI_SUCCESS_SOFT);
+        draw_rect_outline(pixels, stride, badge, 6, 1, UI_SUCCESS_BORDER);
+        draw_text_center(pixels, stride, badge, state_label, 12, UI_SUCCESS);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
+        const char *style_label = ptc_ui_theme_style_label(ptc_ui_theme_get_style());
+        int sw = measure_text(style_label, 12) + 16;
+        if (sw < 56) sw = 56;
+        UiRect badge = {card.x + card.width - sw - 14, card.y + 8, sw, 24};
+        if (!paint) return badge;
+        fill_round_rect(pixels, stride, badge, 6, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, badge, 6, 1, UI_ACCENT);
+        draw_text_center(pixels, stride, badge, style_label, 12, UI_ACCENT);
     } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 1) {
         bool enabled = model->reason_notifications_enabled;
         const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2);
@@ -1236,9 +1363,9 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
 
     /* Action Hint Box */
     UiRect hint_box = {help.x + 24, help.y + 268, help.width - 48, 44};
-    fill_round_rect(pixels, stride, hint_box, 10, UI_PAGE);
-    draw_rect_outline(pixels, stride, hint_box, 10, 1, UI_BORDER);
-    draw_button_label(pixels, stride, hint_box, action_hint, 15, UI_INK);
+    fill_round_rect(pixels, stride, hint_box, 10, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, hint_box, 10, 1, UI_ACCENT);
+    draw_button_label(pixels, stride, hint_box, action_hint, 15, UI_ACCENT);
 
     /* Bottom guidance */
     draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 68,

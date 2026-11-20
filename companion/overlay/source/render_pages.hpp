@@ -358,7 +358,7 @@
     PtcOverlayRect flow_card(tsl::gfx::Renderer *renderer, const char *label,
         const char *value, const char *note, int value_size, tsl::Color color,
         tsl::Color tone, PtcOverlayParentAction action, bool highlighted = false, bool disabled = false,
-        int label_size = PTC_OVERLAY_FONT_BODY)
+        int label_size = PTC_OVERLAY_FONT_BODY, bool promoted = false)
     {
         const auto &pal = current_palette();
         const auto &vp = page_layout_.viewport;
@@ -367,6 +367,35 @@
         const int icon_space = 30;
         const int text_w = content_w - icon_space;
         const int text_x = (vp.x + 4) + 14 + icon_space;
+
+        /* Unfocused unavailable rule cards fold into a compact single-line row so
+           active and promoted actions stay above the fold without losing focusability. */
+        if (disabled && !highlighted) {
+            const int compact_size = PTC_OVERLAY_FONT_SECONDARY;
+            const int label_w = static_cast<int>(measure_localized(renderer, label, compact_size).first);
+            const bool short_note = note != nullptr && note[0] != '\0' && std::strchr(note, '\n') == nullptr;
+            const int note_w = short_note ? static_cast<int>(measure_localized(renderer, note, PTC_OVERLAY_FONT_CAPTION).first) : 0;
+            const bool show_inline_note = short_note && (label_w + note_w + 12 <= text_w);
+            const int label_h = overlay_text_height(renderer, label, show_inline_note ? (label_w + 2) : text_w, compact_size);
+            const int height = std::max(static_cast<int>(PTC_OVERLAY_PARENT_CARD_COMPACT_H), label_h + 12);
+            const auto raw = ptc_overlay_rect(vp.x + 4, flow_y_, raw_w, height);
+            const int y = raw.y - static_cast<int>(page_scroll_);
+            flow_y_ += height + 4;
+            if (y + height <= vp.y || y >= vp.y + vp.h) return raw;
+
+            draw_dashboard_surface(renderer, ptc_overlay_rect(raw.x, y, raw.w, raw.h),
+                pal.card_bg, pal.border_decorative, false);
+            renderer->drawRect(raw.x, y + 6, 2, height - 12, renderer->a(pal.text_disabled));
+            draw_parent_action_icon(renderer, action, raw.x + 14, y + (height - 22) / 2, pal.text_disabled);
+            overlay_text(renderer, label, text_x, y + (height - label_h) / 2,
+                show_inline_note ? (label_w + 2) : text_w, compact_size, pal.text_disabled);
+            if (show_inline_note) {
+                const int note_h = (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5;
+                overlay_text(renderer, note, raw.x + raw.w - 14 - note_w, y + (height - note_h) / 2,
+                    note_w + 2, PTC_OVERLAY_FONT_CAPTION, pal.text_disabled);
+            }
+            return raw;
+        }
 
         const int first_line_h = (label_size * 6 + 4) / 5;
         const int label_w = static_cast<int>(measure_localized(renderer, label, label_size).first);
@@ -393,17 +422,23 @@
         // glyphs into the bounded Tesla cache when the entire card is clipped.
         if (y + height <= vp.y || y >= vp.y + vp.h) return raw;
 
+        const auto card_tone = promoted ? pal.danger : tone;
+        const auto card_bg = promoted ? pal.danger_soft : highlighted ? dashboard_soft(tone) : pal.card_raised;
+        const auto card_border = promoted ? pal.danger : highlighted ? tone : pal.border_control;
         draw_dashboard_surface(renderer, ptc_overlay_rect(raw.x, y, raw.w, raw.h),
-            highlighted ? dashboard_soft(tone) : tsl::Color{1, 2, 3, 15},
-            highlighted ? tone : pal.border_decorative, highlighted);
-        renderer->drawRect(raw.x, y + 6, disabled ? 2 : 3, height - 12, renderer->a(tone));
+            card_bg, card_border, highlighted || promoted);
+        if (highlighted) {
+            draw_focus_ring(renderer, ptc_overlay_rect(raw.x, y, raw.w, raw.h), card_tone);
+        }
+        renderer->drawRect(raw.x, y + 6, promoted ? 5 : highlighted ? 4 : disabled ? 2 : 3,
+            height - 12, renderer->a(card_tone));
 
         const int content_top = y + (height - content_h) / 2;
         const int label_y = content_top + (inline_value ? (row0_h - label_h) / 2 : 0);
 
         // Icon aligns with the first line of the title row
         const int icon_y = label_y + (first_line_h - 22) / 2;
-        draw_parent_action_icon(renderer, action, raw.x + 14, icon_y, disabled ? pal.text_disabled : tone);
+        draw_parent_action_icon(renderer, action, raw.x + 14, icon_y, disabled ? pal.text_disabled : card_tone);
 
         overlay_text(renderer, label, text_x, label_y, inline_value ? (label_w + 1) : text_w, label_size,
             disabled ? pal.text_disabled : pal.text_primary);
@@ -766,11 +801,23 @@
                 const char *value = nullptr;
                 const char *note = reason;
                 char action_note[512];
+                tsl::Color value_color = reason ? pal.text_disabled : pal.text_primary;
                 if (index == PTC_OVERLAY_PARENT_ADD_MINUTES) {
-                    ptc_ui_format_minutes(daily_add_minutes_, line, sizeof(line));
+                    char min_buf[64];
+                    ptc_ui_format_minutes(daily_add_minutes_, min_buf, sizeof(min_buf));
+                    std::snprintf(line, sizeof(line), "< +%s >", min_buf);
                     value = line;
-                    std::snprintf(action_note, sizeof(action_note), "%s%s%s",
-                        ptc_ui_text(PTC_UI_T_OVERLAY_ADJUST_MINUTES), reason ? "\n" : "", reason ? reason : "");
+                    value_color = reason ? pal.text_disabled : pal.success;
+                    if (!reason && !stale && displayed_summary_.valid &&
+                        displayed_summary_.remaining_available && displayed_summary_.unrestricted_today != 1) {
+                        std::snprintf(action_note, sizeof(action_note),
+                            ptc_ui_text(PTC_UI_T_OVERLAY_QUICK_ADD_PREVIEW),
+                            displayed_summary_.remaining_minutes,
+                            displayed_summary_.remaining_minutes + daily_add_minutes_);
+                    } else {
+                        std::snprintf(action_note, sizeof(action_note), "%s%s%s",
+                            ptc_ui_text(PTC_UI_T_OVERLAY_ADJUST_MINUTES), reason ? "\n" : "", reason ? reason : "");
+                    }
                     note = action_note;
                 } else if (index == PTC_OVERLAY_PARENT_SKIP_EYE_CARE && !reason && displayed_summary_.eye_care_rest_remaining_seconds > 0) {
                     ptc_ui_format_minutes((displayed_summary_.eye_care_rest_remaining_seconds + 59) / 60, line, sizeof(line));
@@ -780,8 +827,9 @@
                 const auto tone = reason ? pal.text_disabled :
                     (promoted || parent_action_requires_hold(action)) ? pal.danger : pal.accent;
                 page_layout_.actions[index] = flow_card(renderer, ptc_ui_text(parent_action_label_id(index)), value, note,
-                    PTC_OVERLAY_FONT_BTN, reason ? pal.text_disabled : pal.text_primary,
-                    tone, action, parent_action_ == index, reason != nullptr);
+                    PTC_OVERLAY_FONT_BTN, value_color,
+                    tone, action, parent_action_ == index, reason != nullptr,
+                    PTC_OVERLAY_FONT_BODY, promoted);
                 if (parent_action_ == index && !reason && parent_action_requires_hold(action)) {
                     auto rect = page_layout_.actions[index];
                     rect.y = start - static_cast<int>(page_scroll_);
@@ -789,8 +837,8 @@
                 }
             }
             end_page(renderer);
-            if (page_changed_ && parent_action_ >= 0) page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
-                page_layout_.viewport, page_layout_.actions[parent_action_], 0, page_layout_.scroll_max));
+            if (page_changed_ && parent_action_ >= 0) page_scroll_target_ = static_cast<float>(
+                ptc_overlay_scroll_to_parent_action(&page_layout_, parent_action_, 0));
             page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
             page_layout_.secondary = {};
             const auto selected = static_cast<PtcOverlayParentAction>(parent_action_);
@@ -1001,14 +1049,39 @@
             const bool entered = i < input_->length;
             draw_dashboard_surface(renderer, slot, cursor ? pal.accent_soft : entered ? pal.success_soft : pal.card_raised,
                 cursor ? pal.accent : entered ? pal.success : pal.border_control, cursor);
-            const char symbol[] = {entered ? input_->symbols[i] : cursor ? '_' : ' ', '\0'};
-            draw_localized_center(renderer, symbol, slot.x, slot.y, slot.w, slot.h,
-                PTC_OVERLAY_FONT_CODE, entered ? pal.text_primary : cursor ? pal.accent : pal.text_disabled);
+            if (entered) {
+                const char symbol[] = {input_->symbols[i], '\0'};
+                draw_localized_center(renderer, symbol, slot.x, slot.y, slot.w, slot.h,
+                    PTC_OVERLAY_FONT_CODE, pal.text_primary);
+            } else if (cursor) {
+                /* Draw cursor bar with drawRect to stay crisp and avoid extra glyph cache entries. */
+                renderer->drawRect(slot.x + (slot.w - 20) / 2, slot.y + slot.h - 14, 20, 3, renderer->a(pal.accent));
+            } else {
+                renderer->drawRect(slot.x + (slot.w - 4) / 2, slot.y + (slot.h - 4) / 2, 4, 4, renderer->a(pal.text_disabled));
+            }
+        }
+        {
+            /* Center 4-4 grouping dash drawn via drawRect (zero glyph cache cost). */
+            const auto slot3 = ptc_overlay_code_slot_rect(cx, cy, cw, 3);
+            const auto slot4 = ptc_overlay_code_slot_rect(cx, cy, cw, 4);
+            const int gap_w = slot4.x - (slot3.x + slot3.w);
+            const int dash_w = std::max(6, std::min(10, gap_w - 4));
+            renderer->drawRect(slot3.x + slot3.w + (gap_w - dash_w) / 2,
+                slot3.y + (slot3.h - 3) / 2, dash_w, 3, renderer->a(pal.accent));
         }
         std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_INPUT_COUNT), input_->length);
-        draw_localized(renderer, line, false, cx + 14, cy + meta_y, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
         format_console_date(summary, date, sizeof(date));
-        draw_localized(renderer, date, false, cx + 14, cy + date_y, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
+        const int count_w = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_CAPTION).first);
+        const int date_w = static_cast<int>(measure_localized(renderer, date, PTC_OVERLAY_FONT_CAPTION).first);
+        if (count_w + date_w + 16 <= cw - 28) {
+            const int combined_y = (meta_y + date_y) / 2;
+            draw_localized(renderer, line, false, cx + 14, cy + combined_y, PTC_OVERLAY_FONT_CAPTION,
+                renderer->a(input_->length > 0 ? pal.text_primary : pal.text_secondary));
+            draw_localized_right(renderer, date, cx + cw - 14, cy + combined_y, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+        } else {
+            draw_localized(renderer, line, false, cx + 14, cy + meta_y, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
+            draw_localized(renderer, date, false, cx + 14, cy + date_y, PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
+        }
         const char *charset = ptc_overlay_input_charset();
         for (unsigned i = 0; i < PTC_OVERLAY_KEY_COUNT; ++i) {
             const char symbol[] = {charset[i], '\0'};
@@ -1091,7 +1164,31 @@
         flow_y_ += 32;
     }
 
-    void draw_child_rule_chain(tsl::gfx::Renderer *renderer, const ChildRuleRow *rows, int count)
+    int measure_child_rule_chain_height(tsl::gfx::Renderer *renderer, const ChildRuleRow *rows,
+        int count, bool compact_inactive = false) const
+    {
+        const auto &vp = page_layout_.viewport;
+        const int avail = (vp.w - 8) - 44 - 12;
+        int total = 0;
+        for (int i = 0; i < count; ++i) {
+            const auto &row = rows[i];
+            const int title_size = row.level == 2 ? PTC_OVERLAY_FONT_BODY - 2 : PTC_OVERLAY_FONT_BODY;
+            const int value_size = row.level == 0 ? PTC_OVERLAY_FONT_BODY - 2 :
+                row.level == 1 ? PTC_OVERLAY_FONT_SECONDARY : PTC_OVERLAY_FONT_CAPTION;
+            const int title_w = text_width(renderer, row.label, title_size);
+            const int value_w = text_width(renderer, row.value, value_size);
+            const bool inline_value = title_w + value_w + 12 <= avail;
+            const int title_h = overlay_text_height(renderer, row.label, avail, title_size);
+            const int value_h = overlay_text_height(renderer, row.value, avail, value_size);
+            const int base_h = (compact_inactive && row.level > 0) ? 40 : 54;
+            const int height = inline_value ? base_h : std::max(base_h, 14 + title_h + 2 + value_h + 6);
+            total += height + ((compact_inactive && row.level > 0) ? 3 : 4);
+        }
+        return total;
+    }
+
+    void draw_child_rule_chain(tsl::gfx::Renderer *renderer, const ChildRuleRow *rows,
+        int count, bool compact_inactive = false)
     {
         const auto &pal = current_palette();
         const auto &vp = page_layout_.viewport;
@@ -1108,14 +1205,15 @@
             const bool inline_value = title_w + value_w + 12 <= avail;
             const int title_h = overlay_text_height(renderer, row.label, avail, title_size);
             const int value_h = overlay_text_height(renderer, row.value, avail, value_size);
-            const int height = inline_value ? 54 : std::max(54, 14 + title_h + 2 + value_h + 6);
+            const int base_h = (compact_inactive && row.level > 0) ? 40 : 54;
+            const int height = inline_value ? base_h : std::max(base_h, 14 + title_h + 2 + value_h + 6);
             const int y = flow_y_ - static_cast<int>(page_scroll_);
-            flow_y_ += height + 4;
+            flow_y_ += height + ((compact_inactive && row.level > 0) ? 3 : 4);
 
             const auto soft = dashboard_soft(row.color);
             if (row.level == 0) draw_round_rect_surface(renderer, x, y, w, height, 4, soft, soft, 0);
             const int dot_x = x + 18;
-            const int dot_y = y + (inline_value ? height / 2 : 27);
+            const int dot_y = y + (inline_value ? height / 2 : 24);
             // Chain rail runs between dots; dots never sit on top of it.
             if (i > 0 && dot_y - 17 > previous_center + 17)
                 renderer->drawRect(dot_x - 1, previous_center + 17, 2, dot_y - 17 - (previous_center + 17),
@@ -1147,6 +1245,93 @@
                 overlay_text(renderer, row.label, text_x, y + 8, avail, title_size, title_color);
                 overlay_text(renderer, row.value, text_x, y + 10 + title_h, avail, value_size, value_color);
             }
+        }
+    }
+
+    /* Structured action guidance for restricted child pages using 4-bit palette
+       tokens only; adapts cleanly to available viewport budget so all 3 languages
+       keep scroll_max == 0 without dead black voids. */
+    void draw_restricted_guidance(tsl::gfx::Renderer *renderer, bool dock_restricted,
+        bool confirmed, const PtcCompanionResultSummary &summary, int avail_h)
+    {
+        const auto &pal = current_palette();
+        const auto &vp = page_layout_.viewport;
+        const int x = vp.x + 4, w = vp.w - 8;
+        int used_h = 0;
+
+        auto draw_guidance_card = [&](const char *title, const char *badge, const char *sub,
+            tsl::Color bg, tsl::Color border, tsl::Color accent, bool with_dock_icon, int budget) -> int {
+            const int icon_w = with_dock_icon ? 30 : 0;
+            const int inner_w = w - 28 - icon_w;
+            const int title_w = text_width(renderer, title, PTC_OVERLAY_FONT_SECONDARY);
+            const int badge_w = (badge && *badge) ? text_width(renderer, badge, PTC_OVERLAY_FONT_CAPTION) : 0;
+            const bool inline_badge = (badge && *badge) && (title_w + badge_w + 12 <= inner_w);
+            const int title_h = overlay_text_height(renderer, title, inline_badge ? (title_w + 2) : inner_w, PTC_OVERLAY_FONT_SECONDARY);
+            const int sub_h = (sub && *sub) ? overlay_text_height(renderer, sub, inner_w, PTC_OVERLAY_FONT_CAPTION) : 0;
+            const int card_h = 14 + title_h + (sub_h ? 4 + sub_h : 0);
+            if (card_h + 6 > budget) return 0;
+
+            const int y = flow_y_ - static_cast<int>(page_scroll_);
+            draw_dashboard_surface(renderer, ptc_overlay_rect(x, y, w, card_h), bg, border, false);
+            renderer->drawRect(x, y + 6, 3, card_h - 12, renderer->a(accent));
+            if (with_dock_icon) {
+                draw_child_icon(renderer, ChildCardKind::Dock, x + 14, y + (card_h - 22) / 2, accent);
+            }
+            const int tx = x + 14 + icon_w;
+            overlay_text(renderer, title, tx, y + 7, inline_badge ? (title_w + 2) : inner_w,
+                PTC_OVERLAY_FONT_SECONDARY, pal.text_primary);
+            if (inline_badge) {
+                const int bh = (PTC_OVERLAY_FONT_CAPTION * 6 + 4) / 5;
+                overlay_text(renderer, badge, x + w - 14 - badge_w, y + 7 + (title_h - bh) / 2,
+                    badge_w + 2, PTC_OVERLAY_FONT_CAPTION, accent);
+            }
+            if (sub_h) {
+                overlay_text(renderer, sub, tx, y + 7 + title_h + 4, inner_w,
+                    PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+            }
+            flow_y_ += card_h + 6;
+            return card_h + 6;
+        };
+
+        if (dock_restricted) {
+            char tv_sub[128];
+            if (confirmed && summary.unrestricted_today == 1) {
+                std::snprintf(tv_sub, sizeof(tv_sub), "%s", ptc_ui_text(PTC_UI_T_OVERLAY_TV_UNLIMITED_TODAY));
+            } else if (confirmed && summary.remaining_available && summary.remaining_minutes > 0) {
+                std::snprintf(tv_sub, sizeof(tv_sub), ptc_ui_text(PTC_UI_T_OVERLAY_TV_REMAINING_D_MIN),
+                    summary.remaining_minutes);
+            } else {
+                std::snprintf(tv_sub, sizeof(tv_sub), "%s", ptc_ui_text(PTC_UI_T_OVERLAY_TV_CONTINUE_NOTE));
+            }
+            if (avail_h >= 146) {
+                draw_child_section(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_HOW_TO_CONTINUE));
+                used_h += 32;
+            }
+            used_h += draw_guidance_card(
+                ptc_ui_text(PTC_UI_T_OVERLAY_DOCK_SELF_HELP_TITLE),
+                ptc_ui_text(PTC_UI_T_OVERLAY_NO_PIN_NEEDED),
+                tv_sub, pal.success_soft, pal.success_border, pal.success, true, avail_h - used_h);
+            const int parent_used = draw_guidance_card(
+                ptc_ui_text(PTC_UI_T_OVERLAY_PARENT_UNLOCK_SHORT),
+                nullptr, nullptr, pal.accent_soft, pal.border_control, pal.accent, false, avail_h - used_h);
+            used_h += parent_used;
+            if (used_h == 0) {
+                flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_ASK_PARENT), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+            }
+            return;
+        }
+
+        if (avail_h >= 106) {
+            draw_child_section(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_HOW_TO_CONTINUE));
+            used_h += 32;
+        }
+        const int card_used = draw_guidance_card(
+            ptc_ui_text(PTC_UI_T_OVERLAY_PARENT_UNLOCK_SHORT),
+            nullptr,
+            ptc_ui_text(PTC_UI_T_OVERLAY_ASK_PARENT),
+            pal.accent_soft, pal.border_control, pal.accent, false, avail_h - used_h);
+        if (card_used == 0) {
+            flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_ASK_PARENT), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
         }
     }
 
@@ -1400,12 +1585,14 @@
             rows[count++] = all_rows[i];
         }
         if (restricted) {
-            flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_ASK_PARENT), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
-            flow_y_ += 4;
+            const int rules_h = measure_child_rule_chain_height(renderer, rows, count, true);
+            const int reserved_below = 32 + rules_h + 52;
+            const int avail_h = page_layout_.viewport.h - reserved_below;
+            draw_restricted_guidance(renderer, dock_restricted, confirmed, summary, avail_h);
         }
         draw_child_section(renderer, ptc_ui_text(restricted ? PTC_UI_T_OVERLAY_SECTION_OTHER_RULES :
             PTC_UI_T_OVERLAY_SECTION_RULES));
-        draw_child_rule_chain(renderer, rows, count);
+        draw_child_rule_chain(renderer, rows, count, restricted);
         page_layout_.status = draw_child_status_row(renderer, child_overview_focus_ == (restricted ? 2 : 3));
         end_page(renderer);
 

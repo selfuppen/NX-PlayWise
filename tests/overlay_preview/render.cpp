@@ -826,7 +826,8 @@ static void test_surface_outline(tsl::gfx::Renderer &renderer)
     const tsl::Color background{1, 2, 3, 15};
     // Code slots, keypad keys, refresh, footer buttons and both card widths.
     for (const auto &dimensions : {std::pair<int, int>{44, 64}, {124, 56}, {136, 40},
-        {416, PTC_OVERLAY_RAIL_H}, {408, 114}, {404, PTC_OVERLAY_PARENT_CARD_MIN_H}}) {
+        {416, PTC_OVERLAY_RAIL_H}, {408, 114}, {404, PTC_OVERLAY_PARENT_CARD_COMPACT_H},
+        {404, PTC_OVERLAY_PARENT_CARD_MIN_H}}) {
         for (const bool emphasized : {false, true}) {
             for (const auto color : {DARK_OVERLAY_PALETTE.border_control,
                 DARK_OVERLAY_PALETTE.accent, DARK_OVERLAY_PALETTE.danger}) {
@@ -954,6 +955,8 @@ int main(int argc, char **argv) {
                     view.parent_view_ = ParentView::Actions;
                     status.dock_available = true;
                     status.undocked_limit_enabled = true;
+                    status.dock_restriction_active = true;
+                    view.promoted_parent_action_ = PTC_OVERLAY_PARENT_WAIVE_DOCK;
                     view.parent_action_ = PTC_OVERLAY_PARENT_WAIVE_DOCK;
                 } else if (scene == 4) {
                     status.bedtime_active = true; status.bedtime_enabled = true;
@@ -1393,19 +1396,24 @@ int main(int argc, char **argv) {
                     int previous_bottom = view.page_layout_.viewport.y;
                     int previous_group = -1;
                     for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
-                        const int group = ptc_overlay_parent_action_group(slot);
+                        const int index = ptc_overlay_parent_action_at(slot, view.promoted_parent_action_);
+                        const bool promoted = index == view.promoted_parent_action_;
+                        const int group = promoted ? -1 : ptc_overlay_parent_action_group(ptc_overlay_parent_action_slot(index));
                         require(group >= previous_group, "action group headers must follow the visual order");
                         previous_group = group;
-                        const auto rect = view.page_layout_.actions[ptc_overlay_parent_action_order()[slot]];
-                        require(rect.h >= PTC_OVERLAY_PARENT_CARD_MIN_H && rect.y >= previous_bottom, "measured action cards must not overlap");
-                        const int offset = ptc_overlay_scroll_to_rect(view.page_layout_.viewport, rect, 0, view.page_layout_.scroll_max);
+                        const auto rect = view.page_layout_.actions[index];
+                        const bool compact_disabled = view.parent_action_ != index &&
+                            view.parent_action_reason(static_cast<PtcOverlayParentAction>(index)) != nullptr;
+                        const int min_h = compact_disabled ? PTC_OVERLAY_PARENT_CARD_COMPACT_H : PTC_OVERLAY_PARENT_CARD_MIN_H;
+                        require(rect.h >= min_h && rect.y >= previous_bottom, "measured action cards must not overlap");
+                        const int offset = ptc_overlay_scroll_to_parent_action(&view.page_layout_, index, 0);
                         require(rect.y - offset >= view.page_layout_.viewport.y &&
                             rect.y + rect.h - offset <= view.page_layout_.viewport.y + view.page_layout_.viewport.h,
                             "every parent action must be fully reachable by focus scrolling");
                         previous_bottom = rect.y + rect.h;
                     }
-                    view.page_scroll_ = view.page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
-                        view.page_layout_.viewport, view.page_layout_.actions[view.parent_action_], 0, view.page_layout_.scroll_max));
+                    view.page_scroll_ = view.page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_parent_action(
+                        &view.page_layout_, view.parent_action_, 0));
                 }
                 if (scene == 25 || scene == 26 || scene == 33 || scene == 35 || scene == 36)
                     view.page_scroll_ = view.page_scroll_target_ = static_cast<float>(view.page_layout_.scroll_max);

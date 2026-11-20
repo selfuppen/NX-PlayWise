@@ -13,9 +13,12 @@
 </head>
 <body>
   <header class="site-header">
-    <div>
-      <p class="eyebrow" data-i18n="brand_eyebrow">PlayWise</p>
-      <strong data-i18n="brand_name">任我玩</strong>
+    <div class="brand-cluster">
+      <span class="brand-mark" aria-hidden="true">+∴</span>
+      <div>
+        <p class="eyebrow" data-i18n="brand_eyebrow">PlayWise</p>
+        <strong data-i18n="brand_name">任我玩</strong>
+      </div>
     </div>
     <div class="header-actions">
       <label class="appearance">
@@ -70,10 +73,23 @@
       <div id="importError" class="notice danger" role="alert" hidden></div>
 
       <form id="generator">
-        <label id="savedDevices" hidden>
-          <span data-i18n="saved_devices">已保存的 Switch</span>
-          <select id="devicePicker"></select>
-        </label>
+        <div id="pairedBar" class="paired-device-bar" hidden>
+          <div class="paired-device-meta">
+            <span class="paired-target-eyebrow" data-i18n="paired_target_label">当前发码目标主机</span>
+            <div class="paired-device-row">
+              <strong id="pairedDeviceName" class="paired-device-name">kid-switch</strong>
+              <span id="pairedStatusBadge" class="status-pill" data-i18n="paired_badge">已配对</span>
+            </div>
+          </div>
+          <div class="paired-device-controls">
+            <label id="savedDevices" class="device-picker-wrap" hidden>
+              <span class="sr-only" data-i18n="saved_devices">已保存的 Switch</span>
+              <select id="devicePicker"></select>
+            </label>
+            <button id="togglePairingBtn" class="secondary compact" type="button" data-i18n="btn_manage_pairing">管理配对</button>
+          </div>
+        </div>
+
         <details id="pairingSettings" class="settings pairing-settings" open>
           <summary data-i18n="pairing_title">配对 Switch</summary>
           <section class="pairing-tools">
@@ -103,44 +119,56 @@
           </div>
         </details>
 
-        <div class="fields issue-fields">
-          <label>
-            <span data-i18n="label_date">生效日期（Switch 主机本地日期）</span>
+        <div class="workbench-card">
+          <div class="workbench-block">
+            <div class="workbench-block-head">
+              <span class="workbench-step-label" data-i18n="step_duration">① 选择加时时长</span>
+            </div>
+            <div id="tierShortcuts" class="tier-chips-grid" role="group" data-i18n-aria="label_tier"></div>
+            <label class="custom-tier-row">
+              <span data-i18n="custom_duration_label">更多自定义时长</span>
+              <select id="tierMinutes" name="tier_minutes"></select>
+            </label>
+          </div>
+
+          <div class="workbench-block workbench-divider">
+            <div class="workbench-block-head">
+              <label for="date" class="workbench-step-label" data-i18n="step_date">② Switch 主机本地日期</label>
+              <div id="dateShortcuts" class="shortcuts date-shortcuts" role="group" data-i18n-aria="label_date">
+                <button type="button" class="secondary compact" data-days="0" data-i18n="date_today">今天</button>
+                <button type="button" class="secondary compact" data-days="1" data-i18n="date_tomorrow">明天</button>
+              </div>
+            </div>
             <input id="date" name="date" type="date" required>
-          </label>
+            <p class="date-help" data-i18n="date_help">请以 Switch 的本地日期为准。每个加时码仅在所选日期有效。</p>
+          </div>
 
-          <label>
-            <span data-i18n="label_tier">加时时长</span>
-            <select id="tierMinutes" name="tier_minutes"></select>
-          </label>
+          <button id="generate" class="primary" type="submit" data-i18n="btn_generate">生成 8 位数字加时码</button>
         </div>
-        <div id="dateShortcuts" class="shortcuts" role="group" data-i18n-aria="label_date">
-          <button type="button" class="secondary compact" data-days="0" data-i18n="date_today">今天</button>
-          <button type="button" class="secondary compact" data-days="1" data-i18n="date_tomorrow">明天</button>
-        </div>
-        <p class="date-help" data-i18n="date_help">请以 Switch 的本地日期为准。每个加时码仅在所选日期有效。</p>
-        <div id="tierShortcuts" class="shortcuts" role="group" data-i18n-aria="label_tier"></div>
-
-        <button id="generate" class="primary" type="submit" data-i18n="btn_generate">生成 8 位数字加时码</button>
       </form>
 
       <div id="error" class="notice danger" role="alert" hidden></div>
 
       <section id="result" class="result" aria-label="生成结果" data-i18n-aria="result_label" aria-live="polite" tabindex="-1" hidden>
-        <p class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
-        <p id="code" class="code"><span></span><span></span></p>
+        <div class="result-head">
+          <p class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
+          <span class="result-badge" data-i18n="result_badge_single">单次有效 · 4-4 分段</span>
+        </div>
+        <div class="ticket-code-box">
+          <p id="code" class="code"><span></span><span></span></p>
+        </div>
         <p id="meta" class="meta"></p>
         <div class="result-actions">
           <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
-          <button id="copyMessage" class="secondary" type="button" data-i18n="btn_copy_message">复制分享文字</button>
+          <button id="copyMessage" class="secondary accent-outline" type="button" data-i18n="btn_copy_message">复制分享文字</button>
         </div>
         <p class="collision-note" data-i18n="collision_note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
       </section>
 
-      <details id="issuedHistory" class="settings" hidden>
+      <details id="issuedHistory" class="settings issued-history" hidden open>
         <summary id="issuedSummary" data-i18n="issued_summary">本浏览器的签发记录</summary>
         <p data-i18n="issued_help">这里记录本浏览器生成的加时码，是否已兑换请在 Switch 上查看。</p>
-        <ul id="issuedList"></ul>
+        <ul id="issuedList" class="history-list"></ul>
       </details>
 
       <details class="settings">

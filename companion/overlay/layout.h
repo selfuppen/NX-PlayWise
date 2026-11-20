@@ -41,6 +41,7 @@ enum {
     PTC_OVERLAY_HEADER_H = 44,
     PTC_OVERLAY_PATH_X = 16,
     PTC_OVERLAY_PATH_Y = 8,
+    PTC_OVERLAY_PARENT_CARD_COMPACT_H = 40,
     PTC_OVERLAY_PARENT_CARD_MIN_H = 54,
     PTC_OVERLAY_SLOT_Y = 104,
     PTC_OVERLAY_SLOT_W = 44,
@@ -112,6 +113,35 @@ static inline int ptc_overlay_snap_parent_scroll(const PtcOverlayPageLayout *lay
         if (after < before && offset + after <= layout->scroll_max) return offset + after;
         int start = offset - before;
         return start < 0 ? 0 : start;
+    }
+    return offset;
+}
+
+/* Keep the focused parent card completely inside the viewport while avoiding
+   slicing a leading card in half whenever slack allows snapping to a boundary. */
+static inline int ptc_overlay_scroll_to_parent_action(const PtcOverlayPageLayout *layout,
+                                                      int action, int current_offset)
+{
+    if (action < 0 || action >= PTC_OVERLAY_PARENT_ACTION_COUNT) return current_offset;
+    PtcOverlayRect item = layout->actions[action];
+    int offset = ptc_overlay_scroll_to_rect(layout->viewport, item, current_offset, layout->scroll_max);
+    int snapped = ptc_overlay_snap_parent_scroll(layout, offset);
+    if (item.y >= layout->viewport.y + snapped &&
+        item.y + item.h <= layout->viewport.y + layout->viewport.h + snapped) {
+        return snapped;
+    }
+    int top = layout->viewport.y + offset;
+    for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
+        PtcOverlayRect card = layout->actions[i];
+        if (card.h > 0 && top > card.y && top < card.y + card.h) {
+            int forward = card.y + card.h - layout->viewport.y;
+            if (forward <= layout->scroll_max &&
+                item.y >= layout->viewport.y + forward &&
+                item.y + item.h <= layout->viewport.y + layout->viewport.h + forward) {
+                return forward;
+            }
+            break;
+        }
     }
     return offset;
 }
