@@ -21,6 +21,8 @@ static void check(bool value, const char *message)
     if (!value) { fprintf(stderr, "FAIL NRO resource regression: %s\n", message); ++failures; }
 }
 
+#include "nro_wrap_reference.inc"
+
 static void reference_draw(UiRect r, int radius, int blur, int alpha, int bias)
 {
     uint32_t rgb = ui_mix_rgb(g_palette->text_primary, 0, 65);
@@ -171,6 +173,7 @@ int main(int argc, char **argv)
     check(FT_New_Memory_Face(NULL, bytes, length, 0, &g_ui.face) == 0, "load pinned font");
     g_ui.font_ready = true;
     check_clipped_draws();
+    check_nro_wrapping();
     int widths[3];
     for (int i = 0; i < 3; ++i) widths[i] = measure_text("PlayWise 123", 18 + i * 6);
     ptc_resource_font_sizes = ptc_resource_font_loads = 0;

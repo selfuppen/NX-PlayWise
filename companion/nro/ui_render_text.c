@@ -620,10 +620,9 @@ static const char *next_wrapped_line(const char *cursor, int size, int max_width
     const char **line_end)
 {
     const char *end = cursor;
-    const char *newline = strchr(cursor, '\n');
     const char *last_space = NULL;
     int width = 0;
-    while (*end && end != newline) {
+    while (*end && *end != '\n') {
         if (*end == ' ') last_space = end;
         const char *next = end;
         uint32_t codepoint = ui_decode_utf8(&next);
@@ -649,6 +648,13 @@ static const char *next_wrapped_line(const char *cursor, int size, int max_width
     *line_end = end;
     return *end == '\n' ? end + 1 : (*end == ' ' ? end + 1 : end);
 }
+
+#ifdef PTC_RESOURCE_TEST
+const char *ptc_resource_next_wrapped_line(const char *cursor, int size, int max_width, const char **end)
+{
+    return next_wrapped_line(cursor, size, max_width, end);
+}
+#endif
 
 int draw_wrapped_text_from_line(
     uint32_t *pixels,
