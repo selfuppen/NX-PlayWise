@@ -176,6 +176,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | --- | --- |
 | [automation/eden_runner.py](automation/eden_runner.py) | 发版前隔离首次设置、PIN、加时码业务烟测，关联Windows事件并离线核验证据 |
 | [automation/eden_main_flow.py](automation/eden_main_flow.py) | 发版前中文业务旅程串行编排与离线断言复核 |
+| [automation/eden_refresh_flow.py](automation/eden_refresh_flow.py) | 导航快照、手动／过期刷新与重开专项，按原始UI流、回执和业务文件离线核验 |
 | [automation/eden_notification_flow.py](automation/eden_notification_flow.py) | 通知设置的setup／家长区、示意切换、浅暗主题与重开专项及离线断言，不证明真实通知显示 |
 | [automation/eden_safeguard_flow.py](automation/eden_safeguard_flow.py) | PIN冷却重开、额度确认复核、备份配对恢复及离线断言 |
 | [automation/eden_dock_flow.py](automation/eden_dock_flow.py) | 非电视额度预览、旧数据迁移、取消保存及重开专项 |

@@ -27,11 +27,14 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = Path("sdmc/switch/playwise-eden")
 SCENARIOS = ("setup", "reopen", "pin_cancel", "pin_wrong", "pin_correct", "code_success", "code_replay")
 SUITES = ("smoke", "main", "support", "web", "plans", "input", "input-hold", "dock",
-          "notifications", "safeguards")
+          "notifications", "safeguards", "refresh")
 
 
 def scenario_names(suite: str) -> tuple[str, ...]:
     require(suite in SUITES, "unknown suite")
+    if suite == "refresh":
+        from tools.automation.eden_refresh_flow import REFRESH_SCENARIOS
+        return REFRESH_SCENARIOS
     if suite == "safeguards":
         from tools.automation.eden_safeguard_flow import SAFEGUARD_SCENARIOS
         return SAFEGUARD_SCENARIOS
@@ -429,8 +432,10 @@ def prepare(args: argparse.Namespace, output: Path) -> tuple[Path, dict]:
     if args.suite == "notifications":
         for name in ("eden_main_flow.py", "eden_notification_flow.py"):
             shutil.copy2(Path(__file__).with_name(name), artifacts / name)
-    if args.suite in ("main", "support", "web", "plans", "input", "input-hold", "dock", "safeguards"):
+    if args.suite in ("main", "support", "web", "plans", "input", "input-hold", "dock", "safeguards", "refresh"):
         shutil.copy2(Path(__file__).with_name("eden_main_flow.py"), artifacts / "eden_main_flow.py")
+    if args.suite == "refresh":
+        shutil.copy2(Path(__file__).with_name("eden_refresh_flow.py"), artifacts / "eden_refresh_flow.py")
     if args.suite == "safeguards":
         shutil.copy2(Path(__file__).with_name("eden_safeguard_flow.py"), artifacts / "eden_safeguard_flow.py")
     if args.suite == "dock":
@@ -985,6 +990,10 @@ def verify(output: Path) -> dict:
             verify_progress_streams(output)
         if (output / "app-final/support/automation-ui.jsonl").is_file():
             verify_observation_streams(output)
+        if summary.get("suite") == "refresh":
+            from tools.automation.eden_refresh_flow import verify_refresh
+            verify_refresh(output)
+            return summary
         if summary.get("suite") == "dock":
             from tools.automation.eden_dock_flow import verify_dock
             verify_dock(output)
@@ -1174,6 +1183,11 @@ def run(args: argparse.Namespace) -> int:
             class MainSuite(MainFlow, Suite):
                 pass
             suite_class = MainSuite
+        elif args.suite == "refresh":
+            from tools.automation.eden_refresh_flow import RefreshFlow
+            class RefreshSuite(RefreshFlow, Suite):
+                pass
+            suite_class = RefreshSuite
         elif args.suite == "notifications":
             from tools.automation.eden_notification_flow import NotificationFlow
             class NotificationSuite(NotificationFlow, Suite):
