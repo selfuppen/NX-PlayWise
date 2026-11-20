@@ -125,6 +125,10 @@ void blend_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color
         return;
     }
     destination = &pixels[(uint32_t)y * stride + (uint32_t)x];
+    if (alpha == 255) {
+        *destination = (color & 0x00ffffffu) | 0xff000000u;
+        return;
+    }
     red = color & 0xff;
     green = (color >> 8) & 0xff;
     blue = (color >> 16) & 0xff;

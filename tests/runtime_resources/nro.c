@@ -27,6 +27,37 @@ static void reference_draw(UiRect r, int radius, int blur, int alpha, int bias)
     reference_shadow(before, SCREEN_WIDTH, r, radius, blur, alpha, bias, pack_rgb(rgb), true);
 }
 
+static void check_blend_pixels(void)
+{
+    const unsigned alphas[] = {0, 1, 127, 254, 255};
+    const unsigned stride = SCREEN_WIDTH + 7;
+    uint32_t pixels[2 * (SCREEN_WIDTH + 7)];
+    ui_set_vertical_clip(1, 2);
+    for (unsigned a = 0; a < sizeof(alphas) / sizeof(alphas[0]); ++a) {
+        for (unsigned src = 0; src < 256; ++src) {
+            for (unsigned dst = 0; dst < 256; ++dst) {
+                unsigned alpha = alphas[a];
+                uint32_t color = (src << 24) | (src * 0x010101u);
+                uint32_t old = (dst << 24) | (dst * 0x010101u);
+                unsigned mixed = (src * alpha + dst * (255 - alpha)) / 255;
+                uint32_t expected = alpha ? 0xff000000u | (mixed * 0x010101u) : old;
+                pixels[stride + 3] = old;
+                blend_pixel(pixels, stride, 3, 1, color, (uint8_t)alpha);
+                check(pixels[stride + 3] == expected, "blend matches scalar channels and output alpha");
+            }
+        }
+    }
+    for (unsigned i = 0; i < sizeof(pixels) / sizeof(pixels[0]); ++i) pixels[i] = 0x12345678u;
+    blend_pixel(pixels, stride, 1, 0, 0, 255);
+    blend_pixel(pixels, stride, -1, 1, 0, 255);
+    blend_pixel(pixels, stride, SCREEN_WIDTH, 1, 0, 255);
+    blend_pixel(pixels, stride, 1, 2, 0, 255);
+    blend_pixel(pixels, stride, 1, SCREEN_HEIGHT, 0, 255);
+    for (unsigned i = 0; i < sizeof(pixels) / sizeof(pixels[0]); ++i)
+        check(pixels[i] == 0x12345678u, "opaque clipping preserves guards and stride padding");
+    ui_set_vertical_clip(0, SCREEN_HEIGHT);
+}
+
 int main(int argc, char **argv)
 {
     const UiRect rects[] = {{108,176,1064,400}, {0,0,1,1}, {1,2,17,9}, {-10,-5,43,28},
@@ -36,6 +67,7 @@ int main(int argc, char **argv)
     double before_seconds, after_seconds;
     double before_samples[5], after_samples[5];
     if (argc != 2) return 2;
+    check_blend_pixels();
     for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
         for (int dark = 0; dark < 2; ++dark) {
             g_palette = ptc_ui_theme_style_palette(dark ? PTC_UI_RESOLVED_DARK : PTC_UI_RESOLVED_LIGHT,
