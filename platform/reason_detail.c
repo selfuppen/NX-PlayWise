@@ -72,24 +72,30 @@ bool ptc_reason_detail_read(PtcStorage *s, const char *root, const char *kind, P
 
 bool ptc_reason_detail_write(PtcStorage *s, const char *root, const char *kind, const PtcReasonDetail *v)
 {
-    char file[256], text[1024];
+    /* cJSON's preallocated printer needs spare capacity; retain the original
+       1024-byte wire limit separately. Stack nodes keep library JSON escaping. */
+    char file[256], text[1024 + 5], numbers[7][32];
     if (!path(file, root, kind)) return false;
-    cJSON *j = cJSON_CreateObject();
-    if (!j) return false;
-    bool ok = cJSON_AddNumberToObject(j, "version", 1) && cJSON_AddStringToObject(j, "kind", kind) &&
-        cJSON_AddStringToObject(j, "release", v->release) && cJSON_AddStringToObject(j, "boot", v->boot) &&
-        cJSON_AddStringToObject(j, "owner", v->owner);
-    const char *keys[] = {"ui_instance", "sequence", "issued_ms", "expires_ms", "instance", "day", "reason"};
+    cJSON object = {0}, nodes[12] = {{0}};
+    object.type = cJSON_Object;
+    const char *keys[] = {"version", "kind", "release", "boot", "owner",
+        "ui_instance", "sequence", "issued_ms", "expires_ms", "instance", "day", "reason"};
+    const char *strings[] = {NULL, kind, v->release, v->boot, v->owner};
     uint64_t values[] = {v->ui_instance, v->sequence, v->issued_ms, v->expires_ms, v->instance, v->day, v->reason};
-    for (unsigned i = 0; i < 7; ++i) {
-        char value[32]; snprintf(value, sizeof(value), "%llu", (unsigned long long)values[i]);
-        ok = ok && cJSON_AddStringToObject(j, keys[i], value);
+    for (unsigned i = 0; i < 12; ++i) {
+        nodes[i].type = i ? cJSON_String | cJSON_IsReference : cJSON_Number;
+        if (!i) {
+            nodes[i].valueint = 1;
+            nodes[i].valuedouble = 1;
+        } else if (i < 5) nodes[i].valuestring = (char *)strings[i];
+        else {
+            snprintf(numbers[i - 5], sizeof(numbers[i - 5]), "%llu", (unsigned long long)values[i - 5]);
+            nodes[i].valuestring = numbers[i - 5];
+        }
+        if (!cJSON_AddItemToObjectCS(&object, keys[i], &nodes[i])) return false;
     }
-    char *json = ok ? cJSON_PrintUnformatted(j) : NULL;
-    ok = json && strlen(json) < sizeof(text);
-    if (ok) snprintf(text, sizeof(text), "%s", json);
-    cJSON_free(json); cJSON_Delete(j);
-    if (!ok) return false;
+    /* All nodes and referenced strings are borrowed; never cJSON_Delete them. */
+    if (!cJSON_PrintPreallocated(&object, text, sizeof(text), false) || strlen(text) >= 1024) return false;
     /* Only readiness may be lost. Readers still require current identity and
        a fresh lease before offering detail; request and ACK retain commit. */
     if (!strcmp(kind, "ready") && s->vtable->write_text_transient)

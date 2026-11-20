@@ -4572,6 +4572,7 @@ static void test_quiescing_scheduler(void)
 }
 
 #include "test_reason_notification.inc"
+#include "test_reason_detail_serialization.inc"
 #include "test_handoff_ready.inc"
 #include "test_overlay_brief.inc"
 
@@ -4666,6 +4667,7 @@ int main(void)
     test_overlay_reason_wake();
     test_notification_dependency();
     test_reason_detail_transport();
+    test_reason_detail_serialization();
     test_handoff_ready();
     test_reason_idle_cost();
     test_power_ledger();
