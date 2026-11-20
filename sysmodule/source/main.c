@@ -22,6 +22,7 @@
 #include "../usage_evidence.h"
 #include "../reason_notification.h"
 #include "../idle_wait.h"
+#include "../handoff_ready.h"
 #include "../power_ledger.h"
 #include "../../companion/input_owner.h"
 #ifdef PLAYWISE_PCTL_CAPTURE
@@ -155,6 +156,7 @@ static void write_runtime_ready(PtcSysmodule *sysmodule, bool ipc_available)
 static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
     bool ipc_available, unsigned int *quiesce_ticks)
 {
+    static bool ready_write_retry;
     char intent_path[320];
     char ack_path[320];
     char recovery_path[320];
@@ -191,7 +193,7 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
         "\"release_id\":\"%s\",\"source_pid\":%llu}\n",
         transaction_id, PLAYWISE_TITLE_ID, PLAYWISE_PROFILE_NAME, sysmodule->boot_id,
         PLAYWISE_BUILD_RELEASE_ID, (unsigned long long)source_pid);
-    (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, ack_path, text);
+    (void)ptc_handoff_ready_write(sysmodule->storage, ack_path, text, &ready_write_retry);
     if (!sysmodule->storage->vtable->exists(sysmodule->storage, boot_flag_path)) {
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, intent_path);
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, ack_path);

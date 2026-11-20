@@ -4572,6 +4572,7 @@ static void test_quiescing_scheduler(void)
 }
 
 #include "test_reason_notification.inc"
+#include "test_handoff_ready.inc"
 #include "test_overlay_brief.inc"
 
 #include "../../sysmodule/power_ledger.h"
@@ -4665,6 +4666,7 @@ int main(void)
     test_overlay_reason_wake();
     test_notification_dependency();
     test_reason_detail_transport();
+    test_handoff_ready();
     test_reason_idle_cost();
     test_power_ledger();
     test_reason_transport();
