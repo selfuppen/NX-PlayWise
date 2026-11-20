@@ -489,6 +489,7 @@ static int check_primitives(void)
         if (measure_text("💾", 12) != 12) ++failed;
         if (measure_text("📜", 12) != 12) ++failed;
         if (measure_text("🌐", 12) != 12) ++failed;
+        if (measure_text("🔔", 12) != 12) ++failed;
         if (measure_text("💡", 12) != 12) ++failed;
         if (measure_text("🌟", 12) != 12) ++failed;
         if (measure_text("🔓", 12) != 12) ++failed;

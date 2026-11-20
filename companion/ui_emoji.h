@@ -54,6 +54,7 @@ static inline bool is_builtin_emoji(uint32_t codepoint)
     case 0x1F4BE: /* 💾 Floppy Disk / Save */
     case 0x1F4DC: /* 📜 Scroll */
     case 0x1F310: /* 🌐 Globe */
+    case 0x1F514: /* 🔔 Bell */
         return true;
     default:
         return false;
@@ -801,6 +802,52 @@ static inline bool sample_emoji_color(uint32_t codepoint, float u, float v, uint
                 return true;
             }
             *out_rgb = 0x0284C7u;
+            return true;
+        }
+        return false;
+    }
+    case 0x1F514: { /* 🔔 Bell */
+        /* Top crown loop */
+        float dc = (u - 0.50f) * (u - 0.50f) + (v - 0.17f) * (v - 0.17f);
+        if (dc <= 0.085f * 0.085f && v <= 0.24f) {
+            *out_rgb = 0xD97706u;
+            return true;
+        }
+        /* Flared golden bell dome */
+        if (v >= 0.21f && v <= 0.72f) {
+            float t = (v - 0.21f) / 0.51f;
+            float half_w;
+            if (t < 0.30f) {
+                float k = (0.30f - t) / 0.30f;
+                half_w = 0.23f * sqrtf(1.0f - k * k);
+            } else {
+                float f = (t - 0.30f) / 0.70f;
+                half_w = 0.23f + 0.14f * f * f;
+            }
+            if (fabsf(u - 0.50f) <= half_w) {
+                if (u < 0.44f && v >= 0.28f && v <= 0.64f && fabsf(u - (0.47f - half_w * 0.45f)) <= 0.045f) {
+                    *out_rgb = 0xFDE68Au;
+                } else if (u > 0.58f) {
+                    *out_rgb = 0xF59E0Bu;
+                } else {
+                    *out_rgb = 0xFBBF24u;
+                }
+                return true;
+            }
+        }
+        /* Rim base lip */
+        if (v >= 0.68f && v <= 0.77f && fabsf(u - 0.50f) <= 0.40f) {
+            float rx = fabsf(u - 0.50f) - 0.35f;
+            float ry = fabsf(v - 0.725f);
+            if (rx <= 0.0f || rx * rx + ry * ry <= 0.045f * 0.045f) {
+                *out_rgb = 0xD97706u;
+                return true;
+            }
+        }
+        /* Bottom clapper */
+        float dcl = (u - 0.50f) * (u - 0.50f) + (v - 0.81f) * (v - 0.81f);
+        if (dcl <= 0.095f * 0.095f && v >= 0.76f) {
+            *out_rgb = 0xB45309u;
             return true;
         }
         return false;
