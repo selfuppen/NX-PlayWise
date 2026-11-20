@@ -32,29 +32,34 @@ enum {
     PTC_OVERLAY_CONTENT_H = 635,
     PTC_OVERLAY_PARENT_CONTENT_Y = 12,
     /* Unified fixed footer rail: content bottom 639, viewport bottom 579,
-       Tesla safe line 647. All non-child pages share this geometry. */
+       Tesla safe line 647. Pages whose bottom hints live in the Tesla host
+       footer extend their viewport directly to 639 (FULL_VIEWPORT_BOTTOM). */
     PTC_OVERLAY_RAIL_H = 52,
     PTC_OVERLAY_RAIL_Y = PTC_OVERLAY_CONTENT_H - 8 - PTC_OVERLAY_RAIL_H,
     PTC_OVERLAY_RAIL_BOTTOM = PTC_OVERLAY_CONTENT_H - 8,
     PTC_OVERLAY_VIEWPORT_BOTTOM = PTC_OVERLAY_RAIL_Y - 8,
+    PTC_OVERLAY_FULL_VIEWPORT_BOTTOM = PTC_OVERLAY_CONTENT_H - 8,
+    /* libtesla maps touch x < 150, y > 647 directly to HidNpadButton_B.
+       Keep the B-hint inside x < 150 and start the action hint at >= 152. */
+    PTC_OVERLAY_FOOTER_SAFE_X = 152,
     /* Top path bar (方案 A): 22px breadcrumb replaces the old page title. */
     PTC_OVERLAY_HEADER_H = 44,
     PTC_OVERLAY_PATH_X = 16,
     PTC_OVERLAY_PATH_Y = 8,
     PTC_OVERLAY_PARENT_CARD_COMPACT_H = 40,
     PTC_OVERLAY_PARENT_CARD_MIN_H = 54,
-    PTC_OVERLAY_SLOT_Y = 104,
+    PTC_OVERLAY_SLOT_Y = 112,
     PTC_OVERLAY_SLOT_W = 44,
     PTC_OVERLAY_SLOT_H = 64,
     PTC_OVERLAY_SLOT_GAP = 5,
     PTC_OVERLAY_SLOT_GROUP_GAP = 14,
-    PTC_OVERLAY_KEYPAD_Y = 232,
-    PTC_OVERLAY_KEYPAD_H = 248,
-    PTC_OVERLAY_KEY_ROW_STEP = 64,
+    PTC_OVERLAY_KEYPAD_Y = 264,
+    PTC_OVERLAY_KEYPAD_H = 286,
+    PTC_OVERLAY_KEY_ROW_STEP = 74,
     PTC_OVERLAY_KEY_W = 124,
-    PTC_OVERLAY_KEY_H = 56,
-    PTC_OVERLAY_SUBMIT_Y = 507,
-    PTC_OVERLAY_SUBMIT_H = 60,
+    PTC_OVERLAY_KEY_H = 64,
+    PTC_OVERLAY_SUBMIT_Y = PTC_OVERLAY_RAIL_Y,
+    PTC_OVERLAY_SUBMIT_H = PTC_OVERLAY_RAIL_H,
     /* Unified Typography Scale (掌机模式全局字体尺寸统一分级契约) */
     PTC_OVERLAY_FONT_HERO = 56,
     PTC_OVERLAY_FONT_DISPLAY = 44,
@@ -330,20 +335,16 @@ static inline PtcOverlayRect ptc_overlay_clear_rect(int origin_x, int origin_y)
     return rect;
 }
 
-static inline PtcOverlayRect ptc_overlay_submit_rect(int origin_x, int origin_y, int width)
-{
-    return ptc_overlay_rect(origin_x + 12, origin_y + PTC_OVERLAY_SUBMIT_Y, width - 24, PTC_OVERLAY_SUBMIT_H);
-}
-
-static inline PtcOverlayRect ptc_overlay_keypad_nav_back_rect(int origin_x, int origin_y)
-{
-    return ptc_overlay_rect(origin_x + 12, origin_y + PTC_OVERLAY_RAIL_Y, 190, PTC_OVERLAY_RAIL_H);
-}
-
 static inline PtcOverlayRect ptc_overlay_keypad_nav_parent_rect(int origin_x, int origin_y, int width)
 {
-    return ptc_overlay_rect(origin_x + 214, origin_y + PTC_OVERLAY_RAIL_Y,
-                            width - 226, PTC_OVERLAY_RAIL_H);
+    (void)width;
+    return ptc_overlay_rect(origin_x, origin_y + PTC_OVERLAY_RAIL_Y, 154, PTC_OVERLAY_RAIL_H);
+}
+
+static inline PtcOverlayRect ptc_overlay_submit_rect(int origin_x, int origin_y, int width)
+{
+    return ptc_overlay_rect(origin_x + 166, origin_y + PTC_OVERLAY_RAIL_Y,
+                            width - 166, PTC_OVERLAY_RAIL_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_pin_wheel_rect(int origin_x, int origin_y, unsigned int index)

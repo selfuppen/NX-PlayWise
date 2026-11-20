@@ -209,14 +209,15 @@ bool ptc_overlay_keypad_navigate(PtcOverlayInput *input, int *nav_focus,
     unsigned int buttons_down, unsigned int buttons_held, int elapsed_ms)
 {
     /* Columns are up/down/left/right. Numeric IDs are digits, not row indices.
-       Keep all four keypad rows in one graph before entering the footer. */
-    static const unsigned int neighbors[15][4] = {
+       Keep all four keypad rows in one graph before entering the single rail
+       row [12: parent, 13: submit]. Cancel lives in the Tesla host footer. */
+    static const unsigned int neighbors[14][4] = {
         {8, 13, 10, 11},
         {1, 4, 1, 2}, {2, 5, 1, 3}, {3, 6, 2, 3},
         {1, 7, 4, 5}, {2, 8, 4, 6}, {3, 9, 5, 6},
         {4, 10, 7, 8}, {5, 0, 7, 9}, {6, 11, 8, 9},
-        {7, 13, 10, 0}, {9, 13, 0, 11},
-        {13, 12, 12, 14}, {0, 12, 13, 13}, {13, 14, 12, 14}
+        {7, 12, 10, 0}, {9, 13, 0, 11},
+        {10, 12, 12, 13}, {0, 13, 12, 13}
     };
     unsigned int direction, focus, column;
     if (!input || !nav_focus) return false;
@@ -224,7 +225,7 @@ bool ptc_overlay_keypad_navigate(PtcOverlayInput *input, int *nav_focus,
         buttons_down, buttons_held, elapsed_ms);
     if (direction) {
         focus = *nav_focus == -1 ? input->cursor : (unsigned int)*nav_focus;
-        if (focus >= 15u) return true;
+        if (focus >= 14u) return true;
         column = direction == PTC_OVERLAY_BUTTON_UP ? 0u :
             direction == PTC_OVERLAY_BUTTON_DOWN ? 1u :
             direction == PTC_OVERLAY_BUTTON_LEFT ? 2u : 3u;

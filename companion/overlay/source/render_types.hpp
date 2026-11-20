@@ -234,21 +234,81 @@ inline PtcUiLanguagePreference resolve_overlay_effective_language(
     }
 }
 
-inline void draw_overlay_footer_hints(tsl::gfx::Renderer *renderer, tsl::Color color)
+struct OverlayFooterSpec {
+    const char *left_text = nullptr;
+    tsl::Color left_color = { 0xF, 0xF, 0xF, 0xF };
+    const char *action_text = nullptr;
+    tsl::Color action_color = { 0xF, 0xF, 0xF, 0xF };
+};
+
+struct OverlayFooterGeometry {
+    int left_x = 0;
+    int left_w = 0;
+    int action_x = 0;
+    int action_w = 0;
+    int clock_x = 0;
+    int clock_w = 0;
+    int left_font = 0;
+    int action_font = 0;
+};
+
+inline int fit_footer_hint_font(tsl::gfx::Renderer *renderer, const char *text, int max_width, int *out_width)
 {
-    if (!renderer) return;
-    const char *back_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
-    const char *ok_lbl = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+    static constexpr int SIZES[] = {PTC_OVERLAY_FONT_SECONDARY, PTC_OVERLAY_FONT_CAPTION, 20};
+    int chosen_size = SIZES[2];
+    int chosen_width = 0;
+    for (const int size : SIZES) {
+        const int w = static_cast<int>(renderer->drawString(text, false, 0, 0,
+            static_cast<float>(size), tsl::style::color::ColorTransparent).first);
+        chosen_size = size;
+        chosen_width = w;
+        if (w <= max_width) break;
+    }
+    if (out_width) *out_width = chosen_width;
+    return chosen_size;
+}
 
-    // Language lives in the child-overview header, so the host footer only
-    // advertises the two keys that always apply.
-    s32 cur_x = 24;
-    renderer->drawString(back_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
-    const auto back_sz = renderer->drawString(back_lbl, false, 0, 0,
-        PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
-    cur_x += static_cast<s32>(back_sz.first) + 24;
+inline OverlayFooterGeometry draw_overlay_footer_hints(
+    tsl::gfx::Renderer *renderer,
+    const OverlayFooterSpec &spec,
+    const char *time_buf = nullptr,
+    tsl::Color clock_color = { 0xF, 0xF, 0xF, 0xF })
+{
+    OverlayFooterGeometry geom{};
+    if (!renderer) return geom;
 
-    renderer->drawString(ok_lbl, false, cur_x, 693, PTC_OVERLAY_FONT_BTN, color);
+    constexpr s32 baseline_y = 693;
+    constexpr int right_edge = 448 - PTC_OVERLAY_CONTENT_X;
+    if (time_buf && time_buf[0]) {
+        const auto measured = renderer->drawString(time_buf, false, 0, 0,
+            PTC_OVERLAY_FONT_SECONDARY, tsl::style::color::ColorTransparent);
+        geom.clock_w = static_cast<int>(measured.first);
+        geom.clock_x = right_edge - geom.clock_w;
+        renderer->drawString(time_buf, false, geom.clock_x, baseline_y,
+            PTC_OVERLAY_FONT_SECONDARY, renderer->a(clock_color));
+    }
+
+    const char *left_lbl = spec.left_text ? spec.left_text : ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+    geom.left_x = PTC_OVERLAY_CONTENT_X;
+    // Keep the B-hint strictly inside libtesla's native x < 150 touch-back hitbox.
+    const int left_max_w = PTC_OVERLAY_FOOTER_SAFE_X - geom.left_x - 6;
+    geom.left_font = fit_footer_hint_font(renderer, left_lbl, left_max_w, &geom.left_w);
+    renderer->drawString(left_lbl, false, geom.left_x, baseline_y,
+        static_cast<float>(geom.left_font), renderer->a(spec.left_color));
+
+    if (spec.action_text && spec.action_text[0]) {
+        // Start action hints at >= PTC_OVERLAY_FOOTER_SAFE_X (152) so tapping
+        // the action hint cannot accidentally trigger libtesla's B-back zone.
+        geom.action_x = std::max(static_cast<int>(PTC_OVERLAY_FOOTER_SAFE_X), geom.left_x + geom.left_w + 14);
+        const int action_limit = geom.clock_w > 0 ? geom.clock_x - 12 : right_edge;
+        const int action_max_w = std::max(0, action_limit - geom.action_x);
+        if (action_max_w > 0) {
+            geom.action_font = fit_footer_hint_font(renderer, spec.action_text, action_max_w, &geom.action_w);
+            renderer->drawString(spec.action_text, false, geom.action_x, baseline_y,
+                static_cast<float>(geom.action_font), renderer->a(spec.action_color));
+        }
+    }
+    return geom;
 }
 
 #include "../display_clock.h"

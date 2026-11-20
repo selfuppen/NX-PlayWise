@@ -179,6 +179,11 @@ public:
         is_parent_view_ = std::move(is_parent);
     }
 
+    void set_footer_spec_provider(std::function<OverlayFooterSpec()> provider)
+    {
+        footer_spec_provider_ = std::move(provider);
+    }
+
     void draw(tsl::gfx::Renderer *renderer) override
     {
         // PlayWise renders its own compact brand & status bar directly inside draw_overlay.
@@ -189,16 +194,17 @@ public:
         renderer->drawRect(tsl::cfg::FramebufferWidth - 1, 0, 1, tsl::cfg::FramebufferHeight, a(0xF222));
         renderer->drawRect(15, tsl::cfg::FramebufferHeight - 73, tsl::cfg::FramebufferWidth - 30, 1,
             a(tsl::style::color::ColorText));
-        draw_overlay_footer_hints(renderer, a(tsl::style::color::ColorText));
 
         char time_buf[16];
         get_overlay_current_time(time_buf, sizeof(time_buf));
-        if (time_buf[0]) {
-            const auto measured = renderer->drawString(time_buf, false, 0, 0,
-                PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
-            const s32 time_x = tsl::cfg::FramebufferWidth - 30 - static_cast<s32>(measured.first);
-            renderer->drawString(time_buf, false, time_x, 693, PTC_OVERLAY_FONT_BTN, a(tsl::style::color::ColorText));
+        OverlayFooterSpec footer{};
+        if (footer_spec_provider_) {
+            footer = footer_spec_provider_();
+        } else {
+            footer.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+            footer.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
         }
+        draw_overlay_footer_hints(renderer, footer, time_buf, tsl::style::color::ColorText);
 
         if (m_contentElement != nullptr)
             m_contentElement->frame(renderer);
@@ -221,6 +227,7 @@ public:
 
 private:
     std::function<bool()> is_parent_view_;
+    std::function<OverlayFooterSpec()> footer_spec_provider_;
 };
 
 class PctcGui final : public tsl::Gui {
@@ -239,6 +246,7 @@ public:
             ptc_ui_localize(ptc_ui_text(PTC_UI_T_PLAYTIME_BEDTIME_CONTROLS), subtitle, sizeof(subtitle)));
         frame_ = frame;
         frame->set_parent_view_predicate([this] { return access_recovery_visible(); });
+        frame->set_footer_spec_provider([this] { return current_footer_spec(); });
         content_parent_layout_ = access_recovery_visible();
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             renderer->setPreferTraditionalChinese(
@@ -604,6 +612,7 @@ public:
     {
         cancel_child_open();
         status_expanded_ = true;
+        status_details_focus_ = (error_ || !has_status_snapshot_) ? 2 : 1;
         (void)maybe_refresh_on_nav(PTC_UI_STATUS_OTHER);
     }
 
@@ -819,13 +828,9 @@ public:
                     } else if (parent_pin_focus_ == 12) {
                         parent_pin_focus_ = 9;
                     } else if (parent_pin_focus_ == 0) {
-                        parent_pin_focus_ = 10;
-                    } else if (parent_pin_focus_ == 15) {
-                        parent_pin_focus_ = 12;
-                    } else if (parent_pin_focus_ == 13) {
-                        parent_pin_focus_ = 0;
+                        parent_pin_focus_ = 11;
                     } else if (parent_pin_focus_ == 14) {
-                        parent_pin_focus_ = 15;
+                        parent_pin_focus_ = 0;
                     }
                 } else if (keysDown & HidNpadButton_Down) {
                     if (parent_pin_focus_ >= 1 && parent_pin_focus_ <= 6) {
@@ -836,13 +841,9 @@ public:
                         parent_pin_focus_ = 11;
                     } else if (parent_pin_focus_ == 9) {
                         parent_pin_focus_ = 12;
-                    } else if (parent_pin_focus_ == 10 || parent_pin_focus_ == 11) {
+                    } else if (parent_pin_focus_ == 10 || parent_pin_focus_ == 11 || parent_pin_focus_ == 12) {
                         parent_pin_focus_ = 0;
-                    } else if (parent_pin_focus_ == 12) {
-                        parent_pin_focus_ = 15;
                     } else if (parent_pin_focus_ == 0) {
-                        parent_pin_focus_ = 13;
-                    } else if (parent_pin_focus_ == 15) {
                         parent_pin_focus_ = 14;
                     }
                 } else if (keysDown & HidNpadButton_Left) {
@@ -852,10 +853,6 @@ public:
                         parent_pin_focus_ -= 1;
                     } else if (parent_pin_focus_ == 11 || parent_pin_focus_ == 12) {
                         parent_pin_focus_ -= 1;
-                    } else if (parent_pin_focus_ == 15) {
-                        parent_pin_focus_ = 0;
-                    } else if (parent_pin_focus_ == 14) {
-                        parent_pin_focus_ = 13;
                     }
                 } else if (keysDown & HidNpadButton_Right) {
                     if (parent_pin_focus_ == 1 || parent_pin_focus_ == 2 ||
@@ -864,10 +861,6 @@ public:
                         parent_pin_focus_ += 1;
                     } else if (parent_pin_focus_ == 10 || parent_pin_focus_ == 11) {
                         parent_pin_focus_ += 1;
-                    } else if (parent_pin_focus_ == 0) {
-                        parent_pin_focus_ = 15;
-                    } else if (parent_pin_focus_ == 13) {
-                        parent_pin_focus_ = 14;
                     }
                 }
                 if (parent_pin_focus_ != old_focus) {
@@ -877,10 +870,8 @@ public:
                     else if (parent_pin_focus_ == 10) target_rect = page_layout_.pin_keys[12];
                     else if (parent_pin_focus_ == 11) target_rect = page_layout_.pin_keys[0];
                     else if (parent_pin_focus_ == 12) target_rect = page_layout_.pin_keys[11];
-                    else if (parent_pin_focus_ == 15) target_rect = page_layout_.backspace;
-                    else if (parent_pin_focus_ == 13) target_rect = page_layout_.secondary;
                     else if (parent_pin_focus_ == 14) target_rect = page_layout_.primary;
-                    if (target_rect.w > 0) {
+                    if (target_rect.w > 0 && parent_pin_focus_ != 14) {
                         page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
                             page_layout_.viewport, target_rect, static_cast<int>(page_scroll_target_), page_layout_.scroll_max));
                     }
@@ -892,7 +883,7 @@ public:
                     } else if (parent_pin_focus_ >= 1 && parent_pin_focus_ <= 9) {
                         append_pin_digit(parent_pin_focus_);
                         return true;
-                    } else if (parent_pin_focus_ == 10 || parent_pin_focus_ == 15) {
+                    } else if (parent_pin_focus_ == 10) {
                         keysDown |= HidNpadButton_ZL;
                     } else if (parent_pin_focus_ == 11) {
                         append_pin_digit(0);
@@ -901,8 +892,6 @@ public:
                         std::memset(pin_, 0, sizeof(pin_));
                         pin_length_ = 0;
                         return true;
-                    } else if (parent_pin_focus_ == 13) {
-                        keysDown |= HidNpadButton_B;
                     } else if (parent_pin_focus_ == 14) {
                         keysDown |= HidNpadButton_Plus;
                     }
@@ -950,14 +939,10 @@ public:
                     }
                 }
                 if (flow_hit(page_layout_.backspace, tx, ty)) {
-                    parent_pin_focus_ = 15;
                     keysDown |= HidNpadButton_ZL;
                 } else if (page_hit(page_layout_.primary, tx, ty)) {
                     parent_pin_focus_ = 14;
                     keysDown |= HidNpadButton_Plus;
-                } else if (page_hit(page_layout_.secondary, tx, ty)) {
-                    parent_pin_focus_ = 13;
-                    keysDown |= HidNpadButton_B;
                 }
             }
             if ((keysDown & HidNpadButton_ZL) && pin_length_ > 0) {
@@ -1038,8 +1023,6 @@ public:
                         break;
                     }
                 }
-                if (page_hit(page_layout_.primary, tx, ty))
-                    keysDown |= HidNpadButton_B;
             }
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_LEFT))
                 daily_add_minutes_ = daily_add_minutes_ <= 5 ? 5 : daily_add_minutes_ - 5;
@@ -1327,7 +1310,7 @@ private:
     size_t pin_length_ = 0;
     char pin_message_[128]{};
     int child_overview_focus_ = 0;
-    int status_details_focus_ = 0;
+    int status_details_focus_ = 1;
     int parent_pin_focus_ = 1;
     int preview_focus_ = 1;
     int confirm_focus_ = 1;

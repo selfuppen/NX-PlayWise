@@ -91,7 +91,7 @@
 
     void begin_page(tsl::gfx::Renderer *renderer, int cx, int cy, int cw,
         const char *title, const PtcFlowPath &flow, bool refresh = false,
-        int title_size = PTC_OVERLAY_FONT_TITLE)
+        int title_size = PTC_OVERLAY_FONT_TITLE, bool full_viewport = false)
     {
         (void)title_size; // 方案 A: the path bar carries page identity; kept for scheme B experiments.
         const auto &pal = current_palette();
@@ -315,12 +315,18 @@
                 bridge_->waiting ? pal.text_secondary : highlight ? pal.warning : pal.accent,
                 highlight || bridge_->waiting, PTC_OVERLAY_FONT_CAPTION, refresh_focused);
         }
+        const int vp_bottom = full_viewport ? PTC_OVERLAY_FULL_VIEWPORT_BOTTOM : PTC_OVERLAY_VIEWPORT_BOTTOM;
         page_layout_.viewport = ptc_overlay_rect(cx, cy + PTC_OVERLAY_HEADER_H + 8, cw,
-            PTC_OVERLAY_VIEWPORT_BOTTOM - (PTC_OVERLAY_HEADER_H + 8));
-        page_layout_.secondary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y,
-            154, PTC_OVERLAY_RAIL_H);
-        page_layout_.primary = ptc_overlay_rect(cx + 166, cy + PTC_OVERLAY_RAIL_Y,
-            cw - 166, PTC_OVERLAY_RAIL_H);
+            vp_bottom - (PTC_OVERLAY_HEADER_H + 8));
+        if (full_viewport) {
+            page_layout_.secondary = {};
+            page_layout_.primary = {};
+        } else {
+            page_layout_.secondary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y,
+                154, PTC_OVERLAY_RAIL_H);
+            page_layout_.primary = ptc_overlay_rect(cx + 166, cy + PTC_OVERLAY_RAIL_Y,
+                cw - 166, PTC_OVERLAY_RAIL_H);
+        }
         flow_y_ = page_layout_.viewport.y;
         renderer->enableScissoring(cx, page_layout_.viewport.y, cw, page_layout_.viewport.h);
     }
@@ -629,6 +635,48 @@
             fit_rail_button_size(renderer, return_label, page_layout_.primary.w), true);
     }
 
+    // Compact single-line (auto-wrapping when needed) status strip for the
+    // Parent Actions page so more action cards stay visible above the fold.
+    void draw_parent_state_strip(tsl::gfx::Renderer *renderer, const OverlayCurrentState &state, bool stale)
+    {
+        const auto &pal = current_palette();
+        const auto &vp = page_layout_.viewport;
+        const int card_x = vp.x + 4;
+        const int card_w = vp.w - 8;
+        const int inner_w = card_w - 28;
+        char age[64] = {};
+        const bool has_age = !stale;
+        if (has_age) format_refresh_age(age, sizeof(age));
+        const int title_w = static_cast<int>(measure_localized(renderer, state.text, PTC_OVERLAY_FONT_BODY).first);
+        const int age_w = has_age ? static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_CAPTION).first) : 0;
+        const bool inline_age = has_age && (title_w + age_w + 16 <= inner_w);
+        const int title_h = overlay_text_height(renderer, state.text, inline_age ? (title_w + 2) : inner_w, PTC_OVERLAY_FONT_BODY);
+        const int age_h = has_age ? overlay_text_height(renderer, age, inline_age ? (age_w + 2) : inner_w, PTC_OVERLAY_FONT_CAPTION) : 0;
+        const int content_h = inline_age ? std::max(title_h, age_h) : (has_age ? (title_h + 4 + age_h) : title_h);
+        const int height = std::max(46, content_h + 14);
+        const int y = flow_y_ - static_cast<int>(page_scroll_);
+        flow_y_ += height + 6;
+        if (y + height <= vp.y || y >= vp.y + vp.h) return;
+
+        draw_dashboard_surface(renderer, ptc_overlay_rect(card_x, y, card_w, height),
+            state.normal ? tsl::Color{1, 2, 3, 15} : dashboard_soft(state.color),
+            state.normal ? state.color : pal.border_decorative, false);
+        renderer->drawRect(card_x, y + 6, state.normal ? 2 : 3, height - 12, renderer->a(state.color));
+        const int top = y + (height - content_h) / 2;
+        if (inline_age) {
+            overlay_text(renderer, state.text, card_x + 14, top + (content_h - title_h) / 2,
+                title_w + 2, PTC_OVERLAY_FONT_BODY, state.color);
+            overlay_text(renderer, age, card_x + card_w - 14 - age_w, top + (content_h - age_h) / 2,
+                age_w + 2, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+        } else {
+            overlay_text(renderer, state.text, card_x + 14, top, inner_w, PTC_OVERLAY_FONT_BODY, state.color);
+            if (has_age) {
+                overlay_text(renderer, age, card_x + 14, top + title_h + 4, inner_w,
+                    PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+            }
+        }
+    }
+
     void draw_parent_page(tsl::gfx::Renderer *renderer, int cx, int cy, int cw)
     {
         const auto &pal = current_palette();
@@ -648,23 +696,18 @@
             flow.nodes[2] = ptc_ui_text(PTC_UI_T_NAV_RESULT);
             flow.count = 3;
         }
-        begin_page(renderer, cx, cy, cw, title, flow, parent_view_ == ParentView::Actions);
+        const bool full_vp = parent_view_ == ParentView::Actions;
+        begin_page(renderer, cx, cy, cw, title, flow, parent_view_ == ParentView::Actions,
+            PTC_OVERLAY_FONT_TITLE, full_vp);
         const bool stale = !has_status_snapshot_ || status_is_stale();
         const auto state = current_state_line(stale);
-        // PIN must stay one screen: fall back to 32px only when the 44px state wraps.
-        const int state_size = (parent_view_ == ParentView::Pin &&
-            overlay_text_height(renderer, state.text, cw - 36, PTC_OVERLAY_FONT_DISPLAY) >
-                (PTC_OVERLAY_FONT_DISPLAY * 6 + 4) / 5)
-            ? PTC_OVERLAY_FONT_BODY_LG : PTC_OVERLAY_FONT_DISPLAY;
-        // Confirm and result own their hero panel; repeating the state banner
-        // above them only competes with the decision the parent is making.
-        const bool shows_state_panel = parent_view_ == ParentView::Pin || parent_view_ == ParentView::Actions;
-        if (shows_state_panel && parent_view_ == ParentView::Actions && !stale) {
-            char age[64];
-            format_refresh_age(age, sizeof(age));
-            dashboard_panel(renderer, {{state.text, state_size, state.color},
-                {age, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary}}, state.color, state.normal);
-        } else if (shows_state_panel) {
+        if (parent_view_ == ParentView::Actions) {
+            draw_parent_state_strip(renderer, state, stale);
+        } else if (parent_view_ == ParentView::Pin) {
+            // PIN must stay one screen: fall back to 32px only when the 44px state wraps.
+            const int state_size = overlay_text_height(renderer, state.text, cw - 36, PTC_OVERLAY_FONT_DISPLAY) >
+                    (PTC_OVERLAY_FONT_DISPLAY * 6 + 4) / 5
+                ? PTC_OVERLAY_FONT_BODY_LG : PTC_OVERLAY_FONT_DISPLAY;
             dashboard_panel(renderer, {{state.text, state_size, state.color}}, state.color, state.normal);
         }
         if (parent_view_ == ParentView::Pin) {
@@ -728,32 +771,46 @@
                 flow_y_ += 260;
             }
 
-            // Bottom action row: Toggle button on the left, Backspace button on the right
-            const int btn_h = 48;
-            const int toggle_w = 214;
-            const int bs_w = cw - 12 - toggle_w - 10;
-            const auto toggle_rect = ptc_overlay_rect(cx + 4, flow_y_, toggle_w, btn_h);
-            page_layout_.pin_keys[10] = toggle_rect;
-            auto visible_toggle = toggle_rect;
-            visible_toggle.y -= static_cast<int>(page_scroll_);
-            draw_button(renderer, visible_toggle,
-                ptc_ui_text(parent_pin_standard_keypad_ ? PTC_UI_T_SWITCH_TO_DIAL_PAD : PTC_UI_T_SWITCH_TO_NUMPAD),
-                pal.accent, parent_pin_standard_keypad_, PTC_OVERLAY_FONT_SECONDARY,
-                parent_pin_standard_keypad_ && parent_pin_focus_ == 0);
+            // Dial pad keeps Toggle + ZL Backspace side by side. Standard numpad
+            // already has X Backspace on row 4, so Toggle spans the full width.
+            if (!parent_pin_standard_keypad_) {
+                const int btn_h = 48;
+                const int toggle_w = 214;
+                const int bs_w = cw - 12 - toggle_w - 10;
+                const auto toggle_rect = ptc_overlay_rect(cx + 4, flow_y_, toggle_w, btn_h);
+                page_layout_.pin_keys[10] = toggle_rect;
+                auto visible_toggle = toggle_rect;
+                visible_toggle.y -= static_cast<int>(page_scroll_);
+                draw_button(renderer, visible_toggle,
+                    ptc_ui_text(PTC_UI_T_SWITCH_TO_NUMPAD),
+                    pal.accent, false, PTC_OVERLAY_FONT_SECONDARY, false);
 
-            page_layout_.backspace = ptc_overlay_rect(cx + 4 + toggle_w + 10, flow_y_, bs_w, btn_h);
-            auto visible_bs = page_layout_.backspace;
-            visible_bs.y -= static_cast<int>(page_scroll_);
-            draw_button(renderer, visible_bs, ptc_ui_text(PTC_UI_T_ZL_BACKSPACE_2), pal.warning, false, PTC_OVERLAY_FONT_SECONDARY,
-                parent_pin_standard_keypad_ && parent_pin_focus_ == 15);
-            flow_y_ += btn_h + 4;
+                page_layout_.backspace = ptc_overlay_rect(cx + 4 + toggle_w + 10, flow_y_, bs_w, btn_h);
+                auto visible_bs = page_layout_.backspace;
+                visible_bs.y -= static_cast<int>(page_scroll_);
+                draw_button(renderer, visible_bs, ptc_ui_text(PTC_UI_T_ZL_BACKSPACE_2),
+                    pal.warning, false, PTC_OVERLAY_FONT_SECONDARY, false);
+                flow_y_ += btn_h + 4;
+            } else {
+                const int btn_h = 44;
+                const auto toggle_rect = ptc_overlay_rect(cx + 4, flow_y_, cw - 8, btn_h);
+                page_layout_.pin_keys[10] = toggle_rect;
+                page_layout_.backspace = {};
+                auto visible_toggle = toggle_rect;
+                visible_toggle.y -= static_cast<int>(page_scroll_);
+                draw_button(renderer, visible_toggle,
+                    ptc_ui_text(PTC_UI_T_SWITCH_TO_DIAL_PAD),
+                    pal.accent, true, PTC_OVERLAY_FONT_SECONDARY,
+                    parent_pin_focus_ == 0);
+                flow_y_ += btn_h + 4;
+            }
 
             end_page(renderer);
-            const char *back_label = ptc_ui_text(PTC_UI_T_B_BACK_2);
+            // B Back lives in the Tesla host footer (native x < 150 touch hitbox),
+            // letting Verify PIN span the full footer rail cleanly.
+            page_layout_.secondary = {};
+            page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
             const char *verify_label = ptc_ui_text(PTC_UI_T_VERIFY_PIN);
-            draw_button(renderer, page_layout_.secondary, back_label, pal.text_primary, false,
-                fit_rail_button_size(renderer, back_label, page_layout_.secondary.w),
-                parent_pin_standard_keypad_ && parent_pin_focus_ == 13);
             draw_button(renderer, page_layout_.primary, verify_label, pal.accent, true,
                 fit_rail_button_size(renderer, verify_label, page_layout_.primary.w),
                 parent_pin_standard_keypad_ && parent_pin_focus_ == 14);
@@ -839,13 +896,10 @@
             end_page(renderer);
             if (page_changed_ && parent_action_ >= 0) page_scroll_target_ = static_cast<float>(
                 ptc_overlay_scroll_to_parent_action(&page_layout_, parent_action_, 0));
-            page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
+            // Action key hints (B Back / A Execute / Hold A 1s / Unavailable) live
+            // in the Tesla host footer; the full 575px viewport stays for cards.
+            page_layout_.primary = {};
             page_layout_.secondary = {};
-            const auto selected = static_cast<PtcOverlayParentAction>(parent_action_);
-            const char *footer = ptc_ui_text(parent_action_reason(selected) ? PTC_UI_T_ACTION_CURRENTLY_UNAVAILABLE_B_BACK :
-                parent_action_requires_hold(selected) ? PTC_UI_T_HOLD_A_1S_Y_REFRESH_B_BACK : PTC_UI_T_A_EXECUTE_Y_REFRESH_B_BACK);
-            draw_button(renderer, page_layout_.primary, footer, parent_action_reason(selected) ? pal.warning : pal.accent,
-                false, fit_rail_button_size(renderer, footer, page_layout_.primary.w));
             return;
         }
         if (parent_view_ == ParentView::Confirm) {
@@ -921,7 +975,8 @@
         const auto &summary = displayed_summary_;
         char line[384];
         begin_page(renderer, cx, cy, cw, ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS),
-            PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS)}, 2}, true);
+            PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_STATUS_DETAILS)}, 2},
+            true, PTC_OVERLAY_FONT_TITLE, /*full_viewport=*/true);
         if (error_) {
             dashboard_panel(renderer, {
                 {request_label(), PTC_OVERLAY_FONT_BODY_LG, pal.text_primary},
@@ -1005,12 +1060,10 @@
             flow_text(renderer, ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_NOT_BEEN_OBTAINED_YET), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary);
         }
         end_page(renderer);
-        page_layout_.primary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, cw, PTC_OVERLAY_RAIL_H);
+        // B Back lives in the Tesla host footer; the full 575px viewport fits
+        // all three core rule cards on the first screen without scrolling.
+        page_layout_.primary = {};
         page_layout_.secondary = {};
-        const char *back_label = ptc_ui_text(PTC_UI_T_B_BACK_2);
-        draw_button(renderer, page_layout_.primary, back_label, pal.accent, true,
-            fit_rail_button_size(renderer, back_label, page_layout_.primary.w),
-            status_details_focus_ == 0);
     }
 
     void draw_keypad(tsl::gfx::Renderer *renderer, int cx, int cy, int cw)
@@ -1035,9 +1088,9 @@
         // the row whole and still leaves 19px above the code slots (absolute 116).
         // Count and console date then fill the 180..244 band between the slots and
         // the keypad instead of running into the slot outlines.
-        const int status_y = default_scheme ? 84 : 100;
-        const int meta_y = default_scheme ? 192 : 208;
-        const int date_y = default_scheme ? 218 : 234;
+        const int status_y = default_scheme ? 88 : 100;
+        const int meta_y = default_scheme ? 208 : 216;
+        const int date_y = default_scheme ? 236 : 244;
         draw_localized(renderer, line, false, cx + 14, cy + status_y, PTC_OVERLAY_FONT_BODY,
             renderer->a(control_disabled() ? pal.warning : pal.success));
         const int left_width = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
@@ -1097,9 +1150,11 @@
         }
         draw_button(renderer, ptc_overlay_backspace_rect(cx, cy), ptc_ui_text(PTC_UI_T_X_BACKSPACE), pal.warning, false, PTC_OVERLAY_FONT_SECONDARY, keypad_nav_focus_ == 10);
         draw_button(renderer, ptc_overlay_clear_rect(cx, cy), ptc_ui_text(PTC_UI_T_OVERLAY_CLEAR), pal.danger, false, PTC_OVERLAY_FONT_SECONDARY, keypad_nav_focus_ == 11);
-        // Submit and navigation live outside the scrolled viewport; release the
-        // clip so the rail row is not cut at the viewport bottom.
+        // Parent entry and submit share the unified bottom rail; B Cancel lives
+        // in the Tesla host footer (native x < 150 touch-back hitbox).
         end_page(renderer);
+        page_layout_.secondary = {};
+        page_layout_.parent = ptc_overlay_keypad_nav_parent_rect(cx, cy, cw);
         page_layout_.primary = ptc_overlay_submit_rect(cx, cy, cw);
         const bool unavailable = has_status_snapshot_ && !status_is_stale() &&
             (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped || summary.dock_unlimited_capped);
@@ -1111,12 +1166,11 @@
             unavailable ? ptc_ui_text(PTC_UI_T_OVERLAY_CODE_UNAVAILABLE) :
             bridge_->waiting ? ptc_ui_text(PTC_UI_T_BACKGROUND_PROCESSING) :
             ready ? ptc_ui_text(PTC_UI_T_OVERLAY_SUBMIT) : remaining;
+        const char *parent_label = ptc_ui_text(PTC_UI_T_R_PARENT_AREA);
+        draw_button(renderer, page_layout_.parent, parent_label, pal.accent, false,
+            fit_rail_button_size(renderer, parent_label, page_layout_.parent.w), keypad_nav_focus_ == 12);
         draw_button(renderer, page_layout_.primary, submit, ready ? pal.accent : unavailable ? pal.warning : pal.text_secondary,
             ready, fit_rail_button_size(renderer, submit, page_layout_.primary.w), keypad_nav_focus_ == 13, ready);
-        page_layout_.secondary = ptc_overlay_keypad_nav_back_rect(cx, cy);
-        page_layout_.parent = ptc_overlay_keypad_nav_parent_rect(cx, cy, cw);
-        draw_button(renderer, page_layout_.secondary, ptc_ui_text(PTC_UI_T_B_CANCEL_2), pal.text_primary, false, PTC_OVERLAY_FONT_BTN, keypad_nav_focus_ == 12);
-        draw_button(renderer, page_layout_.parent, ptc_ui_text(PTC_UI_T_R_PARENT_AREA), pal.accent, true, PTC_OVERLAY_FONT_BTN, keypad_nav_focus_ == 14);
     }
 
     // ---- Child overview: status banner + rule chain ------------------------
@@ -1687,6 +1741,7 @@
             }
         }
 
+        end_page(renderer);
         page_layout_.secondary = ptc_overlay_rect(cx, cy + PTC_OVERLAY_RAIL_Y, 154, PTC_OVERLAY_RAIL_H);
         page_layout_.primary = ptc_overlay_rect(cx + 166, cy + PTC_OVERLAY_RAIL_Y, cw - 166, PTC_OVERLAY_RAIL_H);
 
@@ -1699,8 +1754,131 @@
         draw_button(renderer, page_layout_.primary, confirm_text,
             pal.accent, true, fit_rail_button_size(renderer, confirm_text, cw - 166),
             language_confirm_focus_ == 5);
+    }
 
-        end_page(renderer);
+    OverlayFooterSpec current_footer_spec() const
+    {
+        const auto &pal = current_palette();
+        OverlayFooterSpec spec{};
+        spec.left_color = pal.text_primary;
+        spec.action_color = pal.text_primary;
+
+        if (language_confirm_active_) {
+            spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CANCEL);
+            spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CONFIRM);
+            spec.action_color = pal.accent;
+            return spec;
+        }
+        if (access_recovery_visible()) {
+            if (parent_view_ == ParentView::Pin) {
+                spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+                if (!parent_pin_standard_keypad_ || parent_pin_focus_ == 14) {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_VERIFY);
+                    spec.action_color = pal.accent;
+                } else {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_INPUT);
+                }
+                return spec;
+            }
+            if (parent_view_ == ParentView::Actions) {
+                spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+                if (parent_action_ < 0) {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_REFRESH);
+                    spec.action_color = pal.accent;
+                    return spec;
+                }
+                const auto selected = static_cast<PtcOverlayParentAction>(parent_action_);
+                if (parent_action_reason(selected) != nullptr) {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_UNAVAILABLE);
+                    spec.action_color = pal.warning;
+                } else if (parent_action_requires_hold(selected)) {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_HOLD_A);
+                    spec.action_color = pal.danger;
+                } else if (selected == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP ||
+                           selected == PTC_OVERLAY_PARENT_WAIVE_DOCK) {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CONTINUE);
+                    spec.action_color = pal.accent;
+                } else {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_EXECUTE);
+                    spec.action_color = pal.accent;
+                }
+                return spec;
+            }
+            if (parent_view_ == ParentView::Confirm) {
+                spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CANCEL);
+                const auto action = static_cast<PtcOverlayParentAction>(parent_action_);
+                const bool immediate = parent_action_ != PTC_OVERLAY_PARENT_WAIVE_DOCK &&
+                    displayed_summary_.bedtime_active && displayed_summary_.bedtime_skipped;
+                if (parent_action_reason(action) != nullptr) {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_UNAVAILABLE);
+                    spec.action_color = pal.warning;
+                } else if (immediate) {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_HOLD_A);
+                    spec.action_color = pal.danger;
+                } else {
+                    spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CONFIRM);
+                    spec.action_color = pal.accent;
+                }
+                return spec;
+            }
+            spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+            spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+            return spec;
+        }
+        if (success_visible_) {
+            spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+            spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+            return spec;
+        }
+        if (preview_ready_) {
+            spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CANCEL);
+            const auto level = ptc_overlay_preview_visual_level(
+                preview_summary_.remaining_after_available,
+                preview_summary_.remaining_after_minutes,
+                preview_summary_.preview_capped,
+                preview_summary_.converts_unlimited_to_limited);
+            if (level == PTC_OVERLAY_PREVIEW_DANGER) {
+                spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_HOLD_A);
+                spec.action_color = pal.danger;
+            } else {
+                spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CONFIRM);
+                spec.action_color = pal.accent;
+            }
+            return spec;
+        }
+        if (status_expanded_) {
+            spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK);
+            if (error_ || !has_status_snapshot_ || status_details_focus_ == 2) {
+                spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_REFRESH);
+                spec.action_color = pal.accent;
+            } else {
+                spec.action_text = ptc_ui_text(details_tech_expanded_ ?
+                    PTC_UI_T_OVERLAY_NAV_COLLAPSE : PTC_UI_T_OVERLAY_NAV_EXPAND);
+                spec.action_color = pal.accent;
+            }
+            return spec;
+        }
+        if (is_keypad_mode() && !child_is_restricted()) {
+            spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CANCEL);
+            const auto &summary = displayed_summary_;
+            const bool unavailable = has_status_snapshot_ && !status_is_stale() &&
+                (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped || summary.dock_unlimited_capped);
+            const bool ready = !control_disabled() && !unavailable && !bridge_->waiting &&
+                input_ != nullptr && ptc_overlay_input_can_submit(input_);
+            if (ready) {
+                spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_SUBMIT);
+                spec.action_color = pal.accent;
+            } else if (keypad_nav_focus_ == 12) {
+                spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+                spec.action_color = pal.accent;
+            } else {
+                spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_INPUT);
+            }
+            return spec;
+        }
+        spec.left_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CLOSE);
+        spec.action_text = ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK);
+        return spec;
     }
 
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)

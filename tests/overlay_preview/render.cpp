@@ -47,7 +47,7 @@ public:
     char pin_[PTC_AUTH_PIN_MAX_LEN + 1]{}, pin_message_[128]{};
     size_t pin_length_ = 0;
     int child_overview_focus_ = 0;
-    int status_details_focus_ = 0;
+    int status_details_focus_ = 1;
     int parent_pin_focus_ = 1;
     int preview_focus_ = 1;
     int confirm_focus_ = 1;
@@ -173,8 +173,8 @@ static void test_disabled_status(const char *font_path)
                 view.keypad_active_ = page == 3;
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
-                const bool keypad = page == 3 && !view.child_is_restricted();
-                const int font = keypad ? PTC_OVERLAY_FONT_BODY : PTC_OVERLAY_FONT_DISPLAY;
+                const bool compact_state = (page == 2) || (page == 3 && !view.child_is_restricted());
+                const int font = compact_state ? PTC_OVERLAY_FONT_BODY : PTC_OVERLAY_FONT_DISPLAY;
                 for (const auto &line : overlay_wrap(&renderer, ptc_ui_text(title), font, 380)) {
                     bool found = false;
                     for (const auto &run : renderer.text_runs) {
@@ -230,14 +230,16 @@ static void test_text_layout(tsl::gfx::Renderer &renderer)
     const auto sanitized = overlay_wrap(&renderer, "A😀B", 32, 380);
     require(sanitized.size() == 1 && sanitized[0] == "AB", "unsupported emoji is removed before measurement");
     PreviewView view;
-    const PtcUiTextId small_buttons[] = {PTC_UI_T_B_CANCEL_2, PTC_UI_T_B_BACK_2, PTC_UI_T_Y_RE_VERIFY};
+    const PtcUiTextId small_buttons[] = {PTC_UI_T_B_CANCEL_2, PTC_UI_T_B_BACK_2,
+        PTC_UI_T_Y_RE_VERIFY, PTC_UI_T_R_PARENT_AREA};
     for (const auto label : small_buttons) {
         const int size = view.fit_rail_button_size(&renderer, ptc_ui_text(label), 154);
         require(overlay_text_height(&renderer, ptc_ui_text(label), 130, size) <=
             PTC_OVERLAY_RAIL_H - 8, "localized small footer button must fit the rail");
     }
     const PtcUiTextId large_buttons[] = {PTC_UI_T_A_CONFIRM_2, PTC_UI_T_HOLD_A_TO_CONFIRM,
-        PTC_UI_T_HOLD_A_1S_TO_RESTORE, PTC_UI_T_VERIFY_PIN, PTC_UI_T_R_PARENT_AREA};
+        PTC_UI_T_HOLD_A_1S_TO_RESTORE, PTC_UI_T_VERIFY_PIN, PTC_UI_T_OVERLAY_SUBMIT,
+        PTC_UI_T_OVERLAY_CODE_UNAVAILABLE};
     for (const auto label : large_buttons) {
         const int size = view.fit_rail_button_size(&renderer, ptc_ui_text(label), 250);
         require(overlay_text_height(&renderer, ptc_ui_text(label), 226, size) <=
@@ -521,10 +523,9 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
         // A watched countdown that reaches zero asks for one immediate re-read.
         require(view.countdown_recheck_pending_ == (i == 3),
             "only the expired rest countdown schedules a status re-read");
-        renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 13});
+        renderer.drawRect(0, 648, 448, 72, {0, 0, 0, 13});
         renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
-        draw_overlay_footer_hints(&renderer, {14, 14, 15, 15});
-        renderer.drawString("12:34", false, 448 - 30 - 55, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
+        draw_overlay_footer_hints(&renderer, view.current_footer_spec(), "12:34", {14, 14, 15, 15});
         renderer.save((dir / (std::string(names[i]) + ".ppm")).string());
     }
 }
@@ -866,6 +867,85 @@ static void test_surface_outline(tsl::gfx::Renderer &renderer)
     }
 }
 
+static void test_dynamic_footer_hints(const char *font_path)
+{
+    const auto saved_language = ptc_ui_language_get_resolved();
+    for (const float width_scale : {1.0f, 1.35f}) {
+        tsl::gfx::Renderer renderer(font_path);
+        renderer.horizontal_metric_scale = width_scale;
+        for (const auto language : {PTC_UI_LANGUAGE_SIMPLIFIED, PTC_UI_LANGUAGE_ENGLISH,
+                 PTC_UI_LANGUAGE_TRADITIONAL}) {
+            ptc_ui_language_set_resolved(language);
+            const auto &pal = DARK_OVERLAY_PALETTE;
+            const OverlayFooterSpec specs[] = {
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CLOSE), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_OK), pal.text_primary},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_EXECUTE), pal.accent},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CONTINUE), pal.accent},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_HOLD_A), pal.danger},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_UNAVAILABLE), pal.warning},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_REFRESH), pal.accent},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_EXPAND), pal.accent},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_COLLAPSE), pal.accent},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_BACK), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_VERIFY), pal.accent},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CANCEL), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_INPUT), pal.text_primary},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CANCEL), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_SUBMIT), pal.accent},
+                {ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CANCEL), pal.text_primary,
+                 ptc_ui_text(PTC_UI_T_OVERLAY_NAV_CONFIRM), pal.accent},
+            };
+            for (const auto &spec : specs) {
+                const auto geom = draw_overlay_footer_hints(&renderer, spec, "23:59", pal.text_primary);
+                require(geom.left_x == PTC_OVERLAY_CONTENT_X && geom.left_x + geom.left_w < 150,
+                    "footer B hint must stay inside libtesla's x<150 touch-back zone");
+                require(geom.action_x >= PTC_OVERLAY_FOOTER_SAFE_X && geom.action_w > 0,
+                    "footer action hint must start outside libtesla's x<150 touch-back zone");
+                require(geom.action_x + geom.action_w <= geom.clock_x - 8,
+                    "footer action hint must not collide with the clock under 1.35x width stress");
+                require(geom.clock_x + geom.clock_w <= 448 - PTC_OVERLAY_CONTENT_X,
+                    "footer clock must stay inside the right sidebar margin");
+            }
+            // Verify standard PIN numpad mode fits on one screen with no duplicate backspace.
+            PtcOverlayBridge bridge{};
+            PtcOverlayInput input{};
+            ptc_overlay_input_init(&input);
+            PreviewView pin_view;
+            pin_view.bridge_ = &bridge;
+            pin_view.input_ = &input;
+            pin_view.parent_view_ = ParentView::Pin;
+            pin_view.parent_pin_standard_keypad_ = true;
+            pin_view.displayed_summary_.valid = true;
+            pin_view.displayed_summary_.remaining_available = true;
+            pin_view.displayed_summary_.remaining_minutes = 25;
+            pin_view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+                PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+            require(pin_view.page_layout_.scroll_max == 0,
+                "standard PIN numpad must fit on one screen without scrolling");
+            require(pin_view.page_layout_.backspace.w == 0 && pin_view.page_layout_.secondary.w == 0 &&
+                pin_view.page_layout_.primary.w == PTC_OVERLAY_CONTENT_W,
+                "standard PIN numpad removes duplicate backspace and B back rail buttons");
+            const auto pin_footer = pin_view.current_footer_spec();
+            require(std::strcmp(pin_footer.action_text, ptc_ui_text(PTC_UI_T_OVERLAY_NAV_INPUT)) == 0,
+                "numpad PIN footer advertises A Input while focused on keypad");
+            pin_view.parent_pin_standard_keypad_ = false;
+            const auto dial_footer = pin_view.current_footer_spec();
+            require(std::strcmp(dial_footer.action_text, ptc_ui_text(PTC_UI_T_OVERLAY_NAV_VERIFY)) == 0,
+                "dial-pad PIN footer advertises + Verify instead of misleading A OK");
+        }
+    }
+    ptc_ui_language_set_resolved(saved_language);
+    std::puts("PASS: Dynamic overlay host footer fits all three languages and clears x<150 touch-back");
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) return 2;
     try {
@@ -878,6 +958,7 @@ int main(int argc, char **argv) {
         test_parent_cards(renderer);
         test_surface_outline(renderer);
         test_child_header_controls(argv[1]);
+        test_dynamic_footer_hints(argv[1]);
         if (std::strcmp(argv[2], "--check-header") == 0) {
             test_child_button_bounds(argv[1], "build/host/ui-regression-previews/overlay");
             std::puts("PASS: Overlay header brand, controls and focus in three languages");
@@ -1313,10 +1394,13 @@ int main(int argc, char **argv) {
                     !view.language_confirm_active_ &&
                     (!view.is_keypad_mode() || view.child_is_restricted());
                 if (!child_root_page) {
+                    const bool full_vp_page = (view.parent_view_ == ParentView::Actions) || view.status_expanded_;
+                    const int expected_vp_bottom = full_vp_page ?
+                        PTC_OVERLAY_FULL_VIEWPORT_BOTTOM : PTC_OVERLAY_VIEWPORT_BOTTOM;
                     require(view.page_layout_.viewport.y == PTC_OVERLAY_CONTENT_Y +
                         PTC_OVERLAY_HEADER_H + 8, "top path header must leave the shared viewport start");
-                    require(view.page_layout_.viewport.h == PTC_OVERLAY_VIEWPORT_BOTTOM -
-                        (PTC_OVERLAY_HEADER_H + 8), "top path header must leave the shared viewport height");
+                    require(view.page_layout_.viewport.h == expected_vp_bottom -
+                        (PTC_OVERLAY_HEADER_H + 8), "top path header must leave the expected viewport height");
                     const char *current = nullptr;
                     if (view.access_recovery_visible()) {
                         if (view.parent_view_ == ParentView::Pin) current = ptc_ui_text(PTC_UI_T_NAV_VERIFY);
@@ -1343,22 +1427,27 @@ int main(int argc, char **argv) {
                     }
                     require(current_found, "top path bar must draw the current node");
                     require(!title_found, "top path bar must not draw a 34px page title");
-                    if (view.is_keypad_mode()) {
-                        require(view.page_layout_.primary.y == PTC_OVERLAY_CONTENT_Y +
-                            PTC_OVERLAY_SUBMIT_Y && view.page_layout_.primary.h == PTC_OVERLAY_SUBMIT_H,
-                            "keypad submit uses the shared rail contract");
-                        require(view.page_layout_.primary.y + view.page_layout_.primary.h ==
-                            PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_VIEWPORT_BOTTOM,
-                            "keypad submit ends at the viewport bottom");
-                        require(view.page_layout_.secondary.y == PTC_OVERLAY_CONTENT_Y +
-                            PTC_OVERLAY_RAIL_Y && view.page_layout_.secondary.h == PTC_OVERLAY_RAIL_H &&
-                            view.page_layout_.parent.y == PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_Y &&
-                            view.page_layout_.parent.h == PTC_OVERLAY_RAIL_H,
-                            "keypad navigation uses the shared footer rail");
+                    if (full_vp_page) {
+                        require(view.page_layout_.primary.w == 0 && view.page_layout_.secondary.w == 0,
+                            "full-viewport pages delegate B/A key hints to the Tesla host footer");
+                    } else if (view.is_keypad_mode()) {
+                        require(view.page_layout_.secondary.w == 0,
+                            "keypad delegates B Cancel to the Tesla host footer");
+                        require(view.page_layout_.parent.y == PTC_OVERLAY_CONTENT_Y +
+                            PTC_OVERLAY_RAIL_Y && view.page_layout_.parent.h == PTC_OVERLAY_RAIL_H &&
+                            view.page_layout_.primary.y == PTC_OVERLAY_CONTENT_Y +
+                            PTC_OVERLAY_RAIL_Y && view.page_layout_.primary.h == PTC_OVERLAY_RAIL_H &&
+                            view.page_layout_.parent.x + view.page_layout_.parent.w < view.page_layout_.primary.x,
+                            "keypad parent and submit share the unified footer rail");
                         require(region_has_ink(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_Y,
                             PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_RAIL_BOTTOM),
-                            "keypad navigation must be pixel-visible");
+                            "keypad rail must be pixel-visible");
                     } else {
+                        if (view.parent_view_ == ParentView::Pin) {
+                            require(view.page_layout_.secondary.w == 0 &&
+                                view.page_layout_.primary.w == PTC_OVERLAY_CONTENT_W,
+                                "parent PIN delegates B Back to the Tesla host footer and gives Verify full rail width");
+                        }
                         if (view.page_layout_.primary.w > 0)
                             require(view.page_layout_.primary.y == PTC_OVERLAY_CONTENT_Y +
                                 PTC_OVERLAY_RAIL_Y && view.page_layout_.primary.h == PTC_OVERLAY_RAIL_H,
@@ -1420,16 +1509,18 @@ int main(int argc, char **argv) {
                 std::fill(renderer.pixels.begin(), renderer.pixels.end(), 17);
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
-                renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 13});
+                renderer.drawRect(0, 648, 448, 72, {0, 0, 0, 13});
                 renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
-                draw_overlay_footer_hints(&renderer, {14, 14, 15, 15});
-
                 // Documentation samples must not dirty the source tree whenever
                 // the build clock advances. The installed Overlay keeps live time.
-                const char *time_buf = "12:34";
-                const auto time_measured = renderer.drawString(time_buf, false, 0, 0, PTC_OVERLAY_FONT_BTN, tsl::style::color::ColorTransparent);
-                const int time_x = 448 - 30 - static_cast<int>(time_measured.first);
-                renderer.drawString(time_buf, false, time_x, 693, PTC_OVERLAY_FONT_BTN, {14, 14, 15, 15});
+                const auto footer_geom = draw_overlay_footer_hints(&renderer,
+                    view.current_footer_spec(), "12:34", {14, 14, 15, 15});
+                require(footer_geom.left_x == PTC_OVERLAY_CONTENT_X &&
+                    footer_geom.left_x + footer_geom.left_w < 150,
+                    "rendered footer B hint must stay inside libtesla's x<150 touch-back zone");
+                require(footer_geom.action_x >= PTC_OVERLAY_FOOTER_SAFE_X &&
+                    footer_geom.action_x + footer_geom.action_w <= footer_geom.clock_x - 8,
+                    "rendered footer action hint must clear x<150 and the clock");
                 renderer.save((dir / (std::string(scenes[scene]) + ".ppm")).string());
             }
             require(child_overflows == 0, "ordinary child pages must fit on one screen in all three languages");

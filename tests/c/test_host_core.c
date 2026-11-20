@@ -1349,7 +1349,15 @@ static void test_overlay_keypad_navigation(void)
     (void)ptc_overlay_keypad_navigate(&input, &focus, down, 0, 0);
     check_int(focus, 11, "nine reaches clear");
     (void)ptc_overlay_keypad_navigate(&input, &focus, down, 0, 0);
-    check_int(focus, 13, "fourth row reaches submit");
+    check_int(focus, 13, "fourth row clear reaches submit");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, left, 0, 0);
+    check_int(focus, 12, "submit moves left to parent zone");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, up, 0, 0);
+    check_int(focus, 10, "parent zone returns to backspace above it");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, down, 0, 0);
+    check_int(focus, 12, "backspace reaches parent zone below it");
+    (void)ptc_overlay_keypad_navigate(&input, &focus, right, 0, 0);
+    check_int(focus, 13, "parent zone moves right to submit");
     (void)ptc_overlay_keypad_navigate(&input, &focus, up, 0, 0);
     check_true(focus == -1 && input.cursor == 0, "submit returns to zero above it");
 
@@ -1371,8 +1379,8 @@ static void test_overlay_keypad_navigation(void)
 
     /* Traverse the production focus graph; every digit and visible action must
        be reachable without touch (including television output). */
-    bool seen[15] = {false};
-    int queue[15], count = 1;
+    bool seen[14] = {false};
+    int queue[14], count = 1;
     queue[0] = 1;
     seen[1] = true;
     const unsigned int directions[] = {up, down, left, right};
@@ -1383,14 +1391,14 @@ static void test_overlay_keypad_navigation(void)
             if (focus == -1) input.cursor = (unsigned int)queue[next];
             (void)ptc_overlay_keypad_navigate(&input, &focus, directions[i], 0, 0);
             int target = focus == -1 ? (int)input.cursor : focus;
-            check_true(target >= 0 && target < 15, "keypad navigation stays inside visible focus targets");
-            if (target >= 0 && target < 15 && !seen[target]) {
+            check_true(target >= 0 && target < 14, "keypad navigation stays inside visible focus targets");
+            if (target >= 0 && target < 14 && !seen[target]) {
                 seen[target] = true;
                 queue[count++] = target;
             }
         }
     }
-    check_int(count, 15, "all ten digits and five actions are controller reachable");
+    check_int(count, 14, "all ten digits and four actions are controller reachable");
 }
 
 static void test_pending_redemption_recovery_marker(void)
@@ -1528,40 +1536,39 @@ static void test_overlay_layout_geometry(void)
     check_int(fifth_slot.x - fourth_slot.x - fourth_slot.w, 14, "code groups have a visible center gap");
     check_int(first_slot.x - 16, 432 - last_slot.x - last_slot.w, "both code groups fit with symmetric margins");
     check_int(PTC_OVERLAY_SLOT_H, 64, "code slots have room for 40px digits");
-    check_int(PTC_OVERLAY_SLOT_Y, 104, "code slots sit below the path header");
-    check_int(PTC_OVERLAY_KEYPAD_Y, 232, "keypad starts below count and date");
+    check_int(PTC_OVERLAY_SLOT_Y, 112, "code slots sit below the path header with breathing room");
+    check_int(PTC_OVERLAY_KEYPAD_Y, 264, "keypad starts below count and date");
     check_int(PTC_OVERLAY_RAIL_Y, 575, "footer rail starts at 587 absolute");
     check_int(PTC_OVERLAY_RAIL_BOTTOM, 627, "footer rail ends at 639 absolute");
-    check_int(PTC_OVERLAY_VIEWPORT_BOTTOM, 567, "viewport ends at 579 absolute");
-    check_int(PTC_OVERLAY_SUBMIT_Y, 507, "submit starts at 519 absolute");
-    check_int(PTC_OVERLAY_SUBMIT_H, 60, "submit ends at 579 absolute");
+    check_int(PTC_OVERLAY_VIEWPORT_BOTTOM, 567, "rail viewport ends at 579 absolute");
+    check_int(PTC_OVERLAY_FULL_VIEWPORT_BOTTOM, 627, "full viewport ends at 639 absolute");
+    check_true(PTC_OVERLAY_FOOTER_SAFE_X >= 150, "footer action slot clears libtesla x<150 touch-back zone");
+    check_int(PTC_OVERLAY_SUBMIT_Y, PTC_OVERLAY_RAIL_Y, "submit shares the unified footer rail");
+    check_int(PTC_OVERLAY_SUBMIT_H, PTC_OVERLAY_RAIL_H, "submit matches the unified rail height");
     check_true(PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H < PTC_OVERLAY_KEYPAD_Y,
         "input count and date fit between slots and keypad");
-    /* Slots end at 168 and the keypad starts at 232; the 22px count and date
-       lines need 8+20+6+20 = 54px of that 64px band, leaving 5px below. */
-    check_true(PTC_OVERLAY_KEYPAD_Y - (PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H) >= 54,
-        "slot-to-keypad band still fits the count and console date");
+    check_true(PTC_OVERLAY_KEYPAD_Y - (PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H) >= 72,
+        "slot-to-keypad band comfortably fits count and console date");
     check_true(PTC_OVERLAY_KEYPAD_Y + 3 * PTC_OVERLAY_KEY_ROW_STEP + PTC_OVERLAY_KEY_H <=
-        PTC_OVERLAY_SUBMIT_Y, "keypad ends above submit");
+        PTC_OVERLAY_VIEWPORT_BOTTOM, "keypad ends cleanly above the footer rail");
     const int keypad_origin_y = PTC_OVERLAY_CONTENT_Y;
     for (unsigned i = 0; i < PTC_OVERLAY_KEY_COUNT; ++i) {
         PtcOverlayRect key = ptc_overlay_key_rect(16, keypad_origin_y, i);
         check_int(key.w, 124, "keypad key width stays comfortable");
-        check_int(key.h, 56, "keypad key height grows with the font");
-        check_true(key.y + key.h <= keypad_origin_y + PTC_OVERLAY_SUBMIT_Y,
-            "all ten digit keys end above submit");
+        check_int(key.h, 64, "keypad key height uses the reclaimed vertical room");
+        check_true(key.y + key.h <= keypad_origin_y + PTC_OVERLAY_VIEWPORT_BOTTOM,
+            "all ten digit keys end above the footer rail");
         check_true(ptc_overlay_rect_contains(key, key.x + key.w - 1, key.y + key.h - 1),
             "visible key edges receive touches");
         check_true(!ptc_overlay_rect_contains(key, key.x + key.w, key.y),
             "key touch target ends at the visible edge");
     }
-    PtcOverlayRect submit = ptc_overlay_submit_rect(16, keypad_origin_y, 416);
-    PtcOverlayRect back = ptc_overlay_keypad_nav_back_rect(16, keypad_origin_y);
     PtcOverlayRect parent = ptc_overlay_keypad_nav_parent_rect(16, keypad_origin_y, 416);
-    check_true(submit.y + submit.h < back.y, "submit does not overlap navigation");
-    check_true(back.x + back.w < parent.x, "navigation buttons remain separate");
-    check_int(parent.y + parent.h, 639, "fixed keypad buttons align with the rail bottom");
-    check_true(parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
+    PtcOverlayRect submit = ptc_overlay_submit_rect(16, keypad_origin_y, 416);
+    check_int(parent.y, submit.y, "parent zone and submit share the unified rail row");
+    check_true(parent.x + parent.w < submit.x, "rail buttons remain cleanly separated");
+    check_int(submit.y + submit.h, 639, "fixed keypad buttons align with the rail bottom");
+    check_true(submit.y + submit.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "fixed keypad buttons stay above the Tesla footer");
     check_true(ptc_overlay_remaining_refresh_pending(true, true),
         "submitted code never displays stale remaining time as final");

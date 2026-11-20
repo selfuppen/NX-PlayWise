@@ -220,21 +220,24 @@
             return true;
         }
         if (status_expanded_) {
+            const bool has_diag_toggle = !error_ && has_status_snapshot_;
+            if (!has_diag_toggle) status_details_focus_ = 2;
+            else if (status_details_focus_ != 1 && status_details_focus_ != 2) status_details_focus_ = 1;
             if (keysDown & HidNpadButton_Up) {
-                if (status_details_focus_ == 0) status_details_focus_ = 1;
-                else if (status_details_focus_ == 1) status_details_focus_ = 2;
-                if (status_details_focus_ == 1) {
-                    page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
-                        page_layout_.viewport, page_layout_.status,
-                        static_cast<int>(page_scroll_target_), page_layout_.scroll_max));
+                if (has_diag_toggle && status_details_focus_ == 1) {
+                    status_details_focus_ = 2;
+                    page_scroll_target_ = 0.0f;
                 }
             } else if (keysDown & HidNpadButton_Down) {
-                if (status_details_focus_ == 2) status_details_focus_ = 1;
-                else if (status_details_focus_ == 1) status_details_focus_ = 0;
-                if (status_details_focus_ == 1) {
+                if (has_diag_toggle && status_details_focus_ == 2) {
+                    status_details_focus_ = 1;
                     page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_rect(
                         page_layout_.viewport, page_layout_.status,
                         static_cast<int>(page_scroll_target_), page_layout_.scroll_max));
+                } else if (has_diag_toggle && status_details_focus_ == 1 &&
+                           details_tech_expanded_ && page_layout_.scroll_max > 0) {
+                    page_scroll_target_ = std::clamp(page_scroll_target_ + 80.0f,
+                        0.0f, static_cast<float>(page_layout_.scroll_max));
                 }
             }
             if (tapped && page_hit(page_layout_.refresh, tx, ty) && requests_enabled) {
@@ -243,18 +246,15 @@
                 else (void)begin_status_refresh();
                 return true;
             }
-            if ((keysDown & HidNpadButton_X) || (tapped && flow_hit(page_layout_.status, tx, ty))) {
+            if (has_diag_toggle && ((keysDown & HidNpadButton_X) || (tapped && flow_hit(page_layout_.status, tx, ty)))) {
                 status_details_focus_ = 1;
                 details_tech_expanded_ = !details_tech_expanded_;
                 return true;
             }
-            if ((keysDown & (HidNpadButton_B | HidNpadButton_Minus)) ||
-                (tapped && page_hit(page_layout_.primary, tx, ty))) {
+            if (keysDown & (HidNpadButton_B | HidNpadButton_Minus)) {
                 close_status_details();
             } else if (keysDown & HidNpadButton_A) {
-                if (status_details_focus_ == 0) {
-                    close_status_details();
-                } else if (status_details_focus_ == 1) {
+                if (status_details_focus_ == 1 && has_diag_toggle) {
                     details_tech_expanded_ = !details_tech_expanded_;
                 } else if (status_details_focus_ == 2 && requests_enabled) {
                     if (error_ && (last_request_kind_ == OverlayRequestKind::OfflineCode ||
@@ -314,12 +314,6 @@
                     child_overview_focus_ = 3;
                     open_status_details();
                 }
-                return true;
-            }
-            if (page_hit(page_layout_.secondary, tx, ty)) {
-                keypad_active_ = false;
-                keypad_nav_focus_ = -1;
-                ptc_overlay_input_init(input_);
                 return true;
             }
             const char *charset = ptc_overlay_input_charset();
@@ -488,13 +482,9 @@
                 } else if (keypad_nav_focus_ == 11) {
                     (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
                 } else if (keypad_nav_focus_ == 12) {
-                    keypad_active_ = false;
-                    keypad_nav_focus_ = -1;
-                    ptc_overlay_input_init(input_);
+                    open_parent_pin();
                 } else if (keypad_nav_focus_ == 13 && requests_enabled) {
                     (void)begin_code_preview();
-                } else if (keypad_nav_focus_ == 14) {
-                    open_parent_pin();
                 }
                 return true;
             }
