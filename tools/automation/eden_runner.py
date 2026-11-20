@@ -530,17 +530,22 @@ class Suite:
             time.sleep(0.1)
         raise GateError(f"UI precondition timeout: {expected}; no dependent input")
 
-    def action(self, button: str | None = None, target: str | None = None, hold_ms: int = 200) -> None:
+    def action(self, button: str | None = None, target: str | None = None, hold_ms: int = 200,
+               *, observe_quota_hold: bool = False) -> None:
         self.bounded()
         healthy_launch(self.client.tool("eden_status"))
         value = self.wait_action_ready()
         self.step += 1
-        # A slow software-rendered guest can sample too few held frames within
-        # 1400 host ms. Only an explicitly observed X05 danger-confirm A hold
-        # may use the 2500 ms ceiling; all other inputs keep their old limit.
+        # X05 danger-confirm A presses use a bounded 2500 ms ceiling. The
+        # safeguards quota case can instead observe actual guest hold progress
+        # until completion under its separate six-second deadline.
         x05_confirm = self.suite in ("input", "input-hold") and button == "A" and \
             value["ui"].get("overlay") == 3 and value["ui"].get("confirm_hold_required") is True
         require(200 <= hold_ms <= (2500 if x05_confirm else 1400), "input hold exceeds bound")
+        require(not observe_quota_hold or (self.suite == "safeguards" and button == "A" and
+                value["ui"]["overlay"] == 3 and value["ui"]["overlay_selection"] == 1 and
+                value["ui"]["confirm_hold_required"] is True and value["ui"]["confirm_hold_progress"] == 0),
+                "quota hold requires the selected, fresh danger confirmation")
         name = "eden_press_button" if button else "eden_touch_screen"
         if button:
             arguments = {"button": button}
@@ -554,13 +559,34 @@ class Suite:
         try:
             self.client.tool(name, {**arguments, "action": "down"})
             sampled = self.wait_input(True, after=value)
-            if button:
+            if observe_quota_hold:
+                self.wait_quota_hold(value, sampled, pressed_at + 6)
+            elif button:
                 remaining = hold_ms / 1000 if hold_ms >= 1000 else max(0, hold_ms / 1000 - (time.monotonic() - pressed_at))
                 time.sleep(remaining)
         finally:
             self.client.tool(name, {**arguments, "action": "up"})
         self.wait_input(False, after=sampled)
         time.sleep(0.15)
+
+    def wait_quota_hold(self, start: dict, sampled: dict, deadline: float) -> None:
+        saw_progress = False
+        first = start["ui"]
+        while time.monotonic() < min(self.deadline, deadline):
+            try:
+                value = self.observe()
+                require(value["instance"] == start["instance"], "quota hold changed guest instance")
+                if value["input_sequence"] >= sampled["input_sequence"] and value["input_active"]:
+                    ui = value["ui"]
+                    if (ui["overlay"] != 3 or ui["waiting"] or
+                            ui["quota_refresh_failed"] != first["quota_refresh_failed"] or
+                            (saw_progress and ui["confirm_hold_progress"] == 0)):
+                        return
+                    saw_progress |= ui["confirm_hold_progress"] > 0
+            except (OSError, ValueError, ObservationPending):
+                pass
+            time.sleep(0.025)
+        raise GateError("quota hold did not finish within six seconds; no replay")
 
     def wait_action_ready(self) -> dict:
         # A cached neutral snapshot may precede a slow first render of a new

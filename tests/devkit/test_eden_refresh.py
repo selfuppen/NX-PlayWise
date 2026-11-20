@@ -25,7 +25,7 @@ def fixture() -> tuple[dict, dict]:
             "result_ids": ids, "instance": "abcd", "sequence": index + 1,
             "rules_sha256": "1" * 64, "config_sha256": "2" * 64, "ledger_sha256": None,
             "ui": {"view": 1, "overlay": 0, "waiting": False, "restricted_now": 1,
-                   "today_minutes": 0, "parent_page": 1 if name.startswith("idle_") else 0}}
+                   "today_minutes": 1, "parent_page": 1 if name.startswith("idle_") else 0}}
     return stages, receipts
 
 

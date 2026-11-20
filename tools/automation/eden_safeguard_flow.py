@@ -55,6 +55,16 @@ def verify_safeguards(output: Path) -> None:
             changed["quota_refresh_failed"] is False and failed["quota_refresh_failed"] is True and
             quota["rules_before"] == quota["rules_after_change"] == quota["rules_after_failure"],
             "quota confirmation or failed refresh evidence differs")
+    reconfirmation = quota.get("reconfirmation")
+    if reconfirmation is not None:
+        status = read(output / f"receipts/{reconfirmation['status_id']}.json")
+        updated = ui("quota-reconfirmed-status")
+        require(status["type"] == "status" and status["status"] == "ok" and
+                status["state"]["played_minutes"] == updated["played_minutes"] > failed["played_minutes"] and
+                updated["overlay"] == 3 and updated["confirm_hold_required"] is True and
+                updated["quota_refresh_failed"] is False and updated["quota_draft_minutes"] == minutes and
+                reconfirmation["rules_sha256"] == quota["rules_before"],
+                "second status change did not preserve the draft for explicit reconfirmation")
     writes = [read(path) for path in (output / "receipts").glob("*.json")]
     writes = [row for row in writes if row["type"] == "set_today_limit"]
     require(len(writes) == 1 and writes[0]["request_id"] == quota["write_id"] and
@@ -237,9 +247,9 @@ class SafeguardFlow(MainFlow):
         self.capture("quota-changed")
         after_change = digest(self.app / "rules.json")
         failure = self.quota_fixture("fail")
-        self.confirm()
-        self.wait_ui(overlay=3, waiting=False, quota_refresh_failed=True,
-                     quota_draft_minutes=minutes, confirm_hold_progress=0)
+        self.action(button="A", observe_quota_hold=True)
+        failed = self.wait_ui(overlay=3, waiting=False, quota_refresh_failed=True,
+                              quota_draft_minutes=minutes, confirm_hold_progress=0)
         self.capture("quota-failed")
         after_failure = digest(self.app / "rules.json")
         require(not failure.exists() and baseline == after_change == after_failure and
@@ -247,11 +257,30 @@ class SafeguardFlow(MainFlow):
                     for request_id in self.ids() - before),
                 "a write escaped the quota recheck or failed refresh")
         before = self.ids()
-        self.confirm()
+        self.action(button="A", observe_quota_hold=True)
+        refreshed = self.wait_receipt("status", before)
+        ready = self.wait_ui(waiting=False, confirm_hold_progress=0, quota_refresh_failed=False)
+        reconfirmation = None
+        if ready["ui"]["overlay"] == 3:
+            # A simulated minute can elapse during the held retry. The UI must
+            # show the new usage and keep the write pending on a new decision.
+            current = ready["ui"]
+            rules_sha256 = digest(self.app / "rules.json")
+            require(refreshed["state"]["played_minutes"] == current["played_minutes"] > failed["ui"]["played_minutes"] and
+                    current["confirm_hold_required"] is True and current["quota_draft_minutes"] == minutes and
+                    rules_sha256 == baseline and
+                    all(read(self.app / f"results/{request_id}.json")["type"] == "status"
+                        for request_id in self.ids() - before) and
+                    not any(path.is_file() for folder in ("pending", "processing")
+                            for path in (self.app / "inbox" / folder).glob("*.json")),
+                    "confirmation remains open without a verified new usage endpoint")
+            save(self.output / "checkpoints/quota-reconfirmed-status.json", ready)
+            reconfirmation = {"status_id": refreshed["request_id"], "rules_sha256": rules_sha256}
+            self.action(button="A", observe_quota_hold=True)
         result = self.wait_receipt("set_today_limit", before)
         require(result["status"] == "ok", "fresh quota confirmation did not submit")
         self.wait_ui(overlay=0, waiting=False)
         self.checked("quota_recheck", ["crossing the draft allowance now requires a hold", "failed refresh keeps draft",
                      "only the fresh confirmation writes"], rules_before=baseline,
                      rules_after_change=after_change, rules_after_failure=after_failure,
-                     draft_minutes=minutes, write_id=result["request_id"])
+                     draft_minutes=minutes, write_id=result["request_id"], reconfirmation=reconfirmation)

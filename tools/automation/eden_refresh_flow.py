@@ -26,7 +26,7 @@ def validate_stages(stages: dict[str, dict], receipts: dict[str, dict]) -> None:
                 row["config_sha256"] == first["config_sha256"] and row["ledger_sha256"] == first["ledger_sha256"],
                 "navigation changed business data or instance")
         require(row["ui"]["view"] == 1 and row["ui"]["overlay"] == 0 and row["ui"]["waiting"] is False and
-                row["ui"]["restricted_now"] == 1 and row["ui"]["today_minutes"] == 0 and
+                row["ui"]["restricted_now"] == 1 and row["ui"]["today_minutes"] == 1 and
                 row["ui"]["parent_page"] == (1 if name.startswith("idle_") else 0),
                 "refresh checkpoint is not the expected visible page")
         if previous:
@@ -135,10 +135,10 @@ class RefreshFlow(MainFlow):
         return row
 
     def navigation_refresh(self) -> None:
-        # A normal zero-minute rule stops the simulated minute-change auto-refresh;
+        # A normal one-minute rule below the fixture's existing usage stops auto-refresh;
         # it makes navigation requests independently observable without test hooks.
-        self.today(0)
-        self.refresh(today_minutes=0, restricted_now=1)
+        self.today(1)
+        self.refresh(today_minutes=1, restricted_now=1)
         baseline = self.refresh_snapshot("baseline")
         self.capture("refresh-baseline")
         for _ in range(3):
@@ -147,7 +147,7 @@ class RefreshFlow(MainFlow):
         cached = self.refresh_snapshot("cached")
         require(cached["result_ids"] == baseline["result_ids"], "cached navigation submitted a request")
         self.capture("refresh-cached")
-        self.refresh(today_minutes=0, restricted_now=1)
+        self.refresh(today_minutes=1, restricted_now=1)
         self.refresh_snapshot("manual")
         self.capture("refresh-manual")
         self.page(1)
