@@ -425,6 +425,23 @@ def test_state_observation_requires_original_stream() -> None:
         rejected(lambda: verify_observation_streams(root))
 
 
+def test_pin_landing_waits_for_actual_modal() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60, "safeguards")
+        child = {"instance": "a", "sequence": 1, "ui": {"view": 0, "overlay": 0,
+                 "waiting": False, "overlay_animating": False}}
+        locked = {**child, "sequence": 2, "ui": {**child["ui"], "overlay": 13}}
+        with patch.object(suite, "observe", side_effect=[child, locked]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            assert suite.wait_ui(view=0, waiting=False, allowed_overlays=(13, 22)) == locked
+        entered = {**locked, "sequence": 3, "ui": {**locked["ui"], "overlay": 22}}
+        with patch.object(suite, "observe", return_value=entered):
+            assert suite.wait_ui(view=0, waiting=False, allowed_overlays=(13, 22)) == entered
+        for invalid in ((), (True,), (13, 13), ("22",)):
+            rejected(lambda: suite.wait_ui(allowed_overlays=invalid))
+
+
 def test_preview_cancel_does_not_exit_child() -> None:
     from tools.automation.eden_main_flow import MainFlow
     class Fake(MainFlow):
@@ -963,6 +980,7 @@ def main() -> None:
     test_post_screenshot_neutral_progress()
     test_observation_stream_partial_tail()
     test_state_observation_requires_original_stream()
+    test_pin_landing_waits_for_actual_modal()
     test_preview_cancel_does_not_exit_child()
     test_stale_observation_waits_without_input()
     test_sampled_input_releases_once_on_failure()

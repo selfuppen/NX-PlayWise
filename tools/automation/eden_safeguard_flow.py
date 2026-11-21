@@ -116,7 +116,9 @@ class SafeguardFlow(MainFlow):
         self.action(button="B")
         self.wait_ui(view=0, overlay=0)
         self.action(button="Minus")
-        entry = self.wait_ui(view=0, waiting=False)["ui"]
+        # Minus can be sampled before its modal is presented. Do not branch
+        # on the still-visible child page while waiting for the actual landing.
+        entry = self.wait_ui(view=0, waiting=False, allowed_overlays=(13, 22))["ui"]
         if entry["overlay"] == 13:
             self.wait_ui(overlay=13, auth_cooldown_seconds=0)
             self.action(button="A")

@@ -517,18 +517,25 @@ class Suite:
             raise ObservationPending("UI observation heartbeat stale; input prohibited")
         return value
 
-    def wait_ui(self, **expected: object) -> dict:
+    def wait_ui(self, *, allowed_overlays: tuple[int, ...] | None = None, **expected: object) -> dict:
+        require(allowed_overlays is None or (isinstance(allowed_overlays, tuple) and bool(allowed_overlays) and
+                all(type(item) is int for item in allowed_overlays) and len(set(allowed_overlays)) == len(allowed_overlays)),
+                "invalid allowed UI overlays")
         deadline = min(self.deadline, time.monotonic() + 20)
         while time.monotonic() < deadline:
             try:
                 value = self.observe()
-                if not value["ui"].get("overlay_animating", True) and all(value["ui"].get(key) == item for key, item in expected.items()):
+                if (not value["ui"].get("overlay_animating", True) and
+                        (allowed_overlays is None or value["ui"].get("overlay") in allowed_overlays) and
+                        all(value["ui"].get(key) == item for key, item in expected.items())):
                     save(self.output / f"observations/{self.step:03d}-{uuid.uuid4().hex[:8]}.json", value)
                     return value
             except (OSError, ValueError, ObservationPending):
                 pass
             time.sleep(0.1)
-        raise GateError(f"UI precondition timeout: {expected}; no dependent input")
+        raise GateError(f"UI precondition timeout: {expected}" +
+                        (f"; allowed overlays: {allowed_overlays}" if allowed_overlays is not None else "") +
+                        "; no dependent input")
 
     def action(self, button: str | None = None, target: str | None = None, hold_ms: int = 200,
                *, observe_quota_hold: bool = False) -> None:
