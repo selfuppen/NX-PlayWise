@@ -46,6 +46,7 @@ Consult these only for the relevant task; they are not global development or tes
 | In-app Online Update (Chinese only) | Store source, channels, independent backups, installation journal and recovery boundaries | [在线更新](设计/在线更新.md) |
 | [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md) | Handover, write transactions, private-command evidence and Device Lab boundaries | [PCTL集成架构](设计/PCTL集成架构.md) |
 | [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md) | Palette, semantic colors, edge-to-edge layout and software rendering rules | [视觉风格与设计指南](设计/视觉风格与设计指南.md) |
+| [UI layout review: batch 1, revision 2](设计/页面优化评审-20261121.md) (Chinese) | Revised child B, parent B-left/A-right and distinct Overlay grid/list proposals with archived screenshots | [页面优化评审](设计/页面优化评审-20261121.md) |
 | Holiday Calendar Data (Chinese only) | Built-in data versions, dates, official sources and fallback behavior | [节假日日历数据](设计/节假日日历.md) |
 
 ## Research — `调研/`

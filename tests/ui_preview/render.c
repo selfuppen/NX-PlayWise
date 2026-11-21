@@ -352,6 +352,8 @@ static int check_child_home_grid(bool dark)
     PtcUiRect details = ptc_ui_home_details_rect(false);
     PtcUiRect status = ptc_ui_child_status_rect();
     int bottom = hero.y + hero.h + 14 + forecast.h;
+    PtcUiRect balance = ptc_ui_child_balance_rect();
+    PtcUiRect last_guard = ptc_ui_child_guard_rect(2);
     int hint_max = details.w - 60;
     int hint_lines = count_wrapped_lines(ptc_ui_text(PTC_UI_T_USAGE_DETAILS_HINT), 13, hint_max, 99);
     bool fits = hero.x == forecast.x && hero.w == forecast.w &&
@@ -364,6 +366,8 @@ static int check_child_home_grid(bool dark)
         buffer.y - (submit.y + submit.h) == 14 &&
         details.y - (buffer.y + buffer.h) == 14 &&
         status.y - (details.y + details.h) == 14 &&
+        balance.y == hero.y && balance.y + balance.h == hero.y + hero.h &&
+        last_guard.y + last_guard.h == balance.y + balance.h - 16 &&
         hint_max > 0 && hint_lines >= 1 && hint_lines <= 3;
     fprintf(stderr, "%s: child home grid dark=%d hero=%d..%d forecast=%d..%d right=%d..%d hint_lines=%d\n",
         fits ? "PASS" : "FAIL", dark, hero.y, hero.y + hero.h, forecast.y,

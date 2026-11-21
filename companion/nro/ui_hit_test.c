@@ -526,16 +526,21 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
                 ptc_ui_child_forecast_source(model, i, now) != PTC_UI_CHILD_FORECAST_UNKNOWN)
                 return make_hit(PTC_UI_HIT_CHILD_FORECAST, i);
         }
-        if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
+        for (i = 0; i < 4; ++i) {
+            if (!ptc_ui_rect_contains(ptc_ui_child_action_rect(i), x, y)) continue;
+            PtcUiHitKind kind = ptc_ui_child_action_kind(model, i);
+            bool dock_blocked = ptc_ui_status_is_fresh(model, now) && model->dock_restriction_active;
+            bool unlimited = ptc_ui_status_is_fresh(model, now) &&
+                (model->unrestricted_today == 1 || model->eye_care_unlimited_capped || model->dock_unlimited_capped);
+            if (model->waiting) return make_hit(PTC_UI_HIT_NONE, 0);
+            if (kind == PTC_UI_HIT_CHILD_SUBMIT_CODE && (model->disable_flag_present || dock_blocked || unlimited))
+                return make_hit(PTC_UI_HIT_NONE, 0);
+            if (kind == PTC_UI_HIT_CHILD_BUFFER &&
+                (!model->daily_buffer_available || model->disable_flag_present || dock_blocked))
+                return make_hit(PTC_UI_HIT_NONE, 0);
+            return make_hit(kind, 0);
         }
-        if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
-        }
-        if (model->daily_buffer_available && !model->disable_flag_present && !model->waiting &&
-            ptc_ui_rect_contains(ptc_ui_child_buffer_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_BUFFER, 0);
-        }
+        if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
         if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_footer_rect(0), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }
@@ -548,7 +553,7 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(2), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);
         }
-        /* The parent area stays hidden; touch never exposes it. */
+        /* Parent entry still uses the existing PIN flow. */
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->view == PTC_UI_SETUP) {

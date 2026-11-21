@@ -1405,8 +1405,8 @@ static void test_release_hit_targets(void)
     model.view = PTC_UI_CHILD;
     code_input = ptc_ui_child_submit_rect();
     refresh = ptc_ui_child_refresh_rect();
-    check_int(code_input.x, 964, "child code input aligns with action panel");
-    check_int(code_input.w, 268, "child code input uses the action panel width");
+    check_int(code_input.x, 920, "child code input aligns with action panel");
+    check_int(code_input.w, 312, "child code input uses the action panel width");
     check_int(refresh.y, 660, "child refresh stays in the footer");
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
     model.disable_flag_present = true;
@@ -2761,9 +2761,9 @@ static void test_visual_action_boundaries(void)
     model.view = PTC_UI_CHILD;
     PtcUiRect code = ptc_ui_child_submit_rect();
     PtcUiRect summary = ptc_ui_home_summary_rect(false);
-    check_int(summary.w, 896, "child task board uses a wide dashboard width");
-    check_int(code.x, 964, "child action column aligns inside the right card");
-    check_int(code.w, 268, "child primary action uses the compact right action width");
+    check_int(summary.w, 852, "child task board uses a wide dashboard width");
+    check_int(code.x, 920, "child action column aligns inside the right card");
+    check_int(code.w, 312, "child primary action uses the compact right action width");
     check_int(ptc_ui_child_buffer_rect().w, code.w, "child actions share one visual column width");
     check_int(ptc_ui_home_details_rect(false).w, code.w, "child details action shares the action column width");
     check_true(summary.x + summary.w < code.x,
@@ -4429,6 +4429,46 @@ static PtcUiModel today_projection_model(void)
     return m;
 }
 
+static void test_overview_layout_and_state(void)
+{
+    PtcUiModel m = today_projection_model();
+    PtcUiOverview overview;
+    ptc_ui_project_overview(&m, 1000, m.day_index, 16 * 3600, &overview);
+    check_true(overview.available && overview.total_known && overview.total_remaining == 51,
+               "overview separates daily balance from the continuous projection");
+    char duration[64];
+    snprintf(duration, sizeof(duration), ptc_ui_text(PTC_UI_T_U_MIN), 15u);
+    check_true(strcmp(overview.value, duration) == 0, "overview stops continuous play at the first eye break");
+    m.eye_care_break_id = 7;
+    snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "resting");
+    m.eye_care_rest_remaining_seconds = 300;
+    ptc_ui_project_overview(&m, 1030, m.day_index, 16 * 3600 + 30, &overview);
+    check_true(overview.blocked && overview.total_remaining == 51 && strcmp(overview.value, "04:30") == 0,
+               "rest keeps the daily balance and independently projects the countdown");
+    m.daily_restriction_active = m.dock_restriction_active = m.bedtime_active = true;
+    ptc_ui_project_overview(&m, 1030, m.day_index, 16 * 3600 + 30, &overview);
+    check_true(overview.reasons == (PTC_UI_STOP_DAILY | PTC_UI_STOP_DOCK | PTC_UI_STOP_BEDTIME | PTC_UI_STOP_EYE),
+               "overview retains all concurrent limits");
+    ptc_ui_project_overview(&m, 1121, m.day_index, 16 * 3600, &overview);
+    check_true(!overview.fresh && !overview.available && !overview.total_known && !overview.reasons,
+               "expired overview never exposes an old balance or permission");
+    PtcUiRect balance = ptc_ui_child_balance_rect(), previous = {0};
+    for (int i = 0; i < 3; ++i) {
+        PtcUiRect row = ptc_ui_child_guard_rect(i);
+        check_true(row.x >= balance.x && row.x + row.w <= balance.x + balance.w && row.h >= 50,
+                   "guard rows stay inside the balance panel with legible height");
+        if (i) check_true(row.y - (previous.y + previous.h) == 7, "guard rows use a shared gap");
+        previous = row;
+    }
+    check_true(previous.y + previous.h == balance.y + balance.h - 16, "guard rows fill the panel through the bottom inset");
+    m.view = PTC_UI_CHILD; m.waiting = false;
+    check_true(ptc_ui_child_action_kind(&m, 0) == PTC_UI_HIT_CHILD_PARENT, "restricted child primary action goes to PIN");
+    check_hit(hit_center(&m, ptc_ui_child_action_rect(0)), PTC_UI_HIT_CHILD_PARENT, 0, "primary parent touch uses the PIN entry");
+    m.waiting = true;
+    check_hit(hit_center(&m, ptc_ui_child_action_rect(0)), PTC_UI_HIT_NONE, 0, "pending request blocks parent activation");
+    check_true(ptc_ui_child_action_kind(&m, 0) == PTC_UI_HIT_CHILD_PARENT, "refresh does not reorder the action map");
+}
+
 static void test_home_details_status(void)
 {
     PtcUiModel m = today_projection_model();
@@ -4953,6 +4993,7 @@ int main(void)
     test_policy_status();
     test_home_details_status();
     test_today_projection();
+    test_overview_layout_and_state();
     test_today_details_navigation();
     test_today_settings_links();
     test_config_backup_layout();

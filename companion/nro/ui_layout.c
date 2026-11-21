@@ -62,7 +62,7 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {964, 120, 268, 118};
+    PtcUiRect rect = {920, 120, 312, 121};
     return rect;
 }
 
@@ -74,14 +74,14 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {964, 252, 268, 112};
+    PtcUiRect rect = {920, 255, 312, 121};
     return rect;
 }
 
 PtcUiRect ptc_ui_child_status_rect(void)
 {
     /* 状态卡是右列最后一项，底边与左侧七日预测、孩子首页内容底边（644）齐平。 */
-    PtcUiRect rect = {964, 504, 268, 140};
+    PtcUiRect rect = {920, 525, 312, 119};
     return rect;
 }
 
@@ -468,29 +468,67 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 896, 524};
+    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 852, 524};
 }
 
-/* 孩子首页左列：上方调度态势看板 + 14px 间隔 + 下方七日预测，三者共用同一底边 644。
- * 放大守护卡字号需要的高度从七日预测让出，预测整体下移并利用底栏上方的空闲带。 */
+/* The 320px status/balance row and 190px forecast share the action bottom at 644. */
 PtcUiRect ptc_ui_child_hero_rect(void)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(false);
-    return (PtcUiRect){box.x, box.y, box.w, 300};
+    return (PtcUiRect){box.x, box.y, box.w, 320};
 }
 
 PtcUiRect ptc_ui_child_forecast_rect(void)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(false);
-    return (PtcUiRect){box.x, box.y + 314, box.w, 210};
+    return (PtcUiRect){box.x, box.y + 334, box.w, 190};
 }
 
 PtcUiRect ptc_ui_child_forecast_day_rect(int offset, int count)
 {
     PtcUiRect panel = ptc_ui_child_forecast_rect();
-    int width = 114, gap = 11;
+    int width = 108, gap = 10;
     return (PtcUiRect){panel.x + 16 + offset * (width + gap), panel.y + 40,
         count * (width + gap) - gap, panel.h - 54};
+}
+
+PtcUiRect ptc_ui_child_balance_rect(void)
+{
+    PtcUiRect hero = ptc_ui_child_hero_rect();
+    return (PtcUiRect){hero.x + 528, hero.y, 324, hero.h};
+}
+
+PtcUiRect ptc_ui_child_guard_rect(int index)
+{
+    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
+    PtcUiRect balance = ptc_ui_child_balance_rect();
+    int start = 128, gap = 7, height = balance.h - start - 16;
+    int top = index * (height - 2 * gap) / 3 + index * gap;
+    int bottom = (index + 1) * (height - 2 * gap) / 3 + index * gap;
+    return (PtcUiRect){balance.x + 16, balance.y + start + top, balance.w - 32, bottom - top};
+}
+
+PtcUiRect ptc_ui_child_action_rect(int index)
+{
+    if (index == 0) return ptc_ui_child_submit_rect();
+    if (index == 1) return ptc_ui_child_buffer_rect();
+    if (index == 2) return ptc_ui_home_details_rect(false);
+    if (index == 3) return ptc_ui_child_status_rect();
+    return (PtcUiRect){0, 0, 0, 0};
+}
+
+PtcUiHitKind ptc_ui_child_action_kind(const PtcUiModel *model, int index)
+{
+    static const PtcUiHitKind normal[] = {PTC_UI_HIT_CHILD_SUBMIT_CODE, PTC_UI_HIT_CHILD_BUFFER,
+        PTC_UI_HIT_HOME_DETAILS, PTC_UI_HIT_CHILD_PARENT};
+    static const PtcUiHitKind restricted[] = {PTC_UI_HIT_CHILD_PARENT, PTC_UI_HIT_CHILD_SUBMIT_CODE,
+        PTC_UI_HIT_HOME_DETAILS, PTC_UI_HIT_CHILD_BUFFER};
+    if (index < 0 || index > 3) return PTC_UI_HIT_NONE;
+    /* Keep the map tied to the last confirmed snapshot, even while refreshing. */
+    bool blocked = model && (model->daily_restriction_active || model->dock_restriction_active ||
+        (model->bedtime_active && !model->bedtime_skipped) ||
+        (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0));
+    return blocked ? restricted[index] : normal[index];
 }
 
 PtcUiRect ptc_ui_today_card_rect(int index)
@@ -642,7 +680,7 @@ PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? ptc_ui_parent_footer_details_rect() : (PtcUiRect){964, 378, 268, 112};
+    return parent ? ptc_ui_parent_footer_details_rect() : (PtcUiRect){920, 390, 312, 121};
 }
 
 PtcUiRect ptc_ui_home_rules_rect(void)

@@ -396,6 +396,8 @@ typedef enum {
 
 typedef struct {
     PtcUiView view;
+    bool child_actions_focused;
+    int child_action_focus;
     PtcUiParentPage parent_page;
     PtcUiPlanPage plan_page;
     bool today_settings_origin;

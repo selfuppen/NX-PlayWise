@@ -321,4 +321,7 @@ void ui_glyph_cache_clear(void);
 void ui_background_rebuild(void);
 void ui_background_draw_frame(uint32_t *pixels, uint32_t stride);
 
+void ui_render_overview(const PtcUiModel *model, PtcUiOverview *out);
+void draw_home_policy_row(uint32_t *pixels, uint32_t stride, UiRect box, const char *title, const char *detail, const char *badge, PtcPolicyDisplayState state);
+
 #endif

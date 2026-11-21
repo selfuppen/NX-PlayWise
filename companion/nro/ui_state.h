@@ -144,6 +144,15 @@ void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
     char *out, size_t out_size);
 void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
     uint16_t local_day_index, int second_of_day, PtcUiTodayProjection *out);
+typedef struct {
+    bool fresh, available, blocked, total_known, total_unlimited;
+    int total_remaining;
+    unsigned reasons;
+    PtcPolicyDisplayState state;
+    char title[160], value[64], hint[192], balance[64];
+} PtcUiOverview;
+void ptc_ui_project_overview(const PtcUiModel *model, int64_t now,
+    uint16_t day, int second, PtcUiOverview *out);
 void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
     PtcUiQuotaRecheckSnapshot *out);
 PtcUiQuotaRecheckDecision ptc_ui_quota_recheck_decide(
