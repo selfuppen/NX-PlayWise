@@ -596,7 +596,7 @@ class Suite:
         # finite window as page/capture readiness without accepting cached frames.
         readiness_budget = 20
         deadline = min(self.deadline, time.monotonic() + readiness_budget)
-        baseline = self.wait_input(False)
+        baseline = self.wait_input(False, before_action_deadline=deadline)
         previous = None
         ready = 0
         while time.monotonic() < deadline:
@@ -648,12 +648,22 @@ class Suite:
             raise ObservationPending("input observation is stale")
         return value
 
-    def wait_input(self, active: bool, after: dict | None = None) -> dict:
+    def wait_input(self, active: bool, after: dict | None = None, *,
+                   before_action_deadline: float | None = None) -> dict:
         # After up has been sent, waiting longer for a real neutral guest sample
         # does not hold the input longer. Never extend ordinary down sampling.
         release_observation = not active and after is not None
         sampling_budget = 20 if release_observation or self.suite in ("input", "input-hold") else 5
-        deadline = min(self.deadline, time.monotonic() + sampling_budget)
+        if before_action_deadline is not None:
+            # Before down, neutral sampling and presented frames share one
+            # readiness window. This never extends a held input's deadline.
+            now = time.monotonic()
+            require(not active and after is None and type(before_action_deadline) in (int, float) and
+                    0 < before_action_deadline - now <= 20, "invalid pre-action neutral deadline")
+            sampling_budget = 20
+            deadline = min(self.deadline, before_action_deadline)
+        else:
+            deadline = min(self.deadline, time.monotonic() + sampling_budget)
         while time.monotonic() < deadline:
             try:
                 value = self.observe_input()

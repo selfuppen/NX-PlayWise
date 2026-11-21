@@ -650,6 +650,55 @@ def test_input_readiness_waits_for_fresh_frames_after_guest_pause() -> None:
         assert not (root / "input-readiness").exists()
 
 
+def test_first_neutral_sample_uses_the_action_readiness_window() -> None:
+    neutral = {"instance": "a", "input_sampling_version": 2,
+               "input_sequence": 20, "input_active": False}
+    first = {**neutral, "presentation_version": 1, "sequence": 10, "input_sequence": 21,
+             "ui": {"waiting": False, "overlay_animating": False}}
+    frames = [{**first, "sequence": 10 + i, "input_sequence": 21 + i} for i in range(3)]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60, "main")
+        suite.deadline = 60
+        clock = [0.0]
+
+        def paused_input():
+            if clock[0] < 8:
+                raise ObservationPending("guest pause")
+            return neutral
+
+        with patch.object(suite, "observe_input", side_effect=paused_input), \
+                patch.object(suite, "observe", side_effect=frames), \
+                patch("tools.automation.eden_runner.time.monotonic", side_effect=lambda: clock[0]), \
+                patch("tools.automation.eden_runner.time.sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+            assert suite.wait_action_ready() == frames[-1]
+        assert 8 <= clock[0] < 20
+        verify_input_readiness(root, 1)
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60, "main")
+        suite.deadline = 60
+        clock = [0.0]
+        with patch.object(suite, "observe_input", side_effect=ObservationPending("still paused")), \
+                patch("tools.automation.eden_runner.time.monotonic", side_effect=lambda: clock[0]), \
+                patch("tools.automation.eden_runner.time.sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+            rejected(lambda: suite.wait_action_ready())
+        assert 20 <= clock[0] < 20.1
+        assert not (root / "input-readiness").exists()
+        # Extending a read-only wait before down cannot extend down sampling.
+        clock[0] = 0
+        with patch.object(suite, "observe_input", side_effect=ObservationPending("still paused")), \
+                patch("tools.automation.eden_runner.time.monotonic", side_effect=lambda: clock[0]), \
+                patch("tools.automation.eden_runner.time.sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+            rejected(lambda: suite.wait_input(True, after=neutral))
+        assert 5 <= clock[0] < 5.1
+        clock[0] = 0
+        with patch("tools.automation.eden_runner.time.monotonic", side_effect=lambda: clock[0]):
+            rejected(lambda: suite.wait_input(True, after=neutral, before_action_deadline=20))
+            rejected(lambda: suite.wait_input(False, before_action_deadline=21))
+
+
 def test_failure_metrics_preserve_original_error() -> None:
     class Client:
         def __init__(self, fail: bool):
@@ -894,6 +943,7 @@ def main() -> None:
     test_quota_hold_failure_releases_once_without_replay()
     test_input_requires_presented_progress()
     test_input_readiness_waits_for_fresh_frames_after_guest_pause()
+    test_first_neutral_sample_uses_the_action_readiness_window()
     test_failure_metrics_preserve_original_error()
     test_progress_stream_boundaries()
     test_profile_capacity_before_copy()
