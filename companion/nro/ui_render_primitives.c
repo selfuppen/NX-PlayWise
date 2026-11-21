@@ -586,6 +586,14 @@ void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
     draw_rect_outline(pixels, stride, outer_rect, radius + outer_w, outer_w, focus_token);
 }
 
+void draw_semantic_pulse_glow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color)
+{
+    int phase = get_breathing_phase();
+    int blur = 6 + phase / 5;
+    int alpha = 26 + phase * 3;
+    draw_round_rect_shadow_colored(pixels, stride, rect, radius, blur, alpha, 1, resolve_color(color), false);
+}
+
 /* 背景氛围层：页面底色加两团极低透明度的主题色光斑，整幅缓存在离屏，
  * 仅在主题、底座状态或过渡进行中重建；绘制时一次整幅拷贝。 */
 uint32_t *g_background_cache;

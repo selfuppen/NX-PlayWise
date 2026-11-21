@@ -701,10 +701,16 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         }
         if (today_mode) {
             UiRect refresh = to_uirect(ptc_ui_today_limit_refresh_rect());
-            fill_round_rect(pixels, stride, refresh, 10, UI_ACCENT_SOFT);
-            draw_rect_outline(pixels, stride, refresh, 10, 1, UI_ACCENT);
+            bool failed = model->quota_refresh_failed;
+            bool warn = !model->waiting && (!fresh || failed);
+            uint32_t bg = failed ? UI_DANGER_SOFT : (warn ? UI_WARNING_SOFT : UI_ACCENT_SOFT);
+            uint32_t bd = failed ? UI_DANGER : (warn ? UI_WARNING : UI_ACCENT);
+            uint32_t fg = failed ? UI_DANGER : (warn ? UI_WARNING_TEXT : UI_ACCENT);
+            if (warn) draw_semantic_pulse_glow(pixels, stride, refresh, 10, bd);
+            fill_round_rect(pixels, stride, refresh, 10, bg);
+            draw_rect_outline(pixels, stride, refresh, 10, warn ? 2 : 1, bd);
             draw_text_center(pixels, stride, refresh,
-                model->waiting ? ptc_ui_text(PTC_UI_T_REFRESHING_HOST_STATUS) : ptc_ui_text(PTC_UI_T_CLICK_TO_REFRESH_THE_LATEST_STATUS_R3), 15, UI_ACCENT);
+                model->waiting ? ptc_ui_text(PTC_UI_T_REFRESHING_HOST_STATUS) : ptc_ui_text(PTC_UI_T_CLICK_TO_REFRESH_THE_LATEST_STATUS_R3), 15, fg);
         }
         draw_text_center(pixels, stride, (UiRect){summary.x, summary.y + 248, summary.width, 26},
                          model->quota_refresh_failed ? ptc_ui_text(PTC_UI_T_REFRESH_FAILED_PLEASE_CLICK_TO_TRY_AGAIN) :

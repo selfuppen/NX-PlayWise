@@ -14,7 +14,7 @@ void draw_subpage_shell(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_footer_button(pixels, stride, ptc_ui_settings_page_back_rect(), back_label);
     if (model->message[0]) {
         char fitted[256];
-        fit_text(fitted, sizeof(fitted), model->message, 14, 380);
+        fit_text(fitted, sizeof(fitted), model->message, 14, 330);
         draw_text(pixels, stride, 640, 692, fitted, 14, UI_WARNING_TEXT);
     }
 }
@@ -241,7 +241,12 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
     if (model->overlay_selection == 15) {
         draw_rect_outline(pixels, stride, to_uirect(ptc_ui_config_backup_field_rect(15)), 12, 3, UI_ACCENT);
     }
-    draw_footer_button(pixels, stride, (PtcUiRect){236, 664, 130, 44}, ptc_ui_text(PTC_UI_T_Y_REFRESH));
+    {
+        int64_t now = ptc_ui_render_now();
+        draw_refresh_footer_button(pixels, stride, (PtcUiRect){236, 664, 130, 44},
+            ptc_ui_text(PTC_UI_T_Y_REFRESH), ptc_ui_status_needs_refresh(model, now),
+            ptc_ui_status_refresh_failed(model), false, model->waiting);
+    }
     draw_footer_button(pixels, stride, (PtcUiRect){378, 664, 130, 44}, ptc_ui_text(PTC_UI_T_L_PREVIOUS_PAGE));
     draw_footer_button(pixels, stride, (PtcUiRect){516, 664, 130, 44}, ptc_ui_text(PTC_UI_T_R_NEXT_PAGE));
 

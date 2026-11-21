@@ -99,6 +99,7 @@ void ptc_ui_setup_sync(PtcUiModel *model);
 void ptc_ui_return_from_parent(PtcUiModel *model);
 void ptc_ui_setup_record_issue(PtcUiModel *model, PtcUiSetupIssueKind kind, int code);
 bool ptc_ui_setup_has_issues(const PtcUiModel *model);
+bool ptc_ui_setup_message_visible(const PtcUiModel *model);
 bool ptc_ui_setup_reference_matches(const PtcUiModel *model);
 bool ptc_ui_parent_read_only_action(const PtcUiModel *model, int index);
 bool ptc_ui_setup_diagnostic_json(const PtcUiModel *model, char *out, size_t size);
@@ -135,6 +136,8 @@ int ptc_ui_preview_effective_add_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
+bool ptc_ui_status_refresh_failed(const PtcUiModel *model);
+bool ptc_ui_status_needs_refresh(const PtcUiModel *model, int64_t now);
 const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
     int index, int64_t now);
 void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,

@@ -165,6 +165,7 @@ void fill_round_rect_gradient(uint32_t *pixels, uint32_t stride, UiRect rect, in
                               uint32_t top, uint32_t bottom);
 void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, int width, uint32_t color);
 void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius);
+void draw_semantic_pulse_glow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color);
 void draw_card_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius);
 void draw_circle_outline(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, int width, uint32_t color);
 void draw_ring_progress(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius,
@@ -203,6 +204,12 @@ void draw_r_stick_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int siz
 void draw_r_stick_axis_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, bool vertical, int direction);
 void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char *label, int size, uint32_t color);
 void draw_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect, const char *label);
+void draw_refresh_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
+                                const char *label, bool needs_refresh, bool failed,
+                                bool focused, bool disabled);
+void draw_refresh_action_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
+                                const char *label, bool needs_refresh, bool failed,
+                                bool selected, bool disabled);
 void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 UiRect to_uirect(PtcUiRect rect);
 void draw_dialog_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,

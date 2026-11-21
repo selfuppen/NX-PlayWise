@@ -421,6 +421,7 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
         else if (down & HidNpadButton_X) setup_review_action(ui, 3);
         else if (down & HidNpadButton_Up) ui->model.setup_review_selection = (ui->model.setup_review_selection + 3) % 4;
         else if (down & HidNpadButton_Down) ui->model.setup_review_selection = (ui->model.setup_review_selection + 1) % 4;
+        else if (down & (HidNpadButton_Left | HidNpadButton_Right)) ui->model.setup_review_selection ^= 1;
         else if (down & HidNpadButton_A) setup_review_action(ui, ui->model.setup_review_selection);
         return;
     }
@@ -439,16 +440,14 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
             ui->model.setup_focus = 1;
             setup_action(ui, PTC_UI_HIT_SETUP_LANGUAGE, ((int)ui->language_preference + direction + 4) % 4);
         } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
-            if (ui->model.setup_focus == 1 && direction > 0) {
-                ui->model.setup_focus = 2;
-            } else if (ui->model.setup_focus == 2) {
-                if (direction < 0 && (int)ui->theme_preference == 0) {
-                    ui->model.setup_focus = 1;
-                } else {
-                    setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, ((int)ui->theme_preference + direction + 3) % 3);
-                }
-            } else if (ui->model.setup_focus >= 3 && direction < 0) {
-                ui->model.setup_focus = 1;
+            if (ui->model.setup_focus == 2) {
+                int next_theme = (int)ui->theme_preference + direction;
+                if (next_theme > 2) ui->model.setup_focus = 5;
+                else if (next_theme >= 0) setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, next_theme);
+            } else if (ui->model.setup_focus >= 1 && ui->model.setup_focus <= 3 && direction > 0) {
+                ui->model.setup_focus += 3;
+            } else if (ui->model.setup_focus >= 4 && ui->model.setup_focus <= 6 && direction < 0) {
+                ui->model.setup_focus -= 3;
             }
         } else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) ui->model.setup_focus ^= 1;
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {

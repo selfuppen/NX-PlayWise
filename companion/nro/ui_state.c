@@ -104,14 +104,18 @@ void ptc_ui_setup_sync(PtcUiModel *model)
         }
         if (ptc_ui_setup_next_option(model) >= 0 && model->view != PTC_UI_PARENT &&
             model->overlay == PTC_UI_OVERLAY_NONE) {
-            if (!model->setup_review_active) model->message[0] = '\0';
+            if (!model->setup_review_active || model->view != PTC_UI_SETUP) model->message[0] = '\0';
             model->setup_review_active = true;
             model->view = PTC_UI_SETUP;
         }
         return;
     }
     if (model->setup_step == 0) model->setup_step = PTC_UI_SETUP_PREPARE;
-    if (model->view != PTC_UI_PARENT) model->view = PTC_UI_SETUP;
+    if (model->view != PTC_UI_PARENT) {
+        if (model->view != PTC_UI_SETUP && !ptc_ui_setup_message_visible(model))
+            model->message[0] = '\0';
+        model->view = PTC_UI_SETUP;
+    }
 }
 
 void ptc_ui_return_from_parent(PtcUiModel *model)

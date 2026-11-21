@@ -622,6 +622,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         } else if (type && strcmp(type, "complete_setup") == 0 &&
                    strcmp(model->setup_phase, "active") != 0) {
             snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_SETUP_CONTROLS_INACTIVE));
+        } else if (type && strcmp(type, "status") == 0 && model->view == PTC_UI_SETUP) {
+            if (!ptc_ui_setup_message_visible(model)) model->message[0] = '\0';
         } else {
             snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
         }

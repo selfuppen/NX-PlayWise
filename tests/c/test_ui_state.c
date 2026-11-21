@@ -1643,12 +1643,12 @@ static void test_release_hit_targets(void)
     check_true(!rects_overlap(ptc_ui_setup_pctl_help_rect(), ptc_ui_setup_time_help_rect()),
                "parental control and clock help targets do not overlap");
     /* The step-1 cards and the footer must keep their measured bands: the help
-       button stays inside the parental-control row (452..490), the clock help
-       stays inside the console-time band (536..612), and neither touches the
+       button stays inside the parental-control card (384..492), the clock help
+       stays inside the console-time card (508..612), and neither touches the
        fixed footer at Y=664. */
-    check_true(ptc_ui_setup_pctl_help_rect().y >= 432 && ptc_ui_setup_pctl_help_rect().y + ptc_ui_setup_pctl_help_rect().h <= 524,
+    check_true(ptc_ui_setup_pctl_help_rect().y >= 384 && ptc_ui_setup_pctl_help_rect().y + ptc_ui_setup_pctl_help_rect().h <= 492,
                "parental control help stays inside its step-1 row");
-    check_true(ptc_ui_setup_time_help_rect().y >= 524 && ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h <= 618,
+    check_true(ptc_ui_setup_time_help_rect().y >= 508 && ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h <= 618,
                "clock help stays inside the console-time band");
     check_true(ptc_ui_setup_time_help_rect().y + ptc_ui_setup_time_help_rect().h < ptc_ui_setup_primary_rect().y,
                "clock help never reaches the fixed footer");
@@ -1674,8 +1674,62 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_setup_shortcut_rect()), PTC_UI_HIT_SETUP_SHORTCUT, 0, "setup shortcut target");
     check_hit(hit_center(&model, ptc_ui_setup_eye_care_rect()), PTC_UI_HIT_SETUP_EYE_CARE, 0, "eye care toggle target");
     check_hit(hit_center(&model, ptc_ui_setup_bedtime_rect()), PTC_UI_HIT_SETUP_BEDTIME, 0, "bedtime toggle target");
-    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_shortcut_rect()), "columns do not overlap");
+    check_hit(hit_center(&model, ptc_ui_setup_notifications_rect()), PTC_UI_HIT_SETUP_NOTIFICATIONS, 0, "notifications card target");
+    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_shortcut_rect()), "left column controls do not overlap");
+    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_eye_care_rect()), "columns do not overlap");
     check_true(!rects_overlap(ptc_ui_setup_eye_care_rect(), ptc_ui_setup_bedtime_rect()), "switches do not overlap");
+    check_true(!rects_overlap(ptc_ui_setup_bedtime_rect(), ptc_ui_setup_notifications_rect()), "bedtime and notifications do not overlap");
+    model.setup_review_active = true;
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_setup_review_rect(i)), PTC_UI_HIT_SETUP_PRIMARY, i,
+                  "setup review button touch target");
+        for (int j = i + 1; j < 4; ++j)
+            check_true(!rects_overlap(ptc_ui_setup_review_rect(i), ptc_ui_setup_review_rect(j)),
+                       "setup review buttons do not overlap");
+    }
+    {
+        PtcUiModel msg_model = {0};
+        const char *status_ok =
+            "{\"version\":1,\"request_id\":\"s1\",\"type\":\"status\",\"status\":\"ok\","
+            "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+            "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
+            "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},"
+            "\"setup\":{\"phase\":\"pending\",\"restriction_cleared\":false,\"snapshot_available\":false,"
+            "\"activate_after\":0,\"compatibility_status\":\"verified\",\"apply_status\":\"idle\","
+            "\"apply_pending_confirmation\":false,\"recovery_active\":false,\"disable_reason\":\"\"},"
+            "\"completed_at\":115}";
+        const char *status_err =
+            "{\"version\":1,\"request_id\":\"s2\",\"type\":\"status\",\"status\":\"error\","
+            "\"error\":{\"code\":310,\"reason\":\"pctl_read_failed\",\"message\":\"read failed\"},"
+            "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
+            "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
+            "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":116}";
+        msg_model.view = PTC_UI_SETUP;
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "empty setup message is hidden");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS));
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "initial status reading message is hidden in setup");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS));
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "status refreshing message is hidden in setup");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_TODAY_S_PLAY_STATUS_HAS_BEEN_REFRESHED));
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "status refreshed message is hidden in setup");
+        check_true(ptc_ui_apply_result_json(&msg_model, status_ok), "setup status ok parses");
+        check_true(msg_model.message[0] == '\0', "status ok in setup does not populate warning banner text");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_REVIEW_UNSAVED));
+        check_true(ptc_ui_setup_message_visible(&msg_model), "setup save failure message remains visible");
+        check_true(ptc_ui_apply_result_json(&msg_model, status_ok), "status ok preserves real setup warning");
+        check_true(strcmp(msg_model.message, ptc_ui_text(PTC_UI_T_SETUP_REVIEW_UNSAVED)) == 0,
+                   "status ok in setup keeps existing setup warning");
+        check_true(ptc_ui_apply_result_json(&msg_model, status_err), "setup status error parses");
+        check_true(ptc_ui_setup_message_visible(&msg_model), "status error remains visible in setup");
+        msg_model.setup_wizard_completed = msg_model.setup_completion_known = true;
+        msg_model.setup_options_loaded = msg_model.setup_review_active = true;
+        msg_model.view = PTC_UI_PARENT;
+        snprintf(msg_model.message, sizeof(msg_model.message), "stale parent message");
+        ptc_ui_return_from_parent(&msg_model);
+        check_true(msg_model.view == PTC_UI_SETUP && msg_model.setup_review_active && msg_model.message[0] == '\0',
+                   "returning from parent to setup review clears stale message");
+    }
+    model.setup_review_active = false;
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");
@@ -4813,8 +4867,26 @@ static void test_online_update_layout(void)
     for (int i = 0; i < 8; ++i) {
         PtcUiRect rect = ptc_ui_update_action_rect(i);
         check_hit(hit_center(&model, rect), PTC_UI_HIT_UPDATE_ACTION, i, "update action shares touch geometry");
-        check_true(rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= 1280 && rect.y + rect.h <= 676, "update action fits app viewport");
+        check_true(rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= 1280 && rect.y + rect.h <= 712, "update action fits app viewport");
+        check_true(!rects_overlap(rect, ptc_ui_settings_page_back_rect()), "update action does not overlap footer back");
+        check_true(!rects_overlap(rect, ptc_ui_update_notes_rect()), "update action does not overlap notes button");
         for (int k = i + 1; k < 8; ++k) check_true(!rects_overlap(rect, ptc_ui_update_action_rect(k)), "update actions do not overlap");
+    }
+    /* Refresh attention helper: fresh suppresses highlight; stale/failed trigger it; waiting suppresses it. */
+    {
+        PtcUiModel r = {0};
+        r.status_loaded = true; r.status_updated_at = 1000; snprintf(r.result_status, sizeof(r.result_status), "ok");
+        check_true(!ptc_ui_status_needs_refresh(&r, 1060), "fresh status does not need refresh highlight");
+        check_true(!ptc_ui_status_refresh_failed(&r), "fresh status is not failed");
+        check_true(ptc_ui_status_needs_refresh(&r, 1125), "stale status triggers refresh highlight");
+        r.waiting = true;
+        check_true(!ptc_ui_status_needs_refresh(&r, 1125), "waiting suppresses refresh highlight");
+        r.waiting = false; r.status_updated_at = 1120; r.home_details_refresh_failed = true;
+        check_true(ptc_ui_status_needs_refresh(&r, 1125) && ptc_ui_status_refresh_failed(&r),
+            "home details refresh failure triggers danger refresh highlight");
+        r.home_details_refresh_failed = false; r.quota_refresh_failed = true;
+        check_true(ptc_ui_status_needs_refresh(&r, 1125) && ptc_ui_status_refresh_failed(&r),
+            "quota refresh failure triggers danger refresh highlight");
     }
     model.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
     for (int i = 0; i < 4; ++i) check_hit(hit_center(&model, ptc_ui_update_backup_rect(i)), PTC_UI_HIT_UPDATE_ACTION, i, "backup selection shares touch geometry");

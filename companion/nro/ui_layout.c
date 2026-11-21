@@ -3,8 +3,18 @@
 
 PtcUiRect ptc_ui_update_action_rect(int index)
 {
-    if (index < 0 || index >= 8) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + (index % 2) * 592, 430 + (index / 2) * 49, 580, 43};
+    /* Row 0: 4-step update pipeline (0: Check -> 1: Download -> 7: Reopen -> 5: Load) */
+    if (index == 0) return (PtcUiRect){74, 422, 262, 70};
+    if (index == 1) return (PtcUiRect){364, 422, 262, 70};
+    if (index == 7) return (PtcUiRect){654, 422, 262, 70};
+    if (index == 5) return (PtcUiRect){944, 422, 262, 70};
+    /* Row 1: 3 preference and maintenance cards (2: Auto check, 3: Channel, 4: Backups) */
+    if (index == 2) return (PtcUiRect){54, 518, 378, 118};
+    if (index == 3) return (PtcUiRect){451, 518, 378, 118};
+    if (index == 4) return (PtcUiRect){848, 518, 378, 118};
+    /* Footer right: contextual cancel download / recover interrupted install */
+    if (index == 6) return (PtcUiRect){986, 664, 240, 44};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_update_backup_rect(int index)
@@ -13,7 +23,7 @@ PtcUiRect ptc_ui_update_backup_rect(int index)
     return (PtcUiRect){54, 200 + index * 96, 1172, 84};
 }
 
-PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){974, 378, 228, 30}; }
+PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){990, 194, 200, 30}; }
 
 PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model)
 {
@@ -102,33 +112,42 @@ PtcUiRect ptc_ui_error_back_rect(void)
 PtcUiRect ptc_ui_setup_language_rect(int index)
 {
     if (index < 0 || index > 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){94 + index * 274, 240, 262, 44};
+    return (PtcUiRect){74 + index * 286, 240, 274, 48};
 }
 
-PtcUiRect ptc_ui_setup_primary_rect(void) { return (PtcUiRect){1036, 664, 190, 44}; }
-PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 664, 170, 44}; }
-PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){236, 664, 280, 44}; }
-PtcUiRect ptc_ui_setup_review_rect(int index) { return (PtcUiRect){164, 358 + index * 72, 952, 56}; }
-PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 320, 510, 54}; }
+PtcUiRect ptc_ui_setup_primary_rect(void) { return (PtcUiRect){946, 664, 280, 44}; }
+PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 664, 188, 44}; }
+PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){256, 664, 312, 44}; }
+PtcUiRect ptc_ui_setup_review_rect(int index)
+{
+    switch (index) {
+    case 0: return (PtcUiRect){54, 462, 576, 86};
+    case 1: return (PtcUiRect){650, 462, 576, 86};
+    case 2: return (PtcUiRect){54, 664, 248, 44};
+    case 3: return (PtcUiRect){318, 664, 290, 44};
+    default: return (PtcUiRect){0, 0, 0, 0};
+    }
+}
+PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){74, 274, 538, 86}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){0, 0, 0, 0}; }
-PtcUiRect ptc_ui_setup_notifications_rect(void) { return (PtcUiRect){94, 550, 510, 48}; }
-PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){676, 334, 510, 44}; }
-PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){94, 536, 1092, 76}; }
-PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){914, 452, 272, 38}; }
+PtcUiRect ptc_ui_setup_notifications_rect(void) { return (PtcUiRect){668, 506, 538, 98}; }
+PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){74, 514, 538, 54}; }
+PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){74, 508, 644, 104}; }
+PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){482, 418, 220, 44}; }
 PtcUiRect ptc_ui_setup_theme_rect(int index)
 {
     if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){676 + index * 174, 258, 162, 40};
+    return (PtcUiRect){74 + index * 184, 420, 170, 44};
 }
 
 PtcUiRect ptc_ui_setup_eye_care_rect(void)
 {
-    return (PtcUiRect){676, 414, 510, 48};
+    return (PtcUiRect){668, 282, 538, 98};
 }
 
 PtcUiRect ptc_ui_setup_bedtime_rect(void)
 {
-    return (PtcUiRect){676, 516, 510, 48};
+    return (PtcUiRect){668, 394, 538, 98};
 }
 
 PtcUiRect ptc_ui_notice_rect(void)

@@ -574,5 +574,10 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     fit_text(fitted_hint, sizeof(fitted_hint), hint, 18, ptc_ui_child_footer_rect(1).w - 24);
     draw_text_center(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), fitted_hint, 18, UI_RGB(UI_BLENDED(text_secondary)));
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), ptc_ui_text(PTC_UI_T_B_EXIT));
-    draw_button_label(pixels, stride, to_uirect(ptc_ui_child_refresh_rect()), ptc_ui_text(PTC_UI_T_Y_REFRESH), 18, model->waiting ? UI_DISABLED : UI_MUTED);
+    {
+        int64_t now = ptc_ui_render_now();
+        draw_refresh_footer_button(pixels, stride, ptc_ui_child_refresh_rect(),
+            ptc_ui_text(PTC_UI_T_Y_REFRESH), ptc_ui_status_needs_refresh(model, now),
+            ptc_ui_status_refresh_failed(model), false, model->waiting);
+    }
 }

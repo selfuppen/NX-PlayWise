@@ -121,6 +121,19 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
         strcmp(model->result_status, "error") != 0;
 }
 
+bool ptc_ui_status_refresh_failed(const PtcUiModel *model)
+{
+    return model && (model->home_details_refresh_failed || model->quota_refresh_failed ||
+        model->error_code != 0 || strcmp(model->result_status, "error") == 0);
+}
+
+bool ptc_ui_status_needs_refresh(const PtcUiModel *model, int64_t now)
+{
+    if (!model || model->waiting) return false;
+    return !ptc_ui_status_is_fresh(model, now) ||
+        model->home_details_refresh_failed || model->quota_refresh_failed;
+}
+
 PtcUiChildForecastSource ptc_ui_child_forecast_source(const PtcUiModel *model, int offset, int64_t now)
 {
     if (!ptc_ui_status_is_fresh(model, now) || offset < 0 || offset >= (int)PTC_RESULT_FORECAST_DAYS ||
@@ -543,6 +556,14 @@ bool ptc_ui_parent_status_alert_visible(const PtcUiModel *model)
         strcmp(model->setup_phase, "failed") == 0 || model->recovery_active ||
         model->disable_flag_present ||
         (model->temporary_unlocked_available && model->temporary_unlocked);
+}
+
+bool ptc_ui_setup_message_visible(const PtcUiModel *model)
+{
+    if (!model || !model->message[0]) return false;
+    return strcmp(model->message, ptc_ui_text(PTC_UI_T_TODAY_S_PLAY_STATUS_HAS_BEEN_REFRESHED)) != 0 &&
+        strcmp(model->message, ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS)) != 0 &&
+        strcmp(model->message, ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS)) != 0;
 }
 
 bool ptc_ui_operation_feedback_visible(const PtcUiModel *model)

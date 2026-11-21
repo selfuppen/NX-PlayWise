@@ -41,6 +41,8 @@ PREVIEW_FILES = (
     "setup/setup-notifications-light.png",
     "setup/setup-notifications-dark.png",
     "setup/setup-step-3-light.png",
+    "setup/setup-review-light.png",
+    "setup/setup-review-dark.png",
     "grant/grant-entry-light.png",
     "grant/grant-duration-editor-light.png",
     "grant/grant-issued-light.png",

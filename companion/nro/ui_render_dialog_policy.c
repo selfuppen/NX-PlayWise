@@ -540,12 +540,19 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     }
     if (restore || limit_change || direct_quota_change) {
         UiRect refresh = to_uirect(ptc_ui_quota_refresh_rect());
-        fill_round_rect(pixels, stride, refresh, 8,
-                        model->quota_refresh_failed ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
+        bool failed = model->quota_refresh_failed;
+        bool stale = !model->waiting && !ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+        bool warn = !model->waiting && (failed || stale);
+        uint32_t bg = failed ? UI_DANGER_SOFT : (warn ? UI_WARNING_SOFT : UI_ACCENT_SOFT);
+        uint32_t bd = failed ? UI_DANGER : (warn ? UI_WARNING : UI_ACCENT);
+        uint32_t fg = failed ? UI_DANGER : (warn ? UI_WARNING_TEXT : UI_ACCENT);
+        if (warn) draw_semantic_pulse_glow(pixels, stride, refresh, 8, bd);
+        fill_round_rect(pixels, stride, refresh, 8, bg);
+        if (warn) draw_rect_outline(pixels, stride, refresh, 8, 2, bd);
         draw_text_center(pixels, stride, refresh,
-                         model->quota_refresh_failed ? ptc_ui_text(PTC_UI_T_REFRESH_FAILED_NOT_SUBMITTED_PRESS_Y_OR) :
+                         failed ? ptc_ui_text(PTC_UI_T_REFRESH_FAILED_NOT_SUBMITTED_PRESS_Y_OR) :
                          ptc_ui_text(PTC_UI_T_Y_CLICK_TO_REFRESH_AND_RECALCULATE_AUTOMATICALLY), 14,
-                         model->quota_refresh_failed ? UI_DANGER : UI_ACCENT);
+                         fg);
     }
     draw_overlay_actions(pixels, stride, model,
                          model->confirm_hold_required ? ptc_ui_text(PTC_UI_T_LONG_PRESS_A_TOUCH_AND_HOLD) : ptc_ui_text(PTC_UI_T_A_CONFIRM));
