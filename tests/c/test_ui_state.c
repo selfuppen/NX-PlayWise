@@ -252,9 +252,9 @@ static void test_release_navigation(void)
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 1, "selection moves right");
+    check_int(model.selected_index, 2, "selection moves right along the quota lifecycle row");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 1, "six-card selection stays in the first row when moving upward");
+    check_int(model.selected_index, 1, "up from the quota lifecycle row reaches full-width quick add");
 
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
@@ -2370,13 +2370,36 @@ static void test_home_redesign(void)
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
     check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "parent today header language switcher");
-    const PtcUiRect quota_group = {548, 176, 696, 230};
-    const PtcUiRect other_group = {548, 416, 696, 212};
+    const PtcUiRect quota_group = {480, 176, 764, 230};
+    const PtcUiRect other_group = {480, 416, 764, 212};
     check_true(!rects_overlap(quota_group, other_group) &&
                !rects_overlap(quota_group, ptc_ui_home_summary_rect(true)) &&
                !rects_overlap(other_group, ptc_ui_home_summary_rect(true)),
                "today section backgrounds do not overlap each other or the summary");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 8, "today has eight actions");
+    PtcUiRect quick = ptc_ui_today_card_rect(1);
+    check_true(quick.w > ptc_ui_today_card_rect(0).w * 2 && quick.y < ptc_ui_today_card_rect(0).y,
+               "quick add occupies the full first row above the three quota lifecycle actions");
+    for (int i = 0; i < 11; ++i) {
+        for (int direction = 0; direction < 4; ++direction) {
+            model.selected_index = i; model.parent_footer_focused = false;
+            ptc_ui_move_parent_selection(&model, direction < 2 ? (direction == 0 ? -1 : 1) : 0,
+                direction >= 2 ? (direction == 2 ? -1 : 1) : 0);
+            check_true(model.selected_index >= 0 && model.selected_index < 11, "today focus stays in action and guardian targets");
+        }
+    }
+    model.selected_index = 1; model.parent_footer_focused = false;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 0, "quick-add down reaches the quota lifecycle row");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 2, "quota right reaches unlimited on the same row");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 3, "unlimited right reaches clear on the same row");
+    model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 4, "eye skip right reaches bedtime skip");
+    model.selected_index = 0;
+
     for (int i = 0; i < 8; ++i) {
         PtcUiRect rect = ptc_ui_today_card_rect(i);
         PtcUiRect group = i < 4 ? quota_group : other_group;
@@ -2622,22 +2645,19 @@ static void test_home_redesign(void)
         check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
             "TV waiver rejects missing dock status");
     }
-    model.selected_index = 4;
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_true(!model.parent_footer_focused && model.selected_index == 6,
-        "right from bedtime reaches eye care skip");
-    ptc_ui_move_parent_selection(&model, -1, 0);
-    check_true(!model.parent_footer_focused && model.selected_index == 4,
-        "left from eye care reaches bedtime");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(!model.parent_footer_focused && model.selected_index == 5,
-        "down from bedtime reaches buffer");
     model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_true(!model.parent_footer_focused && model.selected_index == 4,
+        "right from eye care reaches bedtime skip on the same row");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 6, "left from bedtime returns to eye care skip");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(!model.parent_footer_focused && model.selected_index == 7,
-        "down from eye care reaches TV waiver");
+    check_int(model.selected_index, 5, "down from eye care reaches buffer in the same column");
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 7, "down from bedtime reaches TV waiver in the same column");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 6, "up from TV waiver returns to eye care");
+    check_int(model.selected_index, 4, "up from TV waiver returns to bedtime");
     ptc_ui_move_parent_selection(&model, 0, 1);
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 5, "left from TV waiver reaches buffer");
@@ -4376,10 +4396,12 @@ static void test_today_settings_links(void)
     }
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 0, "quota does not focus the informational rule source badge");
+    check_int(model.selected_index, 8, "left from quota reaches the adjacent guardian settings");
     model.selected_index = 2;
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 8, "left from unlimited quota enters status column");
+    check_int(model.selected_index, 0, "left from unlimited quota returns to set allowance");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 8, "left from allowance enters status column");
     ptc_ui_move_parent_selection(&model, 0, -1);
     check_int(model.selected_index, 8, "eye care stays focused above the status column");
     ptc_ui_move_parent_selection(&model, 0, 1);

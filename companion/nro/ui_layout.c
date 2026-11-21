@@ -468,7 +468,7 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 852, 524};
+    return parent ? (PtcUiRect){48, 176, 412, 452} : (PtcUiRect){48, 120, 852, 524};
 }
 
 /* The 320px status/balance row and 190px forecast share the action bottom at 644. */
@@ -534,12 +534,15 @@ PtcUiHitKind ptc_ui_child_action_kind(const PtcUiModel *model, int index)
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
     if (index < 0 || index >= 8) return (PtcUiRect){0, 0, 0, 0};
-    if (index == 5) return (PtcUiRect){560, 536, 324, 82};
-    if (index == 7) return (PtcUiRect){908, 536, 324, 82};
-    if (index == 4) return (PtcUiRect){560, 444, 324, 82};
-    if (index == 6) return (PtcUiRect){908, 444, 324, 82};
-    return (PtcUiRect){560 + (index % 2) * 348,
-                       204 + (index / 2) * 100, 324, 90};
+    if (index == 1) return (PtcUiRect){492, 204, 740, 90};
+    if (index == 0 || index == 2 || index == 3) {
+        int column = index == 0 ? 0 : index - 1;
+        return (PtcUiRect){492 + column * 250, 304, 240, 90};
+    }
+    if (index == 6) return (PtcUiRect){492, 444, 360, 82};
+    if (index == 4) return (PtcUiRect){872, 444, 360, 82};
+    if (index == 5) return (PtcUiRect){492, 536, 360, 82};
+    return (PtcUiRect){872, 536, 360, 82};
 }
 
 PtcUiRect ptc_ui_plan_card_rect(int index)
@@ -1567,7 +1570,7 @@ PtcUiRect ptc_ui_today_status_rect(int index)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(true);
     if (index < 8 || index > 10) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){box.x + 22, box.y + 212 + (index - 8) * 58, box.w - 44, index == 10 ? 70 : 52};
+    return (PtcUiRect){box.x + 18, box.y + 212 + (index - 8) * 62, box.w - 36, index == 10 ? 70 : 54};
 }
 
 PtcUiRect ptc_ui_config_backup_field_rect(int index)

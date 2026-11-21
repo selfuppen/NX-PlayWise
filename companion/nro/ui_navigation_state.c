@@ -206,68 +206,19 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
-        if (index >= 8) {
-            if (horizontal > 0) index = index == 8 ? 2 : (index == 9 ? 4 : 5);
-            else if (vertical < 0 && index > 8) --index;
-            else if (vertical > 0) {
-                if (index < 10) ++index;
-                else {
-                    model->parent_content_selection = index;
-                    model->parent_footer_focused = true;
-                    model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
-                    PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
-                }
-            }
-            model->selected_index = index;
-            return;
-        }
-        if (vertical < 0) {
-            if (index == 5) {
-                index = 4;
-            } else if (index == 7) {
-                index = 6;
-            } else if (index == 4) {
-                index = 2;
-            } else if (index == 6) {
-                index = 3;
-            } else if (index == 2) {
-                index = 0;
-            } else if (index == 3) {
-                index = 1;
-            }
-        } else if (vertical > 0) {
-            if (index == 0) {
-                index = 2;
-            } else if (index == 1) {
-                index = 3;
-            } else if (index == 2) {
-                index = 4;
-            } else if (index == 3) {
-                index = 6;
-            } else if (index == 4) {
-                index = 5;
-            } else if (index == 6) {
-                index = 7;
-            } else if (index == 5 || index == 7) {
-                model->parent_content_selection = index;
-                model->parent_footer_focused = true;
-                model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
-                    PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
-            }
-        } else if (horizontal < 0) {
-            if (index == 2) index = 8;
-            else if (index == 4) index = 9;
-            else if (index == 5) index = 10;
-            else if (index == 1) index = 0;
-            else if (index == 3) index = 2;
-            else if (index == 6) index = 4;
-            else if (index == 7) index = 5;
-        } else if (horizontal > 0) {
-            if (index == 0) index = 1;
-            else if (index == 2) index = 3;
-            else if (index == 4) index = 6;
-            else if (index == 5) index = 7;
-        }
+        static const int left[]  = {8, 8, 0, 2, 6, 10, 9, 5, 8, 9, 10};
+        static const int right[] = {2, 1, 3, 3, 4, 7, 4, 7, 0, 6, 5};
+        static const int up[]    = {1, 1, 1, 1, 3, 6, 0, 4, 8, 8, 9};
+        static const int down[]  = {6, 0, 4, 4, 7, 5, 5, 7, 9, 10, 10};
+        if (horizontal < 0) index = left[index];
+        else if (horizontal > 0) index = right[index];
+        else if (vertical < 0) index = up[index];
+        else if (vertical > 0 && down[index] == index) {
+            model->parent_content_selection = index;
+            model->parent_footer_focused = true;
+            model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
+                PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
+        } else if (vertical > 0) index = down[index];
         model->selected_index = index;
         return;
     }
