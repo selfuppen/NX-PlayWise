@@ -399,6 +399,32 @@ def test_observation_stream_partial_tail() -> None:
         rejected(lambda: verify_observation_streams(root))  # Readiness also requires original raw records.
 
 
+def test_state_observation_requires_original_stream() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        value = {"schema_version": 1, "presentation_version": 1, "release_id": "eden-test",
+                 "instance": "a", "sequence": 2, "input_sampling_version": 2,
+                 "input_sequence": 3, "input_active": False, "ui": {"view": 1, "overlay": 3}}
+        save(root / "state-observations/quota-reconfirmed-status.json", value)
+        # A state read is not a screenshot, but it still needs the original UI stream.
+        verify_capture_readiness(root)
+        rejected(lambda: verify_observation_streams(root))
+        path = root / "app-final/support/automation-ui.jsonl"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(value) + '\n', encoding="utf-8")
+        verify_observation_streams(root)
+        verify_observation_streams(root)
+        altered = {**value, "sequence": 3}
+        (root / "state-observations/quota-reconfirmed-status.json").write_text(
+            json.dumps(altered), encoding="utf-8")
+        rejected(lambda: verify_observation_streams(root))
+        path.write_text(json.dumps(altered) + '\n', encoding="utf-8")
+        malformed = {**altered, "input_stream_version": 1}
+        (root / "state-observations/quota-reconfirmed-status.json").write_text(
+            json.dumps(malformed), encoding="utf-8")
+        rejected(lambda: verify_observation_streams(root))
+
+
 def test_preview_cancel_does_not_exit_child() -> None:
     from tools.automation.eden_main_flow import MainFlow
     class Fake(MainFlow):
@@ -936,6 +962,7 @@ def main() -> None:
     test_support_seed_enters_parent_after_setup()
     test_post_screenshot_neutral_progress()
     test_observation_stream_partial_tail()
+    test_state_observation_requires_original_stream()
     test_preview_cancel_does_not_exit_child()
     test_stale_observation_waits_without_input()
     test_sampled_input_releases_once_on_failure()

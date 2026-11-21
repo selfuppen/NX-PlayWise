@@ -1086,8 +1086,21 @@ def verify(output: Path) -> dict:
 
 def verify_observation_streams(output: Path) -> None:
     samples = {"ui": {}, "input": {}}
-    for path in list((output / "input-samples").glob("*.json")) + list((output / "input-readiness").glob("*.json")):
+    for path in (list((output / "input-samples").glob("*.json")) +
+                 list((output / "input-readiness").glob("*.json")) +
+                 list((output / "state-observations").glob("*.json"))):
         value = read(path)
+        if path.parent.name == "state-observations":
+            # State-only reads have no screenshot/resume evidence. They must
+            # instead be exact presented UI records in the original raw stream.
+            require("input_stream_version" not in value and
+                    isinstance(value.get("release_id"), str) and bool(value["release_id"]) and
+                    type(value.get("presentation_version")) is int and value["presentation_version"] == 1 and
+                    type(value.get("input_sampling_version")) is int and value["input_sampling_version"] in (1, 2) and
+                    type(value.get("input_sequence")) is int and value["input_sequence"] > 0 and
+                    type(value.get("input_active")) is bool,
+                    "invalid state-only UI observation")
+            validate_observation(value, value.get("release_id"))
         group = samples["input" if value.get("input_stream_version") == 1 else "ui"]
         key = (value["instance"], value["sequence"])
         require(key not in group or group[key] == value, "same observation sequence has different input samples")

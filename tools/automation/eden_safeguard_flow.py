@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.automation.eden_main_flow import MainFlow
-from tools.automation.eden_runner import decode, digest, read, require, save
+from tools.automation.eden_runner import decode, digest, read, require, save, validate_observation
 from tools.lib.ptc_token_v2 import encode_token, tier_for_minutes
 
 SAFEGUARD_SCENARIOS = ("setup", "pin_cooldown", "pairing_restore", "quota_recheck")
@@ -58,7 +58,14 @@ def verify_safeguards(output: Path) -> None:
     reconfirmation = quota.get("reconfirmation")
     if reconfirmation is not None:
         status = read(output / f"receipts/{reconfirmation['status_id']}.json")
-        updated = ui("quota-reconfirmed-status")
+        observation = read(output / "state-observations/quota-reconfirmed-status.json")
+        previous = read(output / "checkpoints/quota-failed.json")
+        validate_observation(observation, previous["release_id"])
+        require(observation["instance"] == previous["instance"] and
+                observation["sequence"] > previous["sequence"] and
+                observation["input_sequence"] > previous["input_sequence"],
+                "quota reconfirmation observation did not advance in the same instance")
+        updated = observation["ui"]
         require(status["type"] == "status" and status["status"] == "ok" and
                 status["state"]["played_minutes"] == updated["played_minutes"] > failed["played_minutes"] and
                 updated["overlay"] == 3 and updated["confirm_hold_required"] is True and
@@ -274,7 +281,7 @@ class SafeguardFlow(MainFlow):
                     not any(path.is_file() for folder in ("pending", "processing")
                             for path in (self.app / "inbox" / folder).glob("*.json")),
                     "confirmation remains open without a verified new usage endpoint")
-            save(self.output / "checkpoints/quota-reconfirmed-status.json", ready)
+            save(self.output / "state-observations/quota-reconfirmed-status.json", ready)
             reconfirmation = {"status_id": refreshed["request_id"], "rules_sha256": rules_sha256}
             self.action(button="A", observe_quota_hold=True)
         result = self.wait_receipt("set_today_limit", before)

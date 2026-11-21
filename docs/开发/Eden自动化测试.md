@@ -137,7 +137,7 @@ smoke默认总期限300秒、最多180次输入；main使用1200秒预算、最�
 
 下一次down之前的完成帧必须`waiting=false`，避免状态刷新正在等待回执时页面拒绝保存等按键。down后的采样与释放只依赖独立HID流，不等同步请求、绘制或帧提交返回，不能为了等回执而延迟up。此门禁最多等待5秒，不能用输入已采样替代页面接受或同ID业务回执。
 
-新执行器还要求`presentation_version:1`：观察只在`framebufferEnd`返回后发布，表示该帧已完成软件绘制和提交，不代表真实显示器或原生阻断效果。每次down前，最多5秒内取得同实例的一个中立基线及两份`sequence/input_sequence`均前进的中立、非waiting、非动画帧；等待中遇到活跃输入、waiting或动画会重新建立基线，不接受缓存不变的中立记录。`input-readiness/`保留每个动作三份原件，`input_readiness_version:1`的成功报告按动作数、字段类型和原始流逐份核对。旧NRO证据仍可离线核验，但缺少完成帧标记时不能用于新的实际输入。
+新执行器还要求`presentation_version:1`：观察只在`framebufferEnd`返回后发布，表示该帧已完成软件绘制和提交，不代表真实显示器或原生阻断效果。每次down前，在同一20秒截止时间内取得同实例的一个中立基线及两份`sequence/input_sequence`均前进的中立、非waiting、非动画帧；等待中遇到活跃输入、waiting或动画会重新建立基线，不接受缓存不变的中立记录。`input-readiness/`保留每个动作三份原件，`input_readiness_version:1`的成功报告按动作数、字段类型和原始流逐份核对。旧NRO证据仍可离线核验，但缺少完成帧标记时不能用于新的实际输入。
 
 场景失败后至多调用一次只读`eden_get_runtime_metrics(sample_ms=500)`，保存帧计数和可用运行状态；指标不可用也独立保存错误，不替换原失败、不重发输入、不妨碍退出。单批成功不自动解释历史采样中断，完整UI、业务、原始输入流与健康收尾仍分别断言。
 
@@ -161,7 +161,7 @@ Eden的只读status仍同步完成；其他请求复制到一个自有待处理�
 
 仅 `PLAYWISE_EDEN` 编译；由测试 profile 的 `support/automation-observe.flag` 显式启用。绘制路径最多每秒10次追加一条JSON到 `support/automation-ui.jsonl`，每个NRO实例最多追加128MiB，达到上限后停止观察发布，执行器因缺少新心跳停止。它不提交请求、不读取动作指令、不改认证或业务状态。仅供旧NRO兼容的`automation-ui.json`仍可读取；新发布不反复删除/替换观察路径，避免与Host读句柄竞争导致只剩`.write`临时文件。
 
-Host只读取流尾最多64KiB，选择最后一条以换行结束的完整JSON；未完成尾行不接受，已完成的损坏行直接拒绝，不向前寻找能解析的旧行。健康关闭后重开前，将上一实例UI/HID流原样归档到`ui-streams/`、`input-streams/`再清理私有profile中的旧流；最终流保存到`app-final/support/`。离线核验逐条读取原始流，要求每份输入采样和就绪帧都存在相同实例/序号及完整内容的原记录；UI与HID序号属于不同流，不混用。观察发布失败不影响产品流程；真实SD原子队列仍使用原有实现，本改动不证明或改变其语义。
+Host只读取流尾最多64KiB，选择最后一条以换行结束的完整JSON；未完成尾行不接受，已完成的损坏行直接拒绝，不向前寻找能解析的旧行。健康关闭后重开前，将上一实例UI/HID流原样归档到`ui-streams/`、`input-streams/`再清理私有profile中的旧流；最终流保存到`app-final/support/`。离线核验逐条读取原始流，要求每份输入采样和就绪帧都存在相同实例/序号及完整内容的原记录；UI与HID序号属于不同流，不混用。只读业务状态保存到`state-observations/`，同样逐字绑定原UI流；`checkpoints/`仅保存实际截图检查点，必须具备截图后就绪证据。不能为没有截图的状态快照伪造恢复帧，也不能用状态快照代替截图。观察发布失败不影响产品流程；真实SD原子队列仍使用原有实现，本改动不证明或改变其语义。
 
 外壳：`schema_version:1`、整数`presentation_version:1`、内嵌 `release_id`、本次 NRO `instance`（十六进制 tick 起点）、正整数 `sequence`、十进制字符串 `tick`、`ui` 对象。instance 仅用于测试进程观察，不是主机 boot 身份。
 
