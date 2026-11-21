@@ -400,7 +400,7 @@ static void draw_setup_review(uint32_t *pixels, uint32_t stride, const PtcUiMode
     }
 
     /* Non-blocking Save Failure Banner strictly outside all 4 buttons (Y=566..606) */
-    if (model->message[0]) {
+    if (ptc_ui_setup_message_visible(model)) {
         UiRect warn_bar = {54, 566, 1172, 42};
         fill_round_rect(pixels, stride, warn_bar, 10, UI_WARNING_SOFT);
         draw_rect_outline(pixels, stride, warn_bar, 10, 1, UI_WARNING_BORDER);
@@ -932,7 +932,7 @@ static void draw_setup_step3(uint32_t *pixels, uint32_t stride, const PtcUiModel
         status_note = ptc_ui_text(model->setup_activation_pending
             ? PTC_UI_T_SETUP_ACTIVATING : PTC_UI_T_SETUP_CONTROLS_INACTIVE);
     }
-    if (model->message[0]) {
+    if (ptc_ui_setup_message_visible(model)) {
         status_note = model->message;
         status_warning = true;
     }
@@ -1008,7 +1008,7 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_setup_step3(pixels, stride, model);
     }
 
-    if (model->message[0] && step != PTC_UI_SETUP_CONFIRM) {
+    if (ptc_ui_setup_message_visible(model) && step != PTC_UI_SETUP_CONFIRM) {
         char fitted[256];
         fit_text(fitted, sizeof(fitted), model->message, 13, 1172);
         draw_text(pixels, stride, 54, 646, fitted, 13, UI_WARNING_TEXT);

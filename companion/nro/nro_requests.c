@@ -11,7 +11,7 @@ void begin_wait(UiState *ui, const char *type, const char *message)
     ui->model.feedback_detail[0] = '\0';
     set_command_name(ui, type);
     sync_transport_label(ui);
-    snprintf(ui->model.message, sizeof(ui->model.message), "%s", message);
+    if (message) snprintf(ui->model.message, sizeof(ui->model.message), "%s", message);
 }
 
 void submit_transport_empty(UiState *ui, const char *type, const char *ok_message, const char *fail_prefix)
@@ -57,8 +57,12 @@ void submit_status_with_origin(UiState *ui, PtcUiStatusOrigin origin)
 #endif
     set_command_name(ui, "status");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "status", ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS));
-    else {
+    if (status == PTC_COMPANION_OK) {
+        const char *wait_message = ui->model.view != PTC_UI_SETUP
+            ? ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS)
+            : (ptc_ui_setup_message_visible(&ui->model) ? NULL : "");
+        begin_wait(ui, "status", wait_message);
+    } else {
         ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_READ_FAILED);
         set_message(ui, ptc_ui_text(PTC_UI_T_REFRESH_FAILED), status);
     }

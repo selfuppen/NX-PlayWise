@@ -558,6 +558,14 @@ bool ptc_ui_parent_status_alert_visible(const PtcUiModel *model)
         (model->temporary_unlocked_available && model->temporary_unlocked);
 }
 
+bool ptc_ui_setup_message_visible(const PtcUiModel *model)
+{
+    if (!model || !model->message[0]) return false;
+    return strcmp(model->message, ptc_ui_text(PTC_UI_T_TODAY_S_PLAY_STATUS_HAS_BEEN_REFRESHED)) != 0 &&
+        strcmp(model->message, ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS)) != 0 &&
+        strcmp(model->message, ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS)) != 0;
+}
+
 bool ptc_ui_operation_feedback_visible(const PtcUiModel *model)
 {
     if (!model) return false;

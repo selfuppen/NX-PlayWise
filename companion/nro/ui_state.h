@@ -99,6 +99,7 @@ void ptc_ui_setup_sync(PtcUiModel *model);
 void ptc_ui_return_from_parent(PtcUiModel *model);
 void ptc_ui_setup_record_issue(PtcUiModel *model, PtcUiSetupIssueKind kind, int code);
 bool ptc_ui_setup_has_issues(const PtcUiModel *model);
+bool ptc_ui_setup_message_visible(const PtcUiModel *model);
 bool ptc_ui_setup_reference_matches(const PtcUiModel *model);
 bool ptc_ui_parent_read_only_action(const PtcUiModel *model, int index);
 bool ptc_ui_setup_diagnostic_json(const PtcUiModel *model, char *out, size_t size);

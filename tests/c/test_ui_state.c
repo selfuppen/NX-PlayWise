@@ -1687,6 +1687,48 @@ static void test_release_hit_targets(void)
             check_true(!rects_overlap(ptc_ui_setup_review_rect(i), ptc_ui_setup_review_rect(j)),
                        "setup review buttons do not overlap");
     }
+    {
+        PtcUiModel msg_model = {0};
+        const char *status_ok =
+            "{\"version\":1,\"request_id\":\"s1\",\"type\":\"status\",\"status\":\"ok\","
+            "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+            "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
+            "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},"
+            "\"setup\":{\"phase\":\"pending\",\"restriction_cleared\":false,\"snapshot_available\":false,"
+            "\"activate_after\":0,\"compatibility_status\":\"verified\",\"apply_status\":\"idle\","
+            "\"apply_pending_confirmation\":false,\"recovery_active\":false,\"disable_reason\":\"\"},"
+            "\"completed_at\":115}";
+        const char *status_err =
+            "{\"version\":1,\"request_id\":\"s2\",\"type\":\"status\",\"status\":\"error\","
+            "\"error\":{\"code\":310,\"reason\":\"pctl_read_failed\",\"message\":\"read failed\"},"
+            "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
+            "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
+            "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":116}";
+        msg_model.view = PTC_UI_SETUP;
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "empty setup message is hidden");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS));
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "initial status reading message is hidden in setup");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS));
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "status refreshing message is hidden in setup");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_TODAY_S_PLAY_STATUS_HAS_BEEN_REFRESHED));
+        check_true(!ptc_ui_setup_message_visible(&msg_model), "status refreshed message is hidden in setup");
+        check_true(ptc_ui_apply_result_json(&msg_model, status_ok), "setup status ok parses");
+        check_true(msg_model.message[0] == '\0', "status ok in setup does not populate warning banner text");
+        snprintf(msg_model.message, sizeof(msg_model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_REVIEW_UNSAVED));
+        check_true(ptc_ui_setup_message_visible(&msg_model), "setup save failure message remains visible");
+        check_true(ptc_ui_apply_result_json(&msg_model, status_ok), "status ok preserves real setup warning");
+        check_true(strcmp(msg_model.message, ptc_ui_text(PTC_UI_T_SETUP_REVIEW_UNSAVED)) == 0,
+                   "status ok in setup keeps existing setup warning");
+        check_true(ptc_ui_apply_result_json(&msg_model, status_err), "setup status error parses");
+        check_true(ptc_ui_setup_message_visible(&msg_model), "status error remains visible in setup");
+        msg_model.setup_wizard_completed = msg_model.setup_completion_known = true;
+        msg_model.setup_options_loaded = msg_model.setup_review_active = true;
+        msg_model.view = PTC_UI_PARENT;
+        snprintf(msg_model.message, sizeof(msg_model.message), "stale parent message");
+        ptc_ui_return_from_parent(&msg_model);
+        check_true(msg_model.view == PTC_UI_SETUP && msg_model.setup_review_active && msg_model.message[0] == '\0',
+                   "returning from parent to setup review clears stale message");
+    }
     model.setup_review_active = false;
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
