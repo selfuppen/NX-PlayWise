@@ -476,6 +476,88 @@ def test_sampled_input_releases_once_on_failure() -> None:
             rejected(lambda: suite.wait_input(True, after=neutral))
 
 
+def test_quota_hold_requires_guest_completion() -> None:
+    start = {"instance": "a", "input_sequence": 10, "input_active": False,
+             "ui": {"overlay": 3, "waiting": False, "quota_refresh_failed": False,
+                    "confirm_hold_progress": 0}}
+    sampled = {"instance": "a", "input_sequence": 11, "input_active": True}
+
+    def frame(sequence=11, active=True, instance="a", **changes):
+        return {**start, "instance": instance, "input_sequence": sequence,
+                "input_active": active, "ui": {**start["ui"], **changes}}
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        suite = Suite(None, root, root, {}, 60, "safeguards")
+        # A long host hold, cached frame, neutral frame, and partial progress
+        # cannot substitute for the guest completing its confirmation.
+        for frames in ([frame(sequence=10, waiting=True)], [frame(active=False, waiting=True)],
+                       [frame()], [frame(confirm_hold_progress=40)]):
+            with patch.object(suite, "observe", side_effect=frames), \
+                    patch("tools.automation.eden_runner.time.monotonic", side_effect=[0, 6.01]), \
+                    patch("tools.automation.eden_runner.time.sleep"):
+                rejected(lambda: suite.wait_quota_hold(start, sampled, 6))
+        for ending in (frame(waiting=True), frame(overlay=0), frame(quota_refresh_failed=True),
+                       frame(confirm_hold_progress=0)):
+            with patch.object(suite, "observe", side_effect=[frame(confirm_hold_progress=45), ending]), \
+                    patch("tools.automation.eden_runner.time.monotonic", side_effect=[0, 1]), \
+                    patch("tools.automation.eden_runner.time.sleep"):
+                suite.wait_quota_hold(start, sampled, 6)
+        with patch.object(suite, "observe", return_value=frame(instance="b", waiting=True)), \
+                patch("tools.automation.eden_runner.time.monotonic", return_value=0):
+            rejected(lambda: suite.wait_quota_hold(start, sampled, 6))
+        # The whole-suite deadline can end this wait before six seconds.
+        suite.deadline = 2
+        with patch.object(suite, "observe", return_value=frame(confirm_hold_progress=80)), \
+                patch("tools.automation.eden_runner.time.monotonic", side_effect=[0, 2.01]), \
+                patch("tools.automation.eden_runner.time.sleep"):
+            rejected(lambda: suite.wait_quota_hold(start, sampled, 6))
+
+
+def test_quota_hold_failure_releases_once_without_replay() -> None:
+    class Client:
+        def __init__(self):
+            self.calls = []
+        def tool(self, name, arguments=None):
+            self.calls.append((name, arguments))
+            return {"running": True, "backend": "eden-control", "pid": 1,
+                    "launch": {"target_reached": True, "phase": "game_ready"}}
+
+    neutral = {"instance": "a", "input_sequence": 10, "input_active": False,
+               "ui": {"overlay": 3, "overlay_selection": 1, "confirm_hold_required": True,
+                      "confirm_hold_progress": 0}}
+    sampled = {**neutral, "input_sequence": 11, "input_active": True}
+    released = {**neutral, "input_sequence": 12}
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for error in (None, GateError("quota hold timeout"), GateError("guest instance changed")):
+            client = Client()
+            suite = Suite(client, root, root, {}, 60, "safeguards")
+            with patch.object(suite, "wait_action_ready", return_value=neutral), \
+                    patch.object(suite, "wait_input", side_effect=[sampled, released]) as inputs, \
+                    patch.object(suite, "wait_quota_hold", side_effect=error) as held, \
+                    patch("tools.automation.eden_runner.time.sleep"):
+                if error:
+                    rejected(lambda: suite.action(button="A", observe_quota_hold=True))
+                    assert inputs.call_count == 1
+                else:
+                    suite.action(button="A", observe_quota_hold=True)
+                    assert inputs.call_count == 2
+                assert held.call_count == 1
+            assert [args["action"] for name, args in client.calls if name == "eden_press_button"] == ["down", "up"]
+        for suite_name, button, changes in (("main", "A", {}), ("safeguards", "B", {}),
+                                           ("safeguards", "A", {"overlay": 0}),
+                                           ("safeguards", "A", {"overlay_selection": 0}),
+                                           ("safeguards", "A", {"confirm_hold_required": False}),
+                                           ("safeguards", "A", {"confirm_hold_progress": 20})):
+            client = Client()
+            suite = Suite(client, root, root, {}, 60, suite_name)
+            ready = {**neutral, "ui": {**neutral["ui"], **changes}}
+            with patch.object(suite, "wait_action_ready", return_value=ready):
+                rejected(lambda: suite.action(button=button, observe_quota_hold=True))
+            assert not any(name == "eden_press_button" for name, _ in client.calls)
+
+
 def test_input_requires_presented_progress() -> None:
     from copy import deepcopy
     first = {"instance": "a", "presentation_version": 1, "input_sampling_version": 2,
@@ -808,6 +890,8 @@ def main() -> None:
     test_preview_cancel_does_not_exit_child()
     test_stale_observation_waits_without_input()
     test_sampled_input_releases_once_on_failure()
+    test_quota_hold_requires_guest_completion()
+    test_quota_hold_failure_releases_once_without_replay()
     test_input_requires_presented_progress()
     test_input_readiness_waits_for_fresh_frames_after_guest_pause()
     test_failure_metrics_preserve_original_error()
