@@ -284,6 +284,8 @@ void draw_quota_transition_detailed(
     uint32_t after_accent);
 void draw_unchanged_quota_card(
     uint32_t *pixels, uint32_t stride, UiRect rect, const char *reason);
+void draw_redeem_step_bar(
+    uint32_t *pixels, uint32_t stride, UiRect area, int active_step);
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                       const UiAction *action, bool selected, PtcUiActionState state,
                       int reserved_right, UiRect status_badge);
@@ -298,6 +300,12 @@ void draw_toggle_switch(
     const char *on_label,
     const char *off_label);
 const char *bedtime_override_label(PtcBedtimeOverrideMode mode);
+void draw_bedtime_timeline_strip(uint32_t *pixels, uint32_t stride,
+                                 UiRect bar, uint16_t start_m, uint16_t end_m, bool enabled);
+int bedtime_matching_preset_window(const PtcBedtimeWindow *window);
+void draw_bedtime_preset_chip_row(uint32_t *pixels, uint32_t stride,
+                                  const PtcBedtimeWindow *window, bool custom,
+                                  const PtcUiRect *rects, int focused_index);
 void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
                  const char *label, bool primary, bool selected, bool disabled);
 extern const UiAction GRANT_MANAGER_ACTIONS[];
@@ -320,5 +328,8 @@ void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void ui_glyph_cache_clear(void);
 void ui_background_rebuild(void);
 void ui_background_draw_frame(uint32_t *pixels, uint32_t stride);
+
+void ui_render_overview(const PtcUiModel *model, PtcUiOverview *out);
+void draw_home_policy_row(uint32_t *pixels, uint32_t stride, UiRect box, const char *title, const char *detail, const char *badge, PtcPolicyDisplayState state);
 
 #endif

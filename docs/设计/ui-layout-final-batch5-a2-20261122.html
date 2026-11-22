@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>PlayWise 第五批定稿 · 获取加时码三合一单选（A2 整合版）</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--background,#f3f4f6);color:var(--foreground,#171a20);font:14px/1.55 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;padding:14px 18px}
+button,select{font:inherit;padding:6px 11px;border:1px solid var(--border,#dce0e6);border-radius:8px;background:var(--card,#fff);color:var(--card-foreground,#171a20);cursor:pointer}
+.bar{max-width:1280px;margin:0 auto 10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.bar h2{margin:0;font-size:17px}.bar p{margin:2px 0 0;font-size:12px;color:var(--muted-foreground,#667080)}
+.ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.frame{max-width:1280px;margin:auto;border:1px solid var(--border,#dce0e6);border-radius:11px;overflow:hidden;background:#111}
+.screen-wrap{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden}
+.screen-wrap .native{position:absolute;top:0;left:0;transform:scale(var(--scale,1));transform-origin:top left}
+.native{width:1280px;height:720px;overflow:hidden;background:var(--page_bg);color:var(--text_primary);font:17px/1.35 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;position:relative;user-select:none}
+.native button{font:inherit;background:var(--surface);border:1px solid var(--border_control);color:var(--accent);border-radius:10px;padding:6px 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;white-space:nowrap;line-height:1.2}
+.native button.main{background:var(--accent);color:var(--on_accent);border-color:var(--accent)}
+.native button.soft{background:var(--accent_soft);color:var(--accent);border-color:var(--accent)}
+.native button.subtle{background:var(--surface_raised);color:var(--text_primary);border-color:var(--border_decorative)}
+.native .n-head{height:104px;padding:16px 54px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border_decorative);background:var(--surface)}
+.native .n-title{display:flex;align-items:center;gap:14px}
+.native .n-icon{width:50px;height:50px;border-radius:13px;background:var(--accent);color:var(--on_accent);display:grid;place-items:center;flex-shrink:0}
+.native .n-title h2{font-size:28px;margin:0;font-weight:650;color:var(--text_primary)}
+.native .n-title p{font-size:15px;color:var(--text_secondary);margin:3px 0 0}
+.native .n-capsule{min-width:448px;padding:9px 14px;border-radius:12px;background:var(--surface_raised);border:1px solid var(--border_decorative);display:flex;flex-direction:column;gap:4px}
+.native .n-cap-top{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--text_secondary)}
+.native .n-cap-top strong{font-size:18px;color:var(--text_primary)}
+.native .n-cap-mid{display:flex;align-items:center;justify-content:space-between;font-size:15px}
+.native .n-cap-mid strong{color:var(--success);font-size:17px}
+.native .n-cap-bar{height:4px;border-radius:2px;background:var(--border_decorative);overflow:hidden}
+.native .n-cap-bar span{display:block;height:100%}
+.native .n-crumb{position:absolute;left:54px;right:54px;top:112px;height:38px;display:flex;align-items:center;justify-content:space-between}
+.native .n-back{padding:5px 13px;min-height:36px;border-radius:18px;font-size:15px;border-color:var(--border_decorative)}
+.native .n-path{font-size:17px;color:var(--text_secondary)}
+.native .n-stage{position:absolute;left:54px;right:54px;top:158px;bottom:72px;overflow:hidden}
+.native .n-foot{position:absolute;bottom:0;left:0;right:0;height:64px;padding:10px 54px;background:var(--surface_raised);border-top:1px solid var(--border_decorative);display:flex;align-items:center;justify-content:space-between}
+.native .key{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border-radius:11px;border:1px solid currentColor;font-size:12px;line-height:1}
+.native .card{background:var(--surface);border:1px solid var(--border_decorative);border-radius:14px;padding:12px 15px;min-width:0;min-height:0;overflow:hidden}
+.native .card h3{font-size:17px;font-weight:650;margin:0;color:var(--text_primary)}
+.native .card p{font-size:13px;color:var(--text_secondary);margin:0}
+.native .strip{padding:7px 11px;border-radius:9px;font-size:13px;line-height:1.35;border:1px solid var(--border_decorative);background:var(--surface_raised);color:var(--text_secondary)}
+.native .pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;background:var(--surface_raised);color:var(--text_secondary);border:1px solid var(--border_decorative);white-space:nowrap}
+.native .s-good{background:var(--success_soft);border-color:var(--success_border);color:var(--success)}
+.native .s-warn{background:var(--warning_soft);border-color:var(--warning_border);color:var(--warning_text,var(--warning))}
+.native .s-bad{background:var(--danger_soft);border-color:var(--danger_border);color:var(--danger)}
+.native .s-accent{background:var(--accent_soft);border-color:var(--accent);color:var(--accent)}
+.native .c-good{color:var(--success)!important}.native .c-accent{color:var(--accent)!important}
+.native .flex{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.native .row-g{display:flex;align-items:center;gap:8px;min-width:0}
+.native .stack{display:flex;flex-direction:column;gap:9px;min-width:0;min-height:0}
+.native .grow{flex:1;min-height:0}.native .w100{width:100%}
+.native .sub{font-size:13px;color:var(--text_secondary)}.native .t14{font-size:14px}.native .t12{font-size:12px}
+.native .g-tri{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,1.38fr);gap:15px;height:100%}
+.native .mode-opt{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border_decorative);cursor:pointer}
+.native .mode-opt.sel{background:var(--accent_soft);border:2px solid var(--accent);padding:8px 11px}
+.native .mode-art{width:92px;height:56px;border-radius:9px;background:var(--surface_raised);border:1px solid var(--border_decorative);display:grid;place-items:center;flex-shrink:0}
+.native .mode-opt.sel .mode-art{background:var(--surface);border-color:var(--accent)}
+.native .mode-art svg{width:84px;height:48px;display:block}
+.native .mode-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.native .mode-body strong{font-size:16px;color:var(--text_primary)}.native .mode-opt.sel .mode-body strong{color:var(--accent)}
+.native .mode-body small{font-size:12px;color:var(--text_secondary);line-height:1.3}
+.native .radio{width:20px;height:20px;border-radius:50%;border:2px solid var(--border_control);background:var(--surface_raised);display:grid;place-items:center;flex-shrink:0}
+.native .radio.on{border-color:var(--accent);background:var(--accent)}
+.native .radio.on i{width:8px;height:8px;border-radius:50%;background:var(--on_accent);display:block}
+.native .qr-stage{display:flex;align-items:center;gap:16px;padding:12px 14px;border-radius:12px;background:var(--surface_raised);border:1px solid var(--border_decorative)}
+.native .qr-card{background:#FFF;border-radius:11px;padding:10px;border:1px solid #D0D5DD;flex-shrink:0}
+.native .step-item{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border-radius:10px;background:var(--surface_raised);border:1px solid var(--border_decorative)}
+.native .step-num{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--on_accent);display:grid;place-items:center;font-size:13px;font-weight:700;flex-shrink:0}
+.native .path-chip{font-family:Consolas,monospace;font-size:13px;color:var(--accent);background:var(--surface);border:1px solid var(--border_decorative);padding:3px 8px;border-radius:7px;display:inline-block;margin-top:3px}
+.native .chip-row{display:flex;gap:6px}.native .chip-row button{flex:1;min-height:32px;padding:4px 8px;font-size:13px;border-radius:8px}
+.native .ticket-box{padding:11px 14px;border-radius:12px;background:var(--surface_raised);border:2px solid var(--success);display:flex;flex-direction:column;gap:7px}
+.native .ticket-code{font-family:Consolas,monospace;font-size:36px;font-weight:800;letter-spacing:4px;text-align:center;color:var(--text_primary);background:var(--surface);border-radius:9px;padding:6px;border:1px solid var(--border_decorative)}
+.native .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div><h2>第五批定稿确认 · 离线加时「三合一单选」整合版（A2）</h2><p>去掉顶层二级切换，把「手机扫码（默认）」「电脑/手机离线文件」「本机直接生成」整合为左侧统一三选一模式卡，点按左卡即时切换右侧专属工作台。</p></div>
+  <div class="ctl"><label>主题 <select id="theme"><option value="light">浅色</option><option value="dark">深色</option></select></label><label>风格 <select id="style"><option value="slate">石墨</option><option value="paper">纸墨</option><option value="teal">雾青</option><option value="dusk">暮霭</option></select></label></div>
+</div>
+<div class="frame"><div class="screen-wrap" id="wrap"></div></div>
+<script id="review-data" type="application/json">{"schema_version":1,"review_id":"playwise-ui-batch5-final-a2-20261122","canvas":[1280,720],"palette_source":"companion/nro/ui_theme.c","palette_source_sha256":"fa87551b36413e2542cb5cd7254e0b5436ea9a16763492fb731c7fe1298c5e19","palettes":{"slate":{"light":{"page_bg":"#F3F4F6","surface":"#FCFCFD","surface_raised":"#E9EBEF","border_decorative":"#DDE0E5","border_control":"#7D8593","text_primary":"#171A20","text_secondary":"#545B68","text_disabled":"#7E8592","accent":"#2F5FD0","focus":"#1C46AC","on_accent":"#FFFFFF","accent_soft":"#E6ECFB","hero":"#1E3566","on_hero":"#FFFFFF","hero_secondary":"#C3D2EE","success":"#2C7A4B","success_soft":"#EAF5EE","success_border":"#9AD2AE","warning":"#9A6114","warning_soft":"#FBF2E1","warning_border":"#E4C17B","warning_text":"#83500C","danger":"#B53A45","danger_soft":"#FAEBEC","danger_border":"#E2A2A8","coral":"#C9665C","night":"#5B4CB0","night_soft":"#EDEAF9","night_border":"#BDB4E8","scrim":"#DEE1E7","key_glyph_bg":"#E7EAEE","key_glyph_border":"#BCC2CB","gauge_slot":"#E3E7EC","gauge_slot_border":"#4C5666"},"dark":{"page_bg":"#111111","surface":"#222222","surface_raised":"#333333","border_decorative":"#444444","border_control":"#888888","text_primary":"#EEEEEE","text_secondary":"#BBBBBB","text_disabled":"#777777","accent":"#88AAEE","focus":"#BBDDFF","on_accent":"#112233","accent_soft":"#223344","hero":"#223355","on_hero":"#EEEEFF","hero_secondary":"#AABBCC","success":"#77CC99","success_soft":"#113322","success_border":"#336644","warning":"#EEBB66","warning_soft":"#332211","warning_border":"#775522","warning_text":"#EEBB66","danger":"#EE8899","danger_soft":"#441122","danger_border":"#882233","coral":"#EE8899","night":"#BBAAFF","night_soft":"#221144","night_border":"#554488","scrim":"#000000","key_glyph_bg":"#333333","key_glyph_border":"#555555","gauge_slot":"#333333","gauge_slot_border":"#666666"}},"paper":{"light":{"page_bg":"#F5F1E8","surface":"#FFFDF8","surface_raised":"#EDE7DA","border_decorative":"#E2DACB","border_control":"#8A8172","text_primary":"#211E19","text_secondary":"#5D564B","text_disabled":"#8A8172","accent":"#2C4A6E","focus":"#1B3350","on_accent":"#FFFFFF","accent_soft":"#E7EDF4","hero":"#233D5B","on_hero":"#FBF9F4","hero_secondary":"#C3D1E0","success":"#3E7A4E","success_soft":"#EBF3E9","success_border":"#A8CDA4","warning":"#96601A","warning_soft":"#FAF1DF","warning_border":"#E3C07E","warning_text":"#7F4F10","danger":"#AE3E38","danger_soft":"#FAEBE7","danger_border":"#E3A79F","coral":"#C46A55","night":"#5D4A8A","night_soft":"#F0EBF7","night_border":"#C5B7DE","scrim":"#E6DFD1","key_glyph_bg":"#EAE3D5","key_glyph_border":"#C3B7A3","gauge_slot":"#E8E1D2","gauge_slot_border":"#6E6151"},"dark":{"page_bg":"#111111","surface":"#221111","surface_raised":"#332222","border_decorative":"#443333","border_control":"#887777","text_primary":"#FFEEDD","text_secondary":"#CCBBAA","text_disabled":"#776666","accent":"#99BBDD","focus":"#BBDDFF","on_accent":"#112233","accent_soft":"#223344","hero":"#223344","on_hero":"#FFEEDD","hero_secondary":"#AACCDD","success":"#88CC99","success_soft":"#113322","success_border":"#336644","warning":"#EEBB66","warning_soft":"#332211","warning_border":"#775522","warning_text":"#EEBB66","danger":"#EE9988","danger_soft":"#441111","danger_border":"#883322","coral":"#EE9988","night":"#CCAAEE","night_soft":"#221133","night_border":"#664488","scrim":"#110000","key_glyph_bg":"#332222","key_glyph_border":"#554444","gauge_slot":"#332222","gauge_slot_border":"#665555"}},"teal":{"light":{"page_bg":"#F2F5F2","surface":"#FBFCFA","surface_raised":"#E9EFEA","border_decorative":"#DCE4DE","border_control":"#768A81","text_primary":"#182420","text_secondary":"#52645C","text_disabled":"#7F8C85","accent":"#1F6B5C","focus":"#124F44","on_accent":"#FFFFFF","accent_soft":"#E2F0EB","hero":"#1B4B43","on_hero":"#F7FCFA","hero_secondary":"#BFDCD3","success":"#2E7D4F","success_soft":"#EAF5EE","success_border":"#9BD3AE","warning":"#9A6212","warning_soft":"#FBF3E3","warning_border":"#E7C27B","warning_text":"#85510B","danger":"#B33B45","danger_soft":"#FAECEC","danger_border":"#E4A3A8","coral":"#C96A5E","night":"#5A4E9E","night_soft":"#EFEBF8","night_border":"#BFB4E0","scrim":"#DCE5E0","key_glyph_bg":"#E6EDE8","key_glyph_border":"#B9C8C1","gauge_slot":"#DCE7E1","gauge_slot_border":"#4A6B60"},"dark":{"page_bg":"#111111","surface":"#112222","surface_raised":"#223333","border_decorative":"#334444","border_control":"#778888","text_primary":"#EEFFFF","text_secondary":"#AACCCC","text_disabled":"#667777","accent":"#77CCBB","focus":"#AADDDD","on_accent":"#002222","accent_soft":"#113333","hero":"#114433","on_hero":"#EEFFFF","hero_secondary":"#AACCCC","success":"#77CC99","success_soft":"#113322","success_border":"#336644","warning":"#EEBB66","warning_soft":"#332211","warning_border":"#775522","warning_text":"#EEBB66","danger":"#EE8899","danger_soft":"#441122","danger_border":"#882233","coral":"#EE8899","night":"#BBAAFF","night_soft":"#221144","night_border":"#554488","scrim":"#001111","key_glyph_bg":"#223333","key_glyph_border":"#445555","gauge_slot":"#223333","gauge_slot_border":"#446655"}},"dusk":{"light":{"page_bg":"#F4F4F8","surface":"#FCFCFE","surface_raised":"#ECECF4","border_decorative":"#DCDCE8","border_control":"#7B7A93","text_primary":"#181826","text_secondary":"#53536A","text_disabled":"#808098","accent":"#54469E","focus":"#3C307C","on_accent":"#FFFFFF","accent_soft":"#EEEBFA","hero":"#2C2454","on_hero":"#F9F8FE","hero_secondary":"#C2BDF0","success":"#2E7D4F","success_soft":"#EAF5EE","success_border":"#9BD3AE","warning":"#96601A","warning_soft":"#FAF1DF","warning_border":"#E3C07E","warning_text":"#7F4F10","danger":"#B03E46","danger_soft":"#FAEAEC","danger_border":"#E3A3A8","coral":"#C46A63","night":"#4653A8","night_soft":"#EAEBF8","night_border":"#B4BAE3","scrim":"#E0E0EA","key_glyph_bg":"#E5E5F0","key_glyph_border":"#BFBFCF","gauge_slot":"#E4E4EE","gauge_slot_border":"#63637E"},"dark":{"page_bg":"#111111","surface":"#111122","surface_raised":"#222233","border_decorative":"#333344","border_control":"#666688","text_primary":"#EEEEFF","text_secondary":"#AABBCC","text_disabled":"#666677","accent":"#9988EE","focus":"#BBBBFF","on_accent":"#111133","accent_soft":"#222244","hero":"#222255","on_hero":"#EEEEFF","hero_secondary":"#AABBEE","success":"#77CC99","success_soft":"#113322","success_border":"#336644","warning":"#EEBB66","warning_soft":"#332211","warning_border":"#775522","warning_text":"#EEBB66","danger":"#EE8899","danger_soft":"#441122","danger_border":"#882233","coral":"#EE8899","night":"#99AAFF","night_soft":"#222244","night_border":"#444488","scrim":"#000011","key_glyph_bg":"#222233","key_glyph_border":"#444455","gauge_slot":"#222233","gauge_slot_border":"#444466"}}}}</script>
+<script>
+'use strict';
+const DATA=JSON.parse(document.getElementById('review-data').textContent);
+const st={theme:'light',style:'slate',mode:'phone',draftMin:60,issuedMin:20,issuedCode:'12345678',exported:false};
+const key=s=>`<span class="key">${s}</span>`;
+const pill=(t,c='')=>`<span class="pill${c?' '+c:''}">${t}</span>`;
+function art(k){
+  if(k==='phone')return '<svg viewBox="0 0 104 60" fill="none"><rect x="4" y="14" width="7" height="32" rx="3" fill="#2E72D2"/><rect x="12" y="14" width="30" height="32" rx="2.5" fill="var(--surface)" stroke="var(--text_secondary)" stroke-width="1.5"/><rect x="18" y="19" width="18" height="22" rx="2" fill="#FFF" stroke="var(--border_control)"/><rect x="21" y="22" width="5" height="5" fill="#111"/><rect x="28" y="22" width="5" height="5" fill="#111"/><rect x="21" y="29" width="5" height="5" fill="#111"/><rect x="28" y="29" width="5" height="5" fill="#111"/><rect x="43" y="14" width="7" height="32" rx="3" fill="#E64A38"/><path d="M55 30h12m-3.5-4L67.5 30l-4 4" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><rect x="73" y="10" width="25" height="40" rx="4.5" fill="var(--text_primary)"/><rect x="76" y="14" width="19" height="30" rx="2" fill="var(--accent_soft)"/><circle cx="85.5" cy="29" r="6.5" fill="var(--success)"/><path d="M82.5 29l2.1 2.2 3.9-4.2" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  if(k==='pc')return '<svg viewBox="0 0 104 60" fill="none"><path d="M9 13h16l7 7v26a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V16a3 3 0 0 1 3-3Z" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.8"/><rect x="10" y="26" width="18" height="12" rx="2.5" fill="var(--accent)"/><text x="19" y="34.5" text-anchor="middle" font-size="6.8" font-weight="700" fill="#FFF">JSON</text><path d="M37 30h12m-3.5-4L49.5 30l-4 4" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><rect x="56" y="13" width="38" height="26" rx="3.5" fill="var(--text_primary)"/><rect x="59" y="16" width="32" height="20" rx="1.5" fill="var(--accent_soft)"/><rect x="63" y="21" width="14" height="3.5" rx="1.5" fill="var(--accent)"/><rect x="63" y="27" width="24" height="3" rx="1.5" fill="var(--success)"/><path d="M51 41h48l-3 5H54l-3-5Z" fill="var(--text_secondary)"/></svg>';
+  return '<svg viewBox="0 0 104 60" fill="none"><rect x="10" y="11" width="11" height="38" rx="4" fill="#2E72D2"/><rect x="23" y="11" width="58" height="38" rx="3" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.8"/><rect x="30" y="20" width="44" height="20" rx="4" fill="var(--success_soft)" stroke="var(--success)" stroke-width="1.2"/><text x="52" y="33.5" text-anchor="middle" font-size="10.5" font-weight="800" fill="var(--success)">1234 5678</text><rect x="83" y="11" width="11" height="38" rx="4" fill="#E64A38"/></svg>';
+}
+function qrSvg(sz){
+  const rows=['111111101011111','100000100100001','101110101101101','101110100001101','101110101001101','100000100100001','111111101010101','000000001101000','101101110110110','010010001001001','111111101101101','100000100010010','101110101101110','100000101010001','111111100110101'];
+  let r='';rows.forEach((row,y)=>{for(let x=0;x<row.length;x++)if(row[x]==='1')r+=`<rect x="${x+2}" y="${y+2}" width="1" height="1" fill="#000"/>`;});
+  return `<svg width="${sz}" height="${sz}" viewBox="0 0 19 19" shape-rendering="crispEdges"><rect width="19" height="19" fill="#FFF"/>${r}</svg>`;
+}
+function render(){
+  const pal=DATA.palettes[st.style][st.theme];
+  const opt=(id,t,tag,desc)=>{const sel=st.mode===id;return `<div class="mode-opt${sel?' sel':''}" data-mode="${id}"><div class="mode-art">${art(id)}</div><div class="mode-body"><div class="flex"><strong>${t}</strong>${pill(tag,sel?'s-accent':'')}</div><small>${desc}</small></div><span class="radio${sel?' on':''}"><i></i></span></div>`;};
+  let right='';
+  if(st.mode==='phone'){
+    right=`<section class="card stack" style="justify-content:space-between"><div class="flex"><div class="row-g"><h3>手机联网扫码配对</h3>${pill('默认推荐 · 扫一次永久离线发码','s-good')}</div><span class="sub">深浅主题纯白底</span></div><div class="strip s-good t12"><strong>✓ 设备与私有密钥已就绪：</strong>kid-switch-01 · 仅本机与已配对家长端持有</div><div class="qr-stage grow"><div class="qr-card">${qrSvg(210)}</div><div class="stack grow"><div class="strip"><strong>第 1 步 · 手机扫码自动配对</strong><br>用手机相机或浏览器扫描左侧二维码，自动导入设备名与签名密钥。</div><div class="strip"><strong>配对网页地址</strong><br><span class="c-accent t12">https://selfuppen.github.io/NX-PlayWise/</span></div><div class="strip"><strong>后续免网发码</strong>：首次打开后保存到主屏，日常无需联网随时发码。</div></div></div><div class="strip s-bad t12"><strong>安全提醒：</strong>二维码包含加时码签名密钥，请仅由家长扫描保存，切勿发给他人。</div></section>`;
+  }else if(st.mode==='pc'){
+    right=`<section class="card stack" style="justify-content:space-between"><div class="flex"><div class="row-g"><h3>电脑 / 手机离线单文件配对</h3>${pill(st.exported?'配置已导出到 SD 卡':'全程免网络','s-'+(st.exported?'good':'accent'))}</div><span class="sub">无外网或电脑发码</span></div><div class="strip s-good t12"><strong>✓ 设备与私有密钥已就绪：</strong>kid-switch-01 · 可与手机扫码共用同一密钥</div><div class="stack grow"><div class="step-item"><span class="step-num">1</span><div class="grow"><div class="flex"><strong class="t14">导出配置文件到 SD 卡</strong><button data-act="export" class="main" style="min-height:32px;padding:4px 12px;font-size:13px">${key('A')} ${st.exported?'已导出配置':'导出配置文件'}</button></div><span class="path-chip">sdmc:/switch/playwise/parent-import.json</span></div></div><div class="step-item"><span class="step-num">2</span><div><strong class="t14">将离线网页与配置传到可信电脑/手机</strong><p>把交付包里的 <strong>playwise-offline.html</strong> 与刚导出的 JSON 一起保存到设备。</p></div></div><div class="step-item"><span class="step-num">3</span><div><strong class="t14">用系统浏览器打开 HTML 并导入配置</strong><p>点「导入配置文件」选中 JSON 即可；请勿使用聊天或网盘内置预览器。</p></div></div></div><div class="strip s-bad t12"><strong>安全提醒：</strong>配置文件含签名密钥，请妥善保存在家长设备中，切勿转发他人。</div></section>`;
+  }else{
+    const mismatch=st.draftMin!==st.issuedMin;
+    const fmt=`${st.issuedCode.slice(0,4)}  ${st.issuedCode.slice(4)}`;
+    right=`<section class="card stack" style="justify-content:space-between"><div class="flex"><div class="row-g"><h3>本机直接生成 8 位加时码</h3>${pill('今日剩 51 分 · 已用 69 分','s-good')}</div><span class="sub">生成前再验 PIN</span></div><div class="stack" style="gap:7px"><div class="chip-row">${[15,30,45,60,120].map(m=>`<button data-pre="${m}" class="${st.draftMin===m?'main':'subtle'}">${m} 分钟</button>`).join('')}</div><div class="flex strip"><span>自定义时长：<strong>${st.draftMin} 分钟</strong>（兑换后预计剩 ${51+st.draftMin} 分）</span><button data-act="issue" class="main" style="min-height:34px;padding:4px 14px;font-size:14px">${key('+')} 签发 ${st.draftMin} 分钟新码</button></div></div><div class="ticket-box grow"><div class="flex"><strong class="c-good">已签发凭证票据</strong>${pill(`此码面额 ${st.issuedMin} 分钟`,'s-good')}</div><div class="ticket-code">${fmt}</div><div class="g2"><div class="strip t12">签发时预计剩：<strong>${51+st.issuedMin} 分钟</strong></div><div class="strip t12">有效期：<strong>2026-07-08 · 单次有效</strong></div></div><div class="strip ${mismatch?'s-warn':''} t12">${mismatch?`注意：上方草稿已调为 ${st.draftMin} 分，但不影响这张已签发的 ${st.issuedMin} 分旧码。`:'把上方 8 位数字告知孩子，在首页或游戏浮窗输入兑换即可。'}</div></div></section>`;
+  }
+  document.getElementById('wrap').innerHTML=`<div class="native" style="${Object.entries(pal).map(([k,v])=>`--${k}:${v}`).join(';')}"><header class="n-head"><div class="n-title"><span class="n-icon"><svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.1"><rect x="4" y="4" width="8" height="8" rx="1.5"/><rect x="16" y="4" width="8" height="8" rx="1.5"/><rect x="4" y="16" width="8" height="8" rx="1.5"/><path d="M16 16h4v4h-4zm4 4h4v4h-4zm0-4h4"/></svg></span><div><h2>获取与签发加时码</h2><p>离线加时 / 统一选择手机扫码、电脑离线或本机直接生成</p></div></div><div class="n-capsule"><div class="n-cap-top"><span><strong>16:00</strong> · 7月8日 周三</span>${pill('掌机模式','s-accent')}<span>刚刚刷新</span></div><div class="n-cap-mid"><strong>今天还可玩：51 分钟</strong><span class="sub">今日已兑 1 次（+30 分）</span></div><div class="n-cap-bar"><span style="width:42%;background:var(--success)"></span></div></div></header><div class="n-crumb"><div class="row-g"><button class="n-back">${key('B')} 返回离线加时</button><span class="n-path">离线加时 / 获取与签发加时码</span></div><span class="sub">三合一单选 · 零双层标签</span></div><main class="n-stage"><div class="g-tri"><section class="card stack" style="justify-content:space-between"><div><div class="flex"><h3>选择加时码方式</h3>${pill('上下键切换')}</div><p style="margin-top:2px">日常推荐先用手机或电脑配对，临时手边没设备时再选本机直接生成。</p></div><div class="stack" style="gap:8px">${opt('phone','手机配对（联网扫码）','默认推荐','扫右侧二维码 10 秒配对，之后随时离线发码。')}${opt('pc','电脑 / 手机配对（离线文件）','全程免网','导出配置文件＋离线 HTML 导入，无需网络。')}${opt('local','本机直接生成 8 位码','临时应急','直接在 Switch 上选时长、验 PIN 签发新码。')}</div><div class="strip t12">三种方式共用同一套本机密钥，互不冲突。</div></section>${right}</div></main><footer class="n-foot"><div class="row-g"><button>${key('B')} 返回</button><button>${key('Y')} 刷新状态</button></div><small>生成设置（设备名与密钥）及使用记录入口保留在离线加时主菜单</small></footer></div>`;
+  scale();
+}
+function scale(){const w=document.getElementById('wrap');if(w.clientWidth>0)w.style.setProperty('--scale',w.clientWidth/1280);}
+new ResizeObserver(scale).observe(document.documentElement);
+document.addEventListener('click',e=>{
+  const m=e.target.closest('[data-mode]');if(m){st.mode=m.dataset.mode;render();return;}
+  const p=e.target.closest('[data-pre]');if(p){st.draftMin=Number(p.dataset.pre);render();return;}
+  const a=e.target.closest('[data-act]');if(!a)return;
+  if(a.dataset.act==='export'){st.exported=true;render();}
+  if(a.dataset.act==='issue'){st.issuedMin=st.draftMin;st.issuedCode=String(10000000+((st.draftMin*7391+24681)%89999999));render();}
+});
+document.getElementById('theme').addEventListener('change',e=>{st.theme=e.target.value;render();});
+document.getElementById('style').addEventListener('change',e=>{st.style=e.target.value;render();});
+render();
+</script>
+</body>
+</html>

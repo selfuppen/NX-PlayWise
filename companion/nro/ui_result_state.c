@@ -269,10 +269,42 @@ void ptc_ui_change_redemption_history_page(PtcUiModel *model, int direction)
     else if (direction > 0 && model->redemption_history_page + 1 < pages) ++model->redemption_history_page;
 }
 
+bool ptc_ui_activity_matches_filter(const PtcActivityHistoryRecord *record, int filter)
+{
+    if (!record) return false;
+    if (filter <= 0 || filter > 3) return true;
+    if (filter == 1) {
+        return strcmp(record->action, "offline_grant") == 0 ||
+               strcmp(record->action, "daily_buffer") == 0 ||
+               strcmp(record->action, "today_add") == 0;
+    }
+    if (filter == 3) {
+        return strcmp(record->action, "protection") == 0;
+    }
+    return strcmp(record->action, "offline_grant") != 0 &&
+           strcmp(record->action, "daily_buffer") != 0 &&
+           strcmp(record->action, "today_add") != 0 &&
+           strcmp(record->action, "protection") != 0;
+}
+
+int ptc_ui_activity_filtered_count(const PtcUiModel *model)
+{
+    int count = 0;
+    if (!model || model->activity_history_count <= 0) return 0;
+    if (model->activity_history_filter <= 0 || model->activity_history_filter > 3)
+        return model->activity_history_count;
+    for (int i = 0; i < model->activity_history_count; ++i) {
+        if (ptc_ui_activity_matches_filter(&model->activity_history[i], model->activity_history_filter))
+            ++count;
+    }
+    return count;
+}
+
 int ptc_ui_activity_history_page_count(const PtcUiModel *model)
 {
-    if (!model || model->activity_history_count <= 0) return 1;
-    return (model->activity_history_count + 7) / 8;
+    int count = ptc_ui_activity_filtered_count(model);
+    if (count <= 0) return 1;
+    return (count + 7) / 8;
 }
 
 void ptc_ui_change_activity_history_page(PtcUiModel *model, int direction)

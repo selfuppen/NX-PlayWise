@@ -38,7 +38,6 @@ void randomGet(void *out, size_t size) { memset(out, 0x35, size); }
 void ptc_ui_graphics_language_changed(void) { ++glyph_refreshes; }
 static int64_t monotonic_offset_ms;
 int64_t ptc_ui_anim_now_ms(void) { return fixed_time * 1000 + monotonic_offset_ms; }
-void refresh_security_state(UiState *ui) { (void)ui; }
 void finish_quota_recheck(UiState *ui, bool success) { (void)ui; (void)success; }
 void finish_today_limit_refresh(UiState *ui, bool success) { (void)ui; (void)success; }
 void show_pending_redemption(UiState *ui) { (void)ui; }
@@ -139,6 +138,44 @@ static void init_parent_entry(UiState *ui, PtcMemStorage *mem)
     ui->model.setup_pin_ready = true;
     pin_values[0] = "9999";
     enter_parent_area(ui);
+}
+
+static void test_grant_hub_pairing_authentication(void)
+{
+    static PtcMemStorage mem;
+    UiState ui;
+    init(&ui, &mem);
+    check(ptc_companion_auth_set_pin(&ui.auth, "1234", fixed_time, switch_random, NULL) == PTC_AUTH_OK,
+          "pairing PIN fixture");
+    check(mem.storage.vtable->write_text_atomic(&mem.storage, CONFIG_PATH, "{\"device_id\":\"fixture-device\"}") &&
+          mem.storage.vtable->write_text_atomic(&mem.storage, CREDENTIALS_PATH,
+              "{\"grant_secret\":\"fixture-secret-for-pairing-tests-012345\"}"), "pairing config fixture");
+    ui.model.view = PTC_UI_PARENT;
+    select_grant_hub_mode(&ui, 1);
+    pin_values[0] = "1234";
+    select_grant_hub_mode(&ui, 0);
+    check(pin_opens == 1 && ui.model.overlay == PTC_UI_OVERLAY_QR && ui.model.grant_hub_mode == 0 &&
+          qrcodegen_getSize(ui.model.qr_code) > 0, "QR tab opens after sensitive PIN verification");
+    export_parent_import(&ui);
+    check(pin_opens == 1 && ui.model.parent_export_succeeded, "verified QR page can export as before");
+    check(mem.storage.vtable->remove_path(&mem.storage, APP_ROOT "/parent-import.json"), "reset export fixture");
+
+    ui.model.overlay = PTC_UI_OVERLAY_QR;
+    select_grant_hub_mode(&ui, 1);
+    pin_cursor = 0;
+    pin_values[0] = NULL;
+    select_grant_hub_mode(&ui, 0);
+    check(pin_opens == 2 && ui.model.overlay == PTC_UI_OVERLAY_QR && ui.model.grant_hub_mode == 1,
+          "canceling later PIN keeps the file tab even when a cached QR exists");
+    export_parent_import(&ui);
+    check(pin_opens == 3 && !mem.storage.vtable->exists(&mem.storage, APP_ROOT "/parent-import.json"),
+          "cached QR does not authorize export from the file tab");
+    pin_cursor = 0;
+    pin_values[0] = "1234";
+    export_parent_import(&ui);
+    check(pin_opens == 4 && ui.model.parent_export_succeeded &&
+          mem.storage.vtable->exists(&mem.storage, APP_ROOT "/parent-import.json"),
+          "verified file tab exports the pairing configuration");
 }
 
 static void test_update_badge_entry(void)
@@ -944,6 +981,7 @@ int main(void)
     char text[8192];
     test_eden_request_release_boundary();
     test_update_badge_entry();
+    test_grant_hub_pairing_authentication();
     init(&ui, &mem);
     ui.model.view = PTC_UI_PARENT;
     ui.model.setup_step = 0;

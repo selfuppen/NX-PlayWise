@@ -527,6 +527,17 @@ void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
     model->numpad_error[0] = '\0';
 }
 
+void ptc_ui_duration_set_minutes(PtcUiModel *model, uint16_t minutes)
+{
+    if (!model || !duration_purpose(model->numpad_purpose)) return;
+    if (minutes < model->numpad_minimum) minutes = model->numpad_minimum;
+    if (minutes > model->numpad_maximum) minutes = model->numpad_maximum;
+    set_duration_value(model, minutes);
+    model->duration_hours_replace_on_input = true;
+    model->duration_minutes_replace_on_input = true;
+    model->numpad_error[0] = '\0';
+}
+
 void ptc_ui_numpad_activate(PtcUiModel *model)
 {
     char *text;

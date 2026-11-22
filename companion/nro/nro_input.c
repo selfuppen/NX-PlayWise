@@ -31,6 +31,9 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & (HidNpadButton_R | HidNpadButton_Right)) {
             ptc_audio_play(PTC_SE_STEP);
             ptc_ui_support_guide_change_page(&ui->model, 1);
+        } else if (down & HidNpadButton_Y) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            submit_status(ui);
         }
         return;
     }

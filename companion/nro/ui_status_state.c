@@ -380,6 +380,75 @@ void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
     out->total_at_stop = total == INT_MAX ? -1 : total / 60;
 }
 
+void ptc_ui_project_overview(const PtcUiModel *model, int64_t now,
+    uint16_t day, int second, PtcUiOverview *out)
+{
+    PtcUiTodayProjection p;
+    memset(out, 0, sizeof(*out));
+    out->state = PTC_POLICY_UNKNOWN;
+    snprintf(out->title, sizeof(out->title), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_PENDING));
+    snprintf(out->value, sizeof(out->value), "%s", ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED));
+    snprintf(out->balance, sizeof(out->balance), "%s", ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED));
+    snprintf(out->hint, sizeof(out->hint), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_REFRESH));
+    ptc_ui_project_today(model, now, day, second, &p);
+    out->fresh = p.fresh;
+    if (!p.fresh) return;
+    out->total_known = p.total_known;
+    out->total_unlimited = p.total_unlimited;
+    out->total_remaining = p.total_remaining;
+    out->reasons = p.active_reasons;
+    if (p.total_known) {
+        if (p.total_unlimited) snprintf(out->balance, sizeof(out->balance), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        else snprintf(out->balance, sizeof(out->balance), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)p.total_remaining);
+    }
+    bool runtime = !model->disable_flag_present && !model->recovery_active &&
+        !model->apply_pending_confirmation && !model->temporary_unlocked &&
+        strcmp(model->setup_phase, "active") == 0;
+    bool known = true;
+    for (int i = 0; i < 4; ++i) if (p.conditions[i] == PTC_UI_CONDITION_UNKNOWN) known = false;
+    out->blocked = p.active_reasons != 0;
+    out->available = runtime && known && !out->blocked && model->restricted_now != 1 && model->blocked_today != 1;
+    if (!runtime) {
+        PtcUiTextId title = model->disable_flag_present ? PTC_UI_T_CONTROL_IS_DISABLED :
+            model->recovery_active ? PTC_UI_T_RECOVERING :
+            model->apply_pending_confirmation ? PTC_UI_T_WAITING_FOR_EFFECT : PTC_UI_T_OVERVIEW_PENDING;
+        snprintf(out->title, sizeof(out->title), "%s", ptc_ui_text(title));
+        return;
+    }
+    if (out->blocked) {
+        unsigned count = 0;
+        for (unsigned bit = 1; bit <= PTC_UI_STOP_DOCK; bit <<= 1) if (p.active_reasons & bit) ++count;
+        out->state = p.active_reasons == PTC_UI_STOP_EYE ? PTC_POLICY_WAITING : PTC_POLICY_ACTIVE;
+        if (count > 1) {
+            snprintf(out->title, sizeof(out->title), ptc_ui_text(PTC_UI_T_OVERVIEW_MULTI), count);
+            snprintf(out->value, sizeof(out->value), ptc_ui_text(PTC_UI_T_OVERVIEW_COUNT), count);
+        } else {
+            PtcUiTextId title = p.active_reasons & PTC_UI_STOP_EYE ? PTC_UI_T_OVERVIEW_REST :
+                p.active_reasons & PTC_UI_STOP_BEDTIME ? PTC_UI_T_BEDTIME_ACTIVE :
+                p.active_reasons & PTC_UI_STOP_DOCK ? PTC_UI_T_DOCK_BLOCKED : PTC_UI_T_DETAIL_STOP_DAILY;
+            snprintf(out->title, sizeof(out->title), "%s", ptc_ui_text(title));
+            snprintf(out->value, sizeof(out->value), "%s", ptc_ui_text(PTC_UI_T_DETAIL_BLOCKED));
+            if (p.active_reasons == PTC_UI_STOP_EYE) {
+                int remaining = (int)((int64_t)model->eye_care_rest_remaining_seconds - ptc_ui_status_age_seconds(model, now));
+                if (!model->eye_care_break_id || model->eye_care_rest_remaining_seconds > model->eye_care_policy.rest_minutes * 60)
+                    remaining = 0;
+                if (remaining > 0) snprintf(out->value, sizeof(out->value), "%02d:%02d", remaining / 60, remaining % 60);
+                else snprintf(out->value, sizeof(out->value), "%s", ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED));
+            }
+        }
+        snprintf(out->hint, sizeof(out->hint), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_INDEPENDENT));
+    } else if (out->available) {
+        out->state = PTC_POLICY_AVAILABLE;
+        snprintf(out->title, sizeof(out->title), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_AVAILABLE));
+        if (p.simulation_available && p.continuous_seconds >= 0) {
+            /* Continuous use stops at the first actual projected boundary; it
+             * never reuses the daily balance as a promise of uninterrupted play. */
+            snprintf(out->value, sizeof(out->value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)(p.continuous_seconds / 60));
+            snprintf(out->hint, sizeof(out->hint), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_CONTINUOUS));
+        }
+    }
+}
+
 static bool countdown_same_day(const PtcUiModel *model, int64_t now)
 {
     if (ptc_ui_status_age_seconds(model, now) < 0) return false;

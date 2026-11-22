@@ -277,14 +277,54 @@ void open_local_grant(UiState *ui)
     ui->model.grant_estimated_at = 0;
     ui->model.grant_status_refresh_failed = false;
     ui->model.grant_code[0] = '\0';
+    ui->model.grant_hub_mode = 2;
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
     ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
     ui->model.grant_status_refresh_failed = false;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_NATIVELY_GENERATES_8_BIT_PLUS_TIME_CODE));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_TITLE));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "%s", ptc_ui_text(PTC_UI_T_CHOOSE_THE_DURATION_GENERATE_IT_AND_TELL_2));
+             "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_SUBTITLE));
     submit_status(ui);
     if (!ui->waiting) ui->model.grant_status_refresh_failed = true;
+}
+void select_grant_hub_mode(UiState *ui, int mode)
+{
+    uint16_t maximum = PTC_TOKEN_V2_MAX_MINUTES;
+    if (!ui || mode < 0 || mode > 2) return;
+    if (mode == 0) {
+        if (ui->model.overlay != PTC_UI_OVERLAY_QR || ui->model.grant_hub_mode != 0) {
+            show_pairing_qr(ui);
+        }
+        return;
+    }
+    if (mode == 1) {
+        ui->model.grant_hub_mode = 1;
+        ui->model.overlay = PTC_UI_OVERLAY_QR;
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_TITLE));
+        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_SUBTITLE));
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
+        ui->model.grant_hub_mode = 2;
+        return;
+    }
+    if (read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum)) {
+        ui->model.grant_max_minutes = maximum;
+        if (ui->model.grant_minutes == 0 || ui->model.grant_minutes > maximum)
+            ui->model.grant_minutes = legal_grant_minutes(30U, maximum);
+    } else if (ui->model.grant_minutes == 0) {
+        ui->model.grant_max_minutes = PTC_TOKEN_V2_MAX_MINUTES;
+        ui->model.grant_minutes = 30U;
+    }
+    ui->model.grant_hub_mode = 2;
+    ui->model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
+    ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_TITLE));
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_SUBTITLE));
+    if (!ui->waiting && !ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL))) {
+        submit_status(ui);
+        if (!ui->waiting) ui->model.grant_status_refresh_failed = true;
+    }
 }
 void edit_pairing_base_url(UiState *ui)
 {
@@ -403,10 +443,11 @@ void show_pairing_qr(UiState *ui)
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_FAILED_TO_GENERATE_MATCHING_QR_CODE));
         return;
     }
+    ui->model.grant_hub_mode = 0;
     ui->model.overlay = PTC_UI_OVERLAY_QR;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_MOBILE_PHONE_COMPUTER_GENERATES_GRANT_CODE));
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_TITLE));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "%s", ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
+             "%s", ptc_ui_text(PTC_UI_T_GRANT_HUB_SUBTITLE));
 }
 void export_parent_import(UiState *ui)
 {
@@ -415,12 +456,15 @@ void export_parent_import(UiState *ui)
     cJSON *root;
     char *json;
     bool ok;
+    /* Only the active, PIN-verified QR page carries its existing export authorization. */
+    const bool verified_qr_page = ui->model.overlay == PTC_UI_OVERLAY_QR &&
+        ui->model.grant_hub_mode == 0 && qrcodegen_getSize(ui->model.qr_code) != 0;
     if (ui->model.overlay == PTC_UI_OVERLAY_QR ||
         ui->model.overlay == PTC_UI_OVERLAY_GRANT_MANAGER)
         ui->export_return_overlay = ui->model.overlay;
     if (ui->export_return_overlay == PTC_UI_OVERLAY_NONE)
         ui->export_return_overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
-    if (ui->export_return_overlay != PTC_UI_OVERLAY_QR) {
+    if (!verified_qr_page) {
         ui->auth_retry_action = AUTH_RETRY_EXPORT_CONFIG;
         if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THIS_APPLICATION_PIN_AGAIN_BEFORE_4))) return;
     }

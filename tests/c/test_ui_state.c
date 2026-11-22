@@ -252,22 +252,28 @@ static void test_release_navigation(void)
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 1, "selection moves right");
+    check_int(model.selected_index, 2, "selection moves right along the quota lifecycle row");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 1, "six-card selection stays in the first row when moving upward");
+    check_int(model.selected_index, 1, "up from the quota lifecycle row reaches full-width quick add");
 
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
     model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 1, "holiday header moves down to statutory rule");
+    check_int(model.selected_index, 6, "holiday master switch moves down to calendar manager");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 0, "holiday calendar manager moves up to master switch");
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 2, "holiday navigation moves across rule cards");
+    check_int(model.selected_index, 1, "holiday master switch moves right to statutory rule");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 5, "holiday right rule moves down to save");
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 6, "holiday save reaches calendar entry to the right");
+    check_int(model.selected_index, 2, "holiday statutory rule moves down to makeup rule");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 5, "holiday makeup rule moves down to save");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 4, "holiday save moves left to discard");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 6, "holiday discard reaches calendar manager to the left");
 
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     model.recent_event_count = 3;
@@ -1321,22 +1327,36 @@ static void test_candidate_navigation(void)
 {
     PtcUiModel model;
     memset(&model, 0, sizeof(model));
-    model.editor_index = 0;
-    model.selected_index = 0;
     model.weekly_grid_slot = 0;
-    model.weekly_last_day_slot = 6;
     ptc_ui_move_weekly_focus(&model, -1, 0);
-    check_int(model.weekly_grid_slot, 0, "weekly grid stops at the left edge");
+    check_int(model.weekly_grid_slot, 0, "weekly date row stops at the left edge");
     ptc_ui_move_weekly_focus(&model, 1, 0);
-    check_int(model.weekly_grid_slot, 1, "weekly grid moves to the next day");
+    check_int(model.editor_index, 2, "weekly Tuesday selection preserves protocol weekday identity");
     ptc_ui_move_weekly_focus(&model, 0, 1);
-    check_int(model.selected_index, 1, "weekly focus moves from date to mode");
+    check_int(model.selected_index, 1, "weekly date moves down to mode");
+    ptc_ui_move_weekly_focus(&model, 0, 1);
+    check_int(model.selected_index, 5, "weekly mode moves down to minutes");
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    check_int(model.selected_index, 3, "weekly editor moves right to discard");
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    check_int(model.selected_index, 4, "weekly discard moves right to save");
     ptc_ui_move_weekly_focus(&model, -1, 0);
-    check_int(model.selected_index, 1, "weekly button focus stops at the left edge");
-    ptc_ui_move_weekly_focus(&model, 1, 0);
-    ptc_ui_move_weekly_focus(&model, 1, 0);
-    ptc_ui_move_weekly_focus(&model, 1, 0);
-    check_int(model.selected_index, 4, "weekly button focus stops at save");
+    ptc_ui_move_weekly_focus(&model, -1, 0);
+    check_int(model.selected_index, 5, "weekly discard returns left to minutes");
+    ptc_ui_move_weekly_focus(&model, 0, -1);
+    check_int(model.selected_index, 1, "weekly minutes move up to mode");
+    ptc_ui_move_weekly_focus(&model, 0, -1);
+    check_int(model.selected_index, 0, "weekly mode returns up to the selected date");
+    check_int(model.editor_index, 2, "weekly editor navigation keeps the selected day");
+    ptc_ui_move_weekly_focus(&model, 0, -1);
+    check_int(model.selected_index, 2, "weekly date moves up to batch setup");
+    ptc_ui_move_weekly_focus(&model, 0, 1);
+    check_int(model.selected_index, 0, "weekly batch setup returns down to date");
+    model.parent_footer_focused = true;
+    model.parent_content_selection = 5;
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(!model.parent_footer_focused && model.selected_index == 5,
+               "weekly footer returns to the new minutes field");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -1405,8 +1425,8 @@ static void test_release_hit_targets(void)
     model.view = PTC_UI_CHILD;
     code_input = ptc_ui_child_submit_rect();
     refresh = ptc_ui_child_refresh_rect();
-    check_int(code_input.x, 964, "child code input aligns with action panel");
-    check_int(code_input.w, 268, "child code input uses the action panel width");
+    check_int(code_input.x, 920, "child code input aligns with action panel");
+    check_int(code_input.w, 312, "child code input uses the action panel width");
     check_int(refresh.y, 660, "child refresh stays in the footer");
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
     model.disable_flag_present = true;
@@ -1471,16 +1491,24 @@ static void test_release_hit_targets(void)
               "parent status footer aligns with the main content border");
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
-    model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
-              "weekly mode pill toggles Monday directly");
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
-              "leftmost weekly day edits Monday without changing protocol order");
-    model.draft_week[1].mode = PTC_RULE_MODE_UNLIMITED;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
-              "unlimited weekly quota remains semantic for an explanatory message");
-    check_hit(hit_center(&model, ptc_ui_weekly_day_header_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
-              "weekly header only selects the day");
+    model.editor_index = 0;
+    for (int slot = 0; slot < 7; ++slot) {
+        int day = ptc_ui_weekday_for_display_slot(slot);
+        model.draft_week[day].mode = PTC_RULE_MODE_LIMIT;
+        check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(slot)), PTC_UI_HIT_WEEKLY_DAY, day,
+                  "weekly summary mode selects its date without modifying the draft");
+        check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(slot)), PTC_UI_HIT_WEEKLY_DAY, day,
+                  "weekly summary amount selects its date without opening the editor");
+        model.draft_week[day].mode = PTC_RULE_MODE_UNLIMITED;
+        check_hit(hit_center(&model, ptc_ui_weekly_day_rect(slot)), PTC_UI_HIT_WEEKLY_DAY, day,
+                  "unlimited summary remains a date selector");
+        model.editor_index = day;
+        check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, day,
+                  "weekly mode field uses the selected protocol weekday");
+        check_hit(hit_center(&model, ptc_ui_weekly_page_minutes_rect()), PTC_UI_HIT_WEEKLY_MIN_INPUT, day,
+                  "unlimited minutes field reaches existing explanatory feedback");
+    }
+    model.editor_index = 0;
     for (int page = PTC_UI_PLAN_PAGE_WEEKLY; page <= PTC_UI_PLAN_PAGE_DOCK; ++page) {
         model.plan_page = page;
         check_true(!ptc_ui_parent_footer_shortcuts(&model), "plan editor hides the main-menu shortcuts");
@@ -1497,15 +1525,15 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "weekly save is on the page");
     check_hit(hit_center(&model, ptc_ui_weekly_bulk_rect()), PTC_UI_HIT_WEEKLY_BULK, 0,
-              "weekly bulk action occupies slot seven");
+              "weekly batch setup is above the seven-day overview");
     for (int slot = 0; slot < 7; ++slot) {
         PtcUiRect card = ptc_ui_weekly_day_rect(slot);
-        check_true(card.w == 98 && card.h == 280, "weekly day cards use the seven-column size");
+        check_true(card.w == 98 && card.h == 164, "weekly day cards use the seven-column size");
         check_true(card.x == 54 + slot * 108 && card.y == 208,
                    "weekly day cards use the horizontal Monday-to-Sunday coordinates");
         check_true(ptc_ui_weekly_day_header_rect(slot).h == 42 &&
-                   ptc_ui_weekly_day_mode_rect(slot).h == 46 &&
-                   ptc_ui_weekly_day_minutes_rect(slot).h == 186,
+                   ptc_ui_weekly_day_mode_rect(slot).h == 24 &&
+                   ptc_ui_weekly_day_minutes_rect(slot).h == 66,
                    "weekly subregions partition the card height");
     }
     check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
@@ -1514,6 +1542,21 @@ static void test_release_hit_targets(void)
                "weekly page mode geometry does not move the legacy editor overlay");
     {
         PtcUiRect footer = ptc_ui_parent_subpage_footer_rect(0);
+        PtcUiRect editor = ptc_ui_weekly_editor_rect();
+        PtcUiRect fields[] = {ptc_ui_weekly_page_mode_rect(), ptc_ui_weekly_page_minutes_rect()};
+        for (int field = 0; field < 2; ++field) {
+            PtcUiRect rect = fields[field];
+            check_true(rect.x >= editor.x + 20 && rect.x + rect.w <= editor.x + editor.w - 20 &&
+                       rect.y >= editor.y + 64 && rect.y + rect.h <= editor.y + editor.h - 32,
+                       "weekly fields stay inside the selected-day editor");
+            for (int day = 0; day < 7; ++day)
+                check_true(!rects_overlap(rect, ptc_ui_weekly_day_rect(day)),
+                           "weekly fields are separate from summary date selectors");
+        }
+        check_true(!rects_overlap(fields[0], fields[1]), "weekly mode and quota fields do not overlap");
+        check_true(!rects_overlap(editor, ptc_ui_weekly_save_rect()) &&
+                   !rects_overlap(editor, ptc_ui_weekly_discard_rect()),
+                   "weekly save controls occupy the independent right column");
         check_true(!rects_overlap(ptc_ui_weekly_page_mode_rect(), ptc_ui_weekly_bulk_rect()),
                    "weekly mode does not overlap bulk button");
         check_true(!rects_overlap(ptc_ui_weekly_bulk_rect(), ptc_ui_weekly_discard_rect()),
@@ -1525,10 +1568,12 @@ static void test_release_hit_targets(void)
     }
     model.disable_flag_present = true;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
-              "disabled weekly minutes remain semantic for read-only feedback");
-    check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
-              "disabled weekly mode remains semantic for read-only feedback");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
+              "disabled weekly summary still selects the date");
+    check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
+              "disabled weekly mode field reaches the existing write guard");
+    check_hit(hit_center(&model, ptc_ui_weekly_page_minutes_rect()), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0,
+              "disabled weekly minutes field reaches the existing write guard");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "disabled weekly save reaches submission guard feedback");
     check_hit(hit_center(&model, ptc_ui_weekly_discard_rect()), PTC_UI_HIT_WEEKLY_DISCARD, 0,
@@ -1578,34 +1623,31 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(0)), PTC_UI_HIT_HOLIDAY_MINUTES, 0, "holiday statutory quota target");
     check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(1)), PTC_UI_HIT_HOLIDAY_MODE, 1, "holiday makeup mode target");
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(1)), PTC_UI_HIT_HOLIDAY_MINUTES, 1, "holiday makeup quota target");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday mode action");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday discard action");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday save action");
     check_hit(hit_center(&model, ptc_ui_holiday_manage_rect()), PTC_UI_HIT_CALENDAR_MANAGER, 0,
-              "holiday calendar manager is in the status column");
+              "holiday calendar manager is in the left column");
     {
         PtcUiRect footer = ptc_ui_parent_subpage_footer_rect(0);
-        for (int index = 0; index < 6; ++index) {
-            check_true(!rects_overlap(ptc_ui_holiday_card_rect(index), footer),
+        int indices[] = {0, 1, 2, 4, 5};
+        for (int i = 0; i < 5; ++i) {
+            check_true(!rects_overlap(ptc_ui_holiday_card_rect(indices[i]), footer),
                        "holiday control does not overlap subpage footer");
         }
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_manage_rect()),
+                   "holiday master switch does not overlap calendar manager button");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(1)),
-                   "holiday header does not overlap rule controls");
+                   "holiday left column does not overlap right rule rows");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
-                   "holiday rule cards sit side by side without overlap");
-        check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(3)),
-                   "holiday rule card does not overlap bottom actions");
-        check_true(!rects_overlap(ptc_ui_holiday_card_rect(3), ptc_ui_holiday_card_rect(4)) &&
-                   !rects_overlap(ptc_ui_holiday_card_rect(4), ptc_ui_holiday_card_rect(5)),
+                   "holiday rule rows stack without overlap");
+        check_true(!rects_overlap(ptc_ui_holiday_mode_rect(0), ptc_ui_holiday_minutes_rect(0)) &&
+                   !rects_overlap(ptc_ui_holiday_mode_rect(1), ptc_ui_holiday_minutes_rect(1)),
+                   "holiday inline mode toggle does not overlap quota button");
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(4), ptc_ui_holiday_card_rect(5)),
                    "holiday bottom actions do not overlap each other");
-        check_true(ptc_ui_holiday_card_rect(3).w == 240 && ptc_ui_holiday_card_rect(4).w == 240 &&
-                   ptc_ui_holiday_card_rect(5).w == 248,
-                   "holiday bottom actions share the left control width");
-        for (int index = 0; index < 6; ++index) {
-            PtcUiRect card = ptc_ui_holiday_card_rect(index);
-            check_true(card.x >= 54 && card.x + card.w <= 814,
-                       "holiday controls stay in the 760px left column");
-        }
+        check_true(ptc_ui_holiday_card_rect(0).x == 54 && ptc_ui_holiday_card_rect(0).w == 396 &&
+                   ptc_ui_holiday_card_rect(1).x >= 466 && ptc_ui_holiday_card_rect(5).x + ptc_ui_holiday_card_rect(5).w == 1226,
+                   "holiday plan B aligns left 396px column and right 760px column");
     }
 
     model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
@@ -1822,7 +1864,7 @@ static void test_release_hit_targets(void)
         PtcUiRect details_rect = ptc_ui_notice_details_rect();
         PtcUiRect footer_rect = ptc_ui_parent_footer_rect(4);
         check_true(summary_rect.x > hours_rect.x + hours_rect.w &&
-                   summary_rect.w == 470 && summary_rect.h == 350,
+                   summary_rect.w == 470 && summary_rect.h == 376,
                    "compact plan summary uses the reserved right-side editor panel");
         check_true(!rects_overlap(summary_rect, ptc_ui_cancel_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)) &&
                    !rects_overlap(summary_rect, ptc_ui_confirm_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)),
@@ -2299,8 +2341,18 @@ static void test_balanced_feature_state(void)
     check_hit(hit_center(&model, ptc_ui_scheduled_field_rect(2)),
         PTC_UI_HIT_SCHEDULED_FIELD, 2, "scheduled duration field is touchable");
     model.overlay = PTC_UI_OVERLAY_AUTONOMY;
-    check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(3)),
-        PTC_UI_HIT_AUTONOMY_OPTION, 3, "fifteen-minute autonomy option is touchable");
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(i)),
+            PTC_UI_HIT_AUTONOMY_OPTION, i, "autonomy 2x2 option is touchable");
+    }
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "autonomy full-page top back is touchable");
+    check_hit(hit_center(&model, ptc_ui_scheduled_refresh_rect()),
+        PTC_UI_HIT_PARENT_REFRESH, 0, "autonomy full-page footer refresh is touchable");
+    check_hit(hit_center(&model, ptc_ui_discard_rect(PTC_UI_OVERLAY_AUTONOMY)),
+        PTC_UI_HIT_OVERLAY_DISCARD, 0, "autonomy discard button is touchable");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(PTC_UI_OVERLAY_AUTONOMY)),
+        PTC_UI_HIT_OVERLAY_CONFIRM, 0, "autonomy save button is touchable");
     model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
     model.numpad_purpose = PTC_UI_NUMPAD_MINUTES;
     model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
@@ -2352,6 +2404,29 @@ static void test_balanced_feature_state(void)
     model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
     check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(2)),
         PTC_UI_HIT_HISTORY_NEXT, 0, "family activity next-page button is touchable");
+    for (int f = 0; f < 4; ++f) {
+        check_hit(hit_center(&model, ptc_ui_activity_filter_rect(f)),
+            PTC_UI_HIT_ACTIVITY_FILTER, f, "family activity filter pill is touchable");
+    }
+    model.activity_history_count = 4;
+    snprintf(model.activity_history[0].action, sizeof(model.activity_history[0].action), "offline_grant");
+    snprintf(model.activity_history[1].action, sizeof(model.activity_history[1].action), "daily_buffer");
+    snprintf(model.activity_history[2].action, sizeof(model.activity_history[2].action), "weekly_update");
+    snprintf(model.activity_history[3].action, sizeof(model.activity_history[3].action), "protection");
+    model.activity_history_filter = 0; check_int(ptc_ui_activity_filtered_count(&model), 4, "filter 0 shows all");
+    model.activity_history_filter = 1; check_int(ptc_ui_activity_filtered_count(&model), 2, "filter 1 shows grants & buffer");
+    model.activity_history_filter = 2; check_int(ptc_ui_activity_filtered_count(&model), 1, "filter 2 shows rules");
+    model.activity_history_filter = 3; check_int(ptc_ui_activity_filtered_count(&model), 1, "filter 3 shows protection");
+    model.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
+    check_hit(hit_center(&model, ptc_ui_shortcut_prefix_rect(0)), PTC_UI_HIT_SHORTCUT_DISABLE, 0, "shortcut prefix 0 disables custom");
+    check_hit(hit_center(&model, ptc_ui_shortcut_prefix_rect(1)), PTC_UI_HIT_SHORTCUT_PREFIX, 1, "shortcut prefix 1 selects L+R");
+    check_hit(hit_center(&model, ptc_ui_shortcut_prefix_rect(2)), PTC_UI_HIT_SHORTCUT_PREFIX, 2, "shortcut prefix 2 selects ZL+ZR");
+    model.overlay = PTC_UI_OVERLAY_SUPPORT_GUIDE;
+    for (int s = 0; s < 4; ++s) {
+        check_hit(hit_center(&model, ptc_ui_support_guide_step_rect(s)), PTC_UI_HIT_SUPPORT_GUIDE_STEP, s, "support guide step pill is touchable");
+    }
+    check_hit(hit_center(&model, ptc_ui_support_guide_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0, "support guide refresh button is touchable");
+    model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
     check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()),
         PTC_UI_HIT_OVERLAY_CONFIRM, 0, "family activity clear button is touchable");
     check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()),
@@ -2370,13 +2445,36 @@ static void test_home_redesign(void)
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
     check_hit(hit_center(&model, ptc_ui_header_language_rect()), PTC_UI_HIT_LANGUAGE_SWITCH, 0, "parent today header language switcher");
-    const PtcUiRect quota_group = {548, 176, 696, 230};
-    const PtcUiRect other_group = {548, 416, 696, 212};
+    const PtcUiRect quota_group = {480, 176, 764, 230};
+    const PtcUiRect other_group = {480, 416, 764, 212};
     check_true(!rects_overlap(quota_group, other_group) &&
                !rects_overlap(quota_group, ptc_ui_home_summary_rect(true)) &&
                !rects_overlap(other_group, ptc_ui_home_summary_rect(true)),
                "today section backgrounds do not overlap each other or the summary");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 8, "today has eight actions");
+    PtcUiRect quick = ptc_ui_today_card_rect(1);
+    check_true(quick.w > ptc_ui_today_card_rect(0).w * 2 && quick.y < ptc_ui_today_card_rect(0).y,
+               "quick add occupies the full first row above the three quota lifecycle actions");
+    for (int i = 0; i < 11; ++i) {
+        for (int direction = 0; direction < 4; ++direction) {
+            model.selected_index = i; model.parent_footer_focused = false;
+            ptc_ui_move_parent_selection(&model, direction < 2 ? (direction == 0 ? -1 : 1) : 0,
+                direction >= 2 ? (direction == 2 ? -1 : 1) : 0);
+            check_true(model.selected_index >= 0 && model.selected_index < 11, "today focus stays in action and guardian targets");
+        }
+    }
+    model.selected_index = 1; model.parent_footer_focused = false;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 0, "quick-add down reaches the quota lifecycle row");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 2, "quota right reaches unlimited on the same row");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 3, "unlimited right reaches clear on the same row");
+    model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 4, "eye skip right reaches bedtime skip");
+    model.selected_index = 0;
+
     for (int i = 0; i < 8; ++i) {
         PtcUiRect rect = ptc_ui_today_card_rect(i);
         PtcUiRect group = i < 4 ? quota_group : other_group;
@@ -2622,22 +2720,19 @@ static void test_home_redesign(void)
         check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
             "TV waiver rejects missing dock status");
     }
-    model.selected_index = 4;
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_true(!model.parent_footer_focused && model.selected_index == 6,
-        "right from bedtime reaches eye care skip");
-    ptc_ui_move_parent_selection(&model, -1, 0);
-    check_true(!model.parent_footer_focused && model.selected_index == 4,
-        "left from eye care reaches bedtime");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(!model.parent_footer_focused && model.selected_index == 5,
-        "down from bedtime reaches buffer");
     model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_true(!model.parent_footer_focused && model.selected_index == 4,
+        "right from eye care reaches bedtime skip on the same row");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 6, "left from bedtime returns to eye care skip");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(!model.parent_footer_focused && model.selected_index == 7,
-        "down from eye care reaches TV waiver");
+    check_int(model.selected_index, 5, "down from eye care reaches buffer in the same column");
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 7, "down from bedtime reaches TV waiver in the same column");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 6, "up from TV waiver returns to eye care");
+    check_int(model.selected_index, 4, "up from TV waiver returns to bedtime");
     ptc_ui_move_parent_selection(&model, 0, 1);
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 5, "left from TV waiver reaches buffer");
@@ -2761,9 +2856,9 @@ static void test_visual_action_boundaries(void)
     model.view = PTC_UI_CHILD;
     PtcUiRect code = ptc_ui_child_submit_rect();
     PtcUiRect summary = ptc_ui_home_summary_rect(false);
-    check_int(summary.w, 896, "child task board uses a wide dashboard width");
-    check_int(code.x, 964, "child action column aligns inside the right card");
-    check_int(code.w, 268, "child primary action uses the compact right action width");
+    check_int(summary.w, 852, "child task board uses a wide dashboard width");
+    check_int(code.x, 920, "child action column aligns inside the right card");
+    check_int(code.w, 312, "child primary action uses the compact right action width");
     check_int(ptc_ui_child_buffer_rect().w, code.w, "child actions share one visual column width");
     check_int(ptc_ui_home_details_rect(false).w, code.w, "child details action shares the action column width");
     check_true(summary.x + summary.w < code.x,
@@ -2816,6 +2911,30 @@ static void test_visual_action_boundaries(void)
                    "child and parent details decision entries share one bottom edge");
         check_int(child_btn.x, parent_btn.x, "child details decision entry keeps the parent column");
         check_int(child_btn.w, parent_btn.w, "child details decision entry keeps the parent width");
+        for (int view = 0; view < 2; ++view) {
+            PtcUiModel *details = view ? &parent_details : &child_details;
+            for (int panel = 0; panel < 5; ++panel) {
+                PtcUiRect rect = ptc_ui_today_details_panel_rect(details, panel);
+                check_true(rect.x >= 40 && rect.x + rect.w <= 1240 &&
+                           rect.y >= (view ? 72 : guide.y + guide.h) && rect.y + rect.h <= 616,
+                           "today A panels stay between title/guide and footer");
+                check_true(!rects_overlap(rect, ptc_ui_home_details_action_rect(details, 0)),
+                           "today A rules entry stays outside all panels");
+                for (int other = panel + 1; other < 5; ++other)
+                    check_true(!rects_overlap(rect, ptc_ui_today_details_panel_rect(details, other)),
+                               "today A separates status, schedule, estimate and balance");
+            }
+            PtcUiRect prediction = ptc_ui_today_details_panel_rect(details, 2);
+            for (int event = 0; event < 3; ++event) {
+                PtcUiRect rect = ptc_ui_today_details_event_rect(details, event);
+                check_true(rect.x >= prediction.x + 20 && rect.x + rect.w <= prediction.x + prediction.w - 20 &&
+                           rect.y >= prediction.y + 108 && rect.y + rect.h <= prediction.y + prediction.h - 48,
+                           "event labels stay below the rail and above the estimate note");
+                for (int other = event + 1; other < 3; ++other)
+                    check_true(!rects_overlap(rect, ptc_ui_today_details_event_rect(details, other)),
+                               "dense event labels have separate measured cells");
+            }
+        }
     }
     model.waiting = true;
     check_hit(hit_center(&model, code), PTC_UI_HIT_NONE, 0, "syncing primary action remains blocked");
@@ -3054,6 +3173,16 @@ static void test_plan_polish(void)
         check_true(!rects_overlap(ptc_ui_scheduled_field_rect(i), ptc_ui_confirm_rect(model.overlay)),
                    "scheduled field does not overlap save");
     }
+    for (int q = 0; q < 14; ++q) {
+        check_hit(hit_center(&model, ptc_ui_scheduled_quick_rect(q)), PTC_UI_HIT_SCHEDULED_QUICK, q,
+                  "scheduled quick control is touchable");
+    }
+    check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
+              "scheduled discard button is touchable");
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "scheduled breadcrumb back button is touchable");
+    check_hit(hit_center(&model, ptc_ui_scheduled_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
+              "scheduled footer refresh button is touchable");
     model.waiting = true;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
               "pending schedule blocks repeated touch save");
@@ -3252,15 +3381,17 @@ static void test_today_decision_and_plan_review(void)
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
     model.selected_index = 2;
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 6, "holiday rule moves right to calendar button");
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 5, "calendar button moves left to save");
+    check_int(model.selected_index, 0, "holiday rule moves left to master switch");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "holiday master switch moves down to calendar button");
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 6, "holiday save moves right to calendar button");
+    check_int(model.selected_index, 4, "calendar button moves right to discard");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 6, "holiday discard moves left to calendar button");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 2, "calendar button moves up to makeup rule");
+    check_int(model.selected_index, 0, "calendar button moves up to master switch");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 6, "calendar button keeps its content selection on footer entry");
@@ -3325,7 +3456,7 @@ static void test_time_menu_modal_touch_guards(void)
     model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
 
     for (int section = PTC_UI_BEDTIME_WEEKLY; section <= PTC_UI_BEDTIME_SCHEDULED; ++section) {
-        int field_count = section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+        int field_count = section == PTC_UI_BEDTIME_WEEKLY ? 19 :
             (section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
         model.bedtime_section = (PtcUiBedtimeSection)section;
         check_hit(hit_center(&model, ptc_ui_bedtime_section_rect(section)),
@@ -3590,9 +3721,12 @@ static void test_global_time_projection_and_direct_inputs(void)
     model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
     model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
     model.selected_index = 0;
+    model.bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
     model.bedtime_section_focused = false;
     ptc_ui_move_bedtime_focus(&model, 1, 0);
     check_int(model.selected_index, 1, "bedtime focus moves right within the weekly row");
+    check_int(model.bedtime_editor_day, ptc_ui_weekday_for_display_slot(1),
+              "bedtime weekly navigation updates inline editor day");
     ptc_ui_move_bedtime_focus(&model, -1, 0);
     check_int(model.selected_index, 0, "bedtime focus moves left within the weekly row");
     ptc_ui_move_bedtime_focus(&model, 0, -1);
@@ -3609,13 +3743,17 @@ static void test_global_time_projection_and_direct_inputs(void)
     check_hit(hit_center(&model, master_switch), PTC_UI_HIT_BEDTIME_MASTER_SWITCH, 0,
               "bedtime master switch card is touchable");
     model.bedtime_section_focused = true;
-    model.bedtime_section = PTC_UI_BEDTIME_SCHEDULED;
-    ptc_ui_move_bedtime_focus(&model, 1, 0);
-    check_true(model.bedtime_master_focused && !model.bedtime_section_focused,
-               "right from last bedtime tab reaches master switch");
+    model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
     ptc_ui_move_bedtime_focus(&model, -1, 0);
+    check_true(model.bedtime_master_focused && !model.bedtime_section_focused,
+               "left from first bedtime tab reaches master switch");
+    ptc_ui_move_bedtime_focus(&model, 1, 0);
     check_true(!model.bedtime_master_focused && model.bedtime_section_focused,
-               "left from master switch returns to tabs");
+               "right from master switch returns to tabs");
+    ptc_ui_move_bedtime_focus(&model, -1, 0);
+    ptc_ui_move_bedtime_focus(&model, 0, 1);
+    check_true(!model.bedtime_master_focused && model.selected_index == 0,
+               "down from master switch enters bedtime content");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     check_hit(hit_center(&model, ptc_ui_bedtime_overlay_field_rect(model.overlay, 0)),
@@ -3949,25 +4087,54 @@ static void test_language_and_short_weekly_limits(void)
         "weekly editor rejects zero and values over one day");
     memset(&model, 0, sizeof(model));
     model.overlay = PTC_UI_OVERLAY_QR;
+    model.grant_hub_mode = 0;
+    check_hit(hit_center(&model, ptc_ui_grant_hub_mode_rect(0)), PTC_UI_HIT_GRANT_HUB_MODE, 0,
+        "Grant Hub mode 0 (phone pairing) is touchable");
+    check_hit(hit_center(&model, ptc_ui_grant_hub_mode_rect(1)), PTC_UI_HIT_GRANT_HUB_MODE, 1,
+        "Grant Hub mode 1 (offline file pairing) is touchable");
+    check_hit(hit_center(&model, ptc_ui_grant_hub_mode_rect(2)), PTC_UI_HIT_GRANT_HUB_MODE, 2,
+        "Grant Hub mode 2 (local voucher) is touchable");
     check_hit(hit_center(&model, ptc_ui_qr_export_rect()), PTC_UI_HIT_QR_EXPORT, 0,
         "QR instructions provide touch export button");
     {
-        PtcUiRect confirm = ptc_ui_confirm_rect(PTC_UI_OVERLAY_QR);
         PtcUiRect left = ptc_ui_qr_panel_rect(0);
         PtcUiRect right = ptc_ui_qr_panel_rect(1);
         PtcUiRect code = ptc_ui_qr_code_rect();
         PtcUiRect address = ptc_ui_qr_address_rect();
         PtcUiRect warning = ptc_ui_qr_warning_rect();
-        check_true(!rects_overlap(left, right), "QR solution cards do not overlap");
-        check_true(left.y + left.h < confirm.y, "QR cards stay above the dialog button row");
-        check_true(code.x >= left.x && code.y >= left.y && code.x + code.w <= left.x + left.w &&
-            code.y + code.h <= left.y + left.h, "QR canvas stays inside the left card");
-        check_true(!rects_overlap(code, address) && !rects_overlap(address, warning),
-            "QR address and warning blocks do not overlap");
-        check_true(warning.y + warning.h <= left.y + left.h, "QR warning stays inside the left card");
-        check_true(ptc_ui_qr_export_rect().x != ptc_ui_cancel_rect(PTC_UI_OVERLAY_QR).x,
+        PtcUiRect export_btn = ptc_ui_qr_export_rect();
+        check_true(!rects_overlap(left, right), "Grant Hub mode list and right workbench do not overlap");
+        check_true(code.x >= right.x && code.y >= right.y && code.x + code.w <= right.x + right.w &&
+            code.y + code.h <= right.y + right.h, "QR canvas stays inside the right workbench");
+        check_true(!rects_overlap(code, address) && !rects_overlap(address, warning) &&
+            !rects_overlap(code, warning),
+            "QR canvas, address and warning blocks do not overlap");
+        check_true(warning.y + warning.h <= right.y + right.h, "QR warning stays inside the right workbench");
+        check_true(export_btn.x != ptc_ui_cancel_rect(PTC_UI_OVERLAY_QR).x,
             "QR export and back occupy different button slots");
     }
+    /* Batch 5: Grant Hub Mode 2 quick presets & Today Quota Editor quick presets */
+    model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
+    check_int(ptc_ui_grant_hub_active_mode(&model), 2, "local grant overlay activates Grant Hub mode 2");
+    for (int i = 0; i < 5; ++i) {
+        check_hit(hit_center(&model, ptc_ui_grant_preset_rect(i)), PTC_UI_HIT_GRANT_PRESET, i,
+            "Grant Hub local voucher preset chip is touchable");
+        check_true(ptc_ui_grant_preset_minutes(i) > 0, "Grant Hub preset minutes are positive");
+    }
+    memset(&model, 0, sizeof(model));
+    model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    model.numpad_purpose = PTC_UI_NUMPAD_MINUTES;
+    model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    model.numpad_minimum = 0;
+    model.numpad_maximum = 1440;
+    for (int i = 0; i < 5; ++i) {
+        check_hit(hit_center(&model, ptc_ui_today_quota_preset_rect(i)), PTC_UI_HIT_TODAY_QUOTA_PRESET, i,
+            "Today quota preset chip is touchable");
+        check_true(ptc_ui_today_quota_preset_minutes(i) >= 30, "Today quota preset minutes are valid");
+    }
+    ptc_ui_duration_set_minutes(&model, 90);
+    check_true(strcmp(model.duration_hours_text, "1") == 0 && strcmp(model.duration_minutes_text, "30") == 0,
+        "duration set minutes splits hours and minutes cleanly");
 }
 
 static void test_calendar_manager_surface(void)
@@ -4020,13 +4187,28 @@ static void test_calendar_manager_surface(void)
             PTC_UI_HIT_PARENT_REFRESH, 0, "every plan editor has the rendered refresh target");
     }
     PtcUiRect skip = ptc_ui_eye_care_page_skip_rect();
+    PtcUiRect rules = ptc_ui_eye_care_page_rules_rect();
+    PtcUiRect discard = ptc_ui_eye_care_page_discard_rect();
+    PtcUiRect save = ptc_ui_eye_care_page_save_rect();
     PtcUiRect refresh = ptc_ui_parent_subpage_footer_rect(1);
-    check_true(skip.x >= refresh.x + refresh.w, "eye care skip does not cover back or refresh");
-    check_int(skip.w, ptc_ui_eye_care_page_save_rect().w, "eye care actions use the same button width");
+    check_true(skip.x >= refresh.x + refresh.w && skip.y + skip.h <= 651,
+        "eye care skip lives in the right status card above the footer");
+    check_true(!rects_overlap(discard, save) && discard.y + discard.h <= 651 && save.y + save.h <= 651,
+        "eye care discard and save sit side by side above the footer");
+    check_hit(hit_center(&model, rules), PTC_UI_HIT_EYE_CARE_PAGE_RULES, 0,
+        "eye care rules button is touchable");
+    check_hit(hit_center(&model, discard), PTC_UI_HIT_EYE_CARE_PAGE_DISCARD, 0,
+        "eye care discard button is touchable");
+    check_hit(hit_center(&model, save), PTC_UI_HIT_EYE_CARE_PAGE_SAVE, 0,
+        "eye care save button is touchable");
     model.eye_care_policy.enabled = true;
     snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
     check_hit(hit_center(&model, skip), PTC_UI_HIT_EYE_CARE_PAGE_SKIP, 0,
         "resting eye care skip keeps its own touch target");
+    model.overlay = PTC_UI_OVERLAY_EYE_CARE_RULES;
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+        "eye care rules modal provides touch back");
+    model.overlay = PTC_UI_OVERLAY_NONE;
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
     check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "地区日历管理") == 0,
         "simplified region calendar label");
@@ -4197,16 +4379,25 @@ static void test_dock_ui(void)
         PtcUiRect row2 = ptc_ui_dock_field_rect(2);
         PtcUiRect rules_pill = ptc_ui_dock_field_rect(5);
         PtcUiRect waive = ptc_ui_dock_field_rect(4);
+        PtcUiRect discard = ptc_ui_dock_field_rect(9);
         PtcUiRect save = ptc_ui_dock_field_rect(3);
         check_true(!rects_overlap(row0, row1) && !rects_overlap(row1, row2),
             "dock mode rows do not overlap");
         check_true(row2.y + row2.h <= 651, "dock mode rows stay inside the stage");
-        check_true(rules_pill.x >= 824 && rules_pill.y + rules_pill.h <= 651,
-            "dock rules pill sits in the rules card");
-        check_true(!rects_overlap(waive, save) && waive.y >= 652 && save.y >= 652,
-            "dock save and waive live in the footer action row");
-        check_hit(hit_center(&model, waive), PTC_UI_HIT_DOCK_FIELD, 4, "dock footer waive hits dock field");
-        check_hit(hit_center(&model, save), PTC_UI_HIT_DOCK_FIELD, 3, "dock footer save hits dock field");
+        check_true(rules_pill.x >= 814 && rules_pill.y + rules_pill.h <= 651,
+            "dock rules pill sits in the right exception card");
+        check_true(!rects_overlap(waive, rules_pill) && waive.x >= 814 && waive.y + waive.h <= 651,
+            "dock waive lives inside the right exception card");
+        check_true(!rects_overlap(discard, save) && discard.y + discard.h <= 651 && save.y + save.h <= 651,
+            "dock discard and save live in the right column above the footer");
+        check_hit(hit_center(&model, waive), PTC_UI_HIT_DOCK_FIELD, 4, "dock waive hits dock field");
+        check_hit(hit_center(&model, discard), PTC_UI_HIT_DOCK_FIELD, 9, "dock discard hits dock field");
+        check_hit(hit_center(&model, save), PTC_UI_HIT_DOCK_FIELD, 3, "dock save hits dock field");
+        for (int p = 0; p < 4; ++p)
+            check_hit(hit_center(&model, ptc_ui_dock_preset_rect(p)), PTC_UI_HIT_DOCK_PRESET, p, "dock preset hits");
+        check_hit(hit_center(&model, ptc_ui_dock_step_rect(0)), PTC_UI_HIT_DOCK_STEP, 0, "dock dec step hits");
+        check_hit(hit_center(&model, ptc_ui_dock_step_rect(1)), PTC_UI_HIT_DOCK_STEP, 1, "dock inc step hits");
+        check_hit(hit_center(&model, ptc_ui_dock_value_rect()), PTC_UI_HIT_DOCK_VALUE, 0, "dock value pill hits");
     }
     model.overlay = PTC_UI_OVERLAY_DOCK_RULES;
     PtcUiRect dock_rules_cancel = ptc_ui_cancel_rect(model.overlay);
@@ -4324,7 +4515,7 @@ static void test_config_backup_layout(void)
     PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
     model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
     model.config_backup_tab = 1;
-    int tab1_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17};
+    int tab1_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 19};
     int n_tab1 = sizeof(tab1_indices) / sizeof(tab1_indices[0]);
     for (int idx = 0; idx < n_tab1; ++idx) {
         int i = tab1_indices[idx];
@@ -4376,10 +4567,12 @@ static void test_today_settings_links(void)
     }
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 0, "quota does not focus the informational rule source badge");
+    check_int(model.selected_index, 8, "left from quota reaches the adjacent guardian settings");
     model.selected_index = 2;
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 8, "left from unlimited quota enters status column");
+    check_int(model.selected_index, 0, "left from unlimited quota returns to set allowance");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 8, "left from allowance enters status column");
     ptc_ui_move_parent_selection(&model, 0, -1);
     check_int(model.selected_index, 8, "eye care stays focused above the status column");
     ptc_ui_move_parent_selection(&model, 0, 1);
@@ -4427,6 +4620,46 @@ static PtcUiModel today_projection_model(void)
     snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "playing");
     m.eye_care_used_minutes = 25;
     return m;
+}
+
+static void test_overview_layout_and_state(void)
+{
+    PtcUiModel m = today_projection_model();
+    PtcUiOverview overview;
+    ptc_ui_project_overview(&m, 1000, m.day_index, 16 * 3600, &overview);
+    check_true(overview.available && overview.total_known && overview.total_remaining == 51,
+               "overview separates daily balance from the continuous projection");
+    char duration[64];
+    snprintf(duration, sizeof(duration), ptc_ui_text(PTC_UI_T_U_MIN), 15u);
+    check_true(strcmp(overview.value, duration) == 0, "overview stops continuous play at the first eye break");
+    m.eye_care_break_id = 7;
+    snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "resting");
+    m.eye_care_rest_remaining_seconds = 300;
+    ptc_ui_project_overview(&m, 1030, m.day_index, 16 * 3600 + 30, &overview);
+    check_true(overview.blocked && overview.total_remaining == 51 && strcmp(overview.value, "04:30") == 0,
+               "rest keeps the daily balance and independently projects the countdown");
+    m.daily_restriction_active = m.dock_restriction_active = m.bedtime_active = true;
+    ptc_ui_project_overview(&m, 1030, m.day_index, 16 * 3600 + 30, &overview);
+    check_true(overview.reasons == (PTC_UI_STOP_DAILY | PTC_UI_STOP_DOCK | PTC_UI_STOP_BEDTIME | PTC_UI_STOP_EYE),
+               "overview retains all concurrent limits");
+    ptc_ui_project_overview(&m, 1121, m.day_index, 16 * 3600, &overview);
+    check_true(!overview.fresh && !overview.available && !overview.total_known && !overview.reasons,
+               "expired overview never exposes an old balance or permission");
+    PtcUiRect balance = ptc_ui_child_balance_rect(), previous = {0};
+    for (int i = 0; i < 3; ++i) {
+        PtcUiRect row = ptc_ui_child_guard_rect(i);
+        check_true(row.x >= balance.x && row.x + row.w <= balance.x + balance.w && row.h >= 50,
+                   "guard rows stay inside the balance panel with legible height");
+        if (i) check_true(row.y - (previous.y + previous.h) == 7, "guard rows use a shared gap");
+        previous = row;
+    }
+    check_true(previous.y + previous.h == balance.y + balance.h - 16, "guard rows fill the panel through the bottom inset");
+    m.view = PTC_UI_CHILD; m.waiting = false;
+    check_true(ptc_ui_child_action_kind(&m, 0) == PTC_UI_HIT_CHILD_PARENT, "restricted child primary action goes to PIN");
+    check_hit(hit_center(&m, ptc_ui_child_action_rect(0)), PTC_UI_HIT_CHILD_PARENT, 0, "primary parent touch uses the PIN entry");
+    m.waiting = true;
+    check_hit(hit_center(&m, ptc_ui_child_action_rect(0)), PTC_UI_HIT_NONE, 0, "pending request blocks parent activation");
+    check_true(ptc_ui_child_action_kind(&m, 0) == PTC_UI_HIT_CHILD_PARENT, "refresh does not reorder the action map");
 }
 
 static void test_home_details_status(void)
@@ -4953,6 +5186,7 @@ int main(void)
     test_policy_status();
     test_home_details_status();
     test_today_projection();
+    test_overview_layout_and_state();
     test_today_details_navigation();
     test_today_settings_links();
     test_config_backup_layout();

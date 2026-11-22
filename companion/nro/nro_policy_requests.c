@@ -257,6 +257,15 @@ void dock_page_action(UiState *ui, int action, int delta)
         ptc_audio_play(PTC_SE_CONFIRM);
         save_dock_from_page(ui);
         return;
+    } else if (action == 9) {
+        if (ui->model.dock_dirty) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ui->model.draft_dock_policy = ui->model.dock_policy;
+            ui->model.dock_dirty = false;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+        }
+        return;
     }
     ui->model.dock_dirty = ptc_ui_dock_dirty(&ui->model);
 }

@@ -20,6 +20,7 @@ bool ptc_ui_parse_time_hhmm(const char *text, uint16_t *out_minute_of_day);
 bool ptc_ui_parse_span_days(const char *text, uint16_t *out_days);
 bool ptc_ui_grant_minutes_legal(uint16_t minutes, uint16_t maximum);
 bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value);
+void ptc_ui_duration_set_minutes(PtcUiModel *model, uint16_t minutes);
 void ptc_ui_duration_select_field(PtcUiModel *model, PtcUiDurationField field);
 void ptc_ui_duration_toggle_field(PtcUiModel *model);
 bool ptc_ui_duration_step_field(PtcUiModel *model, int step);

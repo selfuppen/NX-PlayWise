@@ -252,10 +252,11 @@ static int check_bedtime_editors(const PtcUiModel *baseline)
                     model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1380, 480};
                     snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(state == 0 ?
                         PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT : PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
+                    ptc_ui_graphics_draw(&model, &theme);
                     memset(&bedtime_trace, 0, sizeof(bedtime_trace));
                     bedtime_trace.enabled = true;
                     bedtime_trace.overlay = model.overlay;
-                    ptc_ui_graphics_draw(&model, &theme);
+                    draw_plan_overlay_surface(preview_pixels, 1280, &model);
                     bedtime_trace.enabled = false;
                     if (bedtime_trace.failed || bedtime_trace.hints != 2 ||
                         strcmp(bedtime_trace.guide, model.overlay_body) != 0) {
@@ -352,6 +353,8 @@ static int check_child_home_grid(bool dark)
     PtcUiRect details = ptc_ui_home_details_rect(false);
     PtcUiRect status = ptc_ui_child_status_rect();
     int bottom = hero.y + hero.h + 14 + forecast.h;
+    PtcUiRect balance = ptc_ui_child_balance_rect();
+    PtcUiRect last_guard = ptc_ui_child_guard_rect(2);
     int hint_max = details.w - 60;
     int hint_lines = count_wrapped_lines(ptc_ui_text(PTC_UI_T_USAGE_DETAILS_HINT), 13, hint_max, 99);
     bool fits = hero.x == forecast.x && hero.w == forecast.w &&
@@ -364,6 +367,8 @@ static int check_child_home_grid(bool dark)
         buffer.y - (submit.y + submit.h) == 14 &&
         details.y - (buffer.y + buffer.h) == 14 &&
         status.y - (details.y + details.h) == 14 &&
+        balance.y == hero.y && balance.y + balance.h == hero.y + hero.h &&
+        last_guard.y + last_guard.h == balance.y + balance.h - 16 &&
         hint_max > 0 && hint_lines >= 1 && hint_lines <= 3;
     fprintf(stderr, "%s: child home grid dark=%d hero=%d..%d forecast=%d..%d right=%d..%d hint_lines=%d\n",
         fits ? "PASS" : "FAIL", dark, hero.y, hero.y + hero.h, forecast.y,
@@ -373,7 +378,7 @@ static int check_child_home_grid(bool dark)
 
 /* The child usage-details page leads with a reading-order guide bar. It must stay
  * on one measured line inside its own rect and above the first card row, and the
- * three-column cards must not grow into the shared bottom button band. */
+ * two-column panels must not grow into the shared bottom button band. */
 static int check_child_details_guide(bool dark)
 {
     UiRect guide = to_uirect(ptc_ui_home_details_guide_rect());
@@ -388,12 +393,12 @@ static int check_child_details_guide(bool dark)
     PtcUiRect button = ptc_ui_home_details_action_rect(&child, 0);
     fits = fits && button.y >= guide.y + guide.height + 280 &&
         button.y + button.h <= 616;
-    /* 孩子区按钮收薄 16px 以让出导读条高度，底边仍与家长区一致。 */
-    fits = fits && button.y == 514 && button.h == 102;
+    /* The same compact rules entry aligns both A sidebars at 616. */
+    fits = fits && button.y == 540 && button.h == 76;
     PtcUiModel parent = {0};
     parent.view = PTC_UI_PARENT;
     PtcUiRect parent_button = ptc_ui_home_details_action_rect(&parent, 0);
-    fits = fits && parent_button.y == 498 && parent_button.h == 118;
+    fits = fits && parent_button.y == 540 && parent_button.h == 76;
     fprintf(stderr, "%s: child details guide lang=%d dark=%d width=%d/%d button=%d..%d\n",
         fits ? "PASS" : "FAIL", (int)ptc_ui_language_get_resolved(), dark,
         width, guide.width - 46, button.y, button.y + button.h);
@@ -1476,6 +1481,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
         for (int slot = 0; slot < 7; ++slot)
             if (ptc_ui_weekday_for_display_slot(slot) == ptc_weekday_from_day_index(model.day_index)) model.weekly_grid_slot = slot;
+        model.weekly_last_day_slot = model.weekly_grid_slot;
+        model.editor_index = ptc_ui_weekday_for_display_slot(model.weekly_grid_slot);
         failed |= save_preview(directory, "plan", "plan-saved", &model, dark);
         {
             PtcUiModel confirmation = model;
@@ -1545,6 +1552,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             if (!ptc_day_index_from_date(2026, 9, 18, &friday_editor.day_index)) return 1;
             friday_editor.scheduled_override.enabled = false;
             friday_editor.editor_index = 5;
+            friday_editor.weekly_grid_slot = friday_editor.weekly_last_day_slot = 4;
             memcpy(friday_editor.draft_week, friday_editor.current_week, sizeof(friday_editor.draft_week));
             friday_editor.current_week[5] = (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
             friday_editor.draft_week[5] = friday_editor.current_week[5];
@@ -1562,6 +1570,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SAVED_PLAN_LOADED));
         model.parent_page = PTC_UI_PARENT_PLAN;
         model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+        model.calendar_builtin = true;
         model.holiday_rule = model.draft_holiday_rule = rules.holiday_rule;
         model.makeup_workday_rule = model.draft_makeup_workday_rule = rules.makeup_workday_rule;
         model.draft_holiday_enabled = true;
@@ -1613,6 +1622,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         failed |= save_preview(directory, "holiday", "holiday-disabled", &model, dark);
         model.disable_flag_present = false;
         model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+        model.bedtime_editor_day = 1;
         model.draft_bedtime_policy.enabled = true;
         model.draft_bedtime_policy.week[1] = (PtcBedtimeWindow){true, 1327, 420};
         model.bedtime_dirty = true;
@@ -2186,6 +2196,516 @@ static int check_action_text(UiRect card, const char *required_title)
     return failed + !title;
 }
 
+static int check_weekly_page_text(const PtcUiModel *baseline, bool dark, int style)
+{
+    int failed = 0;
+    for (int state = 0; state < 8; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.parent_footer_focused = false;
+        model.editor_index = ptc_weekday_from_day_index(model.day_index);
+        for (int slot = 0; slot < 7; ++slot)
+            if (ptc_ui_weekday_for_display_slot(slot) == model.editor_index)
+                model.weekly_grid_slot = model.weekly_last_day_slot = slot;
+        memcpy(model.draft_week, model.current_week, sizeof(model.draft_week));
+        model.weekly_dirty = state != 0;
+        if (state) model.draft_week[model.editor_index].minutes = 90;
+        if (state == 2) model.scheduled_override = (PtcScheduledOverride){true, model.day_index, model.day_index, {PTC_RULE_MODE_LIMIT, 120}};
+        if (state == 3) model.status_updated_at = 879;
+        if (state == 4) model.disable_flag_present = true;
+        if (state == 5) model.waiting = true;
+        if (state == 6) snprintf(model.result_status, sizeof(model.result_status), "error");
+        if (state == 7) model.draft_week[model.editor_index].mode = PTC_RULE_MODE_UNLIMITED;
+        model.selected_index = state % 6;
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+            (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        for (int slot = 0; slot < 7; ++slot) failed += check_action_text(to_uirect(ptc_ui_weekly_day_rect(slot)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_editor_rect()), NULL);
+        failed += check_action_text((UiRect){838, 176, 388, 372}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_bulk_rect()), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_discard_rect()), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_save_rect()), NULL);
+    }
+    return failed;
+}
+
+static int check_batch3_pages_text(const PtcUiModel *baseline, bool dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Holiday Plan B across on/off/unlimited/stale/read-only states */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.draft_holiday_enabled = (state != 1);
+        model.holiday_dirty = (state != 0);
+        if (state == 2) model.draft_holiday_rule.mode = PTC_RULE_MODE_UNLIMITED;
+        if (state == 3) { model.disable_flag_present = true; model.status_updated_at = 879; }
+        model.selected_index = state == 0 ? 0 : (state == 1 ? 6 : 1);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(0)), NULL);
+        failed += check_action_text((UiRect){54, 314, 396, 260}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(1)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(2)), NULL);
+        failed += check_action_text((UiRect){466, 398, 760, 176}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(4)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(5)), NULL);
+    }
+
+    /* 2. Scheduled Quota Plan B across active/unlimited/disabled/stale states */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SCHEDULED;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.draft_scheduled_override = (PtcScheduledOverride){
+            state != 2, (uint16_t)(model.day_index + (state == 3 ? 3 : 0)),
+            (uint16_t)(model.day_index + (state == 3 ? 9 : 6)),
+            {state == 1 ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT, 90}
+        };
+        model.overlay_selection = state;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_plan_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 748, 250}, NULL);
+        failed += check_action_text((UiRect){54, 436, 748, 200}, NULL);
+        failed += check_action_text((UiRect){820, 174, 406, 396}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_discard_rect(PTC_UI_OVERLAY_SCHEDULED)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_confirm_rect(PTC_UI_OVERLAY_SCHEDULED)), NULL);
+    }
+
+    /* 3. Bedtime Plan A across all 3 tabs + master off */
+    for (int sec = 0; sec < 3; ++sec) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.bedtime_section = (PtcUiBedtimeSection)sec;
+        model.bedtime_editor_day = 1;
+        model.draft_bedtime_policy.enabled = true;
+        model.draft_bedtime_policy.week[1] = (PtcBedtimeWindow){true, 1320, 420};
+        model.draft_bedtime_policy.calendar_enabled = true;
+        model.draft_bedtime_policy.holiday_rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+        model.draft_bedtime_policy.holiday_rule.window = (PtcBedtimeWindow){true, 1350, 450};
+        model.draft_bedtime_policy.scheduled_override.present = true;
+        model.draft_bedtime_policy.scheduled_override.start_day_index = model.day_index;
+        model.draft_bedtime_policy.scheduled_override.end_day_index = (uint16_t)(model.day_index + 6);
+        model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+        model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1320, 420};
+        model.bedtime_dirty = true;
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_bedtime_master_switch_rect()), NULL);
+        for (int t = 0; t < 3; ++t) failed += check_action_text(to_uirect(ptc_ui_bedtime_section_rect(t)), NULL);
+        failed += check_action_text((UiRect){838, 228, 388, 338}, NULL);
+        if (sec == PTC_UI_BEDTIME_WEEKLY) {
+            for (int d = 0; d < 7; ++d) failed += check_action_text(to_uirect(ptc_ui_bedtime_field_rect(0, d)), NULL);
+            failed += check_action_text(to_uirect(ptc_ui_bedtime_inline_editor_rect()), NULL);
+        } else if (sec == PTC_UI_BEDTIME_CALENDAR) {
+            for (int f = 0; f < 3; ++f) failed += check_action_text(to_uirect(ptc_ui_bedtime_field_rect(1, f)), NULL);
+        } else {
+            failed += check_action_text((UiRect){54, 228, 768, 178}, NULL);
+            failed += check_action_text(to_uirect(ptc_ui_bedtime_field_rect(2, 3)), NULL);
+        }
+    }
+    return failed;
+}
+
+static int check_batch4_pages_text(const PtcUiModel *baseline, int dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Eye Care Plan A across playing/resting/off + rules modal */
+    for (int state = 0; state < 3; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.eye_care_policy = (PtcEyeCarePolicy){state != 2, 40, 10};
+        model.draft_eye_care_policy = (PtcEyeCarePolicy){state != 2, state == 0 ? 30 : 40, 10};
+        model.eye_care_dirty = (state == 0);
+        model.eye_care_used_minutes = 12;
+        model.eye_care_rest_remaining_seconds = 380;
+        model.eye_care_break_id = state == 1 ? 42 : 0;
+        snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "%s",
+                 state == 1 ? "resting" : (state == 2 ? "off" : "playing"));
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_eye_care_page_master_rect()), NULL);
+        failed += check_action_text((UiRect){54, 250, 748, 152}, NULL);
+        failed += check_action_text((UiRect){54, 412, 748, 224}, NULL);
+        failed += check_action_text((UiRect){818, 174, 408, 396}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_eye_care_page_discard_rect()), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_eye_care_page_save_rect()), NULL);
+    }
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_EYE_CARE_RULES;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_plan_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1000, 560)), NULL);
+    }
+
+    /* 2. Dock / TV Mode Plan A across handheld/danger/waived/lite */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_DOCK; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.dock_available = model.undocked_usage_available = true;
+        model.dock_supported_available = true;
+        model.dock_supported = (state != 3);
+        model.undocked_used_minutes = 12;
+        model.undocked_remaining_minutes = 18;
+        model.dock_policy = (PtcDockPolicy){false, true, 30};
+        model.draft_dock_policy = (PtcDockPolicy){state == 1, true, state == 0 ? 45 : 30};
+        model.dock_dirty = (state == 0 || state == 1);
+        model.dock_waived_today = (state == 2);
+        snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 744, 422}, NULL);
+        failed += check_action_text((UiRect){814, 174, 412, 266}, NULL);
+        failed += check_action_text((UiRect){814, 450, 412, 120}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_dock_field_rect(9)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_dock_field_rect(3)), NULL);
+    }
+
+    /* 3. Autonomy Plan A full-page across available/claimed/off/unlimited */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_AUTONOMY;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.autonomy_policy.daily_buffer_minutes = state == 2 ? 0 : 10;
+        model.draft_autonomy_policy.daily_buffer_minutes = state == 0 ? 15 : model.autonomy_policy.daily_buffer_minutes;
+        model.daily_buffer_claimed = (state == 1);
+        model.daily_buffer_available = (state == 0);
+        model.unrestricted_today = (state == 3) ? 1 : 0;
+        model.overlay_selection = model.draft_autonomy_policy.daily_buffer_minutes / 5;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_plan_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 748, 72}, NULL);
+        for (int i = 0; i < 4; ++i) failed += check_action_text(to_uirect(ptc_ui_autonomy_option_rect(i)), NULL);
+        failed += check_action_text((UiRect){818, 174, 408, 396}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_discard_rect(PTC_UI_OVERLAY_AUTONOMY)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_confirm_rect(PTC_UI_OVERLAY_AUTONOMY)), NULL);
+    }
+    return failed;
+}
+
+static int check_batch5_pages_text(const PtcUiModel *baseline, int dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Parent PIN workbench (1080x620) & Auth Error / Cooldown (820x400) */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_PIN;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_PARENT_PIN_VERIFICATION));
+        snprintf(model.pin_text, sizeof(model.pin_text), "1234");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1080, 620)), NULL);
+    }
+    for (int cd = 0; cd < 2; ++cd) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_AUTH_ERROR;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.auth_error_parent_entry = true;
+        model.auth_cooldown_seconds = cd ? 30 : 0;
+        snprintf(model.auth_error_title, sizeof(model.auth_error_title), "%s",
+                 ptc_ui_text(cd ? PTC_UI_T_PIN_TEMPORARILY_LOCKED : PTC_UI_T_PIN_IS_INCORRECT));
+        snprintf(model.auth_error_message, sizeof(model.auth_error_message), "%s",
+                 ptc_ui_text(cd ? PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR : PTC_UI_T_PARENT_PIN_ERROR_CHOICE));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(820, 400)), NULL);
+    }
+
+    /* 2. Redeem 3-step closed loop: Input (1040x610), Confirm (860x476), Result (860x476) */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_NUMPAD;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.numpad_purpose = PTC_UI_NUMPAD_OFFLINE_CODE;
+        model.numpad_max_digits = 8;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_REDEEM_STEP_1));
+        snprintf(model.numpad_title, sizeof(model.numpad_title), "%s", ptc_ui_text(PTC_UI_T_REDEEM_STEP_1));
+        snprintf(model.numpad_text, sizeof(model.numpad_text), "123456");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1040, 610)), NULL);
+    }
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_CONFIRM;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.operation = PTC_UI_OPERATION_REDEEM_OFFLINE_CODE;
+        model.confirm_hold_required = true;
+        model.confirm_hold_progress = 450;
+        snprintf(model.pending_code, sizeof(model.pending_code), "12345678");
+        model.code_grant_minutes = 30;
+        model.code_effective_add_minutes = 30;
+        model.code_preview_after_available = true;
+        model.code_preview_after_minutes = 81;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_REDEEM_STEP_2));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(860, 476)), NULL);
+    }
+    for (int failed_case = 0; failed_case < 2; ++failed_case) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_CODE_RESULT;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        snprintf(model.pending_code, sizeof(model.pending_code), "12345678");
+        model.code_grant_minutes = 30;
+        model.code_effective_add_minutes = 30;
+        model.code_result_failed = failed_case != 0;
+        model.code_result_pending = false;
+        model.code_actual_add_available = !failed_case;
+        model.code_actual_add_minutes = 30;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s",
+                 ptc_ui_text(failed_case ? PTC_UI_T_GRANT_FAILED : PTC_UI_T_GRANT_SUCCESSFUL));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(860, 476)), NULL);
+    }
+
+    /* 3. Grant Hub 3-in-1 A2 Full Page: Mode 0 (Phone QR), Mode 1 (Offline File), Mode 2 (Local Voucher) */
+    for (int mode = 0; mode < 3; ++mode) {
+        uint8_t qr_tmp[qrcodegen_BUFFER_LEN_MAX];
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_GRANT;
+        model.overlay = model.rendered_overlay = (mode == 2) ? PTC_UI_OVERLAY_GRANT_LOCAL : PTC_UI_OVERLAY_QR;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.grant_hub_mode = mode;
+        snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "https://selfuppen.github.io/NX-PlayWise/");
+        snprintf(model.pairing_url, sizeof(model.pairing_url), "https://selfuppen.github.io/NX-PlayWise/#demo");
+        (void)qrcodegen_encodeText(model.pairing_url, qr_tmp, model.qr_code,
+                                   qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+                                   qrcodegen_Mask_AUTO, true);
+        model.grant_minutes = 45;
+        model.grant_has_code = true;
+        model.grant_issued_minutes = 30;
+        snprintf(model.grant_code, sizeof(model.grant_code), "58291406");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_account_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        for (int m = 0; m < 3; ++m)
+            failed += check_action_text(to_uirect(ptc_ui_grant_hub_mode_rect(m)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_qr_panel_rect(1)), NULL);
+    }
+
+    /* 4. Today Quota Editor (960x630) & Today Quota Confirm (860x476) */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_TODAY;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.numpad_purpose = PTC_UI_NUMPAD_MINUTES;
+        model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+        model.numpad_minimum = 0;
+        model.numpad_maximum = 1440;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SET_TODAY_LIMIT));
+        ptc_ui_duration_set_minutes(&model, 90);
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(960, 630)), NULL);
+    }
+    return failed;
+}
+
+static int check_batch6_pages_text(const PtcUiModel *baseline, int dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Support & Recovery right health panel + 4-step full-page Troubleshooting Guide */
+    for (int state = 0; state < 2; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SUPPORT;
+        model.overlay = PTC_UI_OVERLAY_NONE;
+        model.disable_flag_present = (state == 1);
+        model.recent_events_available = (state == 1);
+        model.recent_event_count = (state == 1) ? 2 : 0;
+        if (state == 1) {
+            snprintf(model.recent_events[0], sizeof(model.recent_events[0]), "%s", ptc_ui_text(PTC_UI_T_RULE_SAVE_INCOMPLETE_PLEASE_VIEW_DETAILS));
+            snprintf(model.recent_events[1], sizeof(model.recent_events[1]), "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_CONTROL));
+            model.recent_event_timestamps[0] = 950;
+            model.recent_event_timestamps[1] = 990;
+        }
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){842, 176, 384, 452}, NULL);
+    }
+    for (int page = 0; page < 4; ++page) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SUPPORT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SUPPORT_GUIDE;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.support_guide_page = page;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        for (int s = 0; s < 4; ++s)
+            failed += check_action_text(to_uirect(ptc_ui_support_guide_step_rect(s)), NULL);
+        failed += check_action_text((UiRect){54, 228, 1172, 54}, NULL);
+        failed += check_action_text((UiRect){54, 294, 1172, 344}, NULL);
+    }
+
+    /* 2. Config Backup & Import (Tab 0 Create + Danger Zone, Tab 1 Restore + Before/After) */
+    for (int tab = 0; tab < 2; ++tab) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.config_backup_tab = tab;
+        model.config_backup_ready = true;
+        model.config_today_available = true;
+        model.config_pin_available = true;
+        model.setup_snapshot_available = true;
+        model.config_groups = tab == 1 ? 0x103u : 0u;
+        snprintf(model.config_metadata, sizeof(model.config_metadata), "kid-switch / 2026-11-22 18:30");
+        snprintf(model.config_preview, sizeof(model.config_preview), "%s", ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_APPLY));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 744, 474}, NULL);
+        failed += check_action_text((UiRect){824, 172, 402, 474}, NULL);
+    }
+
+    /* 3. Parent Shortcut 2-Step & Album Anti-Bypass */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.shortcut_draft_enabled = true;
+        model.custom_shortcut_enabled = true;
+        model.setup_shortcut_index = 2;
+        snprintf(model.custom_shortcut_label, sizeof(model.custom_shortcut_label), "L + R");
+        snprintf(model.shortcut_draft_label, sizeof(model.shortcut_draft_label), "%s", ptc_ui_shortcut_common_label(2));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 738, 466}, NULL);
+        failed += check_action_text((UiRect){810, 172, 416, 466}, NULL);
+    }
+    for (int st = 0; st < 2; ++st) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.album_restriction_state = st;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 1172, 68}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_album_action_rect(0)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_album_action_rect(1)), NULL);
+    }
+
+    /* 4. Family Activity & Redemption History unified full-page ledgers */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.activity_history_available = true;
+        model.activity_history_count = 3;
+        model.activity_history[0] = (PtcActivityHistoryRecord){.occurred_at=950, .minutes=30, .effective_minutes=30};
+        snprintf(model.activity_history[0].action, sizeof(model.activity_history[0].action), "offline_grant");
+        model.activity_history[1] = (PtcActivityHistoryRecord){.occurred_at=970, .minutes=120, .effective_minutes=120};
+        snprintf(model.activity_history[1].action, sizeof(model.activity_history[1].action), "weekly_update");
+        model.activity_history[2] = (PtcActivityHistoryRecord){.occurred_at=990, .minutes=0, .effective_minutes=0};
+        snprintf(model.activity_history[2].action, sizeof(model.activity_history[2].action), "protection");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_account_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 1172, 468}, NULL);
+    }
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_GRANT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_REDEMPTION_HISTORY;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.redemption_history_available = true;
+        model.redemption_history_count = 2;
+        model.redemption_history[0] = (PtcRedemptionHistoryRecord){
+            .redeemed_at=960, .day_index=2380, .grant_minutes=30, .effective_add_minutes=30,
+            .remaining_after_available=true, .remaining_after_minutes=81, .token_version=2};
+        model.redemption_history[1] = (PtcRedemptionHistoryRecord){
+            .redeemed_at=990, .day_index=2380, .grant_minutes=60, .effective_add_minutes=15,
+            .remaining_after_available=true, .remaining_after_minutes=96, .token_version=2};
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_account_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 1172, 468}, NULL);
+    }
+    return failed;
+}
+
 static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
 {
     int failed = 0;
@@ -2198,6 +2718,11 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
         for (int dark = 0; dark < 2; ++dark) {
             for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
                 ptc_ui_theme_set_style((PtcUiThemeStyle)style);
+                failed += check_weekly_page_text(baseline, dark, style);
+                failed += check_batch3_pages_text(baseline, dark, style);
+                failed += check_batch4_pages_text(baseline, dark, style);
+                failed += check_batch5_pages_text(baseline, dark, style);
+                failed += check_batch6_pages_text(baseline, dark, style);
                 for (int state = 0; state < 5; ++state) {
                     PtcUiModel model = *baseline;
                     model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;

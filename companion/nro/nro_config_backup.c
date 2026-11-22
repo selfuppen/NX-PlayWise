@@ -189,7 +189,11 @@ void config_backup_action(UiState *ui, int index)
     }
     if (index < 11 && index >= 0 && ui->model.config_backup_ready && (available_groups(&ui->model) & (1u << index)))
         ui->model.config_groups ^= (1u << index);
-    else if (index == 11 && ui->model.config_backup_ready) ui->model.config_groups = available_groups(&ui->model);
+    else if (index == 19 && ui->model.config_backup_ready) {
+        ui->model.config_groups = (PTC_CONFIG_WEEK | PTC_CONFIG_SCHEDULED | PTC_CONFIG_TODAY |
+            PTC_CONFIG_BUFFER | PTC_CONFIG_HOLIDAY | PTC_CONFIG_BEDTIME | PTC_CONFIG_EYE |
+            PTC_CONFIG_DOCK) & available_groups(&ui->model);
+    } else if (index == 11 && ui->model.config_backup_ready) ui->model.config_groups = available_groups(&ui->model);
     else if (index == 12) ui->model.config_groups = 0;
     else if (index == 14) { request_config_restore(ui); return; }
     else if (index == 13) {

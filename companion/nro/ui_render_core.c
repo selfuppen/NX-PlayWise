@@ -750,22 +750,32 @@ void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool hold = model->confirm_hold_required && model->overlay == PTC_UI_OVERLAY_CONFIRM;
     if (hold) {
         UiRect button = to_uirect(confirm);
-        char progress_label[48];
-        fill_round_rect(pixels, stride, button, 12, UI_ACCENT);
-        if (model->confirm_hold_progress > 0) {
+        char progress_label[64];
+        bool completed = model->confirm_hold_progress >= 1000;
+        uint32_t base_bg = completed ? UI_SUCCESS
+            : UI_RGB(ui_darken(UI_BLENDED(danger), 34));
+        fill_round_rect(pixels, stride, button, 12, base_bg);
+        if (model->confirm_hold_progress > 0 && !completed) {
             UiRect progress = button;
-            progress.width = progress.width * model->confirm_hold_progress / 1000;
-            fill_round_rect(pixels, stride, progress, 12, UI_SUCCESS);
+            int fill_w = (int)((int64_t)button.width * model->confirm_hold_progress / 1000);
+            if (fill_w < 8) fill_w = 8;
+            if (fill_w > button.width) fill_w = button.width;
+            progress.width = fill_w;
+            int r = fill_w < 24 ? fill_w / 2 : 12;
+            fill_round_rect(pixels, stride, progress, r, UI_DANGER);
             snprintf(progress_label, sizeof(progress_label), ptc_ui_text(PTC_UI_T_A_KEEP_HOLDING_U),
                      (unsigned int)(model->confirm_hold_progress / 10));
+        } else if (completed) {
+            snprintf(progress_label, sizeof(progress_label), "%s", ptc_ui_text(PTC_UI_T_A_CONFIRMATION_COMPLETED));
         } else {
             snprintf(progress_label, sizeof(progress_label), "%s", ptc_ui_text(PTC_UI_T_A_PRESS_AND_HOLD_FOR_1_SECOND));
         }
-        draw_text_center(pixels, stride, button,
-                         model->confirm_hold_progress >= 1000 ? ptc_ui_text(PTC_UI_T_A_CONFIRMATION_COMPLETED) : progress_label,
-                         20, UI_ON_ACCENT);
-        draw_rect_outline(pixels, stride, button, 12, 2,
-                          model->confirm_hold_progress > 0 ? UI_SUCCESS : UI_ACCENT);
+        char fitted[64];
+        int font_size = 18;
+        while (font_size > 13 && measure_text(progress_label, font_size) > button.width - 20) --font_size;
+        fit_text(fitted, sizeof(fitted), progress_label, font_size, button.width - 18);
+        draw_text_center(pixels, stride, button, fitted, font_size, UI_ON_ACCENT);
+        draw_rect_outline(pixels, stride, button, 12, 2, completed ? UI_SUCCESS : UI_DANGER);
     } else {
         draw_dialog_button(pixels, stride, confirm, confirm_label, UI_ACCENT, UI_ON_ACCENT, false);
     }

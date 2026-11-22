@@ -275,6 +275,7 @@ void handle_parent_action(UiState *ui)
             ui->model.bedtime_dirty = false;
             ui->model.bedtime_switch_pending = false;
             ui->model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+            ui->model.bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
             ui->model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
             ui->model.selected_index = 0;
             break;
@@ -845,8 +846,11 @@ void accept_numpad(UiState *ui)
         ui->model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui->model);
     } else if (purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
         PtcBedtimeWindow *window;
-        if (ui->model.numpad_return_overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW) {
-            window = &ui->model.draft_bedtime_policy.week[ui->model.bedtime_editor_day];
+        if (ui->model.numpad_return_overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW ||
+            ui->model.numpad_return_overlay == PTC_UI_OVERLAY_NONE) {
+            int day = ui->model.bedtime_editor_day;
+            if (day < 0 || day >= 7) day = 1;
+            window = &ui->model.draft_bedtime_policy.week[day];
         } else if (ui->model.numpad_return_overlay == PTC_UI_OVERLAY_BEDTIME) {
             window = &ui->model.draft_bedtime_policy.week[0];
         } else {

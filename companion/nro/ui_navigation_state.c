@@ -162,12 +162,13 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
-        static const int left[7]  = {0, 1, 1, 3, 3, 4, 5};
-        static const int right[7] = {0, 2, 6, 4, 5, 6, 6};
-        static const int up[7]    = {0, 0, 0, 1, 1, 2, 2};
-        static const int down[7]  = {1, 3, 5, 3, 4, 5, 6};
+        /* Holiday B: left col = 0 (master), 6 (calendar); right col = 1 (statutory), 2 (makeup), 4 (discard), 5 (save). */
+        static const int left[7]  = {0, 0, 0, 0, 6, 4, 6};
+        static const int right[7] = {1, 1, 2, 4, 5, 5, 4};
+        static const int up[7]    = {0, 1, 1, 2, 2, 2, 0};
+        static const int down[7]  = {6, 2, 5, 4, 4, 5, 6};
         int previous = index;
-        if (index > 6) index = 6;
+        if (index == 3 || index > 6) index = 0;
         if (horizontal < 0) index = left[index];
         else if (horizontal > 0) index = right[index];
         else if (vertical < 0) index = up[index];
@@ -206,68 +207,19 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
-        if (index >= 8) {
-            if (horizontal > 0) index = index == 8 ? 2 : (index == 9 ? 4 : 5);
-            else if (vertical < 0 && index > 8) --index;
-            else if (vertical > 0) {
-                if (index < 10) ++index;
-                else {
-                    model->parent_content_selection = index;
-                    model->parent_footer_focused = true;
-                    model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
-                    PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
-                }
-            }
-            model->selected_index = index;
-            return;
-        }
-        if (vertical < 0) {
-            if (index == 5) {
-                index = 4;
-            } else if (index == 7) {
-                index = 6;
-            } else if (index == 4) {
-                index = 2;
-            } else if (index == 6) {
-                index = 3;
-            } else if (index == 2) {
-                index = 0;
-            } else if (index == 3) {
-                index = 1;
-            }
-        } else if (vertical > 0) {
-            if (index == 0) {
-                index = 2;
-            } else if (index == 1) {
-                index = 3;
-            } else if (index == 2) {
-                index = 4;
-            } else if (index == 3) {
-                index = 6;
-            } else if (index == 4) {
-                index = 5;
-            } else if (index == 6) {
-                index = 7;
-            } else if (index == 5 || index == 7) {
-                model->parent_content_selection = index;
-                model->parent_footer_focused = true;
-                model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
-                    PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
-            }
-        } else if (horizontal < 0) {
-            if (index == 2) index = 8;
-            else if (index == 4) index = 9;
-            else if (index == 5) index = 10;
-            else if (index == 1) index = 0;
-            else if (index == 3) index = 2;
-            else if (index == 6) index = 4;
-            else if (index == 7) index = 5;
-        } else if (horizontal > 0) {
-            if (index == 0) index = 1;
-            else if (index == 2) index = 3;
-            else if (index == 4) index = 6;
-            else if (index == 5) index = 7;
-        }
+        static const int left[]  = {8, 8, 0, 2, 6, 10, 9, 5, 8, 9, 10};
+        static const int right[] = {2, 1, 3, 3, 4, 7, 4, 7, 0, 6, 5};
+        static const int up[]    = {1, 1, 1, 1, 3, 6, 0, 4, 8, 8, 9};
+        static const int down[]  = {6, 0, 4, 4, 7, 5, 5, 7, 9, 10, 10};
+        if (horizontal < 0) index = left[index];
+        else if (horizontal > 0) index = right[index];
+        else if (vertical < 0) index = up[index];
+        else if (vertical > 0 && down[index] == index) {
+            model->parent_content_selection = index;
+            model->parent_footer_focused = true;
+            model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
+                PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
+        } else if (vertical > 0) index = down[index];
         model->selected_index = index;
         return;
     }
@@ -342,6 +294,7 @@ bool ptc_ui_open_today_settings(PtcUiModel *model, int index)
         model->bedtime_section = PTC_UI_BEDTIME_WEEKLY;
         model->bedtime_section_focused = false;
         model->bedtime_master_focused = false;
+        model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
         model->plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
     } else {
         if (!model->dock_dirty) model->draft_dock_policy = model->dock_policy;
@@ -464,29 +417,32 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
         model->bedtime_section > PTC_UI_BEDTIME_SCHEDULED) {
         model->bedtime_section = PTC_UI_BEDTIME_WEEKLY;
     }
-    field_count = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+    field_count = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 19 :
         (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
 
     if (model->bedtime_master_focused) {
-        if (horizontal < 0 || vertical > 0) {
+        if (horizontal > 0) {
             model->bedtime_master_focused = false;
             model->bedtime_section_focused = true;
+        } else if (vertical > 0) {
+            model->bedtime_master_focused = false;
+            model->bedtime_section_focused = false;
+            model->selected_index = 0;
+            if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY)
+                model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
         }
         return;
     }
 
     if (model->bedtime_section_focused) {
-        if (vertical < 0) {
-            model->bedtime_section_focused = false;
-            model->bedtime_master_focused = true;
-            return;
-        }
         if (horizontal != 0) {
             int next = (int)model->bedtime_section + (horizontal > 0 ? 1 : -1);
             if (next >= PTC_UI_BEDTIME_WEEKLY && next <= PTC_UI_BEDTIME_SCHEDULED) {
                 model->bedtime_section = (PtcUiBedtimeSection)next;
                 model->selected_index = 0;
-            } else if (horizontal > 0) {
+                if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY)
+                    model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
+            } else if (horizontal < 0) {
                 model->bedtime_section_focused = false;
                 model->bedtime_master_focused = true;
             }
@@ -506,6 +462,8 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
             if (best_index >= 0) {
                 model->bedtime_section_focused = false;
                 model->selected_index = best_index;
+                if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY && best_index < 7)
+                    model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(best_index);
             }
         }
         return;
@@ -565,8 +523,13 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
         }
     }
 
-    if (best_index >= 0) model->selected_index = best_index;
-    else if (best_index == -2) model->bedtime_section_focused = true;
+    if (best_index >= 0) {
+        model->selected_index = best_index;
+        if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY && best_index < 7)
+            model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(best_index);
+    } else if (best_index == -2) {
+        model->bedtime_section_focused = true;
+    }
 }
 
 void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels)
@@ -677,30 +640,35 @@ void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction)
 
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical)
 {
-    int slot;
     if (!model) return;
-    if (model->selected_index < 0 || model->selected_index > 4) model->selected_index = 0;
-    if (model->selected_index != 0) {
-        if (vertical < 0) {
-            model->selected_index = 0;
-        } else if (horizontal < 0 && model->selected_index > 1) {
-            --model->selected_index;
-        } else if (horizontal > 0 && model->selected_index < 4) {
-            ++model->selected_index;
-        }
-        return;
+    if (model->selected_index < 0 || model->selected_index > 5) model->selected_index = 0;
+    /* Preserve existing operation indices; 5 is the new minutes field. The
+       date row, two editor rows and right save controls have distinct paths. */
+    if (model->selected_index == 0) {
+        int slot = model->weekly_grid_slot;
+        if (slot < 0 || slot > 6) slot = 0;
+        if (horizontal < 0 && slot > 0) --slot;
+        else if (horizontal > 0 && slot < 6) ++slot;
+        else if (vertical > 0) model->selected_index = 1;
+        else if (vertical < 0) model->selected_index = 2;
+        model->weekly_grid_slot = model->weekly_last_day_slot = slot;
+        model->editor_index = ptc_ui_weekday_for_display_slot(slot);
+    } else if (model->selected_index == 1) {
+        if (vertical < 0) model->selected_index = 0;
+        else if (vertical > 0) model->selected_index = 5;
+        else if (horizontal > 0) model->selected_index = 3;
+    } else if (model->selected_index == 5) {
+        if (vertical < 0) model->selected_index = 1;
+        else if (horizontal > 0) model->selected_index = 3;
+    } else if (model->selected_index == 2) {
+        if (vertical > 0 || horizontal < 0) model->selected_index = 0;
+    } else if (model->selected_index == 3) {
+        if (horizontal > 0) model->selected_index = 4;
+        else if (horizontal < 0 || vertical < 0) model->selected_index = 5;
+    } else if (model->selected_index == 4) {
+        if (horizontal < 0) model->selected_index = 3;
+        else if (vertical < 0) model->selected_index = 5;
     }
-    slot = model->weekly_grid_slot;
-    if (slot < 0 || slot > 6) slot = 0;
-    if (horizontal < 0 && slot > 0) --slot;
-    else if (horizontal > 0 && slot < 6) ++slot;
-    else if (vertical > 0) {
-        model->selected_index = 1;
-        return;
-    }
-    model->weekly_grid_slot = slot;
-    model->weekly_last_day_slot = slot;
-    model->editor_index = ptc_ui_weekday_for_display_slot(slot);
 }
 
 static int credential_selection_step(const PtcUiModel *model, int current, int direction)

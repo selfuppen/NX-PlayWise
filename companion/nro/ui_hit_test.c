@@ -42,11 +42,19 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     if (model->waiting && model->overlay == PTC_UI_OVERLAY_SCHEDULED)
         return make_hit(PTC_UI_HIT_NONE, 0);
     if (model->overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y) ||
+            ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y) ||
+            ptc_ui_rect_contains(ptc_ui_settings_page_back_rect(), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_support_guide_refresh_rect(), x, y))
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        for (i = 0; i < 4; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_support_guide_step_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_SUPPORT_GUIDE_STEP, i);
         for (i = 0; i < 2; ++i)
             if (ptc_ui_rect_contains(ptc_ui_support_guide_nav_rect(i), x, y))
                 return make_hit(i == 0 ? PTC_UI_HIT_HISTORY_PREV : PTC_UI_HIT_HISTORY_NEXT, 0);
-        return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
-            ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
+        return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
         for (i = 0; i < 3; ++i) {
@@ -81,7 +89,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
-        for (int i = 0; i < 19; ++i) {
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y))
+            return make_hit(PTC_UI_HIT_CONFIG_BACKUP_FIELD, 15);
+        for (int i = 0; i < 20; ++i) {
             if (model->config_backup_tab == 0) {
                 if (i != 16 && i != 17 && i != 13 && i != 15 && i != 18) continue;
             } else {
@@ -164,13 +174,44 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    /* The QR export button reuses the dialog confirm slot but keeps its own
-       action id so the export path never goes through the generic confirm. */
-    if (model->overlay == PTC_UI_OVERLAY_QR &&
-        ptc_ui_rect_contains(ptc_ui_qr_export_rect(), x, y)) {
-        return make_hit(PTC_UI_HIT_QR_EXPORT, 0);
+    /* Unified 3-in-1 Grant & Pairing full-page shell (PTC_UI_OVERLAY_QR and PTC_UI_OVERLAY_GRANT_LOCAL). */
+    if (model->overlay == PTC_UI_OVERLAY_QR || model->overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
+        int active_mode = ptc_ui_grant_hub_active_mode(model);
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y) ||
+            ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_scheduled_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        }
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_grant_hub_mode_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_GRANT_HUB_MODE, i);
+            }
+        }
+        if (active_mode == 2) {
+            for (i = 0; i < 5; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_grant_preset_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_GRANT_PRESET, i);
+                }
+            }
+            if (ptc_ui_rect_contains(ptc_ui_grant_adjust_rect(0), x, y)) {
+                return make_hit(PTC_UI_HIT_GRANT_ADJUST, 0);
+            }
+            if (!model->waiting && ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) {
+                return make_hit(PTC_UI_HIT_GRANT_GENERATE, 0);
+            }
+        } else if (ptc_ui_rect_contains(ptc_ui_qr_export_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_QR_EXPORT, 0);
+        }
+        return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        for (i = 0; i < 4; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_activity_filter_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_ACTIVITY_FILTER, i);
         if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(1), x, y))
             return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
         if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y))
@@ -196,12 +237,17 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     if ((model->overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE ||
-         model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) &&
+         model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE ||
+         model->overlay == PTC_UI_OVERLAY_SCHEDULED ||
+         model->overlay == PTC_UI_OVERLAY_AUTONOMY) &&
         ptc_ui_rect_contains(ptc_ui_discard_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
     }
     switch (model->overlay) {
     case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
         if (ptc_ui_rect_contains(ptc_ui_redemption_history_prev_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
         }
@@ -248,6 +294,17 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_SCHEDULED:
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_scheduled_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        }
+        for (i = 0; i < 14; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_scheduled_quick_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_SCHEDULED_QUICK, i);
+            }
+        }
         for (i = 0; i < 4; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_scheduled_field_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_SCHEDULED_FIELD, i);
@@ -255,6 +312,12 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_AUTONOMY:
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_scheduled_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        }
         for (i = 0; i < 4; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_autonomy_option_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_AUTONOMY_OPTION, i);
@@ -279,6 +342,14 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         if (model->today_limit_unlimited_draft &&
             model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) break;
+        if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
+            model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
+            for (i = 0; i < 5; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_today_quota_preset_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_TODAY_QUOTA_PRESET, i);
+                }
+            }
+        }
         for (i = 0; i < 2; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_minute_editor_field_rect((PtcUiDurationField)i), x, y)) {
                 return make_hit(PTC_UI_HIT_DURATION_FIELD, i);
@@ -424,12 +495,16 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
+        if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
+        for (i = 1; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_shortcut_prefix_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_SHORTCUT_PREFIX, i);
+        }
         for (i = 0; i < PTC_UI_SHORTCUT_PRESET_COUNT; ++i) {
-            if (rect_contains_row_cell(ptc_ui_shortcut_option_rect(i), 40, x, y)) {
+            if (ptc_ui_rect_contains(ptc_ui_shortcut_option_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_SHORTCUT_OPTION, i);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
         if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
     case PTC_UI_OVERLAY_NOTIFICATIONS:
@@ -526,16 +601,21 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
                 ptc_ui_child_forecast_source(model, i, now) != PTC_UI_CHILD_FORECAST_UNKNOWN)
                 return make_hit(PTC_UI_HIT_CHILD_FORECAST, i);
         }
-        if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
+        for (i = 0; i < 4; ++i) {
+            if (!ptc_ui_rect_contains(ptc_ui_child_action_rect(i), x, y)) continue;
+            PtcUiHitKind kind = ptc_ui_child_action_kind(model, i);
+            bool dock_blocked = ptc_ui_status_is_fresh(model, now) && model->dock_restriction_active;
+            bool unlimited = ptc_ui_status_is_fresh(model, now) &&
+                (model->unrestricted_today == 1 || model->eye_care_unlimited_capped || model->dock_unlimited_capped);
+            if (model->waiting) return make_hit(PTC_UI_HIT_NONE, 0);
+            if (kind == PTC_UI_HIT_CHILD_SUBMIT_CODE && (model->disable_flag_present || dock_blocked || unlimited))
+                return make_hit(PTC_UI_HIT_NONE, 0);
+            if (kind == PTC_UI_HIT_CHILD_BUFFER &&
+                (!model->daily_buffer_available || model->disable_flag_present || dock_blocked))
+                return make_hit(PTC_UI_HIT_NONE, 0);
+            return make_hit(kind, 0);
         }
-        if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
-        }
-        if (model->daily_buffer_available && !model->disable_flag_present && !model->waiting &&
-            ptc_ui_rect_contains(ptc_ui_child_buffer_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_BUFFER, 0);
-        }
+        if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
         if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_footer_rect(0), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }
@@ -548,7 +628,7 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(2), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);
         }
-        /* The parent area stays hidden; touch never exposes it. */
+        /* Parent entry still uses the existing PIN flow. */
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->view == PTC_UI_SETUP) {
@@ -629,13 +709,6 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
-    /* The dock page keeps save/waive in the footer action row, so its hit test
-       has to run before the generic plan footer buttons. */
-    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
-        for (i = 3; i <= 4; ++i)
-            if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y))
-                return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
-    }
     if (ptc_ui_rect_contains(compact_left ? ptc_ui_parent_subpage_footer_rect(0) :
                              ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
@@ -655,26 +728,24 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             return make_hit(PTC_UI_HIT_HOME_RULES, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
+        for (i = 0; i < 4; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_dock_preset_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_PRESET, i);
+        for (i = 0; i < 2; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_dock_step_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_STEP, i);
+        if (ptc_ui_rect_contains(ptc_ui_dock_value_rect(), x, y)) return make_hit(PTC_UI_HIT_DOCK_VALUE, 0);
         for (i = 0; i <= 5; ++i)
             if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
+        if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(9), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, 9);
         if (model->eden_mode_controls) for (i = 7; i <= 8; ++i)
             if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {
-        for (i = 0; i < 7; ++i) {
-            int weekday = ptc_ui_weekday_for_display_slot(i);
-            if (ptc_ui_rect_contains(ptc_ui_weekly_day_mode_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_MODE, weekday);
-            }
-            if (ptc_ui_rect_contains(ptc_ui_weekly_day_minutes_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, weekday);
-            }
-            if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_DAY, weekday);
-            }
-        }
+        for (i = 0; i < 7; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_WEEKLY_DAY, ptc_ui_weekday_for_display_slot(i));
         if (ptc_ui_rect_contains(ptc_ui_weekly_page_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, model->editor_index);
+        if (ptc_ui_rect_contains(ptc_ui_weekly_page_minutes_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, model->editor_index);
         if (ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_discard_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_DISCARD, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_bulk_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_BULK, 0);
@@ -709,7 +780,7 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         if (ptc_ui_rect_contains(ptc_ui_bedtime_master_switch_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_BEDTIME_MASTER_SWITCH, 0);
         }
-        int fields = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+        int fields = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 19 :
             (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
         for (i = 0; i < 3; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_bedtime_section_rect(i), x, y)) {
@@ -744,6 +815,10 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_VAL, 0);
         if (ptc_ui_rect_contains(ptc_ui_eye_care_rest_inc_rect(), x, y))
             return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_INC, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_page_rules_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_RULES, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_page_discard_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_DISCARD, 0);
         if (ptc_ui_rect_contains(ptc_ui_eye_care_page_save_rect(), x, y))
             return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_SAVE, 0);
         if (strcmp(model->eye_care_phase, "resting") == 0 &&

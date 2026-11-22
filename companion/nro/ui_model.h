@@ -144,7 +144,8 @@ typedef enum {
     PTC_UI_OVERLAY_DOCK_RULES = 45,
     PTC_UI_OVERLAY_ONLINE_UPDATE = 46,
     PTC_UI_OVERLAY_UPDATE_BACKUPS = 47,
-    PTC_UI_OVERLAY_NOTIFICATIONS = 48
+    PTC_UI_OVERLAY_NOTIFICATIONS = 48,
+    PTC_UI_OVERLAY_EYE_CARE_RULES = 49
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -396,6 +397,8 @@ typedef enum {
 
 typedef struct {
     PtcUiView view;
+    bool child_actions_focused;
+    int child_action_focus;
     PtcUiParentPage parent_page;
     PtcUiPlanPage plan_page;
     bool today_settings_origin;
@@ -457,6 +460,7 @@ typedef struct {
     bool activity_history_available;
     int activity_history_count;
     int activity_history_page;
+    int activity_history_filter;
     PtcActivityHistoryRecord activity_history[PTC_ACTIVITY_HISTORY_MAX_RECORDS];
     PtcResultForecastDay forecast[PTC_RESULT_FORECAST_DAYS];
     char forecast_rule_sources[PTC_RESULT_FORECAST_DAYS][32];
@@ -740,6 +744,7 @@ typedef struct {
     char credential_new[80];
     char pairing_base_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     char pairing_url[768];
+    int grant_hub_mode;
     uint16_t grant_minutes;
     uint16_t grant_max_minutes;
     uint16_t grant_day_index;

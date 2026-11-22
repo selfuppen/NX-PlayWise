@@ -401,3 +401,29 @@ Run `python tools/test.py` and `python tools/package_remote.py --with-previews`.
 `tests/c/test_policy_status.inc` runs in the host UI suite with explicit civil dates and seconds. It covers today's upcoming bedtime, overnight release, positive partial-minute rounding, boundary confirmation, future dates, instance skips, disabled policies, stale/cross-day snapshots, clock rollback and missing fields. TV cases cover mode changes, balances independent of wall time, empty non-TV allowance while on TV, active restrictions, waivers, TV-only and unknown usage. Layout checks cover the global bar with all policies enabled and the Overlay strip boundaries; existing touch, settings-return and focus tests remain active.
 
 Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including default Eden NRO and standard Zip build/validation. New previews include three-language NRO light/dark `child/policy-*` and `parent/policy-*` scenes and `overlay/overlay-policy-*` scenes. Inspect upcoming/overnight/skipped bedtime, empty allowance on TV, stale state, no bedtime today, simultaneous restrictions, expanded details and success/failure details. Screenshots do not replace device enforcement evidence.
+
+
+## Child overview layout B
+
+The home page separates current play status and confirmed continuous-use projection from the daily balance. The 320px status/balance row and 190px seven-day forecast retain a 14px gap and the shared bottom at 644. Three guardian rows fill the balance panel down to its 16px inset. Unknown, stale, cross-day, recovery and unconfirmed results never imply permission or expose old current balances; concurrent limits and countdown confirmation remain independent.
+
+The four actions are code, buffer, details, and PIN-protected parent entry; a restricted snapshot promotes parent entry while preserving all four paths. Refresh keeps the existing map stable. Right enters the action column, up/down selects, left leaves, and A activates its shared touch rectangle. Existing shortcuts remain. Status warnings and operation feedback are preserved in the main status card. Host regressions cover the first eye boundary, remaining balance during rest, concurrent limits, expiry and PIN/waiting hit targets.
+
+
+## Today details A regression
+
+Host checks cover the five child/parent panels, separate balance, rules entry and footer, plus three non-overlapping event cells below the continuous-use rail and above its note. Production rendering covers TV/unlimited, rest, concurrent limits, dense cycles, stale/failed refresh, recovery and disabled guardians. Three-language, dual-theme previews check the child guide and shared bottom at 616. Existing projection tests retain timing, freshness and concurrent-reason behavior; previews do not prove real restriction release.
+
+Use the unified `tools/package_remote.py --with-previews --preview-scope docs` gate for C rendering/layout changes, retaining default Eden NRO build and artifact validation. Daily emulator scenarios are not executed by policy.
+
+## Weekly plan A layout and navigation regression
+
+Host checks verify all seven summary cards only select dates, preserving protocol Sunday=0 order. Separate mode/quota fields target the selected day, including unlimited/read-only feedback. Navigation covers dates, mode, quota, discard/save, batch setup and footer restoration. Fields stay inside their editor and outside the overview, right save controls and footer. Existing source/unknown/exhausted/hold projections remain authoritative. Three-language, dual-theme production previews cover saved values, today's draft, a covering date rule, failures, confirmations and input. Use the unified package gate with default Eden NRO validation; daily emulator scenarios are not run by policy.
+
+## Parent schedule combined layout
+
+Today's Schedule combines the B status-first summary on the left with the A action layout on the right. Quick add spans the first row; set allowance, unlimited today and clear adjustment share the next three-column row. Eye/bedtime skips and buffer/TV waiver occupy two further rows. All eight protocol identities, unavailable reasons, PIN and hold confirmations remain intact. Guardian targets and action cards share their draw/touch geometry; directional navigation follows the visible rows and enters the existing footer from the bottom. Host checks cover containment, non-overlap, operation identities, disabled paths and navigation.
+
+## Grant hub authentication regression
+
+Opening the QR tab requires the parent PIN, including when returning from another tab after an earlier successful visit. The verified QR tab retains direct export. Export from the file pairing tab requires its own PIN verification. The Host NRO integration test covers authorized QR and file export, canceled re-entry to the QR tab, and canceled file export with a cached QR.

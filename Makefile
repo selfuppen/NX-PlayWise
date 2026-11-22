@@ -179,6 +179,7 @@ SETUP_TEST_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) compani
 SETUP_TEST_SRCS += companion/nro/nro_online_update.c platform/ultrahand_config.c platform/reason_detail.c companion/notification_test.c
 SETUP_TEST_SRCS += companion/nro/nro_setup_options.c
 SETUP_TEST_SRCS += companion/nro/nro_plan_actions.c
+SETUP_TEST_SRCS += companion/nro/nro_pairing.c common/token/token_v2.c third_party/qrcodegen/qrcodegen.c
 $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
 

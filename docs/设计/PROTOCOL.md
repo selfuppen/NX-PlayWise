@@ -678,3 +678,15 @@ The NRO child home, parent Today hero, global status bar and child Overlay share
 TV information separates current TV/handheld-tabletop mode, non-TV allowance, estimated use and remaining usage minutes. The balance updates from backend readings and never decreases with wall time. It remains visible on TV; an empty non-TV balance does not imply an active restriction on TV. TV-only, disabled, waived and unknown states are explicit. Control requests, PIN checks, redemption permissions and policies retain their existing behavior.
 
 The projection uses each client's existing freshness limit (NRO up to 120 seconds; Overlay below 30 seconds) and requires the snapshot date to match current local time. Failed reads, clock rollback, missing required fields or incomplete instances show a refresh placeholder without manufacturing balances or countdowns. Presence flags are client-local and do not change result JSON.
+
+
+## Child overview layout B
+
+The home page separates current play status and confirmed continuous-use projection from the daily balance. The 320px status/balance row and 190px seven-day forecast retain a 14px gap and the shared bottom at 644. Three guardian rows fill the balance panel down to its 16px inset. Unknown, stale, cross-day, recovery and unconfirmed results never imply permission or expose old current balances; concurrent limits and countdown confirmation remain independent.
+
+The four actions are code, buffer, details, and PIN-protected parent entry; a restricted snapshot promotes parent entry while preserving all four paths. Refresh keeps the existing map stable. Right enters the action column, up/down selects, left leaves, and A activates its shared touch rectangle. Existing shortcuts remain. Status warnings and operation feedback are preserved in the main status card. Host regressions cover the first eye boundary, remaining balance during rest, concurrent limits, expiry and PIN/waiting hit targets.
+
+
+## Parent schedule combined layout
+
+Today's Schedule combines the B status-first summary on the left with the A action layout on the right. Quick add spans the first row; set allowance, unlimited today and clear adjustment share the next three-column row. Eye/bedtime skips and buffer/TV waiver occupy two further rows. All eight protocol identities, unavailable reasons, PIN and hold confirmations remain intact. Guardian targets and action cards share their draw/touch geometry; directional navigation follows the visible rows and enters the existing footer from the bottom. Host checks cover containment, non-overlap, operation identities, disabled paths and navigation.

@@ -144,6 +144,15 @@ void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
     char *out, size_t out_size);
 void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
     uint16_t local_day_index, int second_of_day, PtcUiTodayProjection *out);
+typedef struct {
+    bool fresh, available, blocked, total_known, total_unlimited;
+    int total_remaining;
+    unsigned reasons;
+    PtcPolicyDisplayState state;
+    char title[160], value[64], hint[192], balance[64];
+} PtcUiOverview;
+void ptc_ui_project_overview(const PtcUiModel *model, int64_t now,
+    uint16_t day, int second, PtcUiOverview *out);
 void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
     PtcUiQuotaRecheckSnapshot *out);
 PtcUiQuotaRecheckDecision ptc_ui_quota_recheck_decide(
@@ -220,6 +229,8 @@ int ptc_ui_redemption_history_page_count(const PtcUiModel *model);
 void ptc_ui_change_redemption_history_page(PtcUiModel *model, int direction);
 int ptc_ui_activity_history_page_count(const PtcUiModel *model);
 void ptc_ui_change_activity_history_page(PtcUiModel *model, int direction);
+bool ptc_ui_activity_matches_filter(const PtcActivityHistoryRecord *record, int filter);
+int ptc_ui_activity_filtered_count(const PtcUiModel *model);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
 
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);

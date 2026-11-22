@@ -117,7 +117,15 @@ void handle_config_backup_input(UiState *ui, u64 down)
 static void handle_activity_history_overlay_input(UiState *ui, u64 down)
 {
     if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-    else if (down & (HidNpadButton_L | HidNpadButton_Left)) {
+    else if (down & HidNpadButton_ZL) {
+        ptc_audio_play(PTC_SE_FOCUS);
+        ui->model.activity_history_filter = (ui->model.activity_history_filter + 3) % 4;
+        ui->model.activity_history_page = 0;
+    } else if (down & HidNpadButton_ZR) {
+        ptc_audio_play(PTC_SE_FOCUS);
+        ui->model.activity_history_filter = (ui->model.activity_history_filter + 1) % 4;
+        ui->model.activity_history_page = 0;
+    } else if (down & (HidNpadButton_L | HidNpadButton_Left)) {
         ptc_audio_play(PTC_SE_TAB);
         ptc_ui_change_activity_history_page(&ui->model, -1);
     } else if (down & (HidNpadButton_R | HidNpadButton_Right)) {
@@ -414,6 +422,30 @@ static void handle_grant_local_overlay_input(UiState *ui, u64 down)
 {
     if (down & HidNpadButton_B) {
         ptc_ui_cancel_overlay(&ui->model);
+    } else if (down & (HidNpadButton_L | HidNpadButton_ZL)) {
+        ptc_audio_play(PTC_SE_TAB);
+        select_grant_hub_mode(ui, 1);
+    } else if (down & (HidNpadButton_R | HidNpadButton_ZR)) {
+        ptc_audio_play(PTC_SE_TAB);
+        select_grant_hub_mode(ui, 0);
+    } else if (down & HidNpadButton_Y) {
+        if (!ui->waiting) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            submit_status(ui);
+        }
+    } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+        int current_idx = -1;
+        for (int i = 0; i < 5; ++i) {
+            if (ui->model.grant_minutes == ptc_ui_grant_preset_minutes(i)) current_idx = i;
+        }
+        int next_idx = (down & HidNpadButton_Right)
+            ? (current_idx < 0 ? 1 : (current_idx + 1) % 5)
+            : (current_idx <= 0 ? 4 : current_idx - 1);
+        uint16_t candidate = ptc_ui_grant_preset_minutes(next_idx);
+        if (ui->model.grant_max_minutes > 0 && candidate > ui->model.grant_max_minutes)
+            candidate = ui->model.grant_max_minutes;
+        ui->model.grant_minutes = candidate;
+        ptc_audio_play(PTC_SE_STEP);
     } else if (down & HidNpadButton_Up) {
         ui->model.overlay_selection = ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_BACK
             ? PTC_UI_GRANT_LOCAL_GENERATE : (ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_GENERATE
@@ -422,8 +454,7 @@ static void handle_grant_local_overlay_input(UiState *ui, u64 down)
         ui->model.overlay_selection = ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_ADJUST_FIRST
             ? PTC_UI_GRANT_LOCAL_GENERATE : (ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_GENERATE
                 ? PTC_UI_GRANT_LOCAL_BACK : PTC_UI_GRANT_LOCAL_ADJUST_FIRST);
-    }
-    else if (down & HidNpadButton_Plus) {
+    } else if (down & HidNpadButton_Plus) {
         ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
         generate_local_grant_code(ui);
     } else if (down & HidNpadButton_A) {
@@ -437,8 +468,27 @@ static void handle_grant_local_overlay_input(UiState *ui, u64 down)
 
 static void handle_qr_overlay_input(UiState *ui, u64 down)
 {
-    if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-    else if (down & HidNpadButton_A) export_parent_import(ui);
+    int active = ptc_ui_grant_hub_active_mode(&ui->model);
+    if (down & HidNpadButton_B) {
+        ptc_ui_cancel_overlay(&ui->model);
+    } else if (down & (HidNpadButton_L | HidNpadButton_ZL | HidNpadButton_Up)) {
+        ptc_audio_play(PTC_SE_TAB);
+        select_grant_hub_mode(ui, (active + 2) % 3);
+    } else if (down & (HidNpadButton_R | HidNpadButton_ZR | HidNpadButton_Down)) {
+        ptc_audio_play(PTC_SE_TAB);
+        select_grant_hub_mode(ui, (active + 1) % 3);
+    } else if (down & HidNpadButton_Y) {
+        if (!ui->waiting) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            submit_status(ui);
+        }
+    } else if (down & HidNpadButton_A) {
+        if (active == 0 && qrcodegen_getSize(ui->model.qr_code) == 0) {
+            show_pairing_qr(ui);
+        } else {
+            export_parent_import(ui);
+        }
+    }
     return;
 }
 
