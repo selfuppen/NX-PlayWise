@@ -42,11 +42,19 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     if (model->waiting && model->overlay == PTC_UI_OVERLAY_SCHEDULED)
         return make_hit(PTC_UI_HIT_NONE, 0);
     if (model->overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y) ||
+            ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y) ||
+            ptc_ui_rect_contains(ptc_ui_settings_page_back_rect(), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_support_guide_refresh_rect(), x, y))
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        for (i = 0; i < 4; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_support_guide_step_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_SUPPORT_GUIDE_STEP, i);
         for (i = 0; i < 2; ++i)
             if (ptc_ui_rect_contains(ptc_ui_support_guide_nav_rect(i), x, y))
                 return make_hit(i == 0 ? PTC_UI_HIT_HISTORY_PREV : PTC_UI_HIT_HISTORY_NEXT, 0);
-        return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
-            ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
+        return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
         for (i = 0; i < 3; ++i) {
@@ -81,7 +89,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
-        for (int i = 0; i < 19; ++i) {
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y))
+            return make_hit(PTC_UI_HIT_CONFIG_BACKUP_FIELD, 15);
+        for (int i = 0; i < 20; ++i) {
             if (model->config_backup_tab == 0) {
                 if (i != 16 && i != 17 && i != 13 && i != 15 && i != 18) continue;
             } else {
@@ -197,6 +207,11 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        for (i = 0; i < 4; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_activity_filter_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_ACTIVITY_FILTER, i);
         if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(1), x, y))
             return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
         if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y))
@@ -230,6 +245,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     }
     switch (model->overlay) {
     case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
         if (ptc_ui_rect_contains(ptc_ui_redemption_history_prev_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
         }
@@ -477,12 +495,16 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
+        if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
+        for (i = 1; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_shortcut_prefix_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_SHORTCUT_PREFIX, i);
+        }
         for (i = 0; i < PTC_UI_SHORTCUT_PRESET_COUNT; ++i) {
-            if (rect_contains_row_cell(ptc_ui_shortcut_option_rect(i), 40, x, y)) {
+            if (ptc_ui_rect_contains(ptc_ui_shortcut_option_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_SHORTCUT_OPTION, i);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
         if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
     case PTC_UI_OVERLAY_NOTIFICATIONS:

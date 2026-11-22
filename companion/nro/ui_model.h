@@ -460,6 +460,7 @@ typedef struct {
     bool activity_history_available;
     int activity_history_count;
     int activity_history_page;
+    int activity_history_filter;
     PtcActivityHistoryRecord activity_history[PTC_ACTIVITY_HISTORY_MAX_RECORDS];
     PtcResultForecastDay forecast[PTC_RESULT_FORECAST_DAYS];
     char forecast_rule_sources[PTC_RESULT_FORECAST_DAYS][32];

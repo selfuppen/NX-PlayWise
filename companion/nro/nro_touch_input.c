@@ -16,7 +16,12 @@ void handle_touch(UiState *ui, int x, int y)
     if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
         if (hit.kind == PTC_UI_HIT_HISTORY_PREV) handle_overlay_input(ui, HidNpadButton_L);
         else if (hit.kind == PTC_UI_HIT_HISTORY_NEXT) handle_overlay_input(ui, HidNpadButton_R);
-        else if (hit.kind == PTC_UI_HIT_OVERLAY_CANCEL) handle_overlay_input(ui, HidNpadButton_B);
+        else if (hit.kind == PTC_UI_HIT_SUPPORT_GUIDE_STEP && hit.index >= 0 && hit.index < 4) {
+            ptc_audio_play(PTC_SE_STEP);
+            ui->model.support_guide_page = hit.index;
+        } else if (hit.kind == PTC_UI_HIT_PARENT_REFRESH) {
+            handle_overlay_input(ui, HidNpadButton_Y);
+        } else if (hit.kind == PTC_UI_HIT_OVERLAY_CANCEL) handle_overlay_input(ui, HidNpadButton_B);
         return;
     }
     switch (hit.kind) {
@@ -940,6 +945,16 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_FOCUS);
         select_setup_shortcut(ui, hit.index);
         break;
+    case PTC_UI_HIT_SHORTCUT_PREFIX:
+        ptc_audio_play(PTC_SE_FOCUS);
+        if (hit.index == 1) {
+            int idx = ui->model.setup_shortcut_index % 7;
+            select_setup_shortcut(ui, idx);
+        } else if (hit.index == 2) {
+            int idx = 7 + (ui->model.setup_shortcut_index % 7);
+            select_setup_shortcut(ui, idx);
+        }
+        break;
     case PTC_UI_HIT_SHORTCUT_DISABLE:
         ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.shortcut_draft_enabled = false;
@@ -947,6 +962,13 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SHORTCUT_HINT:
         ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.shortcut_draft_show_hint = !ui->model.shortcut_draft_show_hint;
+        break;
+    case PTC_UI_HIT_ACTIVITY_FILTER:
+        if (hit.index >= 0 && hit.index < 4) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.activity_history_filter = hit.index;
+            ui->model.activity_history_page = 0;
+        }
         break;
     case PTC_UI_HIT_THEME_OPTION:
         /* 点选只更新草稿并即时预览；保存仍走底栏主按钮或 A。 */

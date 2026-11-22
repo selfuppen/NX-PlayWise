@@ -2561,6 +2561,151 @@ static int check_batch5_pages_text(const PtcUiModel *baseline, int dark, int sty
     return failed;
 }
 
+static int check_batch6_pages_text(const PtcUiModel *baseline, int dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Support & Recovery right health panel + 4-step full-page Troubleshooting Guide */
+    for (int state = 0; state < 2; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SUPPORT;
+        model.overlay = PTC_UI_OVERLAY_NONE;
+        model.disable_flag_present = (state == 1);
+        model.recent_events_available = (state == 1);
+        model.recent_event_count = (state == 1) ? 2 : 0;
+        if (state == 1) {
+            snprintf(model.recent_events[0], sizeof(model.recent_events[0]), "%s", ptc_ui_text(PTC_UI_T_RULE_SAVE_INCOMPLETE_PLEASE_VIEW_DETAILS));
+            snprintf(model.recent_events[1], sizeof(model.recent_events[1]), "%s", ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_CONTROL));
+            model.recent_event_timestamps[0] = 950;
+            model.recent_event_timestamps[1] = 990;
+        }
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){842, 176, 384, 452}, NULL);
+    }
+    for (int page = 0; page < 4; ++page) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SUPPORT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SUPPORT_GUIDE;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.support_guide_page = page;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        for (int s = 0; s < 4; ++s)
+            failed += check_action_text(to_uirect(ptc_ui_support_guide_step_rect(s)), NULL);
+        failed += check_action_text((UiRect){54, 228, 1172, 54}, NULL);
+        failed += check_action_text((UiRect){54, 294, 1172, 344}, NULL);
+    }
+
+    /* 2. Config Backup & Import (Tab 0 Create + Danger Zone, Tab 1 Restore + Before/After) */
+    for (int tab = 0; tab < 2; ++tab) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.config_backup_tab = tab;
+        model.config_backup_ready = true;
+        model.config_today_available = true;
+        model.config_pin_available = true;
+        model.setup_snapshot_available = true;
+        model.config_groups = tab == 1 ? 0x103u : 0u;
+        snprintf(model.config_metadata, sizeof(model.config_metadata), "kid-switch / 2026-11-22 18:30");
+        snprintf(model.config_preview, sizeof(model.config_preview), "%s", ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_APPLY));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 744, 474}, NULL);
+        failed += check_action_text((UiRect){824, 172, 402, 474}, NULL);
+    }
+
+    /* 3. Parent Shortcut 2-Step & Album Anti-Bypass */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.shortcut_draft_enabled = true;
+        model.custom_shortcut_enabled = true;
+        model.setup_shortcut_index = 2;
+        snprintf(model.custom_shortcut_label, sizeof(model.custom_shortcut_label), "L + R");
+        snprintf(model.shortcut_draft_label, sizeof(model.shortcut_draft_label), "%s", ptc_ui_shortcut_common_label(2));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 738, 466}, NULL);
+        failed += check_action_text((UiRect){810, 172, 416, 466}, NULL);
+    }
+    for (int st = 0; st < 2; ++st) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.album_restriction_state = st;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 1172, 68}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_album_action_rect(0)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_album_action_rect(1)), NULL);
+    }
+
+    /* 4. Family Activity & Redemption History unified full-page ledgers */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.activity_history_available = true;
+        model.activity_history_count = 3;
+        model.activity_history[0] = (PtcActivityHistoryRecord){.occurred_at=950, .minutes=30, .effective_minutes=30};
+        snprintf(model.activity_history[0].action, sizeof(model.activity_history[0].action), "offline_grant");
+        model.activity_history[1] = (PtcActivityHistoryRecord){.occurred_at=970, .minutes=120, .effective_minutes=120};
+        snprintf(model.activity_history[1].action, sizeof(model.activity_history[1].action), "weekly_update");
+        model.activity_history[2] = (PtcActivityHistoryRecord){.occurred_at=990, .minutes=0, .effective_minutes=0};
+        snprintf(model.activity_history[2].action, sizeof(model.activity_history[2].action), "protection");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_account_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 1172, 468}, NULL);
+    }
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_GRANT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_REDEMPTION_HISTORY;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.redemption_history_available = true;
+        model.redemption_history_count = 2;
+        model.redemption_history[0] = (PtcRedemptionHistoryRecord){
+            .redeemed_at=960, .day_index=2380, .grant_minutes=30, .effective_add_minutes=30,
+            .remaining_after_available=true, .remaining_after_minutes=81, .token_version=2};
+        model.redemption_history[1] = (PtcRedemptionHistoryRecord){
+            .redeemed_at=990, .day_index=2380, .grant_minutes=60, .effective_add_minutes=15,
+            .remaining_after_available=true, .remaining_after_minutes=96, .token_version=2};
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_account_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 172, 1172, 468}, NULL);
+    }
+    return failed;
+}
+
 static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
 {
     int failed = 0;
@@ -2577,6 +2722,7 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                 failed += check_batch3_pages_text(baseline, dark, style);
                 failed += check_batch4_pages_text(baseline, dark, style);
                 failed += check_batch5_pages_text(baseline, dark, style);
+                failed += check_batch6_pages_text(baseline, dark, style);
                 for (int state = 0; state < 5; ++state) {
                     PtcUiModel model = *baseline;
                     model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;

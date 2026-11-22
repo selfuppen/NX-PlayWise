@@ -2404,6 +2404,29 @@ static void test_balanced_feature_state(void)
     model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
     check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(2)),
         PTC_UI_HIT_HISTORY_NEXT, 0, "family activity next-page button is touchable");
+    for (int f = 0; f < 4; ++f) {
+        check_hit(hit_center(&model, ptc_ui_activity_filter_rect(f)),
+            PTC_UI_HIT_ACTIVITY_FILTER, f, "family activity filter pill is touchable");
+    }
+    model.activity_history_count = 4;
+    snprintf(model.activity_history[0].action, sizeof(model.activity_history[0].action), "offline_grant");
+    snprintf(model.activity_history[1].action, sizeof(model.activity_history[1].action), "daily_buffer");
+    snprintf(model.activity_history[2].action, sizeof(model.activity_history[2].action), "weekly_update");
+    snprintf(model.activity_history[3].action, sizeof(model.activity_history[3].action), "protection");
+    model.activity_history_filter = 0; check_int(ptc_ui_activity_filtered_count(&model), 4, "filter 0 shows all");
+    model.activity_history_filter = 1; check_int(ptc_ui_activity_filtered_count(&model), 2, "filter 1 shows grants & buffer");
+    model.activity_history_filter = 2; check_int(ptc_ui_activity_filtered_count(&model), 1, "filter 2 shows rules");
+    model.activity_history_filter = 3; check_int(ptc_ui_activity_filtered_count(&model), 1, "filter 3 shows protection");
+    model.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
+    check_hit(hit_center(&model, ptc_ui_shortcut_prefix_rect(0)), PTC_UI_HIT_SHORTCUT_DISABLE, 0, "shortcut prefix 0 disables custom");
+    check_hit(hit_center(&model, ptc_ui_shortcut_prefix_rect(1)), PTC_UI_HIT_SHORTCUT_PREFIX, 1, "shortcut prefix 1 selects L+R");
+    check_hit(hit_center(&model, ptc_ui_shortcut_prefix_rect(2)), PTC_UI_HIT_SHORTCUT_PREFIX, 2, "shortcut prefix 2 selects ZL+ZR");
+    model.overlay = PTC_UI_OVERLAY_SUPPORT_GUIDE;
+    for (int s = 0; s < 4; ++s) {
+        check_hit(hit_center(&model, ptc_ui_support_guide_step_rect(s)), PTC_UI_HIT_SUPPORT_GUIDE_STEP, s, "support guide step pill is touchable");
+    }
+    check_hit(hit_center(&model, ptc_ui_support_guide_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0, "support guide refresh button is touchable");
+    model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
     check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()),
         PTC_UI_HIT_OVERLAY_CONFIRM, 0, "family activity clear button is touchable");
     check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()),
@@ -4492,7 +4515,7 @@ static void test_config_backup_layout(void)
     PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
     model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
     model.config_backup_tab = 1;
-    int tab1_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17};
+    int tab1_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 19};
     int n_tab1 = sizeof(tab1_indices) / sizeof(tab1_indices[0]);
     for (int idx = 0; idx < n_tab1; ++idx) {
         int i = tab1_indices[idx];

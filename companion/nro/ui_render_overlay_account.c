@@ -292,42 +292,89 @@ static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const 
     }
 }
 
+static void draw_history_stat_card(
+    uint32_t *pixels, uint32_t stride, UiRect rect,
+    const char *label, const char *value, uint32_t accent)
+{
+    char fitted[128];
+    draw_plan_card(pixels, stride, rect, false);
+    fill_round_rect(pixels, stride, (UiRect){rect.x + 12, rect.y + 14, 4, rect.height - 28}, 2, accent);
+    fit_text(fitted, sizeof(fitted), label, 12, rect.width - 36);
+    draw_text(pixels, stride, rect.x + 24, rect.y + 23, fitted, 12, UI_MUTED);
+    fit_text(fitted, sizeof(fitted), value, 17, rect.width - 36);
+    draw_text_bold(pixels, stride, rect.x + 24, rect.y + 49, fitted, 17, accent);
+}
+
 static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
-    char page_text[64];
+    char path[128];
+    char buf[128];
+    char fitted[160];
     int pages = ptc_ui_redemption_history_page_count(model);
     int first = model->redemption_history_page * 6;
     int visible = model->redemption_history_count - first;
     int row;
+    unsigned today_count = 0, today_added = 0;
+    char latest_time[48] = "--";
     if (visible > 6) visible = 6;
     if (visible < 0) visible = 0;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
-    snprintf(page_text, sizeof(page_text), ptc_ui_text(PTC_UI_T_NEWEST_FIRST_PAGE_D_D_D_ENTRIES),
+
+    for (int i = 0; i < model->redemption_history_count; ++i) {
+        const PtcRedemptionHistoryRecord *r = &model->redemption_history[i];
+        if (r->day_index == model->day_index) {
+            ++today_count;
+            today_added += r->effective_add_minutes;
+        }
+    }
+    if (model->redemption_history_count > 0) {
+        format_event_time(model->redemption_history[model->redemption_history_count - 1].redeemed_at,
+                          true, latest_time, sizeof(latest_time));
+    }
+
+    PtcUiTextArg pargs[] = {PTC_UI_TEXT_STRING("name", ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_USAGE_RECORD))};
+    (void)ptc_ui_text_format(PTC_UI_T_OFFLINE_GRANTS_S, path, sizeof(path), pargs, 1);
+    draw_subpage_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_USAGE_RECORD),
+                       ptc_ui_text(PTC_UI_T_ONLY_DISPLAYS_THE_LAST_100_SUCCESSFULLY_REDEEMED),
+                       ptc_ui_text(PTC_UI_T_B_BACK_TO_OFFLINE_GRANTS), path);
+
+    /* Top 3 Summary Cards */
+    {
+        int sw = (1172 - 32) / 3;
+        snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_HISTORY_COUNT_FMT),
+                 model->redemption_history_count, PTC_REDEMPTION_HISTORY_MAX_RECORDS);
+        draw_history_stat_card(pixels, stride, (UiRect){54, 172, sw, 64},
+                               ptc_ui_text(PTC_UI_T_HISTORY_STAT_TOTAL), buf, UI_ACCENT);
+        snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_HISTORY_TODAY_FMT), today_count, today_added);
+        draw_history_stat_card(pixels, stride, (UiRect){54 + sw + 16, 172, sw, 64},
+                               ptc_ui_text(PTC_UI_T_HISTORY_STAT_TODAY_REDEEM), buf, UI_SUCCESS);
+        draw_history_stat_card(pixels, stride, (UiRect){54 + (sw + 16) * 2, 172, sw, 64},
+                               ptc_ui_text(PTC_UI_T_HISTORY_STAT_LATEST), latest_time, UI_INK);
+    }
+
+    /* Page indicator strip */
+    snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_NEWEST_FIRST_PAGE_D_D_D_ENTRIES),
              model->redemption_history_page + 1, pages, model->redemption_history_count);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 104, page_text, 16, UI_MUTED);
+    fit_text(fitted, sizeof(fitted), buf, 13, 1172);
+    draw_text(pixels, stride, 54, 256, fitted, 13, UI_MUTED);
+
     if (!model->redemption_history_available) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+        draw_text_center(pixels, stride, (UiRect){54, 340, 1172, 44},
                          ptc_ui_text(PTC_UI_T_THE_USAGE_RECORD_CANNOT_BE_READ_TEMPORARILY),
                          19, UI_DANGER);
     } else if (model->redemption_history_count == 0) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+        draw_text_center(pixels, stride, (UiRect){54, 340, 1172, 44},
                          ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECORD_OF_SUCCESSFUL_USE),
                          19, UI_MUTED);
     } else {
-        if (visible > 0) {
-            int line_x = dialog.x + 48;
-            int start_y = dialog.y + 132 + 27;
-            int end_y = dialog.y + 132 + (visible - 1) * 62 + 27;
-            fill_rect(pixels, stride, (UiRect){line_x - 1, start_y, 2, end_y - start_y}, UI_BORDER);
-        }
         for (row = 0; row < visible; ++row) {
             int source = model->redemption_history_count - 1 - first - row;
             const PtcRedemptionHistoryRecord *record = &model->redemption_history[source];
-            UiRect item = {dialog.x + 68, dialog.y + 132 + row * 62, dialog.width - 102, 54};
+            UiRect item = {54, 270 + row * 60, 1172, 52};
             char time_text[48];
             char allowance[160];
-            char remaining[80];
+            char remaining[96];
+            const char *ver_txt = record->token_version == 2u
+                ? ptc_ui_text(PTC_UI_T_V2_SUCCESSFUL) : ptc_ui_text(PTC_UI_T_V1_SUCCESSFUL);
             format_event_time(record->redeemed_at, true, time_text, sizeof(time_text));
             if (record->remaining_after_available) {
                 char value[48];
@@ -340,28 +387,46 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
                      (unsigned int)record->grant_minutes,
                      (unsigned int)record->effective_add_minutes,
                      record->effective_add_minutes < record->grant_minutes ? ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED) : "");
-            fill_round_rect(pixels, stride, item, 16, UI_RAISED);
-            draw_rect_outline(pixels, stride, item, 16, 1, UI_BORDER);
-            draw_text(pixels, stride, item.x + 16, item.y + 20, time_text, 15, UI_INK);
-            draw_text(pixels, stride, item.x + 250, item.y + 20, allowance, 15, UI_ACCENT);
-            draw_text(pixels, stride, item.x + 720, item.y + 20, remaining, 15, UI_INK);
-            draw_text(pixels, stride, item.x + item.width - 84, item.y + 20,
-                      record->token_version == 2u ? ptc_ui_text(PTC_UI_T_V2_SUCCESSFUL) : ptc_ui_text(PTC_UI_T_V1_SUCCESSFUL), 14, UI_SUCCESS);
 
-            int cy = item.y + 27;
-            int cx = dialog.x + 48;
-            fill_round_rect(pixels, stride, (UiRect){cx - 4, cy - 4, 8, 8}, 4, UI_SUCCESS);
-            fill_round_rect(pixels, stride, (UiRect){cx - 2, cy - 2, 4, 4}, 2, UI_SURFACE);
+            fill_round_rect(pixels, stride, item, 12, UI_SURFACE);
+            draw_rect_outline(pixels, stride, item, 12, 1, UI_BORDER);
+
+            /* Left side: green dot + version badge + timestamp (all dynamically measured) */
+            fill_round_rect(pixels, stride, (UiRect){item.x + 14, item.y + 21, 10, 10}, 5, UI_SUCCESS);
+            int vw = measure_text(ver_txt, 12) + 18;
+            if (vw > 120) vw = 120;
+            UiRect vpill = {item.x + 34, item.y + 13, vw, 26};
+            fill_round_rect(pixels, stride, vpill, 8, UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, vpill, 8, 1, UI_SUCCESS_BORDER);
+            fit_text(fitted, sizeof(fitted), ver_txt, 12, vpill.width - 10);
+            draw_text_center(pixels, stride, vpill, fitted, 12, UI_SUCCESS);
+
+            int tx = vpill.x + vpill.width + 14;
+            int tw = measure_text(time_text, 14);
+            draw_text(pixels, stride, tx, item.y + 31, time_text, 14, UI_MUTED);
+
+            /* Right side: measured edge-to-edge right-aligned remaining + allowance */
+            fit_text(fitted, sizeof(fitted), remaining, 14, 320);
+            int rw = measure_text(fitted, 14);
+            int rx = item.x + item.width - 16 - rw;
+            draw_text(pixels, stride, rx, item.y + 31, fitted, 14,
+                      record->remaining_after_available ? UI_INK : UI_MUTED);
+
+            int ax = tx + tw + 20;
+            int a_max = rx - ax - 18;
+            if (a_max > 60) {
+                fit_text(fitted, sizeof(fitted), allowance, 15, a_max);
+                draw_text_bold(pixels, stride, ax, item.y + 31, fitted, 15, UI_ACCENT);
+            }
         }
     }
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE),
-                       UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE),
-                       UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
-                       UI_RAISED, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_X_CLEAR_ALL),
-                       UI_DANGER_SOFT, UI_DANGER, false);
+
+    home_button(pixels, stride, ptc_ui_redemption_history_prev_rect(),
+                ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE), false, false, model->redemption_history_page <= 0);
+    home_button(pixels, stride, ptc_ui_redemption_history_next_rect(),
+                ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE), false, false, model->redemption_history_page + 1 >= pages);
+    home_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
+                ptc_ui_text(PTC_UI_T_X_CLEAR_ALL), false, false, model->redemption_history_count == 0);
 }
 
 static const char *activity_label(const char *action)
@@ -382,52 +447,142 @@ static const char *activity_label(const char *action)
 
 static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
+    static const PtcUiTextId FILTER_LABELS[4] = {
+        PTC_UI_T_HISTORY_FILTER_ALL,
+        PTC_UI_T_HISTORY_FILTER_GRANT,
+        PTC_UI_T_HISTORY_FILTER_RULES,
+        PTC_UI_T_HISTORY_FILTER_PROTECT
+    };
+    int filter = (model->activity_history_filter >= 0 && model->activity_history_filter < 4)
+        ? model->activity_history_filter : 0;
+    int filtered_total = ptc_ui_activity_filtered_count(model);
     int pages = ptc_ui_activity_history_page_count(model);
-    int first = model->activity_history_page * 8;
-    int visible = model->activity_history_count - first;
-    int row;
+    int page = model->activity_history_page;
+    if (page >= pages) page = pages - 1;
+    if (page < 0) page = 0;
+    int first = page * 8;
     char line[192];
-    if (visible > 8) visible = 8;
-    if (visible < 0) visible = 0;
+    char fitted[192];
+
+    unsigned grant_count = 0, grant_mins = 0, rule_count = 0, protect_count = 0;
+    for (int i = 0; i < model->activity_history_count; ++i) {
+        const PtcActivityHistoryRecord *r = &model->activity_history[i];
+        if (ptc_ui_activity_matches_filter(r, 1)) {
+            ++grant_count;
+            grant_mins += r->effective_minutes;
+        } else if (ptc_ui_activity_matches_filter(r, 3)) {
+            ++protect_count;
+        } else {
+            ++rule_count;
+        }
+    }
+
     draw_settings_page_shell(pixels, stride, model, ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD),
                              ptc_ui_text(PTC_UI_T_RETAINS_UP_TO_200_RULES_GRANT_AUTONOMOUS));
-    snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_NEWEST_FIRST_PAGE_D_D_D_ENTRIES_2),
-        model->activity_history_page + 1, pages, model->activity_history_count);
-    draw_text(pixels, stride, 54, 194, line, 14, UI_MUTED);
+
+    /* Top 3 Summary Cards */
+    {
+        int sw = (1172 - 32) / 3;
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_HISTORY_COUNT_FMT),
+                 model->activity_history_count, PTC_ACTIVITY_HISTORY_MAX_RECORDS);
+        draw_history_stat_card(pixels, stride, (UiRect){54, 172, sw, 64},
+                               ptc_ui_text(PTC_UI_T_HISTORY_STAT_TOTAL), line, UI_ACCENT);
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_HISTORY_TODAY_FMT), grant_count, grant_mins);
+        draw_history_stat_card(pixels, stride, (UiRect){54 + sw + 16, 172, sw, 64},
+                               ptc_ui_text(PTC_UI_T_HISTORY_STAT_TODAY_GRANT), line, UI_SUCCESS);
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_HISTORY_RULES_FMT), rule_count, protect_count);
+        draw_history_stat_card(pixels, stride, (UiRect){54 + (sw + 16) * 2, 172, sw, 64},
+                               ptc_ui_text(PTC_UI_T_HISTORY_STAT_RULES_PROTECT), line,
+                               protect_count > 0 ? UI_DANGER : UI_INK);
+    }
+
+    /* Category Filter Pills + Right-aligned Page & Filter Hint */
+    for (int f = 0; f < 4; ++f) {
+        UiRect fr = to_uirect(ptc_ui_activity_filter_rect(f));
+        bool active = (f == filter);
+        fill_round_rect(pixels, stride, fr, 17, active ? UI_ACCENT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, fr, 17, 1, active ? UI_ACCENT : UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(FILTER_LABELS[f]), 13, fr.width - 14);
+        draw_text_center(pixels, stride, fr, fitted, 13, active ? UI_ON_ACCENT : UI_INK);
+    }
+    snprintf(line, sizeof(line), "%s  |  ", ptc_ui_text(PTC_UI_T_HISTORY_FILTER_HINT));
+    size_t pref_len = strlen(line);
+    snprintf(line + pref_len, sizeof(line) - pref_len,
+             ptc_ui_text(PTC_UI_T_NEWEST_FIRST_PAGE_D_D_D_ENTRIES_2),
+             page + 1, pages, filtered_total);
+    fit_text(fitted, sizeof(fitted), line, 13, 574);
+    draw_text(pixels, stride, 1218 - measure_text(fitted, 13), 268, fitted, 13, UI_MUTED);
 
     if (!model->activity_history_available) {
-        draw_text_center(pixels, stride, (UiRect){54, 300, 1172, 44},
+        draw_text_center(pixels, stride, (UiRect){54, 360, 1172, 44},
             ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_LOGGING_IS_TEMPORARILY_UNAVAILABLE_CONTROL), 19, UI_DANGER);
     } else if (model->activity_history_count == 0) {
-        draw_text_center(pixels, stride, (UiRect){54, 300, 1172, 44},
+        draw_text_center(pixels, stride, (UiRect){54, 360, 1172, 44},
             ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECORD_OF_FAMILY_ACTIVITIES), 19, UI_MUTED);
+    } else if (filtered_total == 0) {
+        draw_text_center(pixels, stride, (UiRect){54, 360, 1172, 44},
+            ptc_ui_text(PTC_UI_T_HISTORY_FILTER_EMPTY), 18, UI_MUTED);
     } else {
-        for (row = 0; row < visible; ++row) {
-            int source = model->activity_history_count - 1 - first - row;
-            const PtcActivityHistoryRecord *record = &model->activity_history[source];
-            UiRect item = {54, 214 + row * 52, 1172, 46};
-            char time_text[48];
-            char fitted[192];
-            format_event_time(record->occurred_at, true, time_text, sizeof(time_text));
-            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_S_PLANNED_U_MIN_ACTUAL_U),
-                time_text, activity_label(record->action), (unsigned int)record->minutes,
-                (unsigned int)record->effective_minutes);
-            fit_text(fitted, sizeof(fitted), line, 15, item.width - 64);
-            fill_round_rect(pixels, stride, item, 8, UI_RAISED);
-            draw_text(pixels, stride, item.x + 40, item.y + 29, fitted, 15,
-                strcmp(record->action, "protection") == 0 ? UI_DANGER : UI_INK);
+        int matched = 0;
+        int drawn = 0;
+        for (int i = model->activity_history_count - 1; i >= 0 && drawn < 8; --i) {
+            const PtcActivityHistoryRecord *record = &model->activity_history[i];
+            if (!ptc_ui_activity_matches_filter(record, filter)) continue;
+            if (matched++ < first) continue;
 
-            uint32_t dot_color = strcmp(record->action, "protection") == 0 ? UI_DANGER : UI_ACCENT;
-            fill_round_rect(pixels, stride, (UiRect){item.x + 16, item.y + 19, 10, 10}, 5, dot_color);
+            UiRect item = {54, 292 + drawn * 44, 1172, 40};
+            char time_text[48];
+            char mins_text[80];
+            bool is_protect = (strcmp(record->action, "protection") == 0);
+            bool is_buffer = (strcmp(record->action, "daily_buffer") == 0);
+            bool is_grant = (strcmp(record->action, "offline_grant") == 0 || strcmp(record->action, "today_add") == 0);
+            const char *badge_txt = ptc_ui_text(is_protect ? PTC_UI_T_HISTORY_BADGE_PROTECT
+                : (is_buffer ? PTC_UI_T_HISTORY_BADGE_BUFFER
+                   : (is_grant ? PTC_UI_T_HISTORY_BADGE_GRANT : PTC_UI_T_HISTORY_BADGE_RULE)));
+            uint32_t b_bg = is_protect ? UI_DANGER_SOFT : ((is_grant || is_buffer) ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT);
+            uint32_t b_bd = is_protect ? UI_DANGER_BORDER : ((is_grant || is_buffer) ? UI_SUCCESS_BORDER : UI_ACCENT);
+            uint32_t b_fg = is_protect ? UI_DANGER : ((is_grant || is_buffer) ? UI_SUCCESS : UI_ACCENT);
+
+            fill_round_rect(pixels, stride, item, 10, UI_SURFACE);
+            draw_rect_outline(pixels, stride, item, 10, 1, UI_BORDER);
+
+            int bw = measure_text(badge_txt, 12) + 16;
+            if (bw > 92) bw = 92;
+            UiRect bpill = {item.x + 12, item.y + 8, bw, 24};
+            fill_round_rect(pixels, stride, bpill, 7, b_bg);
+            draw_rect_outline(pixels, stride, bpill, 7, 1, b_bd);
+            fit_text(fitted, sizeof(fitted), badge_txt, 12, bpill.width - 8);
+            draw_text_center(pixels, stride, bpill, fitted, 12, b_fg);
+
+            /* Edge-to-edge dynamic right alignment: timestamp on far right, minutes pill left of it */
+            format_event_time(record->occurred_at, true, time_text, sizeof(time_text));
+            int tw = measure_text(time_text, 13);
+            int tx = item.x + item.width - 14 - tw;
+            draw_text(pixels, stride, tx, item.y + 25, time_text, 13, UI_MUTED);
+
+            snprintf(mins_text, sizeof(mins_text), ptc_ui_text(PTC_UI_T_HISTORY_MINUTES_FMT),
+                     (unsigned int)record->minutes, (unsigned int)record->effective_minutes);
+            fit_text(fitted, sizeof(fitted), mins_text, 13, 280);
+            int mw = measure_text(fitted, 13);
+            int mx = tx - 20 - mw;
+            draw_text(pixels, stride, mx, item.y + 25, fitted, 13, is_protect ? UI_DANGER : UI_ACCENT);
+
+            int lx = bpill.x + bpill.width + 14;
+            int lmax = mx - lx - 16;
+            if (lmax > 60) {
+                fit_text(fitted, sizeof(fitted), activity_label(record->action), 15, lmax);
+                draw_text_bold(pixels, stride, lx, item.y + 26, fitted, 15, is_protect ? UI_DANGER : UI_INK);
+            }
+            ++drawn;
         }
     }
 
     home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1),
-                ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE), false, false, false);
+                ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE), false, false, page <= 0);
     home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2),
-                ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE), false, false, false);
+                ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE), false, false, page + 1 >= pages);
     home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
-                ptc_ui_text(PTC_UI_T_X_CLEAR_ALL), false, false, false);
+                ptc_ui_text(PTC_UI_T_X_CLEAR_ALL), false, false, model->activity_history_count == 0);
 }
 
 /* Pure CPU vector illustrations for the 3-in-1 Grant & Pairing mode selector (A2). */

@@ -143,7 +143,10 @@ typedef enum {
     PTC_UI_HIT_UPDATE_BADGE,
     PTC_UI_HIT_GRANT_HUB_MODE,
     PTC_UI_HIT_GRANT_PRESET,
-    PTC_UI_HIT_TODAY_QUOTA_PRESET
+    PTC_UI_HIT_TODAY_QUOTA_PRESET,
+    PTC_UI_HIT_SUPPORT_GUIDE_STEP,
+    PTC_UI_HIT_ACTIVITY_FILTER,
+    PTC_UI_HIT_SHORTCUT_PREFIX
 } PtcUiHitKind;
 
 typedef struct {
@@ -263,6 +266,10 @@ PtcUiRect ptc_ui_holiday_page_action_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
 PtcUiRect ptc_ui_support_guide_rect(void);
 PtcUiRect ptc_ui_support_guide_nav_rect(int index);
+PtcUiRect ptc_ui_support_guide_step_rect(int index);
+PtcUiRect ptc_ui_support_guide_refresh_rect(void);
+PtcUiRect ptc_ui_shortcut_prefix_rect(int index);
+PtcUiRect ptc_ui_activity_filter_rect(int index);
 PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);

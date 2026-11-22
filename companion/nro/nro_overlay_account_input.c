@@ -117,7 +117,15 @@ void handle_config_backup_input(UiState *ui, u64 down)
 static void handle_activity_history_overlay_input(UiState *ui, u64 down)
 {
     if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-    else if (down & (HidNpadButton_L | HidNpadButton_Left)) {
+    else if (down & HidNpadButton_ZL) {
+        ptc_audio_play(PTC_SE_FOCUS);
+        ui->model.activity_history_filter = (ui->model.activity_history_filter + 3) % 4;
+        ui->model.activity_history_page = 0;
+    } else if (down & HidNpadButton_ZR) {
+        ptc_audio_play(PTC_SE_FOCUS);
+        ui->model.activity_history_filter = (ui->model.activity_history_filter + 1) % 4;
+        ui->model.activity_history_page = 0;
+    } else if (down & (HidNpadButton_L | HidNpadButton_Left)) {
         ptc_audio_play(PTC_SE_TAB);
         ptc_ui_change_activity_history_page(&ui->model, -1);
     } else if (down & (HidNpadButton_R | HidNpadButton_Right)) {

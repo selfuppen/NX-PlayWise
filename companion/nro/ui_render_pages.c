@@ -233,58 +233,131 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect panel = {842, 176, 384, 452};
-    char troubleshoot[128];
-    fill_round_rect(pixels, stride, panel, 16, UI_SURFACE);
-    draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
-    int recommended = ptc_ui_support_recommended_action(model);
-    draw_text(pixels, stride, panel.x + 26, panel.y + 36, ptc_ui_text(PTC_UI_T_CURRENT_ISSUE), 23, UI_INK);
-    draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 70, ptc_ui_support_problem(model),
-                      18, panel.width - 52, 25, 2, UI_RGB(UI_BLENDED(text_primary)));
-    const char *next = recommended == 0 ? (model->disable_flag_present ? ptc_ui_text(PTC_UI_T_RECOMMENDATION_UNDEACTIVATE_AND_RE_ENABLE) : ptc_ui_text(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE)) :
-                       recommended == 1 ? ptc_ui_text(PTC_UI_T_SUGGESTION_SELECT_RETRY_REPAIR) :
-                       recommended == 4 ? ptc_ui_text(PTC_UI_T_SUGGESTION_EXPORT_DIAGNOSTIC_PACKAGE_AND_KEEP_PROBLEM) :
-                       (model->waiting || model->apply_pending_confirmation ? ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN) : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU));
-    draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 130, next, 16,
-                      panel.width - 52, 23, 2, UI_RGB(UI_BLENDED(accent)));
+    char troubleshoot[160];
+    char fitted[160];
     char age[80];
-    format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 188, age, 15, status_age_color(model));
-    if (model->environment_available)
-        snprintf(troubleshoot, sizeof(troubleshoot), "HOS %s  |  %s", model->environment_hos, model->environment_model);
-    else snprintf(troubleshoot, sizeof(troubleshoot), "%s", ptc_ui_text(PTC_UI_T_ENVIRONMENT_DETAILS_ARE_TEMPORARILY_UNAVAILABLE_DIAGNOSTICS_CA));
-    fit_text(troubleshoot, sizeof(troubleshoot), troubleshoot, 15, panel.width - 52);
-    draw_text(pixels, stride, panel.x + 26, panel.y + 214, troubleshoot, 15, UI_RGB(UI_BLENDED(text_secondary)));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 252, ptc_ui_text(PTC_UI_T_RECENT_EVENTS), 18, UI_MUTED);
-    if (model->recent_event_count > 0) {
-        for (int event_index = 0; event_index < model->recent_event_count; ++event_index) {
-            char latest[192];
-            char event_time[48];
-            int source_index = model->recent_event_count - 1 - event_index;
-            format_event_time(model->recent_event_timestamps[source_index], false, event_time, sizeof(event_time));
-            snprintf(latest, sizeof(latest), "%s  |  %s", model->recent_events[source_index], event_time);
-            fit_text(latest, sizeof(latest), latest, 14, panel.width - 52);
-            UiRect ev_rect = to_uirect(ptc_ui_support_event_rect(event_index));
-            if (event_index + 6 == model->selected_index && !model->parent_footer_focused) {
-                fill_round_rect(pixels, stride, ev_rect, 8, UI_ACCENT_SOFT);
-                draw_focus_ring(pixels, stride, ev_rect, 8);
-            }
-            draw_text(pixels, stride, panel.x + 26, ev_rect.y + 24,
-                      latest, 14, event_index + 6 == model->selected_index ? UI_ACCENT : UI_MUTED);
-        }
-    } else {
-        const char *no_events_msg = model->recent_events_available
-            ? ptc_ui_text(PTC_UI_T_THERE_ARE_NO_RECENT_EVENTS_REQUIRING_ATTENTION)
-            : ptc_ui_text(PTC_UI_T_TEMPORARILY_UNABLE_TO_READ_RECENT_EVENTS_PLEASE);
-        draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 288,
-                          no_events_msg, 14, panel.width - 52, 20, 2,
-                          model->recent_events_available ? UI_MUTED : UI_DANGER);
+    draw_plan_card(pixels, stride, panel, false);
+
+    int recommended = ptc_ui_support_recommended_action(model);
+    bool is_fault = model->disable_flag_present || model->recovery_active ||
+        strcmp(model->setup_phase, "failed") == 0 || strcmp(model->setup_phase, "protection") == 0;
+    bool is_warn = !is_fault && (recommended >= 0 || model->waiting || model->apply_pending_confirmation ||
+        (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0));
+
+    /* 1. Structured System Health Banner */
+    {
+        UiRect banner = {panel.x + 18, panel.y + 16, panel.width - 36, 118};
+        uint32_t b_bg = is_fault ? UI_DANGER_SOFT : (is_warn ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
+        uint32_t b_bd = is_fault ? UI_DANGER_BORDER : (is_warn ? UI_WARNING_BORDER : UI_SUCCESS_BORDER);
+        uint32_t b_fg = is_fault ? UI_DANGER : (is_warn ? UI_WARNING_TEXT : UI_SUCCESS);
+        uint32_t b_dot = is_fault ? UI_DANGER : (is_warn ? UI_WARNING : UI_SUCCESS);
+        const char *badge_txt = ptc_ui_text(is_fault ? PTC_UI_T_SUPPORT_HEALTH_FAULT_BADGE
+            : (is_warn ? PTC_UI_T_SUPPORT_HEALTH_WARN_BADGE : PTC_UI_T_SUPPORT_HEALTH_OK_BADGE));
+        int bw = measure_text(badge_txt, 12) + 18;
+        if (bw > 130) bw = 130;
+        UiRect bpill = {banner.x + banner.width - 12 - bw, banner.y + 10, bw, 22};
+
+        fill_round_rect(pixels, stride, banner, 12, b_bg);
+        draw_rect_outline(pixels, stride, banner, 12, 1, b_bd);
+        fill_round_rect(pixels, stride, (UiRect){banner.x + 12, banner.y + 16, 10, 10}, 5, b_dot);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SUPPORT_HEALTH_TITLE), 15,
+                 bpill.x - (banner.x + 28) - 8);
+        draw_text_bold(pixels, stride, banner.x + 28, banner.y + 26, fitted, 15, b_fg);
+
+        fill_round_rect(pixels, stride, bpill, 11, UI_SURFACE);
+        draw_rect_outline(pixels, stride, bpill, 11, 1, b_bd);
+        fit_text(fitted, sizeof(fitted), badge_txt, 12, bpill.width - 10);
+        draw_text_center(pixels, stride, bpill, fitted, 12, b_fg);
+
+        draw_wrapped_text(pixels, stride, banner.x + 12, banner.y + 52, ptc_ui_support_problem(model),
+                          14, banner.width - 24, 18, 2, UI_INK);
+        const char *next = recommended == 0 ? (model->disable_flag_present ? ptc_ui_text(PTC_UI_T_RECOMMENDATION_UNDEACTIVATE_AND_RE_ENABLE) : ptc_ui_text(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE)) :
+                           recommended == 1 ? ptc_ui_text(PTC_UI_T_SUGGESTION_SELECT_RETRY_REPAIR) :
+                           recommended == 4 ? ptc_ui_text(PTC_UI_T_SUGGESTION_EXPORT_DIAGNOSTIC_PACKAGE_AND_KEEP_PROBLEM) :
+                           (model->waiting || model->apply_pending_confirmation ? ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN) : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU));
+        draw_wrapped_text(pixels, stride, banner.x + 12, banner.y + 92, next, 12,
+                          banner.width - 24, 16, 2, b_fg);
     }
+
+    /* 2. Environment & Freshness Summary Card */
+    {
+        UiRect env_box = {panel.x + 18, panel.y + 142, panel.width - 36, 56};
+        fill_round_rect(pixels, stride, env_box, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, env_box, 10, 1, UI_BORDER);
+        if (model->environment_available)
+            snprintf(troubleshoot, sizeof(troubleshoot), "HOS %s  |  %s", model->environment_hos, model->environment_model);
+        else snprintf(troubleshoot, sizeof(troubleshoot), "%s", ptc_ui_text(PTC_UI_T_ENVIRONMENT_DETAILS_ARE_TEMPORARILY_UNAVAILABLE_DIAGNOSTICS_CA));
+        fit_text(fitted, sizeof(fitted), troubleshoot, 13, env_box.width - 24);
+        draw_text(pixels, stride, env_box.x + 12, env_box.y + 23, fitted, 13, UI_INK);
+        format_status_age(model, age, sizeof(age));
+        fit_text(fitted, sizeof(fitted), age, 12, env_box.width - 24);
+        draw_text(pixels, stride, env_box.x + 12, env_box.y + 44, fitted, 12, status_age_color(model));
+    }
+
+    /* 3. Structured Recent Events Card */
+    {
+        UiRect ev_card = {panel.x + 18, panel.y + 206, panel.width - 36, 186};
+        char badge_buf[48];
+        uint32_t eb_bg, eb_bd, eb_fg;
+        fill_round_rect(pixels, stride, ev_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, ev_card, 12, 1, UI_BORDER);
+
+        if (model->recent_event_count > 0) {
+            snprintf(badge_buf, sizeof(badge_buf), ptc_ui_text(PTC_UI_T_SUPPORT_EVENTS_COUNT_BADGE), model->recent_event_count);
+            eb_bg = UI_ACCENT_SOFT; eb_bd = UI_ACCENT; eb_fg = UI_ACCENT;
+        } else if (model->recent_events_available) {
+            snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_EVENTS_CLEAR_BADGE));
+            eb_bg = UI_SUCCESS_SOFT; eb_bd = UI_SUCCESS_BORDER; eb_fg = UI_SUCCESS;
+        } else {
+            snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_EVENTS_UNREAD_BADGE));
+            eb_bg = UI_PAGE; eb_bd = UI_BORDER; eb_fg = UI_MUTED;
+        }
+        int ebw = measure_text(badge_buf, 11) + 16;
+        if (ebw > 128) ebw = 128;
+        UiRect ebpill = {ev_card.x + ev_card.width - 12 - ebw, ev_card.y + 10, ebw, 22};
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_RECENT_EVENTS), 15,
+                 ebpill.x - (ev_card.x + 12) - 8);
+        draw_text_bold(pixels, stride, ev_card.x + 12, ev_card.y + 26, fitted, 15, UI_INK);
+        fill_round_rect(pixels, stride, ebpill, 11, eb_bg);
+        draw_rect_outline(pixels, stride, ebpill, 11, 1, eb_bd);
+        fit_text(fitted, sizeof(fitted), badge_buf, 11, ebpill.width - 8);
+        draw_text_center(pixels, stride, ebpill, fitted, 11, eb_fg);
+
+        if (model->recent_event_count > 0) {
+            for (int event_index = 0; event_index < model->recent_event_count; ++event_index) {
+                char latest[192];
+                char event_time[48];
+                int source_index = model->recent_event_count - 1 - event_index;
+                format_event_time(model->recent_event_timestamps[source_index], false, event_time, sizeof(event_time));
+                snprintf(latest, sizeof(latest), "%s  |  %s", model->recent_events[source_index], event_time);
+                UiRect ev_rect = to_uirect(ptc_ui_support_event_rect(event_index));
+                UiRect row_box = {ev_rect.x + 8, ev_rect.y, ev_rect.width - 16, ev_rect.height};
+                bool row_focused = event_index + 6 == model->selected_index && !model->parent_footer_focused;
+                fill_round_rect(pixels, stride, row_box, 8, row_focused ? UI_ACCENT_SOFT : UI_SURFACE);
+                if (row_focused) draw_focus_ring(pixels, stride, row_box, 8);
+                else draw_rect_outline(pixels, stride, row_box, 8, 1, UI_BORDER);
+                fit_text(latest, sizeof(latest), latest, 13, row_box.width - 20);
+                draw_text(pixels, stride, row_box.x + 10, row_box.y + 24,
+                          latest, 13, row_focused ? UI_ACCENT : UI_INK);
+            }
+        } else {
+            /* Keep unread events calm when system is healthy rather than showing alarming red. */
+            const char *no_events_msg = model->recent_events_available
+                ? ptc_ui_text(PTC_UI_T_THERE_ARE_NO_RECENT_EVENTS_REQUIRING_ATTENTION)
+                : ptc_ui_text(PTC_UI_T_TEMPORARILY_UNABLE_TO_READ_RECENT_EVENTS_PLEASE);
+            draw_wrapped_text(pixels, stride, ev_card.x + 14, ev_card.y + 72,
+                              no_events_msg, 13, ev_card.width - 28, 20, 3,
+                              (model->recent_events_available || !is_fault) ? UI_MUTED : UI_WARNING_TEXT);
+        }
+    }
+
     UiRect guide = to_uirect(ptc_ui_support_guide_rect());
     bool guide_focused = model->selected_index == 6 + model->recent_event_count && !model->parent_footer_focused;
-    fill_round_rect(pixels, stride, guide, 8, guide_focused ? UI_ACCENT_SOFT : UI_SURFACE);
-    if (guide_focused) draw_focus_ring(pixels, stride, guide, 8);
-    else draw_rect_outline(pixels, stride, guide, 8, 1, UI_ACCENT);
-    draw_text_center(pixels, stride, guide, ptc_ui_text(PTC_UI_T_SUPPORT_GUIDE), 14, UI_ACCENT);
+    fill_round_rect(pixels, stride, guide, 10, guide_focused ? UI_ACCENT : UI_ACCENT_SOFT);
+    if (guide_focused) draw_focus_ring(pixels, stride, guide, 10);
+    else draw_rect_outline(pixels, stride, guide, 10, 1, UI_ACCENT);
+    draw_text_center(pixels, stride, guide, ptc_ui_text(PTC_UI_T_SUPPORT_GUIDE), 15,
+                     guide_focused ? UI_ON_ACCENT : UI_ACCENT);
 }
 
 static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

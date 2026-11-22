@@ -229,6 +229,8 @@ int ptc_ui_redemption_history_page_count(const PtcUiModel *model);
 void ptc_ui_change_redemption_history_page(PtcUiModel *model, int direction);
 int ptc_ui_activity_history_page_count(const PtcUiModel *model);
 void ptc_ui_change_activity_history_page(PtcUiModel *model, int direction);
+bool ptc_ui_activity_matches_filter(const PtcActivityHistoryRecord *record, int filter);
+int ptc_ui_activity_filtered_count(const PtcUiModel *model);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
 
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
