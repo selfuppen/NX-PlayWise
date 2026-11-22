@@ -963,6 +963,26 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_CONFIRM);
         export_parent_import(ui);
         break;
+    case PTC_UI_HIT_GRANT_HUB_MODE:
+        ptc_audio_play(PTC_SE_TAB);
+        select_grant_hub_mode(ui, hit.index);
+        break;
+    case PTC_UI_HIT_GRANT_PRESET:
+        if (!ui->waiting && hit.index >= 0 && hit.index < 5) {
+            uint16_t minutes = ptc_ui_grant_preset_minutes(hit.index);
+            if (ui->model.grant_max_minutes > 0 && minutes > ui->model.grant_max_minutes)
+                minutes = ui->model.grant_max_minutes;
+            ui->model.grant_minutes = minutes;
+            ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
+            ptc_audio_play(PTC_SE_STEP);
+        }
+        break;
+    case PTC_UI_HIT_TODAY_QUOTA_PRESET:
+        if (hit.index >= 0 && hit.index < 5) {
+            ptc_audio_play(PTC_SE_STEP);
+            ptc_ui_duration_set_minutes(&ui->model, ptc_ui_today_quota_preset_minutes(hit.index));
+        }
+        break;
     case PTC_UI_HIT_SETUP_THEME_OPTION:
         ptc_audio_play(PTC_SE_CONFIRM);
         setup_action(ui, hit.kind, hit.index);

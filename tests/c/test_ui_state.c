@@ -1864,7 +1864,7 @@ static void test_release_hit_targets(void)
         PtcUiRect details_rect = ptc_ui_notice_details_rect();
         PtcUiRect footer_rect = ptc_ui_parent_footer_rect(4);
         check_true(summary_rect.x > hours_rect.x + hours_rect.w &&
-                   summary_rect.w == 470 && summary_rect.h == 350,
+                   summary_rect.w == 470 && summary_rect.h == 376,
                    "compact plan summary uses the reserved right-side editor panel");
         check_true(!rects_overlap(summary_rect, ptc_ui_cancel_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)) &&
                    !rects_overlap(summary_rect, ptc_ui_confirm_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)),
@@ -4064,25 +4064,54 @@ static void test_language_and_short_weekly_limits(void)
         "weekly editor rejects zero and values over one day");
     memset(&model, 0, sizeof(model));
     model.overlay = PTC_UI_OVERLAY_QR;
+    model.grant_hub_mode = 0;
+    check_hit(hit_center(&model, ptc_ui_grant_hub_mode_rect(0)), PTC_UI_HIT_GRANT_HUB_MODE, 0,
+        "Grant Hub mode 0 (phone pairing) is touchable");
+    check_hit(hit_center(&model, ptc_ui_grant_hub_mode_rect(1)), PTC_UI_HIT_GRANT_HUB_MODE, 1,
+        "Grant Hub mode 1 (offline file pairing) is touchable");
+    check_hit(hit_center(&model, ptc_ui_grant_hub_mode_rect(2)), PTC_UI_HIT_GRANT_HUB_MODE, 2,
+        "Grant Hub mode 2 (local voucher) is touchable");
     check_hit(hit_center(&model, ptc_ui_qr_export_rect()), PTC_UI_HIT_QR_EXPORT, 0,
         "QR instructions provide touch export button");
     {
-        PtcUiRect confirm = ptc_ui_confirm_rect(PTC_UI_OVERLAY_QR);
         PtcUiRect left = ptc_ui_qr_panel_rect(0);
         PtcUiRect right = ptc_ui_qr_panel_rect(1);
         PtcUiRect code = ptc_ui_qr_code_rect();
         PtcUiRect address = ptc_ui_qr_address_rect();
         PtcUiRect warning = ptc_ui_qr_warning_rect();
-        check_true(!rects_overlap(left, right), "QR solution cards do not overlap");
-        check_true(left.y + left.h < confirm.y, "QR cards stay above the dialog button row");
-        check_true(code.x >= left.x && code.y >= left.y && code.x + code.w <= left.x + left.w &&
-            code.y + code.h <= left.y + left.h, "QR canvas stays inside the left card");
-        check_true(!rects_overlap(code, address) && !rects_overlap(address, warning),
-            "QR address and warning blocks do not overlap");
-        check_true(warning.y + warning.h <= left.y + left.h, "QR warning stays inside the left card");
-        check_true(ptc_ui_qr_export_rect().x != ptc_ui_cancel_rect(PTC_UI_OVERLAY_QR).x,
+        PtcUiRect export_btn = ptc_ui_qr_export_rect();
+        check_true(!rects_overlap(left, right), "Grant Hub mode list and right workbench do not overlap");
+        check_true(code.x >= right.x && code.y >= right.y && code.x + code.w <= right.x + right.w &&
+            code.y + code.h <= right.y + right.h, "QR canvas stays inside the right workbench");
+        check_true(!rects_overlap(code, address) && !rects_overlap(address, warning) &&
+            !rects_overlap(code, warning),
+            "QR canvas, address and warning blocks do not overlap");
+        check_true(warning.y + warning.h <= right.y + right.h, "QR warning stays inside the right workbench");
+        check_true(export_btn.x != ptc_ui_cancel_rect(PTC_UI_OVERLAY_QR).x,
             "QR export and back occupy different button slots");
     }
+    /* Batch 5: Grant Hub Mode 2 quick presets & Today Quota Editor quick presets */
+    model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
+    check_int(ptc_ui_grant_hub_active_mode(&model), 2, "local grant overlay activates Grant Hub mode 2");
+    for (int i = 0; i < 5; ++i) {
+        check_hit(hit_center(&model, ptc_ui_grant_preset_rect(i)), PTC_UI_HIT_GRANT_PRESET, i,
+            "Grant Hub local voucher preset chip is touchable");
+        check_true(ptc_ui_grant_preset_minutes(i) > 0, "Grant Hub preset minutes are positive");
+    }
+    memset(&model, 0, sizeof(model));
+    model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    model.numpad_purpose = PTC_UI_NUMPAD_MINUTES;
+    model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    model.numpad_minimum = 0;
+    model.numpad_maximum = 1440;
+    for (int i = 0; i < 5; ++i) {
+        check_hit(hit_center(&model, ptc_ui_today_quota_preset_rect(i)), PTC_UI_HIT_TODAY_QUOTA_PRESET, i,
+            "Today quota preset chip is touchable");
+        check_true(ptc_ui_today_quota_preset_minutes(i) >= 30, "Today quota preset minutes are valid");
+    }
+    ptc_ui_duration_set_minutes(&model, 90);
+    check_true(strcmp(model.duration_hours_text, "1") == 0 && strcmp(model.duration_minutes_text, "30") == 0,
+        "duration set minutes splits hours and minutes cleanly");
 }
 
 static void test_calendar_manager_surface(void)

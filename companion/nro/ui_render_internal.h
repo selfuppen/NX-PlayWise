@@ -284,6 +284,8 @@ void draw_quota_transition_detailed(
     uint32_t after_accent);
 void draw_unchanged_quota_card(
     uint32_t *pixels, uint32_t stride, UiRect rect, const char *reason);
+void draw_redeem_step_bar(
+    uint32_t *pixels, uint32_t stride, UiRect area, int active_step);
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                       const UiAction *action, bool selected, PtcUiActionState state,
                       int reserved_right, UiRect status_badge);

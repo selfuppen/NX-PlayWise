@@ -140,7 +140,10 @@ typedef enum {
     PTC_UI_HIT_DAY_DECISION_PREV,
     PTC_UI_HIT_DAY_DECISION_NEXT,
     PTC_UI_HIT_LANGUAGE_SWITCH,
-    PTC_UI_HIT_UPDATE_BADGE
+    PTC_UI_HIT_UPDATE_BADGE,
+    PTC_UI_HIT_GRANT_HUB_MODE,
+    PTC_UI_HIT_GRANT_PRESET,
+    PTC_UI_HIT_TODAY_QUOTA_PRESET
 } PtcUiHitKind;
 
 typedef struct {
@@ -208,6 +211,12 @@ PtcUiRect ptc_ui_qr_panel_rect(int index);
 PtcUiRect ptc_ui_qr_code_rect(void);
 PtcUiRect ptc_ui_qr_address_rect(void);
 PtcUiRect ptc_ui_qr_warning_rect(void);
+PtcUiRect ptc_ui_grant_hub_mode_rect(int index);
+PtcUiRect ptc_ui_grant_preset_rect(int index);
+uint16_t ptc_ui_grant_preset_minutes(int index);
+int ptc_ui_grant_hub_active_mode(const PtcUiModel *model);
+PtcUiRect ptc_ui_today_quota_preset_rect(int index);
+uint16_t ptc_ui_today_quota_preset_minutes(int index);
 PtcUiRect ptc_ui_settings_page_back_rect(void);
 PtcUiRect ptc_ui_settings_page_primary_rect(void);
 PtcUiRect ptc_ui_settings_page_footer_rect(int index);

@@ -743,6 +743,7 @@ typedef struct {
     char credential_new[80];
     char pairing_base_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     char pairing_url[768];
+    int grant_hub_mode;
     uint16_t grant_minutes;
     uint16_t grant_max_minutes;
     uint16_t grant_day_index;

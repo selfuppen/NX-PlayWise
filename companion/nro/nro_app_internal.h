@@ -329,6 +329,7 @@ void change_parent_pin(UiState *ui);
 void show_grant_manager(UiState *ui, int selection);
 void open_grant_manager(UiState *ui);
 void open_local_grant(UiState *ui);
+void select_grant_hub_mode(UiState *ui, int mode);
 void edit_pairing_base_url(UiState *ui);
 void apply_default_pairing_base_url(UiState *ui);
 void request_reset_pairing_base_url(UiState *ui);

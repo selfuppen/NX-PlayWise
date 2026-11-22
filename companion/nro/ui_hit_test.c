@@ -164,11 +164,37 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    /* The QR export button reuses the dialog confirm slot but keeps its own
-       action id so the export path never goes through the generic confirm. */
-    if (model->overlay == PTC_UI_OVERLAY_QR &&
-        ptc_ui_rect_contains(ptc_ui_qr_export_rect(), x, y)) {
-        return make_hit(PTC_UI_HIT_QR_EXPORT, 0);
+    /* Unified 3-in-1 Grant & Pairing full-page shell (PTC_UI_OVERLAY_QR and PTC_UI_OVERLAY_GRANT_LOCAL). */
+    if (model->overlay == PTC_UI_OVERLAY_QR || model->overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
+        int active_mode = ptc_ui_grant_hub_active_mode(model);
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y) ||
+            ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_scheduled_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        }
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_grant_hub_mode_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_GRANT_HUB_MODE, i);
+            }
+        }
+        if (active_mode == 2) {
+            for (i = 0; i < 5; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_grant_preset_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_GRANT_PRESET, i);
+                }
+            }
+            if (ptc_ui_rect_contains(ptc_ui_grant_adjust_rect(0), x, y)) {
+                return make_hit(PTC_UI_HIT_GRANT_ADJUST, 0);
+            }
+            if (!model->waiting && ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) {
+                return make_hit(PTC_UI_HIT_GRANT_GENERATE, 0);
+            }
+        } else if (ptc_ui_rect_contains(ptc_ui_qr_export_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_QR_EXPORT, 0);
+        }
+        return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
         if (ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(1), x, y))
@@ -298,6 +324,14 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         if (model->today_limit_unlimited_draft &&
             model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) break;
+        if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
+            model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
+            for (i = 0; i < 5; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_today_quota_preset_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_TODAY_QUOTA_PRESET, i);
+                }
+            }
+        }
         for (i = 0; i < 2; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_minute_editor_field_rect((PtcUiDurationField)i), x, y)) {
                 return make_hit(PTC_UI_HIT_DURATION_FIELD, i);

@@ -15,6 +15,11 @@ void draw_dialog_shell(
     bool today_limit_editor = model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
         model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
         model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    bool redeem_steps_header = (model->overlay == PTC_UI_OVERLAY_NUMPAD &&
+        model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) ||
+        (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
+         model->operation == PTC_UI_OPERATION_REDEEM_OFFLINE_CODE) ||
+        model->overlay == PTC_UI_OVERLAY_CODE_RESULT;
     const char *title = custom_header ? "" : (numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title));
     const char *description = custom_header ? "" : (numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body));
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
@@ -34,9 +39,14 @@ void draw_dialog_shell(
     draw_rect_outline(pixels, stride, *dialog, 16, 1, UI_BORDER);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
     if (title && title[0]) {
-        draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
+        char fitted_title[96];
+        int title_max = (pin || model->overlay == PTC_UI_OVERLAY_CONFIRM || redeem_steps_header)
+            ? (dialog->width - 330) : (dialog->width - 68);
+        if (title_max < 240) title_max = 240;
+        fit_text(fitted_title, sizeof(fitted_title), title, 28, title_max);
+        draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, fitted_title, 28, UI_INK);
     }
-    if (!today_limit_editor && description && description[0]) {
+    if (!today_limit_editor && !redeem_steps_header && !pin && description && description[0]) {
         /* The pairing QR page puts its two solution cards directly under the
            header, so its description must not grow into them. */
         bool bedtime_editor = model->overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW ||

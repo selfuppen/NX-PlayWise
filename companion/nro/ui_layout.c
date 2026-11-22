@@ -357,38 +357,63 @@ PtcUiRect ptc_ui_notification_verification_rect(void)
     return (PtcUiRect){d.x + 296, d.y + 591, 850, 78};
 }
 
-/* Pairing QR page shares the standard dialog button row so the drawn button,
-   the touch target and the tests always agree. */
+/* Unified 3-in-1 Grant & Pairing full-page shell (Scheme A2):
+   left column = 3 radio mode cards, right column = active mode workbench. */
+int ptc_ui_grant_hub_active_mode(const PtcUiModel *model)
+{
+    if (!model) return 0;
+    if (model->overlay == PTC_UI_OVERLAY_GRANT_LOCAL) return 2;
+    return model->grant_hub_mode == 1 ? 1 : 0;
+}
+
+PtcUiRect ptc_ui_grant_hub_mode_rect(int index)
+{
+    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54, 172 + index * 162, 408, 150};
+}
+
+PtcUiRect ptc_ui_grant_preset_rect(int index)
+{
+    if (index < 0 || index >= 5) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){504 + index * 78, 276, 70, 38};
+}
+
+uint16_t ptc_ui_grant_preset_minutes(int index)
+{
+    static const uint16_t PRESETS[5] = {15, 30, 45, 60, 120};
+    return (index >= 0 && index < 5) ? PRESETS[index] : 30;
+}
+
 PtcUiRect ptc_ui_qr_export_rect(void)
 {
-    return ptc_ui_confirm_rect(PTC_UI_OVERLAY_QR);
+    return (PtcUiRect){972, 578, 230, 48};
 }
 
-/* Two side-by-side solution cards: index 0 = online scan, index 1 = offline file. */
+/* Panel 0 = left 3-mode radio column, panel 1 = right focused workbench. */
 PtcUiRect ptc_ui_qr_panel_rect(int index)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_QR);
-    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 34 + index * 556, dialog.y + 148, 536, 462};
+    if (index == 0) return (PtcUiRect){54, 172, 408, 474};
+    if (index == 1) return (PtcUiRect){480, 172, 746, 474};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
-/* Fixed white QR canvas (12px quiet zone included) inside the left card. */
+/* Fixed white QR canvas (quiet zone included) inside the right workbench. */
 PtcUiRect ptc_ui_qr_code_rect(void)
 {
-    PtcUiRect panel = ptc_ui_qr_panel_rect(0);
-    return (PtcUiRect){panel.x + 122, panel.y + 52, 292, 292};
+    PtcUiRect panel = ptc_ui_qr_panel_rect(1);
+    return (PtcUiRect){panel.x + 24, panel.y + 72, 256, 256};
 }
 
 PtcUiRect ptc_ui_qr_address_rect(void)
 {
-    PtcUiRect panel = ptc_ui_qr_panel_rect(0);
-    return (PtcUiRect){panel.x + 22, panel.y + 350, panel.w - 44, 60};
+    PtcUiRect panel = ptc_ui_qr_panel_rect(1);
+    return (PtcUiRect){panel.x + 298, panel.y + 198, panel.w - 322, 68};
 }
 
 PtcUiRect ptc_ui_qr_warning_rect(void)
 {
-    PtcUiRect panel = ptc_ui_qr_panel_rect(0);
-    return (PtcUiRect){panel.x + 22, panel.y + 414, panel.w - 44, 40};
+    PtcUiRect panel = ptc_ui_qr_panel_rect(1);
+    return (PtcUiRect){panel.x + 298, panel.y + 276, panel.w - 322, 52};
 }
 
 /* Safety & preferences secondary pages: full-page shell with the same footer
@@ -955,8 +980,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 560;
         break;
     case PTC_UI_OVERLAY_NUMPAD:
-        *width = 620;
-        *height = 700;
+        *width = 1040;
+        *height = 610;
         break;
     case PTC_UI_OVERLAY_CREDENTIAL:
         *width = 900;
@@ -1015,12 +1040,12 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 300;
         break;
     case PTC_UI_OVERLAY_CODE_RESULT:
-        *width = 760;
-        *height = 420;
+        *width = 860;
+        *height = 476;
         break;
     case PTC_UI_OVERLAY_AUTH_ERROR:
-        *width = 760;
-        *height = 360;
+        *width = 820;
+        *height = 400;
         break;
     case PTC_UI_OVERLAY_NOTIFICATIONS:
         *width = 1180;
@@ -1035,8 +1060,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 600;
         break;
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
-        *width = 920;
-        *height = 620;
+        *width = 960;
+        *height = 630;
         break;
     case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
         *width = 720;
@@ -1077,13 +1102,13 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 560;
         break;
     case PTC_UI_OVERLAY_PIN:
-        *width = 1040;
+        *width = 1080;
         *height = 620;
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
-        *width = 760;
-        *height = 420;
+        *width = 860;
+        *height = 476;
         break;
     }
 }
@@ -1252,22 +1277,22 @@ PtcUiRect ptc_ui_weekly_bulk_rect(void)
 PtcUiRect ptc_ui_numpad_display_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_NUMPAD);
-    PtcUiRect rect = {dialog.x + 70, dialog.y + 140, dialog.w - 140, 70};
+    PtcUiRect rect = {dialog.x + 34, dialog.y + 132, 570, 76};
     return rect;
 }
 
 PtcUiRect ptc_ui_code_slot_rect(int index)
 {
     PtcUiRect display = ptc_ui_numpad_display_rect();
-    const int slot_width = 48;
+    const int slot_width = 58;
     const int gap = 6;
-    const int group_gap = 18;
+    const int group_gap = 24;
     const int total_width = slot_width * 8 + gap * 6 + group_gap;
     int x;
     if (index < 0 || index >= 8) return (PtcUiRect){0, 0, 0, 0};
     x = display.x + (display.w - total_width) / 2 + index * (slot_width + gap);
     if (index >= 4) x += group_gap - gap;
-    return (PtcUiRect){x, display.y + 9, slot_width, display.h - 18};
+    return (PtcUiRect){x, display.y + 10, slot_width, display.h - 20};
 }
 
 PtcUiRect ptc_ui_numpad_key_rect(int index)
@@ -1275,7 +1300,7 @@ PtcUiRect ptc_ui_numpad_key_rect(int index)
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_NUMPAD);
     int row = index / 3;
     int column = index % 3;
-    PtcUiRect rect = {dialog.x + 116 + column * 134, dialog.y + 324 + row * 54, 120, 46};
+    PtcUiRect rect = {dialog.x + 34 + column * 194, dialog.y + 246 + row * 60, 182, 52};
     if (index < 0 || index >= 12) {
         rect.w = 0;
         rect.h = 0;
@@ -1286,7 +1311,7 @@ PtcUiRect ptc_ui_numpad_key_rect(int index)
 PtcUiRect ptc_ui_numpad_quick_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_NUMPAD);
-    PtcUiRect rect = {dialog.x + 32 + index * 140, dialog.y + 274, 124, 40};
+    PtcUiRect rect = {dialog.x + 34 + index * 145, dialog.y + 212, 136, 28};
     if (index < 0 || index >= 4) {
         rect.w = 0;
         rect.h = 0;
@@ -1308,32 +1333,32 @@ PtcUiRect ptc_ui_pin_key_rect(int digit)
     if (digit < 0 || digit > 9) return (PtcUiRect){0, 0, 0, 0};
     row = digit == 0 ? 3 : (digit - 1) / 3;
     column = digit == 0 ? 1 : (digit - 1) % 3;
-    rect = (PtcUiRect){dialog.x + 590 + column * 112, dialog.y + 220 + row * 58, 100, 52};
+    rect = (PtcUiRect){dialog.x + 583 + column * 149, dialog.y + 256 + row * 62, 140, 52};
     return rect;
 }
 
 PtcUiRect ptc_ui_pin_backspace_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_PIN);
-    return (PtcUiRect){dialog.x + 590, dialog.y + 458, 210, 48};
+    return (PtcUiRect){dialog.x + 583, dialog.y + 442, 140, 52};
 }
 
 PtcUiRect ptc_ui_pin_confirm_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_PIN);
-    return (PtcUiRect){dialog.x + 814, dialog.y + 458, 190, 48};
+    return (PtcUiRect){dialog.x + dialog.w - 34 - 240, dialog.y + 544, 240, 52};
 }
 
 PtcUiRect ptc_ui_pin_cancel_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_PIN);
-    return (PtcUiRect){dialog.x + 590, dialog.y + 516, 190, 48};
+    return (PtcUiRect){dialog.x + 34, dialog.y + 544, 220, 52};
 }
 
 PtcUiRect ptc_ui_pin_keyboard_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_PIN);
-    return (PtcUiRect){dialog.x + 794, dialog.y + 516, 210, 48};
+    return (PtcUiRect){dialog.x + 583 + 2 * 149, dialog.y + 442, 140, 52};
 }
 
 /* Safety & preferences rows that open a full-page secondary view instead of a
@@ -1367,8 +1392,12 @@ PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
         return (PtcUiRect){1020, 582, 206, 54};
     if (overlay == PTC_UI_OVERLAY_AUTONOMY)
         return (PtcUiRect){1018, 582, 208, 54};
+    if (overlay == PTC_UI_OVERLAY_QR)
+        return ptc_ui_qr_export_rect();
+    if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
+        return ptc_ui_grant_generate_rect();
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
-        return (PtcUiRect){dialog.x + dialog.w - 36 - 210, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
+        return (PtcUiRect){dialog.x + dialog.w - 36 - 220, dialog_button_top(dialog), 220, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
 }
@@ -1377,14 +1406,13 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (settings_page_overlay(overlay) || overlay == PTC_UI_OVERLAY_SCHEDULED ||
-        overlay == PTC_UI_OVERLAY_AUTONOMY)
+        overlay == PTC_UI_OVERLAY_AUTONOMY || overlay == PTC_UI_OVERLAY_QR ||
+        overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
         return ptc_ui_settings_page_back_rect();
     if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
         return (PtcUiRect){dialog.x + 34, dialog.y + 620, 246, 44};
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
-        return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
-    if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
-        return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
+        return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 220, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT ||
@@ -1398,7 +1426,7 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
 PtcUiRect ptc_ui_auth_error_guide_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_AUTH_ERROR);
-    return (PtcUiRect){dialog.x + (dialog.w - 210) / 2, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
+    return (PtcUiRect){dialog.x + (dialog.w - 230) / 2, dialog_button_top(dialog), 230, PTC_UI_DIALOG_BTN_H};
 }
 
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
@@ -1466,9 +1494,20 @@ PtcUiRect ptc_ui_grant_manager_card_rect(int index)
 
 PtcUiRect ptc_ui_grant_generate_rect(void)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
-    PtcUiRect rect = {dialog.x + 42, dialog.y + 530, dialog.w - 84, 46};
-    return rect;
+    return (PtcUiRect){942, 578, 260, 48};
+}
+
+PtcUiRect ptc_ui_today_quota_preset_rect(int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
+    if (index < 0 || index >= 5) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 34 + index * 78, dialog.y + 148, 70, 34};
+}
+
+uint16_t ptc_ui_today_quota_preset_minutes(int index)
+{
+    static const uint16_t PRESETS[5] = {30, 60, 90, 120, 180};
+    return (index >= 0 && index < 5) ? PRESETS[index] : 60;
 }
 
 PtcUiRect ptc_ui_minute_editor_key_rect(int index)
@@ -1476,7 +1515,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     int row = index / 3;
     int column = index % 3;
-    PtcUiRect rect = {dialog.x + 36 + column * 116, dialog.y + 280 + row * 52, 106, 44};
+    PtcUiRect rect = {dialog.x + 34 + column * 130, dialog.y + 306 + row * 50, 122, 42};
     if (index < 0 || index >= 12) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -1490,35 +1529,35 @@ PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
 PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 36, dialog.y + 166, 162, 56};
-    if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 212, dialog.y + 166, 162, 56};
+    if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 34, dialog.y + 206, 186, 54};
+    if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 230, dialog.y + 206, 186, 54};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_minute_editor_summary_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    return (PtcUiRect){dialog.x + 414, dialog.y + 150, 470, 350};
+    return (PtcUiRect){dialog.x + 454, dialog.y + 148, 470, 376};
 }
 
 PtcUiRect ptc_ui_today_mode_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    int w = 848;
-    return (PtcUiRect){dialog.x + 36 + 4 + index * ((w - 8) / 2), dialog.y + 76 + 4, (w - 8) / 2, 36};
+    int w = dialog.w - 68;
+    return (PtcUiRect){dialog.x + 34 + 4 + index * ((w - 8) / 2), dialog.y + 72 + 4, (w - 8) / 2, 36};
 }
 
 PtcUiRect ptc_ui_today_limit_refresh_rect(void)
 {
     PtcUiRect summary = ptc_ui_minute_editor_summary_rect();
-    return (PtcUiRect){summary.x, summary.y + 196, summary.w, 44};
+    return (PtcUiRect){summary.x, summary.y + 286, summary.w, 44};
 }
 
 PtcUiRect ptc_ui_quota_refresh_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_CONFIRM);
-    return (PtcUiRect){dialog.x + 54, dialog.y + 310, dialog.w - 108, 28};
+    return (PtcUiRect){dialog.x + 54, dialog.y + 334, dialog.w - 108, 36};
 }
 
 PtcUiRect ptc_ui_shortcut_option_rect(int index)
@@ -1543,8 +1582,7 @@ PtcUiRect ptc_ui_shortcut_hint_rect(void)
 
 PtcUiRect ptc_ui_grant_adjust_rect(int index)
 {
-    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
-    PtcUiRect rect = {dialog.x + 54, dialog.y + 194, 330, 92};
+    PtcUiRect rect = {504, 324, 382, 46};
     if (index != 0) {
         rect.w = 0;
         rect.h = 0;

@@ -237,3 +237,34 @@ void draw_unchanged_quota_card(
     fit_text(fitted, sizeof(fitted), reason, 14, rect.width - 36);
     draw_text(pixels, stride, rect.x + 18, rect.y + 58, fitted, 14, UI_MUTED);
 }
+
+void draw_redeem_step_bar(
+    uint32_t *pixels, uint32_t stride, UiRect area, int active_step)
+{
+    static const PtcUiTextId STEP_KEYS[3] = {
+        PTC_UI_T_REDEEM_STEP_1,
+        PTC_UI_T_REDEEM_STEP_2,
+        PTC_UI_T_REDEEM_STEP_3
+    };
+    const int arrow_w = 24;
+    int pill_w = (area.width - arrow_w * 2) / 3;
+    if (pill_w < 96) pill_w = 96;
+    for (int i = 0; i < 3; ++i) {
+        UiRect pill = {area.x + i * (pill_w + arrow_w), area.y, pill_w, area.height};
+        bool current = (i == active_step);
+        bool done = (i < active_step);
+        uint32_t bg = current ? UI_ACCENT : (done ? UI_SUCCESS_SOFT : UI_RAISED);
+        uint32_t bd = current ? UI_ACCENT : (done ? UI_SUCCESS_BORDER : UI_BORDER);
+        uint32_t fg = current ? UI_ON_ACCENT : (done ? UI_SUCCESS : UI_MUTED);
+        char fitted[64];
+        fill_round_rect(pixels, stride, pill, 10, bg);
+        draw_rect_outline(pixels, stride, pill, 10, 1, bd);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(STEP_KEYS[i]), 13, pill.width - 14);
+        draw_text_center(pixels, stride, pill, fitted, 13, fg);
+        if (i < 2) {
+            draw_text_center(pixels, stride,
+                             (UiRect){pill.x + pill.width, area.y, arrow_w, area.height},
+                             ">", 14, done ? UI_SUCCESS : UI_MUTED);
+        }
+    }
+}

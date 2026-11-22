@@ -2415,6 +2415,152 @@ static int check_batch4_pages_text(const PtcUiModel *baseline, int dark, int sty
     return failed;
 }
 
+static int check_batch5_pages_text(const PtcUiModel *baseline, int dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Parent PIN workbench (1080x620) & Auth Error / Cooldown (820x400) */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_PIN;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_PARENT_PIN_VERIFICATION));
+        snprintf(model.pin_text, sizeof(model.pin_text), "1234");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1080, 620)), NULL);
+    }
+    for (int cd = 0; cd < 2; ++cd) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_AUTH_ERROR;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.auth_error_parent_entry = true;
+        model.auth_cooldown_seconds = cd ? 30 : 0;
+        snprintf(model.auth_error_title, sizeof(model.auth_error_title), "%s",
+                 ptc_ui_text(cd ? PTC_UI_T_PIN_TEMPORARILY_LOCKED : PTC_UI_T_PIN_IS_INCORRECT));
+        snprintf(model.auth_error_message, sizeof(model.auth_error_message), "%s",
+                 ptc_ui_text(cd ? PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR : PTC_UI_T_PARENT_PIN_ERROR_CHOICE));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(820, 400)), NULL);
+    }
+
+    /* 2. Redeem 3-step closed loop: Input (1040x610), Confirm (860x476), Result (860x476) */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_NUMPAD;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.numpad_purpose = PTC_UI_NUMPAD_OFFLINE_CODE;
+        model.numpad_max_digits = 8;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_REDEEM_STEP_1));
+        snprintf(model.numpad_title, sizeof(model.numpad_title), "%s", ptc_ui_text(PTC_UI_T_REDEEM_STEP_1));
+        snprintf(model.numpad_text, sizeof(model.numpad_text), "123456");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1040, 610)), NULL);
+    }
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_CONFIRM;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.operation = PTC_UI_OPERATION_REDEEM_OFFLINE_CODE;
+        model.confirm_hold_required = true;
+        model.confirm_hold_progress = 450;
+        snprintf(model.pending_code, sizeof(model.pending_code), "12345678");
+        model.code_grant_minutes = 30;
+        model.code_effective_add_minutes = 30;
+        model.code_preview_after_available = true;
+        model.code_preview_after_minutes = 81;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_REDEEM_STEP_2));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(860, 476)), NULL);
+    }
+    for (int failed_case = 0; failed_case < 2; ++failed_case) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_CHILD;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_CODE_RESULT;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        snprintf(model.pending_code, sizeof(model.pending_code), "12345678");
+        model.code_grant_minutes = 30;
+        model.code_effective_add_minutes = 30;
+        model.code_result_failed = failed_case != 0;
+        model.code_result_pending = false;
+        model.code_actual_add_available = !failed_case;
+        model.code_actual_add_minutes = 30;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s",
+                 ptc_ui_text(failed_case ? PTC_UI_T_GRANT_FAILED : PTC_UI_T_GRANT_SUCCESSFUL));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(860, 476)), NULL);
+    }
+
+    /* 3. Grant Hub 3-in-1 A2 Full Page: Mode 0 (Phone QR), Mode 1 (Offline File), Mode 2 (Local Voucher) */
+    for (int mode = 0; mode < 3; ++mode) {
+        uint8_t qr_tmp[qrcodegen_BUFFER_LEN_MAX];
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_GRANT;
+        model.overlay = model.rendered_overlay = (mode == 2) ? PTC_UI_OVERLAY_GRANT_LOCAL : PTC_UI_OVERLAY_QR;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.grant_hub_mode = mode;
+        snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "https://selfuppen.github.io/NX-PlayWise/");
+        snprintf(model.pairing_url, sizeof(model.pairing_url), "https://selfuppen.github.io/NX-PlayWise/#demo");
+        (void)qrcodegen_encodeText(model.pairing_url, qr_tmp, model.qr_code,
+                                   qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+                                   qrcodegen_Mask_AUTO, true);
+        model.grant_minutes = 45;
+        model.grant_has_code = true;
+        model.grant_issued_minutes = 30;
+        snprintf(model.grant_code, sizeof(model.grant_code), "58291406");
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_account_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        for (int m = 0; m < 3; ++m)
+            failed += check_action_text(to_uirect(ptc_ui_grant_hub_mode_rect(m)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_qr_panel_rect(1)), NULL);
+    }
+
+    /* 4. Today Quota Editor (960x630) & Today Quota Confirm (860x476) */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_TODAY;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.numpad_purpose = PTC_UI_NUMPAD_MINUTES;
+        model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+        model.numpad_minimum = 0;
+        model.numpad_maximum = 1440;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SET_TODAY_LIMIT));
+        ptc_ui_duration_set_minutes(&model, 90);
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_overlay(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(960, 630)), NULL);
+    }
+    return failed;
+}
+
 static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
 {
     int failed = 0;
@@ -2430,6 +2576,7 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                 failed += check_weekly_page_text(baseline, dark, style);
                 failed += check_batch3_pages_text(baseline, dark, style);
                 failed += check_batch4_pages_text(baseline, dark, style);
+                failed += check_batch5_pages_text(baseline, dark, style);
                 for (int state = 0; state < 5; ++state) {
                     PtcUiModel model = *baseline;
                     model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;
