@@ -1307,8 +1307,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
         model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
         draw_diagnostic_notice(pixels, stride, model);
-    } else if (notice_showing &&
-               !(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK)) {
+    } else if (notice_showing) {
         draw_notice(pixels, stride, model);
     }
     draw_parent_footer(pixels, stride, model, plan_subpage);

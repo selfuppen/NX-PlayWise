@@ -311,16 +311,18 @@ static void handle_dock_page_input(UiState *ui, u64 down)
         if (down & HidNpadButton_B) dock_page_action(ui, 10, 0);
         else if (down & HidNpadButton_Y) dock_page_action(ui, 6, 0);
         else if (down & HidNpadButton_X) dock_page_action(ui, 4, 0);
+        else if (down & HidNpadButton_ZL) dock_page_action(ui, 9, 0);
         else if (down & HidNpadButton_Plus) dock_page_action(ui, 3, 0);
         else if (down & HidNpadButton_Up) {
             int old_focus = ui->model.dock_field_focus;
             int focus = ui->model.dock_field_focus;
-            if (focus == 7 || focus == 8) ui->model.dock_field_focus = focus == 7 ? 3 : 4;
-            else if (focus == 5) ui->model.dock_field_focus = 4;
-            else if (focus == 3 || focus == 4) ui->model.dock_field_focus = 2;
+            if (focus == 7 || focus == 8) ui->model.dock_field_focus = 2;
+            else if (focus == 3 || focus == 9) ui->model.dock_field_focus = 4;
+            else if (focus == 4) ui->model.dock_field_focus = 5;
+            else if (focus == 5) ui->model.dock_field_focus = 2;
             else if (focus == 2) ui->model.dock_field_focus = 1;
             else if (focus == 1) ui->model.dock_field_focus = 0;
-            else if (focus == 0) ui->model.dock_field_focus = ui->model.eden_mode_controls ? 7 : 5;
+            else if (focus == 0) ui->model.dock_field_focus = ui->model.eden_mode_controls ? 7 : 3;
             if (ui->model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
         }
         else if (down & HidNpadButton_Down) {
@@ -328,30 +330,29 @@ static void handle_dock_page_input(UiState *ui, u64 down)
             int focus = ui->model.dock_field_focus;
             if (focus == 0) ui->model.dock_field_focus = 1;
             else if (focus == 1) ui->model.dock_field_focus = 2;
-            else if (focus == 2) ui->model.dock_field_focus = 3;
-            else if (focus == 3 || focus == 4) ui->model.dock_field_focus = 5;
-            else if (focus == 5) {
-                if (ui->model.eden_mode_controls) ui->model.dock_field_focus = 7;
-                else ui->model.dock_field_focus = 0;
-            }
-            else if (focus == 7 || focus == 8) ui->model.dock_field_focus = 0;
+            else if (focus == 2) ui->model.dock_field_focus = ui->model.eden_mode_controls ? 7 : 5;
+            else if (focus == 5) ui->model.dock_field_focus = 4;
+            else if (focus == 4) ui->model.dock_field_focus = 3;
+            else if (focus == 3 || focus == 9) ui->model.dock_field_focus = 0;
+            else if (focus == 7 || focus == 8) ui->model.dock_field_focus = 5;
             if (ui->model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
         }
         else if (down & HidNpadButton_Left) {
             int old_focus = ui->model.dock_field_focus;
             int focus = ui->model.dock_field_focus;
-            if (focus == 2) dock_page_action(ui, 2, -1);
-            else if (focus == 4) ui->model.dock_field_focus = 3;
-            else if (focus == 5) ui->model.dock_field_focus = 4;
+            if (focus == 2) dock_page_action(ui, 2, -5);
+            else if (focus == 3) ui->model.dock_field_focus = 9;
+            else if (focus == 9) ui->model.dock_field_focus = 2;
+            else if (focus == 4 || focus == 5) ui->model.dock_field_focus = 2;
             else if (focus == 8) ui->model.dock_field_focus = 7;
             if (ui->model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
         }
         else if (down & HidNpadButton_Right) {
             int old_focus = ui->model.dock_field_focus;
             int focus = ui->model.dock_field_focus;
-            if (focus == 2) dock_page_action(ui, 2, 1);
-            else if (focus == 3) ui->model.dock_field_focus = 4;
-            else if (focus == 4) ui->model.dock_field_focus = 5;
+            if (focus == 2) dock_page_action(ui, 2, 5);
+            else if (focus == 0 || focus == 1) ui->model.dock_field_focus = 5;
+            else if (focus == 9) ui->model.dock_field_focus = 3;
             else if (focus == 7) ui->model.dock_field_focus = 8;
             if (ui->model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
         }
@@ -363,7 +364,6 @@ static void handle_eye_care_page_input(UiState *ui, u64 down)
 {
     PtcEyeCarePolicy *draft = &ui->model.draft_eye_care_policy;
     bool resting = (strcmp(ui->model.eye_care_phase, "resting") == 0);
-    int focus_count = resting ? 5 : 4;
     if (ui->waiting) {
         if (down) {
             ptc_audio_play(PTC_SE_ERROR);
@@ -387,11 +387,33 @@ static void handle_eye_care_page_input(UiState *ui, u64 down)
             ui->model.selected_index = 4;
         }
     } else if (down & HidNpadButton_Up) {
+        int f = ui->model.eye_care_field_focus;
         ptc_audio_play(PTC_SE_FOCUS);
-        ui->model.eye_care_field_focus = (ui->model.eye_care_field_focus + focus_count - 1) % focus_count;
+        if (f == 0) ui->model.eye_care_field_focus = 3;
+        else if (f == 1) ui->model.eye_care_field_focus = 0;
+        else if (f == 2) ui->model.eye_care_field_focus = 1;
+        else if (f == 5) ui->model.eye_care_field_focus = 2;
+        else if (f == 4) ui->model.eye_care_field_focus = 5;
+        else if (f == 6 || f == 3) ui->model.eye_care_field_focus = resting ? 4 : 5;
+        else ui->model.eye_care_field_focus = 0;
     } else if (down & HidNpadButton_Down) {
+        int f = ui->model.eye_care_field_focus;
         ptc_audio_play(PTC_SE_FOCUS);
-        ui->model.eye_care_field_focus = (ui->model.eye_care_field_focus + 1) % focus_count;
+        if (f == 0) ui->model.eye_care_field_focus = 1;
+        else if (f == 1) ui->model.eye_care_field_focus = 2;
+        else if (f == 2) ui->model.eye_care_field_focus = 5;
+        else if (f == 5) ui->model.eye_care_field_focus = resting ? 4 : 3;
+        else if (f == 4) ui->model.eye_care_field_focus = 3;
+        else ui->model.eye_care_field_focus = 0;
+    } else if ((down & HidNpadButton_ZL) &&
+               ui->model.eye_care_field_focus != 1 && ui->model.eye_care_field_focus != 2) {
+        if (ui->model.eye_care_dirty) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ui->model.draft_eye_care_policy = ui->model.eye_care_policy;
+            ui->model.eye_care_dirty = false;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+        }
     } else if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_ZL | HidNpadButton_ZR)) {
         int delta = 0;
         if (down & HidNpadButton_Left) delta = -1;
@@ -414,6 +436,21 @@ static void handle_eye_care_page_input(UiState *ui, u64 down)
             ptc_audio_play(PTC_SE_STEP);
             draft->rest_minutes = ptc_ui_adjust_minutes(draft->rest_minutes, rest_delta, 1, 60);
             ui->model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui->model);
+        } else if (ui->model.eye_care_field_focus == 3 && (down & HidNpadButton_Left)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.eye_care_field_focus = 6;
+        } else if (ui->model.eye_care_field_focus == 6 && (down & HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.eye_care_field_focus = 3;
+        } else if (ui->model.eye_care_field_focus == 6 && (down & HidNpadButton_Left)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.eye_care_field_focus = 5;
+        } else if (ui->model.eye_care_field_focus == 5 && (down & HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.eye_care_field_focus = resting ? 4 : 6;
+        } else if (ui->model.eye_care_field_focus == 4 && (down & HidNpadButton_Left)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.eye_care_field_focus = 5;
         }
     } else if (down & HidNpadButton_A) {
         if (ui->model.eye_care_field_focus == 0) {
@@ -438,6 +475,17 @@ static void handle_eye_care_page_input(UiState *ui, u64 down)
         } else if (ui->model.eye_care_field_focus == 4) {
             ptc_audio_play(PTC_SE_CONFIRM);
             submit_eye_care_skip(ui);
+        } else if (ui->model.eye_care_field_focus == 5) {
+            ptc_audio_play(PTC_SE_POPUP);
+            ui->model.overlay = PTC_UI_OVERLAY_EYE_CARE_RULES;
+        } else if (ui->model.eye_care_field_focus == 6) {
+            if (ui->model.eye_care_dirty) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ui->model.draft_eye_care_policy = ui->model.eye_care_policy;
+                ui->model.eye_care_dirty = false;
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                         ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+            }
         }
     } else if (down & HidNpadButton_Minus) {
         ptc_audio_play(PTC_SE_TOGGLE);

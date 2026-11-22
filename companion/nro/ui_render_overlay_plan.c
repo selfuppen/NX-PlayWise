@@ -277,62 +277,252 @@ static void draw_scheduled_leave(uint32_t *pixels, uint32_t stride, const PtcUiM
 
 static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
-    static const uint16_t OPTIONS[] = {0, 5, 10, 15};
-    const char *SUBTITLES[] = {ptc_ui_text(PTC_UI_T_DOES_NOT_OPEN_BUFFERING), ptc_ui_text(PTC_UI_T_QUICK_SAVE), ptc_ui_text(PTC_UI_T_CLOSING_RECOMMENDATIONS), ptc_ui_text(PTC_UI_T_ABUNDANT_EXIT)};
-    int index;
-    char label[48];
-    PtcUiModel shell_model = *model;
-    shell_model.overlay_body[0] = '\0';
-    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 880, 480);
+    static const uint16_t OPTIONS[4] = {0, 5, 10, 15};
+    const char *SUBTITLES[4] = {
+        ptc_ui_text(PTC_UI_T_DOES_NOT_OPEN_BUFFERING),
+        ptc_ui_text(PTC_UI_T_QUICK_SAVE),
+        ptc_ui_text(PTC_UI_T_CLOSING_RECOMMENDATIONS),
+        ptc_ui_text(PTC_UI_T_ABUNDANT_EXIT)
+    };
+    const char *DESCS[4] = {
+        ptc_ui_text(PTC_UI_T_AUTONOMY_DESC_OFF),
+        ptc_ui_text(PTC_UI_T_AUTONOMY_DESC_5),
+        ptc_ui_text(PTC_UI_T_AUTONOMY_DESC_10),
+        ptc_ui_text(PTC_UI_T_AUTONOMY_DESC_15)
+    };
+    uint16_t saved_min = model->autonomy_policy.daily_buffer_minutes;
+    uint16_t draft_min = model->draft_autonomy_policy.daily_buffer_minutes;
+    bool dirty = (draft_min != saved_min);
+    bool disabled = model->disable_flag_present || model->waiting;
+    int64_t now = ptc_ui_render_now();
+    bool fresh = ptc_ui_status_is_fresh(model, now);
+    char path[128], buf[192], fitted[192];
 
-    /* 详细用途与机制说明 */
-    char fitted_buf[256];
-    fit_text(fitted_buf, sizeof(fitted_buf),
-             ptc_ui_text(PTC_UI_T_PURPOSE_WHEN_THE_QUOTA_IS_EXHAUSTED_CHILDREN),
-             14, dialog.width - 96);
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 92, fitted_buf, 14, UI_INK);
+    snprintf(path, sizeof(path), ptc_ui_text(PTC_UI_T_TIME_PLANS_S),
+             ptc_ui_text(PTC_UI_T_AUTONOMY_BUFFER_2));
+    draw_subpage_shell(pixels, stride, model,
+                       ptc_ui_text(PTC_UI_T_AUTONOMY_BUFFER_2),
+                       ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING),
+                       ptc_ui_text(PTC_UI_T_B_BACK_TO_PLANS), path);
+    draw_refresh_footer_button(pixels, stride, ptc_ui_scheduled_refresh_rect(),
+        ptc_ui_text(PTC_UI_T_Y_REFRESH), ptc_ui_status_needs_refresh(model, now),
+        ptc_ui_status_refresh_failed(model), false, model->waiting);
 
-    fit_text(fitted_buf, sizeof(fitted_buf),
-             ptc_ui_text(PTC_UI_T_CAN_ONLY_BE_COLLECTED_ONCE_A_DAY),
-             14, dialog.width - 96);
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 118, fitted_buf, 14, UI_MUTED);
-
-    fit_text(fitted_buf, sizeof(fitted_buf),
-             ptc_ui_text(PTC_UI_T_RECOMMENDED_SETTINGS_5_TO_15_MINUTES_ARE),
-             14, dialog.width - 96);
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 144, fitted_buf, 14, UI_ACCENT);
-
-    for (index = 0; index < 4; ++index) {
-        UiRect option = to_uirect(ptc_ui_autonomy_option_rect(index));
-        bool selected = model->draft_autonomy_policy.daily_buffer_minutes == OPTIONS[index];
-        if (OPTIONS[index] > 0u) {
-            snprintf(label, sizeof(label), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)OPTIONS[index]);
-        } else {
-            snprintf(label, sizeof(label), "%s", ptc_ui_text(PTC_UI_T_OFF));
-        }
-        fill_round_rect(pixels, stride, option, 12, selected ? UI_SUCCESS_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, 12, selected ? 2 : 1, selected ? UI_SUCCESS : UI_BORDER);
-        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 12, option.width, 32},
-                         label, 20, selected ? UI_SUCCESS : UI_INK);
-        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 46, option.width, 24},
-                         SUBTITLES[index], 13, selected ? UI_SUCCESS : UI_MUTED);
+    /* ================= Left Column: Intro Card + 2x2 Options + Boundary Pills ================= */
+    UiRect intro_card = {54, 174, 748, 72};
+    draw_plan_card(pixels, stride, intro_card, false);
+    {
+        char saved_lbl[64];
+        if (saved_min > 0u) snprintf(saved_lbl, sizeof(saved_lbl), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)saved_min);
+        else snprintf(saved_lbl, sizeof(saved_lbl), "%s", ptc_ui_text(PTC_UI_T_OFF));
+        int sw = measure_text(saved_lbl, 12) + 22;
+        if (sw > 140) sw = 140;
+        UiRect s_pill = {intro_card.x + intro_card.width - 18 - sw, intro_card.y + 12, sw, 24};
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING), 18,
+                 s_pill.x - (intro_card.x + 18) - 10);
+        draw_text_bold(pixels, stride, intro_card.x + 18, intro_card.y + 30, fitted, 18, UI_INK);
+        fill_round_rect(pixels, stride, s_pill, 6, saved_min > 0u ? UI_SUCCESS_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, s_pill, 6, 1, saved_min > 0u ? UI_SUCCESS_BORDER : UI_BORDER);
+        fit_text(fitted, sizeof(fitted), saved_lbl, 12, s_pill.width - 10);
+        draw_text_center(pixels, stride, s_pill, fitted, 12, saved_min > 0u ? UI_SUCCESS : UI_MUTED);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_PURPOSE_WHEN_THE_QUOTA_IS_EXHAUSTED_CHILDREN),
+                 13, intro_card.width - 36);
+        draw_text(pixels, stride, intro_card.x + 18, intro_card.y + 56, fitted, 13, UI_MUTED);
     }
 
-    /* 底部保障与生效提示卡片 */
-    UiRect tip_box = {dialog.x + 48, dialog.y + 296, dialog.width - 96, 76};
-    fill_round_rect(pixels, stride, tip_box, 8, UI_PAGE);
-    draw_rect_outline(pixels, stride, tip_box, 8, 1, UI_BORDER);
-    fit_text(fitted_buf, sizeof(fitted_buf),
-             ptc_ui_text(PTC_UI_T_THE_BUFFER_ONLY_INCREASES_TODAY_S_QUOTA),
-             14, tip_box.width - 32);
-    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 28, fitted_buf, 14, UI_INK);
-    fit_text(fitted_buf, sizeof(fitted_buf),
-             ptc_ui_text(PTC_UI_T_BEDTIME_TIME_REMAINS_AS_SCHEDULED),
-             14, tip_box.width - 32);
-    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 54, fitted_buf, 14, UI_WARNING);
+    for (int index = 0; index < 4; ++index) {
+        UiRect option = to_uirect(ptc_ui_autonomy_option_rect(index));
+        bool selected = (draft_min == OPTIONS[index]);
+        bool is_saved = (saved_min == OPTIONS[index]);
+        bool focused = (model->overlay_selection == index);
+        bool is_off = (OPTIONS[index] == 0u);
+        uint32_t bg = selected ? (is_off ? UI_ACCENT_SOFT : UI_SUCCESS_SOFT) : UI_RGB(UI_BLENDED(surface));
+        uint32_t bd = selected ? (is_off ? UI_ACCENT : UI_SUCCESS) : UI_BORDER;
+        uint32_t fg = selected ? (is_off ? UI_ACCENT : UI_SUCCESS) : UI_INK;
+        if (!focused) draw_card_shadow(pixels, stride, option, 14);
+        fill_round_rect(pixels, stride, option, 14, bg);
+        if (focused) draw_focus_ring(pixels, stride, option, 14);
+        else draw_rect_outline(pixels, stride, option, 14, selected ? 2 : 1, bd);
 
-    draw_overlay_actions(pixels, stride, model, ptc_ui_text(PTC_UI_T_SAVE_BUFFER_SETTINGS));
+        if (OPTIONS[index] > 0u) snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)OPTIONS[index]);
+        else snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_OFF));
+
+        /* Right badges: Active & Selected (measured dynamically from right edge) */
+        int right_edge = option.x + option.width - 14;
+        if (selected) {
+            const char *st = ptc_ui_text(PTC_UI_T_AUTONOMY_SELECTED_BADGE);
+            int bw = measure_text(st, 11) + 16;
+            UiRect sb = {right_edge - bw, option.y + 14, bw, 22};
+            fill_round_rect(pixels, stride, sb, 6, is_off ? UI_ACCENT : UI_SUCCESS);
+            draw_text_center(pixels, stride, sb, st, 11, UI_ON_ACCENT);
+            right_edge = sb.x - 6;
+        }
+        if (is_saved) {
+            const char *at = ptc_ui_text(PTC_UI_T_AUTONOMY_ACTIVE_BADGE);
+            int bw = measure_text(at, 11) + 16;
+            UiRect ab = {right_edge - bw, option.y + 14, bw, 22};
+            fill_round_rect(pixels, stride, ab, 6, UI_RAISED);
+            draw_rect_outline(pixels, stride, ab, 6, 1, UI_BORDER);
+            draw_text_center(pixels, stride, ab, at, 11, UI_MUTED);
+            right_edge = ab.x - 8;
+        }
+
+        fit_text(fitted, sizeof(fitted), buf, 24, right_edge - (option.x + 16));
+        draw_text_bold(pixels, stride, option.x + 16, option.y + 40, fitted, 24, fg);
+        fit_text(fitted, sizeof(fitted), SUBTITLES[index], 14, option.width - 32);
+        draw_text_bold(pixels, stride, option.x + 16, option.y + 72, fitted, 14,
+                       selected ? fg : UI_INK);
+        draw_wrapped_text(pixels, stride, option.x + 16, option.y + 98, DESCS[index],
+                          12, option.width - 32, 18, 2, UI_MUTED);
+    }
+
+    /* 3 compact boundary boxes along bottom-left */
+    {
+        static const PtcUiTextId BOUNDS[3] = {
+            PTC_UI_T_AUTONOMY_BOUNDARY_1,
+            PTC_UI_T_AUTONOMY_BOUNDARY_2,
+            PTC_UI_T_AUTONOMY_BOUNDARY_3
+        };
+        int bw = (748 - 16) / 3;
+        for (int b = 0; b < 3; ++b) {
+            UiRect box = {54 + b * (bw + 8), 582, bw, 54};
+            draw_plan_card(pixels, stride, box, false);
+            fit_text(fitted, sizeof(fitted), ptc_ui_text(BOUNDS[b]), 12, box.width - 16);
+            draw_text_center(pixels, stride, box, fitted, 12, UI_MUTED);
+        }
+    }
+
+    /* ================= Right Column: Today Claim Status, Impact & Child Preview ================= */
+    UiRect right_card = {818, 174, 408, 396};
+    draw_plan_card(pixels, stride, right_card, false);
+    {
+        const char *st_badge;
+        const char *st_head;
+        const char *st_sub;
+        uint32_t st_bg, st_bd, st_fg;
+        if (!fresh) {
+            st_badge = ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
+            st_head = ptc_ui_text(PTC_UI_T_AUTONOMY_STATUS_PENDING);
+            st_sub = ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_WILL_RECHECK_IMPACT_UPON_SAVING);
+            st_bg = UI_WARNING_SOFT; st_bd = UI_WARNING_BORDER; st_fg = UI_WARNING_TEXT;
+        } else if (saved_min == 0u) {
+            st_badge = ptc_ui_text(PTC_UI_T_OFF_2);
+            st_head = ptc_ui_text(PTC_UI_T_AUTONOMY_STATUS_OFF);
+            st_sub = ptc_ui_text(PTC_UI_T_RECOMMENDED_SETTINGS_5_TO_15_MINUTES_ARE);
+            st_bg = UI_RAISED; st_bd = UI_BORDER; st_fg = UI_MUTED;
+        } else if (model->daily_buffer_claimed) {
+            st_badge = ptc_ui_text(PTC_UI_T_CLAIMED);
+            st_head = ptc_ui_text(PTC_UI_T_AUTONOMY_CLAIMED_NEXT_DAY);
+            st_sub = ptc_ui_text(PTC_UI_T_THE_BUFFER_ONLY_INCREASES_TODAY_S_QUOTA);
+            st_bg = UI_ACCENT_SOFT; st_bd = UI_ACCENT; st_fg = UI_ACCENT;
+        } else if (model->unrestricted_today == 1) {
+            st_badge = ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED);
+            st_head = ptc_ui_text(PTC_UI_T_AUTONOMY_STATUS_UNAVAILABLE);
+            st_sub = ptc_ui_text(PTC_UI_T_CAN_ONLY_BE_COLLECTED_ONCE_A_DAY);
+            st_bg = UI_SUCCESS_SOFT; st_bd = UI_SUCCESS_BORDER; st_fg = UI_SUCCESS;
+        } else {
+            st_badge = ptc_ui_text(PTC_UI_T_AVAILABLE);
+            st_head = ptc_ui_text(PTC_UI_T_CAN_ONLY_BE_COLLECTED_ONCE_A_DAY);
+            st_sub = ptc_ui_text(PTC_UI_T_THE_BUFFER_ONLY_INCREASES_TODAY_S_QUOTA);
+            st_bg = UI_SUCCESS_SOFT; st_bd = UI_SUCCESS_BORDER; st_fg = UI_SUCCESS;
+        }
+        int bw = measure_text(st_badge, 12) + 18;
+        if (bw > 140) bw = 140;
+        UiRect bp = {right_card.x + right_card.width - 16 - bw, right_card.y + 14, bw, 24};
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_AUTONOMY_TODAY_STATUS), 17,
+                 bp.x - (right_card.x + 16) - 10);
+        draw_text_bold(pixels, stride, right_card.x + 16, right_card.y + 32, fitted, 17, UI_INK);
+        fill_round_rect(pixels, stride, bp, 6, st_bg);
+        draw_rect_outline(pixels, stride, bp, 6, 1, st_bd);
+        fit_text(fitted, sizeof(fitted), st_badge, 12, bp.width - 8);
+        draw_text_center(pixels, stride, bp, fitted, 12, st_fg);
+
+        UiRect status_strip = {right_card.x + 16, right_card.y + 48, right_card.width - 32, 82};
+        fill_round_rect(pixels, stride, status_strip, 9, st_bg);
+        draw_rect_outline(pixels, stride, status_strip, 9, 1, st_bd);
+        fit_text(fitted, sizeof(fitted), st_head, 14, status_strip.width - 20);
+        draw_text_bold(pixels, stride, status_strip.x + 10, status_strip.y + 26, fitted, 14, st_fg);
+        draw_wrapped_text(pixels, stride, status_strip.x + 10, status_strip.y + 48, st_sub,
+                          12, status_strip.width - 20, 16, 2, UI_MUTED);
+    }
+
+    /* Before -> After comparison box */
+    {
+        UiRect cmp_box = {right_card.x + 16, right_card.y + 142, right_card.width - 32, 76};
+        fill_round_rect(pixels, stride, cmp_box, 10, UI_RAISED);
+        draw_rect_outline(pixels, stride, cmp_box, 10, 1, UI_BORDER);
+        int half_w = (cmp_box.width - 34) / 2;
+        UiRect lh = {cmp_box.x + 6, cmp_box.y + 6, half_w, cmp_box.height - 12};
+        UiRect rh = {cmp_box.x + cmp_box.width - 6 - half_w, cmp_box.y + 6, half_w, cmp_box.height - 12};
+        char cur_s[48], next_s[48];
+        if (saved_min > 0u) snprintf(cur_s, sizeof(cur_s), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)saved_min);
+        else snprintf(cur_s, sizeof(cur_s), "%s", ptc_ui_text(PTC_UI_T_OFF));
+        if (draft_min > 0u) snprintf(next_s, sizeof(next_s), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)draft_min);
+        else snprintf(next_s, sizeof(next_s), "%s", ptc_ui_text(PTC_UI_T_OFF));
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_CURRENT_STATE), 11, lh.width - 6);
+        draw_text_center(pixels, stride, (UiRect){lh.x, lh.y + 4, lh.width, 18}, fitted, 11, UI_MUTED);
+        fit_text(fitted, sizeof(fitted), cur_s, 18, lh.width - 6);
+        draw_text_center(pixels, stride, (UiRect){lh.x, lh.y + 26, lh.width, 30}, fitted, 18, UI_INK);
+        draw_transition_arrow(pixels, stride, cmp_box.x + cmp_box.width / 2, cmp_box.y + cmp_box.height / 2, UI_MUTED);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_FORECAST_AFTER_SAVE), 11, rh.width - 6);
+        draw_text_center(pixels, stride, (UiRect){rh.x, rh.y + 4, rh.width, 18}, fitted, 11, UI_MUTED);
+        fit_text(fitted, sizeof(fitted), next_s, 18, rh.width - 6);
+        draw_text_center(pixels, stride, (UiRect){rh.x, rh.y + 26, rh.width, 30}, fitted, 18,
+                         dirty ? UI_SUCCESS : UI_MUTED);
+    }
+
+    /* Child Entry Preview Card */
+    {
+        UiRect preview = {right_card.x + 16, right_card.y + 230, right_card.width - 32, 150};
+        fill_round_rect(pixels, stride, preview, 10, UI_RAISED);
+        draw_rect_outline(pixels, stride, preview, 10, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_AUTONOMY_CHILD_PREVIEW), 14, preview.width - 24);
+        draw_text_bold(pixels, stride, preview.x + 12, preview.y + 26, fitted, 14, UI_INK);
+
+        UiRect mock_btn = {preview.x + 12, preview.y + 42, preview.width - 24, 46};
+        uint32_t mb_bg = UI_SURFACE, mb_bd = UI_BORDER, mb_fg = UI_MUTED;
+        if (draft_min == 0u) {
+            snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_DOES_NOT_OPEN_BUFFERING));
+        } else if (!fresh) {
+            snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+            mb_bg = UI_WARNING_SOFT; mb_bd = UI_WARNING_BORDER; mb_fg = UI_WARNING_TEXT;
+        } else if (model->daily_buffer_claimed) {
+            snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_RECEIVED_TODAY));
+        } else if (model->unrestricted_today == 1) {
+            snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+        } else {
+            snprintf(buf, sizeof(buf), "%s (+%u %s)",
+                     ptc_ui_text(PTC_UI_T_AUTONOMY_BUFFER_2), (unsigned)draft_min, ptc_ui_text(PTC_UI_T_MIN));
+            mb_bg = UI_SUCCESS_SOFT; mb_bd = UI_SUCCESS_BORDER; mb_fg = UI_SUCCESS;
+        }
+        fill_round_rect(pixels, stride, mock_btn, 9, mb_bg);
+        draw_rect_outline(pixels, stride, mock_btn, 9, 1, mb_bd);
+        fit_text(fitted, sizeof(fitted), buf, 14, mock_btn.width - 20);
+        draw_text_center(pixels, stride, mock_btn, fitted, 14, mb_fg);
+
+        draw_wrapped_text(pixels, stride, preview.x + 12, preview.y + 110,
+                          ptc_ui_text(PTC_UI_T_BEDTIME_TIME_REMAINS_AS_SCHEDULED),
+                          12, preview.width - 24, 17, 2, UI_WARNING_TEXT);
+    }
+
+    /* Discard & Save buttons */
+    {
+        UiRect discard_btn = to_uirect(ptc_ui_discard_rect(model->overlay));
+        UiRect save_btn = to_uirect(ptc_ui_confirm_rect(model->overlay));
+        bool save_active = dirty && !disabled;
+        fill_round_rect(pixels, stride, discard_btn, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, discard_btn, 12, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_ZL_DISCARD), 15, discard_btn.width - 16);
+        draw_text_center(pixels, stride, discard_btn, fitted, 15, save_active ? UI_INK : UI_DISABLED);
+
+        if (save_active) draw_card_shadow(pixels, stride, save_btn, 12);
+        fill_round_rect(pixels, stride, save_btn, 12, save_active ? UI_ACCENT : UI_RAISED);
+        draw_rect_outline(pixels, stride, save_btn, 12, 1, save_active ? UI_ACCENT : UI_BORDER);
+        fit_text(fitted, sizeof(fitted),
+                 dirty ? ptc_ui_text(PTC_UI_T_SAVE_BUFFER_SETTINGS) : ptc_ui_text(PTC_UI_T_RULE_SAVED),
+                 14, save_btn.width - 16);
+        draw_text_center(pixels, stride, save_btn, fitted, 14, save_active ? UI_ON_ACCENT : UI_DISABLED);
+    }
 }
 
 static void draw_eye_care_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1324,6 +1514,67 @@ static void draw_dock_rules_overlay(uint32_t *pixels, uint32_t stride, const Ptc
         ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, true);
 }
 
+static void draw_eye_care_rules_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    PtcUiModel shell = *model;
+    snprintf(shell.overlay_title, sizeof(shell.overlay_title), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_RULES_BTN));
+    shell.overlay_body[0] = '\0';
+    draw_dialog_shell(pixels, stride, &shell, &dialog, 1000, 560);
+
+    static const PtcUiTextId titles[] = {
+        PTC_UI_T_EYE_CARE_LOGIC_TITLE_1,
+        PTC_UI_T_EYE_CARE_LOGIC_TITLE_2,
+        PTC_UI_T_EYE_CARE_LOGIC_TITLE_3,
+        PTC_UI_T_EYE_CARE_LOGIC_TITLE_4
+    };
+    static const PtcUiTextId items[] = {
+        PTC_UI_T_EYE_CARE_LOGIC_DESC_1,
+        PTC_UI_T_EYE_CARE_LOGIC_DESC_2,
+        PTC_UI_T_EYE_CARE_LOGIC_DESC_3,
+        PTC_UI_T_EYE_CARE_LOGIC_DESC_4
+    };
+    const char *emojis[] = {"🌿", "⏰", "✨", "🛡️"};
+    uint32_t accent_colors[] = {UI_SUCCESS, UI_ACCENT, UI_WARNING, UI_HERO};
+
+    int card_w = (dialog.width - 68 - 18) / 2;
+    int card_h = 166;
+    for (int i = 0; i < 4; ++i) {
+        int col = i % 2;
+        int row = i / 2;
+        int cx = dialog.x + 34 + col * (card_w + 18);
+        int cy = dialog.y + 100 + row * (card_h + 16);
+        UiRect c = {cx, cy, card_w, card_h};
+        char num[8];
+        char fitted_title[128];
+        snprintf(num, sizeof(num), "0%d", i + 1);
+
+        fill_round_rect(pixels, stride, c, 12, UI_PAGE);
+        ui_set_vertical_clip(c.y, c.y + 44);
+        fill_round_rect(pixels, stride, c, 12, UI_RAISED);
+        ui_set_vertical_clip(0, SCREEN_HEIGHT);
+        draw_line(pixels, stride, c.x + 1, c.y + 44, c.x + c.width - 1, c.y + 44, 1, UI_BORDER);
+
+        fill_round_rect(pixels, stride, (UiRect){c.x + 4, c.y + 10, 4, c.height - 20}, 2, accent_colors[i]);
+        draw_rect_outline(pixels, stride, c, 12, 1, UI_BORDER);
+
+        UiRect badge = {c.x + c.width - 14 - 34, c.y + 11, 34, 22};
+        fill_round_rect(pixels, stride, badge, 11, UI_SURFACE);
+        draw_rect_outline(pixels, stride, badge, 11, 1, UI_BORDER);
+        draw_text_center(pixels, stride, badge, num, 11, UI_MUTED);
+
+        draw_text(pixels, stride, c.x + 18, c.y + 29, emojis[i], 16, UI_INK);
+        fit_text(fitted_title, sizeof(fitted_title), ptc_ui_text(titles[i]), 15, badge.x - (c.x + 44) - 10);
+        draw_text_bold(pixels, stride, c.x + 44, c.y + 29, fitted_title, 15, UI_INK);
+
+        draw_wrapped_text(pixels, stride, c.x + 18, c.y + 70,
+                          ptc_ui_text(items[i]), 13, c.width - 34, 20, 5, UI_INK);
+    }
+
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
+        ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, true);
+}
+
 static void draw_calendar_format_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -1450,6 +1701,9 @@ bool draw_plan_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiMod
         return true;
     case PTC_UI_OVERLAY_DOCK_RULES:
         draw_dock_rules_overlay(pixels, stride, model);
+        return true;
+    case PTC_UI_OVERLAY_EYE_CARE_RULES:
+        draw_eye_care_rules_overlay(pixels, stride, model);
         return true;
     case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
         draw_holiday_leave_overlay(pixels, stride, model);

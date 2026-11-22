@@ -274,18 +274,44 @@ static void handle_autonomy_overlay_input(UiState *ui, u64 down)
 {
     static const uint16_t OPTIONS[] = {0, 5, 10, 15};
     if (down & HidNpadButton_B) {
+        ptc_audio_play(PTC_SE_CANCEL);
         ptc_ui_cancel_overlay(&ui->model);
-    } else if (down & HidNpadButton_Left) {
-        ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 3 : ui->model.overlay_selection - 1;
+    } else if (down & HidNpadButton_Y) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+        refresh_disable_flag(ui);
+        submit_status(ui);
+    } else if (down & HidNpadButton_ZL) {
+        if (ui->model.draft_autonomy_policy.daily_buffer_minutes !=
+            ui->model.autonomy_policy.daily_buffer_minutes) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
+            ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
+            if (ui->model.overlay_selection < 0 || ui->model.overlay_selection > 3)
+                ui->model.overlay_selection = 0;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+        }
+    } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+        ptc_audio_play(PTC_SE_STEP);
+        ui->model.overlay_selection = (ui->model.overlay_selection >= 0 && ui->model.overlay_selection < 4)
+            ? (ui->model.overlay_selection ^ 1) : 0;
         ui->model.draft_autonomy_policy.daily_buffer_minutes = OPTIONS[ui->model.overlay_selection];
-    } else if (down & HidNpadButton_Right) {
-        ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
+    } else if (down & (HidNpadButton_Up | HidNpadButton_Down)) {
+        ptc_audio_play(PTC_SE_STEP);
+        ui->model.overlay_selection = (ui->model.overlay_selection >= 0 && ui->model.overlay_selection < 4)
+            ? (ui->model.overlay_selection ^ 2) : 0;
         ui->model.draft_autonomy_policy.daily_buffer_minutes = OPTIONS[ui->model.overlay_selection];
     } else if (down & HidNpadButton_A) {
+        ptc_audio_play(PTC_SE_STEP);
+        if (ui->model.overlay_selection < 0 || ui->model.overlay_selection >= 4)
+            ui->model.overlay_selection = 0;
         ui->model.draft_autonomy_policy.daily_buffer_minutes = OPTIONS[ui->model.overlay_selection];
     } else if (down & HidNpadButton_Plus) {
-        ui->model.overlay = PTC_UI_OVERLAY_NONE;
-        submit_autonomy_policy(ui);
+        if (!ui->model.disable_flag_present && !ui->waiting) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            submit_autonomy_policy(ui);
+        }
     }
     return;
 }
@@ -354,6 +380,16 @@ static void handle_dock_rules_overlay_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_CANCEL);
         ptc_ui_cancel_overlay(&ui->model);
         ui->model.dock_field_focus = 5;
+    }
+    return;
+}
+
+static void handle_eye_care_rules_overlay_input(UiState *ui, u64 down)
+{
+    if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+        ptc_audio_play(PTC_SE_CANCEL);
+        ptc_ui_cancel_overlay(&ui->model);
+        ui->model.eye_care_field_focus = 5;
     }
     return;
 }
@@ -541,6 +577,9 @@ bool handle_plan_overlay_input(UiState *ui, u64 down)
         return true;
     case PTC_UI_OVERLAY_DOCK_RULES:
         handle_dock_rules_overlay_input(ui, down);
+        return true;
+    case PTC_UI_OVERLAY_EYE_CARE_RULES:
+        handle_eye_care_rules_overlay_input(ui, down);
         return true;
     case PTC_UI_OVERLAY_CALENDAR_MANAGER:
         handle_calendar_manager_overlay_input(ui, down);

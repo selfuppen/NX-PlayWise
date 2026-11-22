@@ -2341,8 +2341,18 @@ static void test_balanced_feature_state(void)
     check_hit(hit_center(&model, ptc_ui_scheduled_field_rect(2)),
         PTC_UI_HIT_SCHEDULED_FIELD, 2, "scheduled duration field is touchable");
     model.overlay = PTC_UI_OVERLAY_AUTONOMY;
-    check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(3)),
-        PTC_UI_HIT_AUTONOMY_OPTION, 3, "fifteen-minute autonomy option is touchable");
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(i)),
+            PTC_UI_HIT_AUTONOMY_OPTION, i, "autonomy 2x2 option is touchable");
+    }
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "autonomy full-page top back is touchable");
+    check_hit(hit_center(&model, ptc_ui_scheduled_refresh_rect()),
+        PTC_UI_HIT_PARENT_REFRESH, 0, "autonomy full-page footer refresh is touchable");
+    check_hit(hit_center(&model, ptc_ui_discard_rect(PTC_UI_OVERLAY_AUTONOMY)),
+        PTC_UI_HIT_OVERLAY_DISCARD, 0, "autonomy discard button is touchable");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(PTC_UI_OVERLAY_AUTONOMY)),
+        PTC_UI_HIT_OVERLAY_CONFIRM, 0, "autonomy save button is touchable");
     model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
     model.numpad_purpose = PTC_UI_NUMPAD_MINUTES;
     model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
@@ -4125,13 +4135,28 @@ static void test_calendar_manager_surface(void)
             PTC_UI_HIT_PARENT_REFRESH, 0, "every plan editor has the rendered refresh target");
     }
     PtcUiRect skip = ptc_ui_eye_care_page_skip_rect();
+    PtcUiRect rules = ptc_ui_eye_care_page_rules_rect();
+    PtcUiRect discard = ptc_ui_eye_care_page_discard_rect();
+    PtcUiRect save = ptc_ui_eye_care_page_save_rect();
     PtcUiRect refresh = ptc_ui_parent_subpage_footer_rect(1);
-    check_true(skip.x >= refresh.x + refresh.w, "eye care skip does not cover back or refresh");
-    check_int(skip.w, ptc_ui_eye_care_page_save_rect().w, "eye care actions use the same button width");
+    check_true(skip.x >= refresh.x + refresh.w && skip.y + skip.h <= 651,
+        "eye care skip lives in the right status card above the footer");
+    check_true(!rects_overlap(discard, save) && discard.y + discard.h <= 651 && save.y + save.h <= 651,
+        "eye care discard and save sit side by side above the footer");
+    check_hit(hit_center(&model, rules), PTC_UI_HIT_EYE_CARE_PAGE_RULES, 0,
+        "eye care rules button is touchable");
+    check_hit(hit_center(&model, discard), PTC_UI_HIT_EYE_CARE_PAGE_DISCARD, 0,
+        "eye care discard button is touchable");
+    check_hit(hit_center(&model, save), PTC_UI_HIT_EYE_CARE_PAGE_SAVE, 0,
+        "eye care save button is touchable");
     model.eye_care_policy.enabled = true;
     snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
     check_hit(hit_center(&model, skip), PTC_UI_HIT_EYE_CARE_PAGE_SKIP, 0,
         "resting eye care skip keeps its own touch target");
+    model.overlay = PTC_UI_OVERLAY_EYE_CARE_RULES;
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+        "eye care rules modal provides touch back");
+    model.overlay = PTC_UI_OVERLAY_NONE;
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
     check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "地区日历管理") == 0,
         "simplified region calendar label");
@@ -4302,16 +4327,25 @@ static void test_dock_ui(void)
         PtcUiRect row2 = ptc_ui_dock_field_rect(2);
         PtcUiRect rules_pill = ptc_ui_dock_field_rect(5);
         PtcUiRect waive = ptc_ui_dock_field_rect(4);
+        PtcUiRect discard = ptc_ui_dock_field_rect(9);
         PtcUiRect save = ptc_ui_dock_field_rect(3);
         check_true(!rects_overlap(row0, row1) && !rects_overlap(row1, row2),
             "dock mode rows do not overlap");
         check_true(row2.y + row2.h <= 651, "dock mode rows stay inside the stage");
-        check_true(rules_pill.x >= 824 && rules_pill.y + rules_pill.h <= 651,
-            "dock rules pill sits in the rules card");
-        check_true(!rects_overlap(waive, save) && waive.y >= 652 && save.y >= 652,
-            "dock save and waive live in the footer action row");
-        check_hit(hit_center(&model, waive), PTC_UI_HIT_DOCK_FIELD, 4, "dock footer waive hits dock field");
-        check_hit(hit_center(&model, save), PTC_UI_HIT_DOCK_FIELD, 3, "dock footer save hits dock field");
+        check_true(rules_pill.x >= 814 && rules_pill.y + rules_pill.h <= 651,
+            "dock rules pill sits in the right exception card");
+        check_true(!rects_overlap(waive, rules_pill) && waive.x >= 814 && waive.y + waive.h <= 651,
+            "dock waive lives inside the right exception card");
+        check_true(!rects_overlap(discard, save) && discard.y + discard.h <= 651 && save.y + save.h <= 651,
+            "dock discard and save live in the right column above the footer");
+        check_hit(hit_center(&model, waive), PTC_UI_HIT_DOCK_FIELD, 4, "dock waive hits dock field");
+        check_hit(hit_center(&model, discard), PTC_UI_HIT_DOCK_FIELD, 9, "dock discard hits dock field");
+        check_hit(hit_center(&model, save), PTC_UI_HIT_DOCK_FIELD, 3, "dock save hits dock field");
+        for (int p = 0; p < 4; ++p)
+            check_hit(hit_center(&model, ptc_ui_dock_preset_rect(p)), PTC_UI_HIT_DOCK_PRESET, p, "dock preset hits");
+        check_hit(hit_center(&model, ptc_ui_dock_step_rect(0)), PTC_UI_HIT_DOCK_STEP, 0, "dock dec step hits");
+        check_hit(hit_center(&model, ptc_ui_dock_step_rect(1)), PTC_UI_HIT_DOCK_STEP, 1, "dock inc step hits");
+        check_hit(hit_center(&model, ptc_ui_dock_value_rect()), PTC_UI_HIT_DOCK_VALUE, 0, "dock value pill hits");
     }
     model.overlay = PTC_UI_OVERLAY_DOCK_RULES;
     PtcUiRect dock_rules_cancel = ptc_ui_cancel_rect(model.overlay);

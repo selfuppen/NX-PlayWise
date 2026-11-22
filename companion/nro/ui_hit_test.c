@@ -197,7 +197,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
          model->overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE ||
-         model->overlay == PTC_UI_OVERLAY_SCHEDULED) &&
+         model->overlay == PTC_UI_OVERLAY_SCHEDULED ||
+         model->overlay == PTC_UI_OVERLAY_AUTONOMY) &&
         ptc_ui_rect_contains(ptc_ui_discard_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
     }
@@ -267,6 +268,12 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_AUTONOMY:
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_scheduled_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        }
         for (i = 0; i < 4; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_autonomy_option_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_AUTONOMY_OPTION, i);
@@ -646,13 +653,6 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
-    /* The dock page keeps save/waive in the footer action row, so its hit test
-       has to run before the generic plan footer buttons. */
-    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
-        for (i = 3; i <= 4; ++i)
-            if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y))
-                return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
-    }
     if (ptc_ui_rect_contains(compact_left ? ptc_ui_parent_subpage_footer_rect(0) :
                              ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
@@ -672,8 +672,14 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             return make_hit(PTC_UI_HIT_HOME_RULES, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
+        for (i = 0; i < 4; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_dock_preset_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_PRESET, i);
+        for (i = 0; i < 2; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_dock_step_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_STEP, i);
+        if (ptc_ui_rect_contains(ptc_ui_dock_value_rect(), x, y)) return make_hit(PTC_UI_HIT_DOCK_VALUE, 0);
         for (i = 0; i <= 5; ++i)
             if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
+        if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(9), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, 9);
         if (model->eden_mode_controls) for (i = 7; i <= 8; ++i)
             if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
         return make_hit(PTC_UI_HIT_NONE, 0);
@@ -753,6 +759,10 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_VAL, 0);
         if (ptc_ui_rect_contains(ptc_ui_eye_care_rest_inc_rect(), x, y))
             return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_INC, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_page_rules_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_RULES, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_page_discard_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_DISCARD, 0);
         if (ptc_ui_rect_contains(ptc_ui_eye_care_page_save_rect(), x, y))
             return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_SAVE, 0);
         if (strcmp(model->eye_care_phase, "resting") == 0 &&

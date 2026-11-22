@@ -121,6 +121,8 @@ typedef enum {
     PTC_UI_HIT_EYE_CARE_PAGE_REST_INC,
     PTC_UI_HIT_EYE_CARE_PAGE_SAVE,
     PTC_UI_HIT_EYE_CARE_PAGE_SKIP,
+    PTC_UI_HIT_EYE_CARE_PAGE_RULES,
+    PTC_UI_HIT_EYE_CARE_PAGE_DISCARD,
     PTC_UI_HIT_HOME_DETAILS,
     PTC_UI_HIT_HOME_DETAILS_ACTION,
     PTC_UI_HIT_HOME_RULES,
@@ -131,6 +133,9 @@ typedef enum {
     PTC_UI_HIT_CONFIG_BACKUP_FIELD,
     PTC_UI_HIT_UPDATE_ACTION,
     PTC_UI_HIT_DOCK_FIELD,
+    PTC_UI_HIT_DOCK_PRESET,
+    PTC_UI_HIT_DOCK_STEP,
+    PTC_UI_HIT_DOCK_VALUE,
     PTC_UI_HIT_DAY_DECISION_REFRESH,
     PTC_UI_HIT_DAY_DECISION_PREV,
     PTC_UI_HIT_DAY_DECISION_NEXT,
@@ -267,6 +272,11 @@ PtcUiRect ptc_ui_eye_care_rest_value_rect(void);
 PtcUiRect ptc_ui_eye_care_rest_inc_rect(void);
 PtcUiRect ptc_ui_eye_care_page_save_rect(void);
 PtcUiRect ptc_ui_eye_care_page_skip_rect(void);
+PtcUiRect ptc_ui_eye_care_page_rules_rect(void);
+PtcUiRect ptc_ui_eye_care_page_discard_rect(void);
+PtcUiRect ptc_ui_dock_preset_rect(int index);
+PtcUiRect ptc_ui_dock_step_rect(int index);
+PtcUiRect ptc_ui_dock_value_rect(void);
 PtcUiRect ptc_ui_quick_add_option_rect(int index);
 uint16_t ptc_ui_quick_add_option_minutes(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);

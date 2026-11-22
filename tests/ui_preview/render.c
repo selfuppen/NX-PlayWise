@@ -2322,6 +2322,99 @@ static int check_batch3_pages_text(const PtcUiModel *baseline, bool dark, int st
     return failed;
 }
 
+static int check_batch4_pages_text(const PtcUiModel *baseline, int dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Eye Care Plan A across playing/resting/off + rules modal */
+    for (int state = 0; state < 3; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.eye_care_policy = (PtcEyeCarePolicy){state != 2, 40, 10};
+        model.draft_eye_care_policy = (PtcEyeCarePolicy){state != 2, state == 0 ? 30 : 40, 10};
+        model.eye_care_dirty = (state == 0);
+        model.eye_care_used_minutes = 12;
+        model.eye_care_rest_remaining_seconds = 380;
+        model.eye_care_break_id = state == 1 ? 42 : 0;
+        snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "%s",
+                 state == 1 ? "resting" : (state == 2 ? "off" : "playing"));
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_eye_care_page_master_rect()), NULL);
+        failed += check_action_text((UiRect){54, 250, 748, 152}, NULL);
+        failed += check_action_text((UiRect){54, 412, 748, 224}, NULL);
+        failed += check_action_text((UiRect){818, 174, 408, 396}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_eye_care_page_discard_rect()), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_eye_care_page_save_rect()), NULL);
+    }
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_EYE_CARE_RULES;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_plan_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(1000, 560)), NULL);
+    }
+
+    /* 2. Dock / TV Mode Plan A across handheld/danger/waived/lite */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_DOCK; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.dock_available = model.undocked_usage_available = true;
+        model.dock_supported_available = true;
+        model.dock_supported = (state != 3);
+        model.undocked_used_minutes = 12;
+        model.undocked_remaining_minutes = 18;
+        model.dock_policy = (PtcDockPolicy){false, true, 30};
+        model.draft_dock_policy = (PtcDockPolicy){state == 1, true, state == 0 ? 45 : 30};
+        model.dock_dirty = (state == 0 || state == 1);
+        model.dock_waived_today = (state == 2);
+        snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 744, 422}, NULL);
+        failed += check_action_text((UiRect){814, 174, 412, 266}, NULL);
+        failed += check_action_text((UiRect){814, 450, 412, 120}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_dock_field_rect(9)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_dock_field_rect(3)), NULL);
+    }
+
+    /* 3. Autonomy Plan A full-page across available/claimed/off/unlimited */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_AUTONOMY;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.autonomy_policy.daily_buffer_minutes = state == 2 ? 0 : 10;
+        model.draft_autonomy_policy.daily_buffer_minutes = state == 0 ? 15 : model.autonomy_policy.daily_buffer_minutes;
+        model.daily_buffer_claimed = (state == 1);
+        model.daily_buffer_available = (state == 0);
+        model.unrestricted_today = (state == 3) ? 1 : 0;
+        model.overlay_selection = model.draft_autonomy_policy.daily_buffer_minutes / 5;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_plan_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 748, 72}, NULL);
+        for (int i = 0; i < 4; ++i) failed += check_action_text(to_uirect(ptc_ui_autonomy_option_rect(i)), NULL);
+        failed += check_action_text((UiRect){818, 174, 408, 396}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_discard_rect(PTC_UI_OVERLAY_AUTONOMY)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_confirm_rect(PTC_UI_OVERLAY_AUTONOMY)), NULL);
+    }
+    return failed;
+}
+
 static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
 {
     int failed = 0;
@@ -2336,6 +2429,7 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                 ptc_ui_theme_set_style((PtcUiThemeStyle)style);
                 failed += check_weekly_page_text(baseline, dark, style);
                 failed += check_batch3_pages_text(baseline, dark, style);
+                failed += check_batch4_pages_text(baseline, dark, style);
                 for (int state = 0; state < 5; ++state) {
                     PtcUiModel model = *baseline;
                     model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;

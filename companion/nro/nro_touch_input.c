@@ -350,6 +350,18 @@ void handle_touch(UiState *ui, int x, int y)
             }
             break;
         }
+        if (ui->model.overlay == PTC_UI_OVERLAY_AUTONOMY) {
+            if (!ui->waiting &&
+                ui->model.draft_autonomy_policy.daily_buffer_minutes !=
+                    ui->model.autonomy_policy.daily_buffer_minutes) {
+                ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
+                ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
+                if (ui->model.overlay_selection < 0 || ui->model.overlay_selection > 3)
+                    ui->model.overlay_selection = 0;
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+            }
+            break;
+        }
         if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
             ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
             handle_overlay_input(ui, HidNpadButton_X);
@@ -447,6 +459,23 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_DOCK_FIELD:
         dock_page_action(ui, hit.index, 0);
         break;
+    case PTC_UI_HIT_DOCK_PRESET:
+        if (!ui->waiting && !ui->model.disable_flag_present && hit.index >= 0 && hit.index < 4) {
+            static const uint16_t DOCK_PRESETS[] = {15, 30, 45, 60};
+            ptc_audio_play(PTC_SE_STEP);
+            ui->model.dock_field_focus = 2;
+            ui->model.draft_dock_policy.force_docked = false;
+            ui->model.draft_dock_policy.undocked_limit_enabled = true;
+            ui->model.draft_dock_policy.undocked_daily_minutes = DOCK_PRESETS[hit.index];
+            ui->model.dock_dirty = ptc_ui_dock_dirty(&ui->model);
+        }
+        break;
+    case PTC_UI_HIT_DOCK_STEP:
+        dock_page_action(ui, 2, hit.index == 0 ? -5 : 5);
+        break;
+    case PTC_UI_HIT_DOCK_VALUE:
+        dock_page_action(ui, 2, 0);
+        break;
     case PTC_UI_HIT_EYE_CARE_PAGE_MASTER:
         ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;
@@ -528,6 +557,21 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.eye_care_field_focus = 4;
         submit_eye_care_skip(ui);
+        break;
+    case PTC_UI_HIT_EYE_CARE_PAGE_RULES:
+        ptc_audio_play(PTC_SE_POPUP);
+        ui->model.eye_care_field_focus = 5;
+        ui->model.overlay = PTC_UI_OVERLAY_EYE_CARE_RULES;
+        break;
+    case PTC_UI_HIT_EYE_CARE_PAGE_DISCARD:
+        ui->model.eye_care_field_focus = 6;
+        if (ui->model.eye_care_dirty) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ui->model.draft_eye_care_policy = ui->model.eye_care_policy;
+            ui->model.eye_care_dirty = false;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+        }
         break;
     case PTC_UI_HIT_QUICK_ADD_OPTION:
         ptc_audio_play(PTC_SE_CONFIRM);
