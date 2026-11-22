@@ -331,6 +331,12 @@ The continuous rail retains every play/rest segment. First rest, first resume an
 
 Balance, usage, source and guardian state reuse existing projections and freshness rules. Titles and right-aligned badges are measured; text wraps or fits within each panel in all three languages and both themes. The rules page retains its current implementation.
 
+## Weekly plan A: seven-day overview and selected-day editor
+
+Seven horizontal summary cards show draft mode and quota. Touching a card only selects its date; the editor below contains mode and quota fields and the saved value for that day. Batch setup sits above the overview; save impact and discard/save controls occupy the right column. Draft values, today's actual source and projected save impact remain distinct.
+
+Left/right selects a day; down enters mode, then quota. Right moves from the editor to discard/save; up returns to the previous field or selected day. Up from dates reaches batch setup; down from the bottom controls reaches the existing footer, which restores the prior field on return. Existing A/X/+ and ZL operations, retained minutes when switching unlimited mode, input limits, PIN/hold confirmation, waiting/read-only guards, failure receipts and unsaved-leave flow remain intact. Touch keeps the corresponding field focused. Shared draw/hit rectangles end at 628; measured text and semantic colors support three languages and both themes.
+
 ## Child overview layout B
 
 The home page separates current play status and confirmed continuous-use projection from the daily balance. The 320px status/balance row and 190px seven-day forecast retain a 14px gap and the shared bottom at 644. Three guardian rows fill the balance panel down to its 16px inset. Unknown, stale, cross-day, recovery and unconfirmed results never imply permission or expose old current balances; concurrent limits and countdown confirmation remain independent.

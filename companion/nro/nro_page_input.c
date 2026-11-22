@@ -38,13 +38,13 @@ static void handle_weekly_page_input(UiState *ui, u64 down)
         ptc_ui_move_weekly_focus(&ui->model, 0, -1);
     } else if (down & HidNpadButton_Down) {
         ptc_audio_play(PTC_SE_FOCUS);
-        if (ui->model.selected_index != 0) {
-            ui->model.parent_content_selection = ui->model.selected_index;
+        int before = ui->model.selected_index;
+        ptc_ui_move_weekly_focus(&ui->model, 0, 1);
+        if (ui->model.selected_index == before && (before == 5 || before == 3 || before == 4)) {
+            ui->model.parent_content_selection = before;
             ui->model.parent_footer_focused = true;
             ui->model.parent_footer_selection =
                 ptc_ui_parent_status_alert_visible(&ui->model) ? 1 : 0;
-        } else {
-            ptc_ui_move_weekly_focus(&ui->model, 0, 1);
         }
     } else if (down & HidNpadButton_Y) {
         ptc_audio_play(PTC_SE_CONFIRM);

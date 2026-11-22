@@ -155,9 +155,13 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 
     ptc_ui_format_bedtime_quota_notice(model, ptc_ui_render_now(), bedtime_notice, sizeof(bedtime_notice));
     format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, panel.x + 20, panel.y + panel.height - 14,
-              bedtime_notice[0] ? bedtime_notice : age, 12,
-              bedtime_notice[0] ? UI_DANGER : status_age_color(model));
+    if (bedtime_notice[0]) {
+        draw_wrapped_text(pixels, stride, panel.x + 20, panel.y + panel.height - 34,
+                          bedtime_notice, 12, panel.width - 40, 16, 2, UI_DANGER);
+    } else {
+        draw_text(pixels, stride, panel.x + 20, panel.y + panel.height - 14,
+                  age, 12, status_age_color(model));
+    }
 }
 
 void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
@@ -249,84 +253,80 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
 static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    int slot;
-    char detail[64];
-    char freshness[64];
+    char text[192], fitted[192], saved[96];
     uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
-    format_status_age(model, freshness, sizeof(freshness));
-    draw_rect_outline(pixels, stride, (UiRect){54, 178, 26, 24}, 4, 2, UI_ACCENT);
-    draw_line(pixels, stride, 54, 186, 80, 186, 2, UI_ACCENT);
-    draw_line(pixels, stride, 61, 174, 61, 181, 3, UI_ACCENT);
-    draw_line(pixels, stride, 73, 174, 73, 181, 3, UI_ACCENT);
-    draw_text(pixels, stride, 92, 198, ptc_ui_text(PTC_UI_T_WEEKLY_BASE_PLAN_CLICK_MODE_OR_QUOTA), 17, UI_MUTED);
-    for (slot = 0; slot < 7; ++slot) {
-        int day = ptc_ui_weekday_for_display_slot(slot);
-        bool selected = slot == model->weekly_grid_slot && model->selected_index == 0;
-        bool today = model->status_loaded && day == weekday;
-        UiRect card = to_uirect(ptc_ui_weekly_day_rect(slot));
-        UiRect header = to_uirect(ptc_ui_weekly_day_header_rect(slot));
-        UiRect mode = to_uirect(ptc_ui_weekly_day_mode_rect(slot));
-        UiRect minutes = to_uirect(ptc_ui_weekly_day_minutes_rect(slot));
-        bool limited = model->draft_week[day].mode == PTC_RULE_MODE_LIMIT;
-        draw_plan_card(pixels, stride, card, selected && !model->parent_footer_focused);
-        draw_text_center(pixels, stride, header, ptc_ui_weekday_label((unsigned)day), 19, UI_INK);
-        fill_round_rect(pixels, stride, (UiRect){mode.x + 6, mode.y + 6, mode.width - 12, 32}, 14,
-                        model->disable_flag_present ? UI_BORDER :
-                        (limited ? UI_ACCENT : UI_SUCCESS));
-        draw_text_center(pixels, stride, (UiRect){mode.x + 6, mode.y + 6, mode.width - 12, 32},
-                         limited ? (ptc_ui_text(PTC_UI_T_LIMIT)) : (ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED)), 15,
-                         model->disable_flag_present ? UI_DISABLED : UI_ON_ACCENT);
-        UiRect today_rect = {card.x, minutes.y + 8, card.width, 22};
-        draw_text_center(pixels, stride, today_rect,
-                         today ? (ptc_ui_text(PTC_UI_T_TODAY_3)) : " ", 13, today ? UI_SUCCESS : UI_MUTED);
-        if (limited) {
-            snprintf(detail, sizeof(detail), "%u", (unsigned int)model->draft_week[day].minutes);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 36, minutes.width, 46}, detail, 30,
-                             model->disable_flag_present ? UI_DISABLED : UI_ACCENT);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 84, minutes.width, 24}, ptc_ui_text(PTC_UI_T_MIN), 14, UI_MUTED);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 124, minutes.width, 22}, ptc_ui_text(PTC_UI_T_A_CLICK_EDIT), 12,
-                             model->disable_flag_present ? UI_DISABLED : UI_MUTED);
-        } else {
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 50, minutes.width, 36}, ptc_ui_text(PTC_UI_T_NO_LIMIT), 18,
-                             model->disable_flag_present ? UI_DISABLED : UI_SUCCESS);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 94, minutes.width, 24}, ptc_ui_text(PTC_UI_T_ALL_DAY_ACCESS), 13, UI_MUTED);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 124, minutes.width, 22}, ptc_ui_text(PTC_UI_T_CLICK_FOR_TIP), 11, UI_DISABLED);
-        }
-        /* 每日容量柱状直方图 (Weekly Capacity Histogram Bar) */
-        int bar_w = card.width - 24;
-        int bar_x = card.x + 12;
-        int bar_y = card.y + card.height - 14;
-        UiRect bar_bg = {bar_x, bar_y, bar_w, 5};
-        fill_round_rect(pixels, stride, bar_bg, 2, UI_BORDER);
-        if (limited) {
-            int fill_w = (int)((int64_t)bar_w * (model->draft_week[day].minutes > 180 ? 180 : model->draft_week[day].minutes) / 180);
-            if (fill_w < 4 && model->draft_week[day].minutes > 0) fill_w = 4;
-            uint32_t bar_col = model->disable_flag_present ? UI_DISABLED :
-                (model->draft_week[day].minutes <= 30 ? UI_WARNING : UI_ACCENT);
-            if (fill_w > 0) {
-                fill_round_rect(pixels, stride, (UiRect){bar_x, bar_y, fill_w, 5}, 2, bar_col);
-            }
-        } else {
-            fill_round_rect(pixels, stride, bar_bg, 2, model->disable_flag_present ? UI_DISABLED : UI_SUCCESS);
-        }
-    }
-    draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_WEEKLY, model->weekly_dirty,
-                     (UiRect){838, 176, 388, 452});
-    draw_candidate_button(pixels, stride, ptc_ui_weekly_page_mode_rect(), ptc_ui_text(PTC_UI_T_X_TOGGLE_MODE),
-                           UI_PAGE, UI_ACCENT, model->selected_index == 1,
-                           model->disable_flag_present);
+    bool disabled = model->disable_flag_present || model->waiting;
+    int selected_day = model->editor_index >= 0 && model->editor_index < 7 ? model->editor_index : 0;
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_WEEKLY_BASE_PLAN_CLICK_MODE_OR_QUOTA), 16,
+             ptc_ui_weekly_bulk_rect().x - 54 - 16);
+    draw_text(pixels, stride, 54, 194, fitted, 16, UI_MUTED);
     draw_candidate_button(pixels, stride, ptc_ui_weekly_bulk_rect(), ptc_ui_text(PTC_UI_T_BATCH_SETUP),
-                          UI_PAGE, UI_ACCENT, model->selected_index == 2,
-                          model->disable_flag_present);
+                          UI_PAGE, UI_ACCENT, model->selected_index == 2, disabled);
+    for (int slot = 0; slot < 7; ++slot) {
+        int day = ptc_ui_weekday_for_display_slot(slot);
+        bool selected = slot == model->weekly_grid_slot;
+        bool changed = ptc_ui_day_rule_effectively_changed(model->current_week[day], model->draft_week[day]);
+        UiRect card = to_uirect(ptc_ui_weekly_day_rect(slot));
+        bool limited = model->draft_week[day].mode == PTC_RULE_MODE_LIMIT;
+        draw_plan_card(pixels, stride, card, selected && model->selected_index == 0 && !model->parent_footer_focused);
+        if (selected && model->selected_index != 0) draw_rect_outline(pixels, stride, card, 10, 2, UI_ACCENT);
+        draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 10, card.width - 12, 28},
+                         ptc_ui_weekday_label((unsigned)day), 19, selected ? UI_ACCENT : UI_INK);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(limited ? PTC_UI_T_LIMIT : PTC_UI_T_BASIS_UNLIMITED), 12, card.width - 16);
+        draw_text_center(pixels, stride, (UiRect){card.x + 8, card.y + 42, card.width - 16, 22}, fitted, 12,
+                         limited ? UI_MUTED : UI_SUCCESS);
+        if (limited) snprintf(text, sizeof(text), "%u", (unsigned)model->draft_week[day].minutes);
+        else snprintf(text, sizeof(text), "%s", ptc_ui_text(PTC_UI_T_NO_LIMIT));
+        fit_text(fitted, sizeof(fitted), text, limited ? 30 : 18, card.width - 12);
+        draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 66, card.width - 12, 40},
+                         fitted, limited ? 30 : 18, disabled ? UI_DISABLED : limited ? UI_ACCENT : UI_SUCCESS);
+        draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 108, card.width - 12, 20},
+                         limited ? ptc_ui_text(PTC_UI_T_MIN) : "", 12, UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 132, card.width - 12, 18},
+                         model->status_loaded && day == weekday ? ptc_ui_text(PTC_UI_T_TODAY_3) : "", 12, UI_SUCCESS);
+        if (changed) fill_round_rect(pixels, stride, (UiRect){card.x + card.width - 12, card.y + 10, 5, 5}, 2, UI_WARNING);
+        int fill = limited ? (int)((int64_t)(card.width - 24) * (model->draft_week[day].minutes > 180 ? 180 : model->draft_week[day].minutes) / 180)
+                           : card.width - 24;
+        fill_round_rect(pixels, stride, (UiRect){card.x + 12, card.y + card.height - 8, card.width - 24, 4}, 2, UI_BORDER);
+        if (fill > 0) fill_round_rect(pixels, stride, (UiRect){card.x + 12, card.y + card.height - 8, fill, 4}, 2,
+                                    disabled ? UI_DISABLED : limited ? UI_ACCENT : UI_SUCCESS);
+    }
+    UiRect editor = to_uirect(ptc_ui_weekly_editor_rect());
+    draw_plan_card(pixels, stride, editor, false);
+    snprintf(text, sizeof(text), "%s %s", ptc_ui_text(PTC_UI_T_DRAFT_PREVIEW), ptc_ui_weekday_label((unsigned)selected_day));
+    fit_text(fitted, sizeof(fitted), text, 19, editor.width - 40);
+    draw_text_bold(pixels, stride, editor.x + 20, editor.y + 30, fitted, 19, UI_INK);
+    bool limited = model->draft_week[selected_day].mode == PTC_RULE_MODE_LIMIT;
+    PtcDayRule current = model->current_week[selected_day];
+    if (current.mode == PTC_RULE_MODE_LIMIT) snprintf(saved, sizeof(saved), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)current.minutes);
+    else snprintf(saved, sizeof(saved), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    snprintf(text, sizeof(text), "%s: %s", ptc_ui_text(PTC_UI_T_SAVED), saved);
+    fit_text(fitted, sizeof(fitted), text, 13, editor.width - 40);
+    draw_text(pixels, stride, editor.x + 20, editor.y + 54, fitted, 13, UI_MUTED);
+    UiRect mode = to_uirect(ptc_ui_weekly_page_mode_rect());
+    UiRect minutes = to_uirect(ptc_ui_weekly_page_minutes_rect());
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_X_TOGGLE_MODE), 16, mode.x - editor.x - 40);
+    draw_text(pixels, stride, editor.x + 20, mode.y + 34, fitted, 16, UI_INK);
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_page_mode_rect(),
+                          ptc_ui_text(limited ? PTC_UI_T_LIMIT : PTC_UI_T_BASIS_UNLIMITED), UI_PAGE, UI_ACCENT,
+                          model->selected_index == 1, disabled);
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_WEEKLY_DAY_ALLOWANCE), 16, minutes.x - editor.x - 40);
+    draw_text(pixels, stride, editor.x + 20, minutes.y + 34, fitted, 16, UI_INK);
+    if (limited) snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)model->draft_week[selected_day].minutes);
+    else snprintf(text, sizeof(text), "%s", ptc_ui_text(PTC_UI_T_NOT_EDITABLE));
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_page_minutes_rect(), text, UI_PAGE, UI_ACCENT,
+                          model->selected_index == 5, disabled || !limited);
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_UPDATES_DRAFT_ON_INPUT_APPLIED_ONLY_AFTER), 13, editor.width - 40);
+    draw_text(pixels, stride, editor.x + 20, editor.y + editor.height - 18, fitted, 13, UI_MUTED);
+    draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_WEEKLY, model->weekly_dirty, (UiRect){838, 176, 388, 372});
     draw_candidate_button(pixels, stride, ptc_ui_weekly_discard_rect(), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
-                           UI_PAGE, UI_INK, model->selected_index == 3,
-                           !model->weekly_dirty);
-    bool weekly_hold = model->weekly_dirty && ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_WEEKLY, ptc_ui_render_now());
-    draw_candidate_button(pixels, stride, ptc_ui_weekly_save_rect(),
-                           model->disable_flag_present ? (ptc_ui_text(PTC_UI_T_READ_ONLY)) : (model->waiting ? (ptc_ui_text(PTC_UI_T_SAVING_2)) : (model->weekly_dirty ? (weekly_hold ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_DRAFT_2))) : (ptc_ui_text(PTC_UI_T_SAVED)))),
-                           weekly_hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 4,
-                           !model->weekly_dirty || model->disable_flag_present || model->waiting);
+                          UI_PAGE, UI_INK, model->selected_index == 3, !model->weekly_dirty || model->waiting);
+    bool hold = model->weekly_dirty && ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_WEEKLY, ptc_ui_render_now());
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_save_rect(), ptc_ui_text(model->disable_flag_present ? PTC_UI_T_READ_ONLY :
+                          model->waiting ? PTC_UI_T_SAVING_2 : model->weekly_dirty ? (hold ? PTC_UI_T_SAVE_CONFIRM : PTC_UI_T_SAVE_DRAFT_2) : PTC_UI_T_SAVED),
+                          hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 4, disabled || !model->weekly_dirty);
 }
+
 
 static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {

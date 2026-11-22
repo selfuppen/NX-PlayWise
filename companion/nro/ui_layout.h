@@ -284,6 +284,8 @@ PtcUiRect ptc_ui_weekly_day_header_rect(int index);
 PtcUiRect ptc_ui_weekly_day_mode_rect(int index);
 PtcUiRect ptc_ui_weekly_day_minutes_rect(int index);
 PtcUiRect ptc_ui_weekly_bulk_rect(void);
+PtcUiRect ptc_ui_weekly_editor_rect(void);
+PtcUiRect ptc_ui_weekly_page_minutes_rect(void);
 PtcUiRect ptc_ui_weekly_mode_rect(void);
 PtcUiRect ptc_ui_weekly_page_mode_rect(void);
 PtcUiRect ptc_ui_weekly_min_up_rect(void);

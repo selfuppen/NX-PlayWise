@@ -628,30 +628,35 @@ void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction)
 
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical)
 {
-    int slot;
     if (!model) return;
-    if (model->selected_index < 0 || model->selected_index > 4) model->selected_index = 0;
-    if (model->selected_index != 0) {
-        if (vertical < 0) {
-            model->selected_index = 0;
-        } else if (horizontal < 0 && model->selected_index > 1) {
-            --model->selected_index;
-        } else if (horizontal > 0 && model->selected_index < 4) {
-            ++model->selected_index;
-        }
-        return;
+    if (model->selected_index < 0 || model->selected_index > 5) model->selected_index = 0;
+    /* Preserve existing operation indices; 5 is the new minutes field. The
+       date row, two editor rows and right save controls have distinct paths. */
+    if (model->selected_index == 0) {
+        int slot = model->weekly_grid_slot;
+        if (slot < 0 || slot > 6) slot = 0;
+        if (horizontal < 0 && slot > 0) --slot;
+        else if (horizontal > 0 && slot < 6) ++slot;
+        else if (vertical > 0) model->selected_index = 1;
+        else if (vertical < 0) model->selected_index = 2;
+        model->weekly_grid_slot = model->weekly_last_day_slot = slot;
+        model->editor_index = ptc_ui_weekday_for_display_slot(slot);
+    } else if (model->selected_index == 1) {
+        if (vertical < 0) model->selected_index = 0;
+        else if (vertical > 0) model->selected_index = 5;
+        else if (horizontal > 0) model->selected_index = 3;
+    } else if (model->selected_index == 5) {
+        if (vertical < 0) model->selected_index = 1;
+        else if (horizontal > 0) model->selected_index = 3;
+    } else if (model->selected_index == 2) {
+        if (vertical > 0 || horizontal < 0) model->selected_index = 0;
+    } else if (model->selected_index == 3) {
+        if (horizontal > 0) model->selected_index = 4;
+        else if (horizontal < 0 || vertical < 0) model->selected_index = 5;
+    } else if (model->selected_index == 4) {
+        if (horizontal < 0) model->selected_index = 3;
+        else if (vertical < 0) model->selected_index = 5;
     }
-    slot = model->weekly_grid_slot;
-    if (slot < 0 || slot > 6) slot = 0;
-    if (horizontal < 0 && slot > 0) --slot;
-    else if (horizontal > 0 && slot < 6) ++slot;
-    else if (vertical > 0) {
-        model->selected_index = 1;
-        return;
-    }
-    model->weekly_grid_slot = slot;
-    model->weekly_last_day_slot = slot;
-    model->editor_index = ptc_ui_weekday_for_display_slot(slot);
 }
 
 static int credential_selection_step(const PtcUiModel *model, int current, int direction)

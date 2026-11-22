@@ -1321,22 +1321,36 @@ static void test_candidate_navigation(void)
 {
     PtcUiModel model;
     memset(&model, 0, sizeof(model));
-    model.editor_index = 0;
-    model.selected_index = 0;
     model.weekly_grid_slot = 0;
-    model.weekly_last_day_slot = 6;
     ptc_ui_move_weekly_focus(&model, -1, 0);
-    check_int(model.weekly_grid_slot, 0, "weekly grid stops at the left edge");
+    check_int(model.weekly_grid_slot, 0, "weekly date row stops at the left edge");
     ptc_ui_move_weekly_focus(&model, 1, 0);
-    check_int(model.weekly_grid_slot, 1, "weekly grid moves to the next day");
+    check_int(model.editor_index, 2, "weekly Tuesday selection preserves protocol weekday identity");
     ptc_ui_move_weekly_focus(&model, 0, 1);
-    check_int(model.selected_index, 1, "weekly focus moves from date to mode");
+    check_int(model.selected_index, 1, "weekly date moves down to mode");
+    ptc_ui_move_weekly_focus(&model, 0, 1);
+    check_int(model.selected_index, 5, "weekly mode moves down to minutes");
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    check_int(model.selected_index, 3, "weekly editor moves right to discard");
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    check_int(model.selected_index, 4, "weekly discard moves right to save");
     ptc_ui_move_weekly_focus(&model, -1, 0);
-    check_int(model.selected_index, 1, "weekly button focus stops at the left edge");
-    ptc_ui_move_weekly_focus(&model, 1, 0);
-    ptc_ui_move_weekly_focus(&model, 1, 0);
-    ptc_ui_move_weekly_focus(&model, 1, 0);
-    check_int(model.selected_index, 4, "weekly button focus stops at save");
+    ptc_ui_move_weekly_focus(&model, -1, 0);
+    check_int(model.selected_index, 5, "weekly discard returns left to minutes");
+    ptc_ui_move_weekly_focus(&model, 0, -1);
+    check_int(model.selected_index, 1, "weekly minutes move up to mode");
+    ptc_ui_move_weekly_focus(&model, 0, -1);
+    check_int(model.selected_index, 0, "weekly mode returns up to the selected date");
+    check_int(model.editor_index, 2, "weekly editor navigation keeps the selected day");
+    ptc_ui_move_weekly_focus(&model, 0, -1);
+    check_int(model.selected_index, 2, "weekly date moves up to batch setup");
+    ptc_ui_move_weekly_focus(&model, 0, 1);
+    check_int(model.selected_index, 0, "weekly batch setup returns down to date");
+    model.parent_footer_focused = true;
+    model.parent_content_selection = 5;
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(!model.parent_footer_focused && model.selected_index == 5,
+               "weekly footer returns to the new minutes field");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -1471,16 +1485,24 @@ static void test_release_hit_targets(void)
               "parent status footer aligns with the main content border");
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
-    model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
-              "weekly mode pill toggles Monday directly");
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
-              "leftmost weekly day edits Monday without changing protocol order");
-    model.draft_week[1].mode = PTC_RULE_MODE_UNLIMITED;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
-              "unlimited weekly quota remains semantic for an explanatory message");
-    check_hit(hit_center(&model, ptc_ui_weekly_day_header_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
-              "weekly header only selects the day");
+    model.editor_index = 0;
+    for (int slot = 0; slot < 7; ++slot) {
+        int day = ptc_ui_weekday_for_display_slot(slot);
+        model.draft_week[day].mode = PTC_RULE_MODE_LIMIT;
+        check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(slot)), PTC_UI_HIT_WEEKLY_DAY, day,
+                  "weekly summary mode selects its date without modifying the draft");
+        check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(slot)), PTC_UI_HIT_WEEKLY_DAY, day,
+                  "weekly summary amount selects its date without opening the editor");
+        model.draft_week[day].mode = PTC_RULE_MODE_UNLIMITED;
+        check_hit(hit_center(&model, ptc_ui_weekly_day_rect(slot)), PTC_UI_HIT_WEEKLY_DAY, day,
+                  "unlimited summary remains a date selector");
+        model.editor_index = day;
+        check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, day,
+                  "weekly mode field uses the selected protocol weekday");
+        check_hit(hit_center(&model, ptc_ui_weekly_page_minutes_rect()), PTC_UI_HIT_WEEKLY_MIN_INPUT, day,
+                  "unlimited minutes field reaches existing explanatory feedback");
+    }
+    model.editor_index = 0;
     for (int page = PTC_UI_PLAN_PAGE_WEEKLY; page <= PTC_UI_PLAN_PAGE_DOCK; ++page) {
         model.plan_page = page;
         check_true(!ptc_ui_parent_footer_shortcuts(&model), "plan editor hides the main-menu shortcuts");
@@ -1497,15 +1519,15 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "weekly save is on the page");
     check_hit(hit_center(&model, ptc_ui_weekly_bulk_rect()), PTC_UI_HIT_WEEKLY_BULK, 0,
-              "weekly bulk action occupies slot seven");
+              "weekly batch setup is above the seven-day overview");
     for (int slot = 0; slot < 7; ++slot) {
         PtcUiRect card = ptc_ui_weekly_day_rect(slot);
-        check_true(card.w == 98 && card.h == 280, "weekly day cards use the seven-column size");
+        check_true(card.w == 98 && card.h == 164, "weekly day cards use the seven-column size");
         check_true(card.x == 54 + slot * 108 && card.y == 208,
                    "weekly day cards use the horizontal Monday-to-Sunday coordinates");
         check_true(ptc_ui_weekly_day_header_rect(slot).h == 42 &&
-                   ptc_ui_weekly_day_mode_rect(slot).h == 46 &&
-                   ptc_ui_weekly_day_minutes_rect(slot).h == 186,
+                   ptc_ui_weekly_day_mode_rect(slot).h == 24 &&
+                   ptc_ui_weekly_day_minutes_rect(slot).h == 66,
                    "weekly subregions partition the card height");
     }
     check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
@@ -1514,6 +1536,21 @@ static void test_release_hit_targets(void)
                "weekly page mode geometry does not move the legacy editor overlay");
     {
         PtcUiRect footer = ptc_ui_parent_subpage_footer_rect(0);
+        PtcUiRect editor = ptc_ui_weekly_editor_rect();
+        PtcUiRect fields[] = {ptc_ui_weekly_page_mode_rect(), ptc_ui_weekly_page_minutes_rect()};
+        for (int field = 0; field < 2; ++field) {
+            PtcUiRect rect = fields[field];
+            check_true(rect.x >= editor.x + 20 && rect.x + rect.w <= editor.x + editor.w - 20 &&
+                       rect.y >= editor.y + 64 && rect.y + rect.h <= editor.y + editor.h - 32,
+                       "weekly fields stay inside the selected-day editor");
+            for (int day = 0; day < 7; ++day)
+                check_true(!rects_overlap(rect, ptc_ui_weekly_day_rect(day)),
+                           "weekly fields are separate from summary date selectors");
+        }
+        check_true(!rects_overlap(fields[0], fields[1]), "weekly mode and quota fields do not overlap");
+        check_true(!rects_overlap(editor, ptc_ui_weekly_save_rect()) &&
+                   !rects_overlap(editor, ptc_ui_weekly_discard_rect()),
+                   "weekly save controls occupy the independent right column");
         check_true(!rects_overlap(ptc_ui_weekly_page_mode_rect(), ptc_ui_weekly_bulk_rect()),
                    "weekly mode does not overlap bulk button");
         check_true(!rects_overlap(ptc_ui_weekly_bulk_rect(), ptc_ui_weekly_discard_rect()),
@@ -1525,10 +1562,12 @@ static void test_release_hit_targets(void)
     }
     model.disable_flag_present = true;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
-              "disabled weekly minutes remain semantic for read-only feedback");
-    check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
-              "disabled weekly mode remains semantic for read-only feedback");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
+              "disabled weekly summary still selects the date");
+    check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
+              "disabled weekly mode field reaches the existing write guard");
+    check_hit(hit_center(&model, ptc_ui_weekly_page_minutes_rect()), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0,
+              "disabled weekly minutes field reaches the existing write guard");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "disabled weekly save reaches submission guard feedback");
     check_hit(hit_center(&model, ptc_ui_weekly_discard_rect()), PTC_UI_HIT_WEEKLY_DISCARD, 0,

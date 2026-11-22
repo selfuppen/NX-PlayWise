@@ -667,19 +667,11 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {
-        for (i = 0; i < 7; ++i) {
-            int weekday = ptc_ui_weekday_for_display_slot(i);
-            if (ptc_ui_rect_contains(ptc_ui_weekly_day_mode_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_MODE, weekday);
-            }
-            if (ptc_ui_rect_contains(ptc_ui_weekly_day_minutes_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, weekday);
-            }
-            if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_DAY, weekday);
-            }
-        }
+        for (i = 0; i < 7; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_WEEKLY_DAY, ptc_ui_weekday_for_display_slot(i));
         if (ptc_ui_rect_contains(ptc_ui_weekly_page_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, model->editor_index);
+        if (ptc_ui_rect_contains(ptc_ui_weekly_page_minutes_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, model->editor_index);
         if (ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_discard_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_DISCARD, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_bulk_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_BULK, 0);

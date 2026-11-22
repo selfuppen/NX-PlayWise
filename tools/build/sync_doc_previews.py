@@ -57,6 +57,7 @@ PREVIEW_FILES = (
     "redeem/redeem-failed-light.png",
     "plan/plan-root-light.png",
     "plan/plan-draft-today-light.png",
+    "plan/plan-draft-today-dark.png",
     "plan/plan-minute-editor-light.png",
     "plan/weekly-confirm-change-light.png",
     "holiday/holiday-draft-light.png",

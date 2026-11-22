@@ -416,6 +416,10 @@ Host checks cover the five child/parent panels, separate balance, rules entry an
 
 Use the unified `tools/package_remote.py --with-previews --preview-scope docs` gate for C rendering/layout changes, retaining default Eden NRO build and artifact validation. Daily emulator scenarios are not executed by policy.
 
+## Weekly plan A layout and navigation regression
+
+Host checks verify all seven summary cards only select dates, preserving protocol Sunday=0 order. Separate mode/quota fields target the selected day, including unlimited/read-only feedback. Navigation covers dates, mode, quota, discard/save, batch setup and footer restoration. Fields stay inside their editor and outside the overview, right save controls and footer. Existing source/unknown/exhausted/hold projections remain authoritative. Three-language, dual-theme production previews cover saved values, today's draft, a covering date rule, failures, confirmations and input. Use the unified package gate with default Eden NRO validation; daily emulator scenarios are not run by policy.
+
 ## Parent schedule combined layout
 
 Today's Schedule combines the B status-first summary on the left with the A action layout on the right. Quick add spans the first row; set allowance, unlimited today and clear adjustment share the next three-column row. Eye/bedtime skips and buffer/TV waiver occupy two further rows. All eight protocol identities, unavailable reasons, PIN and hold confirmations remain intact. Guardian targets and action cards share their draw/touch geometry; directional navigation follows the visible rows and enters the existing footer from the bottom. Host checks cover containment, non-overlap, operation identities, disabled paths and navigation.

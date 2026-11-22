@@ -630,7 +630,7 @@ void handle_touch(UiState *ui, int x, int y)
                 }
             }
         }
-        ui->model.selected_index = 0;
+        ui->model.selected_index = ui->model.overlay == PTC_UI_OVERLAY_NONE ? 1 : 0;
         if (weekly_editing_blocked(ui)) {
             ptc_audio_play(PTC_SE_ERROR);
             break;
@@ -703,7 +703,7 @@ void handle_touch(UiState *ui, int x, int y)
                 }
             }
         }
-        ui->model.selected_index = 0;
+        ui->model.selected_index = ui->model.overlay == PTC_UI_OVERLAY_NONE ? 5 : 0;
         if (weekly_editing_blocked(ui)) {
             ptc_audio_play(PTC_SE_ERROR);
             break;

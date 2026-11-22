@@ -1156,7 +1156,7 @@ PtcUiRect ptc_ui_minutes_dec_large_rect(void)
 
 PtcUiRect ptc_ui_weekly_day_rect(int index)
 {
-    PtcUiRect rect = {54 + index * 108, 208, 98, 280};
+    PtcUiRect rect = {54 + index * 108, 208, 98, 164};
     if (index < 0 || index >= 7) rect = (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -1170,19 +1170,19 @@ PtcUiRect ptc_ui_weekly_day_header_rect(int index)
 PtcUiRect ptc_ui_weekly_day_mode_rect(int index)
 {
     PtcUiRect card = ptc_ui_weekly_day_rect(index);
-    return (PtcUiRect){card.x + 4, card.y + 44, card.w - 8, 46};
+    return (PtcUiRect){card.x + 4, card.y + 42, card.w - 8, 24};
 }
 
 PtcUiRect ptc_ui_weekly_day_minutes_rect(int index)
 {
     PtcUiRect card = ptc_ui_weekly_day_rect(index);
-    PtcUiRect rect = {card.x + 4, card.y + 90, card.w - 8, 186};
+    PtcUiRect rect = {card.x + 4, card.y + 66, card.w - 8, 66};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_bulk_rect(void)
 {
-    return (PtcUiRect){242, 516, 176, 66};
+    return (PtcUiRect){618, 166, 196, 36};
 }
 
 PtcUiRect ptc_ui_numpad_display_rect(void)
@@ -1338,13 +1338,13 @@ PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
 
 PtcUiRect ptc_ui_weekly_save_rect(void)
 {
-    PtcUiRect rect = {618, 516, 196, 66};
+    PtcUiRect rect = {1034, 568, 192, 60};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_discard_rect(void)
 {
-    PtcUiRect rect = {430, 516, 176, 66};
+    PtcUiRect rect = {838, 568, 180, 60};
     return rect;
 }
 
@@ -1523,11 +1523,9 @@ bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y)
 {
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
 }
-PtcUiRect ptc_ui_weekly_page_mode_rect(void)
-{
-    PtcUiRect rect = {54, 516, 176, 66};
-    return rect;
-}
+PtcUiRect ptc_ui_weekly_editor_rect(void) { return (PtcUiRect){54, 388, 760, 240}; }
+PtcUiRect ptc_ui_weekly_page_minutes_rect(void) { return (PtcUiRect){510, 520, 284, 56}; }
+PtcUiRect ptc_ui_weekly_page_mode_rect(void) { return (PtcUiRect){510, 452, 284, 56}; }
 
 PtcUiRect ptc_ui_weekly_bulk_target_rect(int index)
 {

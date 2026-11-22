@@ -1480,6 +1480,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
         for (int slot = 0; slot < 7; ++slot)
             if (ptc_ui_weekday_for_display_slot(slot) == ptc_weekday_from_day_index(model.day_index)) model.weekly_grid_slot = slot;
+        model.weekly_last_day_slot = model.weekly_grid_slot;
+        model.editor_index = ptc_ui_weekday_for_display_slot(model.weekly_grid_slot);
         failed |= save_preview(directory, "plan", "plan-saved", &model, dark);
         {
             PtcUiModel confirmation = model;
@@ -1549,6 +1551,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             if (!ptc_day_index_from_date(2026, 9, 18, &friday_editor.day_index)) return 1;
             friday_editor.scheduled_override.enabled = false;
             friday_editor.editor_index = 5;
+            friday_editor.weekly_grid_slot = friday_editor.weekly_last_day_slot = 4;
             memcpy(friday_editor.draft_week, friday_editor.current_week, sizeof(friday_editor.draft_week));
             friday_editor.current_week[5] = (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
             friday_editor.draft_week[5] = friday_editor.current_week[5];
@@ -2190,6 +2193,43 @@ static int check_action_text(UiRect card, const char *required_title)
     return failed + !title;
 }
 
+static int check_weekly_page_text(const PtcUiModel *baseline, bool dark, int style)
+{
+    int failed = 0;
+    for (int state = 0; state < 8; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.parent_footer_focused = false;
+        model.editor_index = ptc_weekday_from_day_index(model.day_index);
+        for (int slot = 0; slot < 7; ++slot)
+            if (ptc_ui_weekday_for_display_slot(slot) == model.editor_index)
+                model.weekly_grid_slot = model.weekly_last_day_slot = slot;
+        memcpy(model.draft_week, model.current_week, sizeof(model.draft_week));
+        model.weekly_dirty = state != 0;
+        if (state) model.draft_week[model.editor_index].minutes = 90;
+        if (state == 2) model.scheduled_override = (PtcScheduledOverride){true, model.day_index, model.day_index, {PTC_RULE_MODE_LIMIT, 120}};
+        if (state == 3) model.status_updated_at = 879;
+        if (state == 4) model.disable_flag_present = true;
+        if (state == 5) model.waiting = true;
+        if (state == 6) snprintf(model.result_status, sizeof(model.result_status), "error");
+        if (state == 7) model.draft_week[model.editor_index].mode = PTC_RULE_MODE_UNLIMITED;
+        model.selected_index = state % 6;
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+            (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        for (int slot = 0; slot < 7; ++slot) failed += check_action_text(to_uirect(ptc_ui_weekly_day_rect(slot)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_editor_rect()), NULL);
+        failed += check_action_text((UiRect){838, 176, 388, 372}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_bulk_rect()), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_discard_rect()), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_weekly_save_rect()), NULL);
+    }
+    return failed;
+}
+
 static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
 {
     int failed = 0;
@@ -2202,6 +2242,7 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
         for (int dark = 0; dark < 2; ++dark) {
             for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
                 ptc_ui_theme_set_style((PtcUiThemeStyle)style);
+                failed += check_weekly_page_text(baseline, dark, style);
                 for (int state = 0; state < 5; ++state) {
                     PtcUiModel model = *baseline;
                     model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;
