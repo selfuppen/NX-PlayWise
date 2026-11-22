@@ -518,9 +518,12 @@ void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, const cha
 
 void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
+    if (!text) return;
+#ifdef PTC_UI_PREVIEW_TEXT_TRACE
+    ptc_ui_preview_record_text(x, baseline, text, size);
+#endif
     char localized[4096];
-    if (text)
-        draw_text_raw(pixels, stride, x, baseline, ptc_ui_localize(text, localized, sizeof(localized)), size, color, true);
+    draw_text_raw(pixels, stride, x, baseline, ptc_ui_localize(text, localized, sizeof(localized)), size, color, true);
 }
 
 static void fit_text_raw(char *out, size_t out_size, const char *source, int size, int max_width, int source_width);

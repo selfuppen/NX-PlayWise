@@ -341,9 +341,8 @@ static int check_child_forecast_heading(bool dark)
     return fits ? 0 : 1;
 }
 
-/* Child home grid: hero, seven-day forecast and the right action column must share one
- * bottom edge (644) above the footer, keep the 14px gap, and the details entry must
- * carry a hint that still fits inside its own button. */
+/* Child home grid: full-width today hero and 7-day forecast stack with 12px gaps
+ * above a single-row bottom action bar ending at y=644 above the footer. */
 static int check_child_home_grid(bool dark)
 {
     PtcUiRect hero = ptc_ui_child_hero_rect();
@@ -352,27 +351,27 @@ static int check_child_home_grid(bool dark)
     PtcUiRect buffer = ptc_ui_child_buffer_rect();
     PtcUiRect details = ptc_ui_home_details_rect(false);
     PtcUiRect status = ptc_ui_child_status_rect();
-    int bottom = hero.y + hero.h + 14 + forecast.h;
     PtcUiRect balance = ptc_ui_child_balance_rect();
     PtcUiRect last_guard = ptc_ui_child_guard_rect(2);
-    int hint_max = details.w - 60;
-    int hint_lines = count_wrapped_lines(ptc_ui_text(PTC_UI_T_USAGE_DETAILS_HINT), 13, hint_max, 99);
-    bool fits = hero.x == forecast.x && hero.w == forecast.w &&
-        hero.y + hero.h + 14 == forecast.y &&
-        forecast.y + forecast.h == bottom && status.y + status.h == bottom &&
-        bottom < ptc_ui_child_footer_rect(1).y &&
-        submit.x == buffer.x && buffer.x == details.x && details.x == status.x &&
-        submit.w == buffer.w && buffer.w == details.w && details.w == status.w &&
-        submit.y == hero.y &&
-        buffer.y - (submit.y + submit.h) == 14 &&
-        details.y - (buffer.y + buffer.h) == 14 &&
-        status.y - (details.y + details.h) == 14 &&
-        balance.y == hero.y && balance.y + balance.h == hero.y + hero.h &&
-        last_guard.y + last_guard.h == balance.y + balance.h - 16 &&
-        hint_max > 0 && hint_lines >= 1 && hint_lines <= 3;
-    fprintf(stderr, "%s: child home grid dark=%d hero=%d..%d forecast=%d..%d right=%d..%d hint_lines=%d\n",
+    PtcUiRect last_day = ptc_ui_child_forecast_day_rect(6, 1);
+    int bottom = status.y + status.h;
+    bool fits = hero.x == forecast.x && hero.w == forecast.w && hero.w == 1184 &&
+        hero.y + hero.h + 12 == forecast.y &&
+        forecast.y + forecast.h + 12 == submit.y &&
+        bottom == 644 && bottom < ptc_ui_child_footer_rect(1).y &&
+        submit.x == hero.x && status.x + status.w == hero.x + hero.w &&
+        submit.y == buffer.y && buffer.y == details.y && details.y == status.y &&
+        submit.h == 48 && buffer.h == 48 && details.h == 48 && status.h == 48 &&
+        buffer.x - (submit.x + submit.w) == 12 &&
+        details.x - (buffer.x + buffer.w) == 12 &&
+        details.x + details.w < status.x &&
+        balance.x == hero.x && balance.y + balance.h == hero.y + hero.h &&
+        last_guard.x + last_guard.w <= hero.x + hero.w &&
+        last_guard.y + last_guard.h == hero.y + hero.h - 12 &&
+        last_day.x + last_day.w == forecast.x + forecast.w - 16;
+    fprintf(stderr, "%s: child home grid dark=%d hero=%d..%d forecast=%d..%d actions=%d..%d\n",
         fits ? "PASS" : "FAIL", dark, hero.y, hero.y + hero.h, forecast.y,
-        forecast.y + forecast.h, status.y, status.y + status.h, hint_lines);
+        forecast.y + forecast.h, submit.y, bottom);
     return fits ? 0 : 1;
 }
 

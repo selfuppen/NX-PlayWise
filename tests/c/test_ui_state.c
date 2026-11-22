@@ -1425,8 +1425,8 @@ static void test_release_hit_targets(void)
     model.view = PTC_UI_CHILD;
     code_input = ptc_ui_child_submit_rect();
     refresh = ptc_ui_child_refresh_rect();
-    check_int(code_input.x, 920, "child code input aligns with action panel");
-    check_int(code_input.w, 312, "child code input uses the action panel width");
+    check_int(code_input.x, 48, "child code input aligns with left edge of bottom action row");
+    check_int(code_input.w, 236, "child code input uses the compact bottom action width");
     check_int(refresh.y, 660, "child refresh stays in the footer");
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
     model.disable_flag_present = true;
@@ -2856,22 +2856,23 @@ static void test_visual_action_boundaries(void)
     model.view = PTC_UI_CHILD;
     PtcUiRect code = ptc_ui_child_submit_rect();
     PtcUiRect summary = ptc_ui_home_summary_rect(false);
-    check_int(summary.w, 852, "child task board uses a wide dashboard width");
-    check_int(code.x, 920, "child action column aligns inside the right card");
-    check_int(code.w, 312, "child primary action uses the compact right action width");
-    check_int(ptc_ui_child_buffer_rect().w, code.w, "child actions share one visual column width");
-    check_int(ptc_ui_home_details_rect(false).w, code.w, "child details action shares the action column width");
-    check_true(summary.x + summary.w < code.x,
-               "child task board and action targets keep a visible column gap");
+    check_int(summary.w, 1184, "child dual-hero board uses the full content width");
+    check_int(code.x, summary.x, "child action row starts flush with the hero left edge");
+    check_int(code.h, 48, "child action row uses a compact single-row height");
+    check_int(ptc_ui_child_buffer_rect().h, code.h, "child actions share one single-row height");
+    check_int(ptc_ui_home_details_rect(false).h, code.h, "child details action shares the single-row height");
+    check_true(summary.y + summary.h < code.y,
+               "child dual-hero area and bottom action row keep a visible vertical gap");
     check_hit(ptc_ui_hit_test(&model, code.x + 1, code.y + code.h / 2),
               PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "primary action inner edge is touchable");
     check_hit(ptc_ui_hit_test(&model, code.x - 1, code.y + code.h / 2),
               PTC_UI_HIT_NONE, 0, "space beside primary action is not touchable");
     check_true(!rects_overlap(code, ptc_ui_child_buffer_rect()) &&
-               !rects_overlap(ptc_ui_child_buffer_rect(), ptc_ui_home_details_rect(false)),
-               "child primary, secondary and detail actions do not overlap");
-    /* 孩子首页共用一条内容底边：守护卡放大后，看板、七日预测和右侧动作栏
-     * 都收在 644，避免某一列忽然比其它列短。 */
+               !rects_overlap(ptc_ui_child_buffer_rect(), ptc_ui_home_details_rect(false)) &&
+               !rects_overlap(ptc_ui_home_details_rect(false), ptc_ui_child_status_rect()),
+               "child primary, secondary, detail and parent actions do not overlap");
+    /* Full-width dual-hero (today projection + 7-day calendar) stacked above a
+     * subtle single-row action bar ending at y=644 above the footer. */
     {
         PtcUiRect hero = ptc_ui_child_hero_rect();
         PtcUiRect forecast = ptc_ui_child_forecast_rect();
@@ -2880,16 +2881,18 @@ static void test_visual_action_boundaries(void)
         PtcUiRect details = ptc_ui_home_details_rect(false);
         int bottom = status.y + status.h;
         check_true(hero.x == forecast.x && hero.w == forecast.w &&
-                   hero.y + hero.h + 14 == forecast.y,
-                   "child hero and forecast share the column and keep a 14px gap");
-        check_true(forecast.y + forecast.h == bottom && bottom < ptc_ui_child_footer_rect(1).y,
-                   "child forecast, status card and action column share one bottom edge above the footer");
-        check_true(code.y == hero.y && buffer.y - (code.y + code.h) == 14 &&
-                   details.y - (buffer.y + buffer.h) == 14 &&
-                   status.y - (details.y + details.h) == 14,
-                   "child right action column keeps 14px gaps and ends on the shared bottom edge");
-        check_true(status.w == code.w && status.x == code.x,
-                   "child status card stays in the action column");
+                   hero.y + hero.h + 12 == forecast.y,
+                   "child hero and 7-day forecast share full width and keep a 12px gap");
+        check_true(forecast.y + forecast.h + 12 == code.y && bottom == 644 &&
+                   bottom < ptc_ui_child_footer_rect(1).y,
+                   "child action row sits 12px below forecast and ends at 644 above footer");
+        check_true(code.y == buffer.y && buffer.y == details.y && details.y == status.y &&
+                   buffer.x - (code.x + code.w) == 12 &&
+                   details.x - (buffer.x + buffer.w) == 12 &&
+                   details.x + details.w < status.x,
+                   "child bottom action row aligns horizontally with clean spacing");
+        check_true(status.x + status.w == hero.x + hero.w && status.h == code.h,
+                   "child parent entry aligns flush with the hero right edge");
     }
     /* 孩子区使用详情多一条导读条：正文整体下移，但底部按钮底边与家长区一致，
      * 避免触控命中和视觉下沿出现两套坐标。 */
@@ -4645,15 +4648,20 @@ static void test_overview_layout_and_state(void)
     ptc_ui_project_overview(&m, 1121, m.day_index, 16 * 3600, &overview);
     check_true(!overview.fresh && !overview.available && !overview.total_known && !overview.reasons,
                "expired overview never exposes an old balance or permission");
+    PtcUiRect hero = ptc_ui_child_hero_rect();
     PtcUiRect balance = ptc_ui_child_balance_rect(), previous = {0};
+    check_true(balance.x == hero.x && balance.y >= hero.y &&
+               balance.y + balance.h == hero.y + hero.h && balance.w == 316,
+               "balance block is integrated into the bottom of the left hero column");
     for (int i = 0; i < 3; ++i) {
-        PtcUiRect row = ptc_ui_child_guard_rect(i);
-        check_true(row.x >= balance.x && row.x + row.w <= balance.x + balance.w && row.h >= 50,
-                   "guard rows stay inside the balance panel with legible height");
-        if (i) check_true(row.y - (previous.y + previous.h) == 7, "guard rows use a shared gap");
-        previous = row;
+        PtcUiRect pill = ptc_ui_child_guard_rect(i);
+        check_true(pill.x >= balance.x + balance.w && pill.x + pill.w <= hero.x + hero.w &&
+                   pill.h == 24 && pill.y + pill.h == hero.y + hero.h - 12,
+                   "inline guard pills stay inside the right projection footer strip");
+        if (i) check_true(pill.x - (previous.x + previous.w) == 8 && pill.y == previous.y,
+                          "inline guard pills share one row and an 8px horizontal gap");
+        previous = pill;
     }
-    check_true(previous.y + previous.h == balance.y + balance.h - 16, "guard rows fill the panel through the bottom inset");
     m.view = PTC_UI_CHILD; m.waiting = false;
     check_true(ptc_ui_child_action_kind(&m, 0) == PTC_UI_HIT_CHILD_PARENT, "restricted child primary action goes to PIN");
     check_hit(hit_center(&m, ptc_ui_child_action_rect(0)), PTC_UI_HIT_CHILD_PARENT, 0, "primary parent touch uses the PIN entry");

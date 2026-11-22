@@ -62,7 +62,7 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {920, 120, 312, 121};
+    PtcUiRect rect = {48, 596, 236, 48};
     return rect;
 }
 
@@ -74,14 +74,14 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {920, 255, 312, 121};
+    PtcUiRect rect = {296, 596, 256, 48};
     return rect;
 }
 
 PtcUiRect ptc_ui_child_status_rect(void)
 {
-    /* 状态卡是右列最后一项，底边与左侧七日预测、孩子首页内容底边（644）齐平。 */
-    PtcUiRect rect = {920, 525, 312, 119};
+    /* Parent entry sits at the far right of the bottom action row, bottom-aligned at y=644. */
+    PtcUiRect rect = {1004, 596, 228, 48};
     return rect;
 }
 
@@ -493,44 +493,42 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 412, 452} : (PtcUiRect){48, 120, 852, 524};
+    return parent ? (PtcUiRect){48, 176, 412, 452} : (PtcUiRect){48, 116, 1184, 468};
 }
 
-/* The 320px status/balance row and 190px forecast share the action bottom at 644. */
+/* Batch 7 Plan A: Full-width today projection hero (276px) + 12px gap + 7-day calendar (180px)
+ * + 12px gap + subtle single-row action strip (48px), sharing the bottom edge at y=644. */
 PtcUiRect ptc_ui_child_hero_rect(void)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(false);
-    return (PtcUiRect){box.x, box.y, box.w, 320};
+    return (PtcUiRect){box.x, box.y, box.w, 276};
 }
 
 PtcUiRect ptc_ui_child_forecast_rect(void)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(false);
-    return (PtcUiRect){box.x, box.y + 334, box.w, 190};
+    return (PtcUiRect){box.x, box.y + 288, box.w, 180};
 }
 
 PtcUiRect ptc_ui_child_forecast_day_rect(int offset, int count)
 {
     PtcUiRect panel = ptc_ui_child_forecast_rect();
-    int width = 108, gap = 10;
-    return (PtcUiRect){panel.x + 16 + offset * (width + gap), panel.y + 40,
-        count * (width + gap) - gap, panel.h - 54};
+    int width = 156, gap = 10;
+    return (PtcUiRect){panel.x + 16 + offset * (width + gap), panel.y + 38,
+        count * (width + gap) - gap, panel.h - 48};
 }
 
 PtcUiRect ptc_ui_child_balance_rect(void)
 {
     PtcUiRect hero = ptc_ui_child_hero_rect();
-    return (PtcUiRect){hero.x + 528, hero.y, 324, hero.h};
+    return (PtcUiRect){hero.x, hero.y + 174, 316, hero.h - 174};
 }
 
 PtcUiRect ptc_ui_child_guard_rect(int index)
 {
     if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
-    PtcUiRect balance = ptc_ui_child_balance_rect();
-    int start = 128, gap = 7, height = balance.h - start - 16;
-    int top = index * (height - 2 * gap) / 3 + index * gap;
-    int bottom = (index + 1) * (height - 2 * gap) / 3 + index * gap;
-    return (PtcUiRect){balance.x + 16, balance.y + start + top, balance.w - 32, bottom - top};
+    PtcUiRect hero = ptc_ui_child_hero_rect();
+    return (PtcUiRect){hero.x + 338 + index * 188, hero.y + hero.h - 36, 180, 24};
 }
 
 PtcUiRect ptc_ui_child_action_rect(int index)
@@ -741,7 +739,7 @@ PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? ptc_ui_parent_footer_details_rect() : (PtcUiRect){920, 390, 312, 121};
+    return parent ? ptc_ui_parent_footer_details_rect() : (PtcUiRect){564, 596, 212, 48};
 }
 
 PtcUiRect ptc_ui_home_rules_rect(void)
