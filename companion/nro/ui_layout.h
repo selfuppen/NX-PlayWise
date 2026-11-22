@@ -220,6 +220,9 @@ PtcUiRect ptc_ui_child_forecast_day_rect(int offset, int count);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
 PtcUiRect ptc_ui_home_details_body_rect(void);
 PtcUiRect ptc_ui_home_details_guide_rect(void);
+/* Today A: status, daily schedule, continuous estimate, balance, guards. */
+PtcUiRect ptc_ui_today_details_panel_rect(const PtcUiModel *model, int index);
+PtcUiRect ptc_ui_today_details_event_rect(const PtcUiModel *model, int index);
 PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model);
 PtcUiRect ptc_ui_rules_dialog_rect(void);
 PtcUiRect ptc_ui_rules_dialog_close_rect(void);

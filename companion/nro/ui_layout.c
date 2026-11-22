@@ -720,6 +720,26 @@ PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 72, 1200,
  * 固定成一条可被预览与布局测试核对的矩形，避免绘制端再各写一套坐标。 */
 PtcUiRect ptc_ui_home_details_guide_rect(void) { return (PtcUiRect){40, 72, 1200, 32}; }
 
+PtcUiRect ptc_ui_today_details_panel_rect(const PtcUiModel *model, int index)
+{
+    bool child = model && model->view == PTC_UI_CHILD;
+    switch (index) {
+    case 0: return (PtcUiRect){40, child ? 112 : 72, 736, 70};
+    case 1: return (PtcUiRect){40, child ? 194 : 154, 736, child ? 164 : 184};
+    case 2: return (PtcUiRect){40, child ? 370 : 350, 736, child ? 246 : 266};
+    case 3: return (PtcUiRect){796, child ? 112 : 72, 444, 148};
+    case 4: return (PtcUiRect){796, child ? 272 : 232, 444, child ? 256 : 296};
+    default: return (PtcUiRect){0, 0, 0, 0};
+    }
+}
+
+PtcUiRect ptc_ui_today_details_event_rect(const PtcUiModel *model, int index)
+{
+    PtcUiRect panel = ptc_ui_today_details_panel_rect(model, 2);
+    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){panel.x + 20 + index * 236, panel.y + 122, 224, 68};
+}
+
 PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model)
 {
     if (model && model->overlay == PTC_UI_OVERLAY_DAY_DECISION)
@@ -744,10 +764,7 @@ PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
     if (index == 2) return (PtcUiRect){40, 628, 220, 44};
     if (index == 0) {
         if (model->home_details_page == 0) {
-            /* 孩子区多看一条导读条，正文整体下移 32px；按钮同时收薄 16px 以保持
-             * 与家长区相同的底边（616）。绘制与命中都走这里，避免两侧各写一份坐标。 */
-            if (model->view == PTC_UI_CHILD) return (PtcUiRect){796, 514, 444, 102};
-            return (PtcUiRect){796, 498, 444, 118};
+            return (PtcUiRect){796, 540, 444, 76};
         }
         if (model->home_details_page == 1) return ptc_ui_rules_independent_tip_rect(model);
     }

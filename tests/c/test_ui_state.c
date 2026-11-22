@@ -2836,6 +2836,30 @@ static void test_visual_action_boundaries(void)
                    "child and parent details decision entries share one bottom edge");
         check_int(child_btn.x, parent_btn.x, "child details decision entry keeps the parent column");
         check_int(child_btn.w, parent_btn.w, "child details decision entry keeps the parent width");
+        for (int view = 0; view < 2; ++view) {
+            PtcUiModel *details = view ? &parent_details : &child_details;
+            for (int panel = 0; panel < 5; ++panel) {
+                PtcUiRect rect = ptc_ui_today_details_panel_rect(details, panel);
+                check_true(rect.x >= 40 && rect.x + rect.w <= 1240 &&
+                           rect.y >= (view ? 72 : guide.y + guide.h) && rect.y + rect.h <= 616,
+                           "today A panels stay between title/guide and footer");
+                check_true(!rects_overlap(rect, ptc_ui_home_details_action_rect(details, 0)),
+                           "today A rules entry stays outside all panels");
+                for (int other = panel + 1; other < 5; ++other)
+                    check_true(!rects_overlap(rect, ptc_ui_today_details_panel_rect(details, other)),
+                               "today A separates status, schedule, estimate and balance");
+            }
+            PtcUiRect prediction = ptc_ui_today_details_panel_rect(details, 2);
+            for (int event = 0; event < 3; ++event) {
+                PtcUiRect rect = ptc_ui_today_details_event_rect(details, event);
+                check_true(rect.x >= prediction.x + 20 && rect.x + rect.w <= prediction.x + prediction.w - 20 &&
+                           rect.y >= prediction.y + 108 && rect.y + rect.h <= prediction.y + prediction.h - 48,
+                           "event labels stay below the rail and above the estimate note");
+                for (int other = event + 1; other < 3; ++other)
+                    check_true(!rects_overlap(rect, ptc_ui_today_details_event_rect(details, other)),
+                               "dense event labels have separate measured cells");
+            }
+        }
     }
     model.waiting = true;
     check_hit(hit_center(&model, code), PTC_UI_HIT_NONE, 0, "syncing primary action remains blocked");

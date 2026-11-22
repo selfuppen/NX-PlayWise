@@ -323,6 +323,14 @@ A quiet `New app version` hint sits independently below the upper-left page head
 The Tesla host footer (`Y=648..719`) renders `24px` context-aware key hints (falling back to `22px`/`20px` via measured width when needed): the left `B` hint (`Close` / `Back` / `Cancel`) stays strictly inside libtesla's native `x < 150` touch-back hitbox, while the action hint starts at `x >= 152` and clears the right-aligned `HH:MM` clock, reflecting the exact key and semantic color of the focused control (e.g., `A Execute`, `A Continue`, `Hold A 1s`, `Unavailable`, `+ Verify`). Parent Actions and Status Details drop their redundant bottom rails to use the full `575px` viewport (down to `Y=639`), and Parent Actions compacts its top status banner into a measured single-line strip (`28px` status + right-aligned `22px` freshness, wrapping when needed) to surface more action cards above the fold. Parent PIN and Extra-Time Code Entry delegate `B Back`/`B Cancel` to the host footer while keeping their unified `52px` primary rail (full-width `+ Verify PIN` with no duplicate backspace on standard PIN numpad; single-row `R Parent` + `+ Redeem code` on code entry for roomier `64px` keys).
 
 
+## Today details A: two timelines and a separate balance
+
+The left column contains the current verdict, the 24-hour bedtime schedule, and the continuous-use estimate for the current screen mode. The right column contains the daily balance, three independent guardians, and the existing rules entry. The child reading guide remains; both variants end at y=616 above the unchanged footer and source-separated history.
+
+The continuous rail retains every play/rest segment. First rest, first resume and final stop have separate cells below it, avoiding overlapping leaders in dense cycles. A day without rest shows current time and final stop. Unknown, restricted, recovery and unconfirmed states retain the existing projection and pending reasons. The 24-hour rail has its own scale; its current-time bubble is measured and clamped to the rail.
+
+Balance, usage, source and guardian state reuse existing projections and freshness rules. Titles and right-aligned badges are measured; text wraps or fits within each panel in all three languages and both themes. The rules page retains its current implementation.
+
 ## Child overview layout B
 
 The home page separates current play status and confirmed continuous-use projection from the daily balance. The 320px status/balance row and 190px seven-day forecast retain a 14px gap and the shared bottom at 644. Three guardian rows fill the balance panel down to its 16px inset. Unknown, stale, cross-day, recovery and unconfirmed results never imply permission or expose old current balances; concurrent limits and countdown confirmation remain independent.

@@ -377,7 +377,7 @@ static int check_child_home_grid(bool dark)
 
 /* The child usage-details page leads with a reading-order guide bar. It must stay
  * on one measured line inside its own rect and above the first card row, and the
- * three-column cards must not grow into the shared bottom button band. */
+ * two-column panels must not grow into the shared bottom button band. */
 static int check_child_details_guide(bool dark)
 {
     UiRect guide = to_uirect(ptc_ui_home_details_guide_rect());
@@ -392,12 +392,12 @@ static int check_child_details_guide(bool dark)
     PtcUiRect button = ptc_ui_home_details_action_rect(&child, 0);
     fits = fits && button.y >= guide.y + guide.height + 280 &&
         button.y + button.h <= 616;
-    /* 孩子区按钮收薄 16px 以让出导读条高度，底边仍与家长区一致。 */
-    fits = fits && button.y == 514 && button.h == 102;
+    /* The same compact rules entry aligns both A sidebars at 616. */
+    fits = fits && button.y == 540 && button.h == 76;
     PtcUiModel parent = {0};
     parent.view = PTC_UI_PARENT;
     PtcUiRect parent_button = ptc_ui_home_details_action_rect(&parent, 0);
-    fits = fits && parent_button.y == 498 && parent_button.h == 118;
+    fits = fits && parent_button.y == 540 && parent_button.h == 76;
     fprintf(stderr, "%s: child details guide lang=%d dark=%d width=%d/%d button=%d..%d\n",
         fits ? "PASS" : "FAIL", (int)ptc_ui_language_get_resolved(), dark,
         width, guide.width - 46, button.y, button.y + button.h);

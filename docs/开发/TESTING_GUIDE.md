@@ -410,6 +410,12 @@ The home page separates current play status and confirmed continuous-use project
 The four actions are code, buffer, details, and PIN-protected parent entry; a restricted snapshot promotes parent entry while preserving all four paths. Refresh keeps the existing map stable. Right enters the action column, up/down selects, left leaves, and A activates its shared touch rectangle. Existing shortcuts remain. Status warnings and operation feedback are preserved in the main status card. Host regressions cover the first eye boundary, remaining balance during rest, concurrent limits, expiry and PIN/waiting hit targets.
 
 
+## Today details A regression
+
+Host checks cover the five child/parent panels, separate balance, rules entry and footer, plus three non-overlapping event cells below the continuous-use rail and above its note. Production rendering covers TV/unlimited, rest, concurrent limits, dense cycles, stale/failed refresh, recovery and disabled guardians. Three-language, dual-theme previews check the child guide and shared bottom at 616. Existing projection tests retain timing, freshness and concurrent-reason behavior; previews do not prove real restriction release.
+
+Use the unified `tools/package_remote.py --with-previews --preview-scope docs` gate for C rendering/layout changes, retaining default Eden NRO build and artifact validation. Daily emulator scenarios are not executed by policy.
+
 ## Parent schedule combined layout
 
 Today's Schedule combines the B status-first summary on the left with the A action layout on the right. Quick add spans the first row; set allowance, unlimited today and clear adjustment share the next three-column row. Eye/bedtime skips and buffer/TV waiver occupy two further rows. All eight protocol identities, unavailable reasons, PIN and hold confirmations remain intact. Guardian targets and action cards share their draw/touch geometry; directional navigation follows the visible rows and enters the existing footer from the bottom. Host checks cover containment, non-overlap, operation identities, disabled paths and navigation.
