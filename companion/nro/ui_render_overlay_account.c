@@ -429,7 +429,7 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
                 ptc_ui_text(PTC_UI_T_X_CLEAR_ALL), false, false, model->redemption_history_count == 0);
 }
 
-static const char *activity_label(const char *action)
+const char *activity_label(const char *action)
 {
     if (strcmp(action, "today_limit") == 0) return ptc_ui_text(PTC_UI_T_MODIFY_TODAY_S_TOTAL_QUOTA);
     if (strcmp(action, "today_add") == 0) return ptc_ui_text(PTC_UI_T_TEMPORARY_EXTRA_TIME_FOR_PARENTS);

@@ -90,8 +90,8 @@ static void draw_restore_arc(uint32_t *pixels, uint32_t stride, int cx, int cy, 
     draw_line(pixels, stride, tip_x + 4, tip_y - 3, tip_x + 4, tip_y + 3, stroke, color);
 }
 
-static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int cy,
-                                  UiActionIcon icon, uint32_t color)
+void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int cy,
+                           UiActionIcon icon, uint32_t color)
 {
     switch (icon) {
     case UI_ACTION_ICON_CLOCK:

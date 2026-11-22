@@ -307,54 +307,72 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
 
 PtcUiRect ptc_ui_settings_card_rect(int index)
 {
-    int column = index % 2;
-    int row = index / 2;
-    PtcUiRect rect = {54 + column * 385, 176 + row * 136, 365, 120};
-    return rect;
+    /* Scheme A: 2 grouped rows x 3 cards on the left column (indices 0,2,4 = Security; 1,3,5 = Preferences). */
+    int row = index % 2;
+    int col = index / 2;
+    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + col * 260, row == 0 ? 204 : 400, 248, 152};
 }
 
 PtcUiRect ptc_ui_notification_option_rect(int index)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
     if (index < 0 || index >= PTC_UI_NOTIFICATION_OPTION_COUNT) return (PtcUiRect){0, 0, 0, 0};
     if (index == PTC_UI_NOTIFICATION_TOGGLE)
-        return (PtcUiRect){d.x + 34, d.y + 126, d.w - 68, 56};
-    return (PtcUiRect){d.x + (index == PTC_UI_NOTIFICATION_PROBE ? 312 : 742), d.y + 620,
-        index == PTC_UI_NOTIFICATION_PROBE ? 382 : 388, 44};
+        return (PtcUiRect){54, 168, 1172, 74};
+    return (PtcUiRect){index == PTC_UI_NOTIFICATION_PROBE ? 70 : 332, 586, 224, 44};
+}
+
+PtcUiRect ptc_ui_notification_preview_card_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + index * 594, 252, 578, 310};
+}
+
+PtcUiRect ptc_ui_notification_preview_screen_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    /* Exact 16:9 (384x216) centered inside each 578px comparison card. */
+    return (PtcUiRect){151 + index * 594, 292, 384, 216};
 }
 
 PtcUiRect ptc_ui_notification_preview_group_rect(void)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 34, d.y + 198, 624, 385};
+    return (PtcUiRect){54, 252, 1172, 310};
 }
 
 PtcUiRect ptc_ui_notification_preview_rect(void)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 50, d.y + 242, 592, 333};
+    return ptc_ui_notification_preview_screen_rect(0);
 }
 
 PtcUiRect ptc_ui_notification_preview_tab_rect(int index)
 {
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 210 + index * 216, d.y + 206, 216, 30};
+    return (PtcUiRect){54 + index * 594, 252, 578, 38};
 }
 
 PtcUiRect ptc_ui_notification_info_rect(int index)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    const int ys[] = {198, 372, 510};
-    const int heights[] = {162, 126, 73};
-    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){d.x + 686, d.y + ys[index], 460, heights[index]};
+    if (index == 0) return (PtcUiRect){70, 512, 546, 44};
+    if (index == 1) return (PtcUiRect){664, 512, 546, 44};
+    if (index == 2) return (PtcUiRect){574, 582, 636, 52};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_notification_verification_rect(void)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 296, d.y + 591, 850, 78};
+    return (PtcUiRect){54, 572, 1172, 72};
+}
+
+PtcUiRect ptc_ui_software_info_qr_tab_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){826 + index * 188, 224, 188, 36};
+}
+
+PtcUiRect ptc_ui_software_info_update_banner_rect(void)
+{
+    return (PtcUiRect){54, 412, 730, 108};
 }
 
 /* Unified 3-in-1 Grant & Pairing full-page shell (Scheme A2):
@@ -1381,22 +1399,21 @@ static bool settings_page_overlay(PtcUiOverlay overlay)
     return overlay == PTC_UI_OVERLAY_THEME || overlay == PTC_UI_OVERLAY_LANGUAGE ||
            overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER || overlay == PTC_UI_OVERLAY_ALBUM_MANAGER ||
            overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY || overlay == PTC_UI_OVERLAY_SOFTWARE_INFO ||
-           overlay == PTC_UI_OVERLAY_GRANT_MANAGER;
+           overlay == PTC_UI_OVERLAY_GRANT_MANAGER || overlay == PTC_UI_OVERLAY_NOTIFICATIONS;
 }
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (settings_page_overlay(overlay)) {
-        /* The album, activity and grant manager pages have no single "confirm" action; their
-           A key acts on the focused row instead. */
+        /* The album, activity, notifications and grant manager pages have no single
+           "confirm" action; their A key acts on the focused control instead. */
         if (overlay == PTC_UI_OVERLAY_ALBUM_MANAGER || overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY ||
-            overlay == PTC_UI_OVERLAY_GRANT_MANAGER)
+            overlay == PTC_UI_OVERLAY_GRANT_MANAGER || overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
             return (PtcUiRect){0, 0, 0, 0};
         return ptc_ui_settings_page_primary_rect();
     }
-    if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS ||
-        overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
         overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE ||
         overlay == PTC_UI_OVERLAY_EYE_CARE_RULES)
         return (PtcUiRect){0, 0, 0, 0};
@@ -1425,8 +1442,6 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return ptc_ui_settings_page_back_rect();
     if (overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE)
         return ptc_ui_settings_page_primary_rect();
-    if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
-        return (PtcUiRect){dialog.x + 34, dialog.y + 620, 246, 44};
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
         return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 220, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
@@ -1695,12 +1710,9 @@ PtcUiRect ptc_ui_theme_style_rect(int index)
 
 PtcUiRect ptc_ui_language_option_rect(int index)
 {
-    int col;
-    int row;
+    /* Scheme B: 4 full-width vertical language cards side-by-side. */
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    col = index % 2;
-    row = index / 2;
-    return (PtcUiRect){54 + col * 598, 186 + row * 228, 574, 210};
+    return (PtcUiRect){54 + index * 297, 176, 281, 456};
 }
 
 PtcUiRect ptc_ui_dock_preset_rect(int index)

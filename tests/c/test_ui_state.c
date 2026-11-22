@@ -224,11 +224,17 @@ static void test_release_navigation(void)
     model.parent_page = PTC_UI_PARENT_SETTINGS;
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 1, "settings selection moves right");
+    check_int(model.selected_index, 2, "settings selection moves right across Security group row");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 4, "settings selection moves right to third Security card");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 3, "settings selection moves down to second row");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 5, "settings selection moves down to audio card in third row");
+    check_int(model.selected_index, 5, "settings selection moves down to Preferences row");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 3, "settings selection moves left across Preferences row");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 1, "settings selection moves left to first Preferences card");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 0, "settings selection moves back up to Security row");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     ptc_ui_change_parent_page(&model, -1);
@@ -2678,8 +2684,9 @@ static void test_home_redesign(void)
         }
         for (int index = 0; index < 6; ++index) {
             PtcUiRect rect = ptc_ui_settings_card_rect(index);
-            check_true(rect.h == 120 && rect.y + rect.h < ptc_ui_notice_rect().y,
-                       "settings cards use 120px height and clear status capsule");
+            check_true(rect.w == 248 && rect.h == 152 && rect.y + rect.h <= 568 &&
+                       rect.y + rect.h < ptc_ui_notice_rect().y,
+                       "settings cards use Scheme A 2x3 geometry and clear quick strip and status capsule");
             for (int next = index + 1; next < 6; ++next) {
                 PtcUiRect other = ptc_ui_settings_card_rect(next);
                 check_true(!rects_overlap(rect, other), "settings action cards keep separate hit areas");
@@ -4057,23 +4064,26 @@ static void test_language_and_short_weekly_limits(void)
     ptc_ui_format_actual_added(15, formatted, sizeof(formatted));
     check_true(strcmp(formatted, "本次增加 15 分钟") == 0, "simplified actual added");
 
-    /* Language overlay: 2x2 grid inside the secondary-page stage */
+    /* Language overlay: Scheme B 4-column vertical cards side-by-side */
     opt0 = ptc_ui_language_option_rect(0);
     opt1 = ptc_ui_language_option_rect(1);
     opt2 = ptc_ui_language_option_rect(2);
     opt3 = ptc_ui_language_option_rect(3);
-    check_true(opt0.w == 574 && opt0.h == 210, "option 0 size");
-    check_true(opt1.w == 574 && opt1.h == 210, "option 1 size");
-    check_true(opt2.w == 574 && opt2.h == 210, "option 2 size");
-    check_true(opt3.w == 574 && opt3.h == 210, "option 3 size");
+    check_true(opt0.w == 281 && opt0.h == 456, "option 0 size");
+    check_true(opt1.w == 281 && opt1.h == 456, "option 1 size");
+    check_true(opt2.w == 281 && opt2.h == 456, "option 2 size");
+    check_true(opt3.w == 281 && opt3.h == 456, "option 3 size");
+    check_true(opt0.y == opt1.y && opt1.y == opt2.y && opt2.y == opt3.y,
+        "language cards share one horizontal row");
+    check_true(opt0.x < opt1.x && opt1.x < opt2.x && opt2.x < opt3.x,
+        "language cards order left to right");
     check_true(!rects_overlap(opt0, opt1), "opt0 and opt1 do not overlap");
-    check_true(!rects_overlap(opt0, opt2), "opt0 and opt2 do not overlap");
-    check_true(!rects_overlap(opt1, opt3), "opt1 and opt3 do not overlap");
+    check_true(!rects_overlap(opt1, opt2), "opt1 and opt2 do not overlap");
     check_true(!rects_overlap(opt2, opt3), "opt2 and opt3 do not overlap");
     check_true(opt0.y >= 176 && opt3.y + opt3.h <= 651,
-        "language rows stay inside the secondary-page stage");
+        "language cards stay inside the secondary-page stage");
     check_true(opt3.y + opt3.h <= ptc_ui_settings_page_back_rect().y,
-        "language rows do not reach the footer bar");
+        "language cards do not reach the footer bar");
 
     memset(&model, 0, sizeof(model));
     model.overlay = PTC_UI_OVERLAY_LANGUAGE;
@@ -4081,6 +4091,24 @@ static void test_language_and_short_weekly_limits(void)
     check_hit(hit_center(&model, opt1), PTC_UI_HIT_LANGUAGE_OPTION, 1, "hit language opt 1");
     check_hit(hit_center(&model, opt2), PTC_UI_HIT_LANGUAGE_OPTION, 2, "hit language opt 2");
     check_hit(hit_center(&model, opt3), PTC_UI_HIT_LANGUAGE_OPTION, 3, "hit language opt 3");
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+        "language top back button cancels overlay");
+
+    /* Software Info overlay: Scheme A QR tabs + update banner */
+    memset(&model, 0, sizeof(model));
+    model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+    {
+        PtcUiRect qr0 = ptc_ui_software_info_qr_tab_rect(0);
+        PtcUiRect qr1 = ptc_ui_software_info_qr_tab_rect(1);
+        PtcUiRect banner = ptc_ui_software_info_update_banner_rect();
+        check_true(qr0.w > 0 && qr1.w > 0 && !rects_overlap(qr0, qr1), "software info QR tabs do not overlap");
+        check_true(!rects_overlap(banner, qr0) && !rects_overlap(banner, qr1), "update banner and QR tabs do not overlap");
+        check_hit(hit_center(&model, qr0), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 0, "hit software info QR tab 0");
+        check_hit(hit_center(&model, qr1), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 1, "hit software info QR tab 1");
+        check_hit(hit_center(&model, banner), PTC_UI_HIT_UPDATE_ACTION, 8, "hit software info update banner");
+        check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+            "software info top back button cancels overlay");
+    }
 
     check_int(ptc_ui_clamp_persisted_rule_minutes(1), 1, "one minute survives reload");
     check_int(ptc_ui_clamp_persisted_rule_minutes(14), 14, "fourteen minutes survive reload");
@@ -4464,31 +4492,39 @@ static void test_config_backup_layout(void)
         ptc_ui_confirm_rect(notifications.overlay).w == 0, "no sound row or duplicate confirmation target");
     check_hit(hit_center(&notifications, ptc_ui_cancel_rect(notifications.overlay)),
         PTC_UI_HIT_OVERLAY_CANCEL, 0, "notification footer back target is independent");
+    check_hit(hit_center(&notifications, ptc_ui_advanced_back_rect()),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "notification top back target cancels overlay");
     PtcUiRect preview = ptc_ui_notification_preview_rect();
-    check_true(preview.w * 9 == preview.h * 16, "notification screen keeps the real 16:9 aspect ratio");
+    PtcUiRect preview_b = ptc_ui_notification_preview_screen_rect(1);
+    check_true(preview.w * 9 == preview.h * 16 && preview_b.w * 9 == preview_b.h * 16,
+        "both side-by-side notification screens keep exact 16:9 aspect ratio");
+    check_true(!rects_overlap(preview, preview_b), "side-by-side notification screens do not overlap");
     check_hit(hit_center(&notifications, preview), PTC_UI_HIT_NONE, 0,
         "illustrated system buttons do not trigger real actions");
+    check_hit(hit_center(&notifications, preview_b), PTC_UI_HIT_NONE, 0,
+        "second illustrated screen does not trigger real actions");
     for (int i = 0; i < 2; ++i) {
         PtcUiRect tab = ptc_ui_notification_preview_tab_rect(i);
-        check_hit(hit_center(&notifications, tab), PTC_UI_HIT_NOTIFICATION_PREVIEW, i, "preview tab has an independent touch target");
-        check_true(!rects_overlap(tab, preview) && !rects_overlap(tab, ptc_ui_cancel_rect(notifications.overlay)),
+        PtcUiRect card = ptc_ui_notification_preview_card_rect(i);
+        PtcUiRect scr = ptc_ui_notification_preview_screen_rect(i);
+        check_hit(hit_center(&notifications, tab), PTC_UI_HIT_NOTIFICATION_PREVIEW, i,
+            "preview card header has an independent touch target");
+        check_true(!rects_overlap(tab, scr) && !rects_overlap(tab, ptc_ui_cancel_rect(notifications.overlay)),
             "preview tabs do not cover the screen or footer");
+        check_true(ptc_ui_rect_contains(card, scr.x, scr.y) &&
+            ptc_ui_rect_contains(card, scr.x + scr.w - 1, scr.y + scr.h - 1),
+            "each simulated screen stays inside its comparison card");
         for (int j = 0; j < PTC_UI_NOTIFICATION_OPTION_COUNT; ++j)
-            check_true(!rects_overlap(tab, ptc_ui_notification_option_rect(j)), "preview tabs do not change notification controls");
+            check_true(!rects_overlap(tab, ptc_ui_notification_option_rect(j)),
+                "preview tabs do not change notification controls");
     }
     PtcUiRect preview_group = ptc_ui_notification_preview_group_rect();
     PtcUiRect verification = ptc_ui_notification_verification_rect();
-    check_true(ptc_ui_rect_contains(preview_group, preview.x, preview.y) &&
-        ptc_ui_rect_contains(preview_group, preview.x + preview.w - 1, preview.y + preview.h - 1),
-        "preview image belongs to its labelled selector group");
+    check_true(!rects_overlap(ptc_ui_notification_preview_card_rect(0), ptc_ui_notification_preview_card_rect(1)),
+        "side-by-side notification comparison cards do not overlap");
     check_true(!rects_overlap(verification, preview_group) &&
         !rects_overlap(verification, ptc_ui_cancel_rect(notifications.overlay)),
         "verification workflow is distinct from preview and back action");
-    PtcUiRect first_tab = ptc_ui_notification_preview_tab_rect(0);
-    PtcUiRect second_tab = ptc_ui_notification_preview_tab_rect(1);
-    check_true(first_tab.x + first_tab.w == second_tab.x && first_tab.y == second_tab.y &&
-        first_tab.y + first_tab.h <= preview.y,
-        "preview modes form one segmented selector above the example");
     for (int i = PTC_UI_NOTIFICATION_PROBE; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i) {
         PtcUiRect action = ptc_ui_notification_option_rect(i);
         check_true(ptc_ui_rect_contains(verification, action.x, action.y) &&
@@ -4498,11 +4534,12 @@ static void test_config_backup_layout(void)
     for (int i = 0; i < 3; ++i) {
         PtcUiRect info = ptc_ui_notification_info_rect(i);
         check_hit(hit_center(&notifications, info), PTC_UI_HIT_NONE, 0,
-            "linked guide and validation results remain read-only");
-        check_true(!rects_overlap(info, verification) && !rects_overlap(info, preview_group),
-            "guide, environment and results stay separate from actions and image");
+            "linked descriptions and receipt box remain read-only");
+        for (int j = 0; j < PTC_UI_NOTIFICATION_OPTION_COUNT; ++j)
+            check_true(!rects_overlap(info, ptc_ui_notification_option_rect(j)),
+                "descriptions and receipt stay separate from interactive controls");
         for (int j = 0; j < i; ++j)
-            check_true(!rects_overlap(info, ptc_ui_notification_info_rect(j)), "information cards do not overlap");
+            check_true(!rects_overlap(info, ptc_ui_notification_info_rect(j)), "information boxes do not overlap");
     }
     check_true(ptc_ui_notification_info_rect(-1).w == 0 && ptc_ui_notification_info_rect(3).w == 0,
         "invalid notification information card has no geometry");

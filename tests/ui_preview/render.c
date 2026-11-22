@@ -11,6 +11,7 @@
 #define ptc_mkdir(dir) mkdir(dir, 0777)
 #endif
 #include "../../companion/nro/ui_render_internal.h"
+#include "../../common/update/update.h"
 #include "selection.h"
 
 uint32_t preview_pixels[1280 * 720];
@@ -2180,7 +2181,7 @@ static int check_action_text(UiRect card, const char *required_title)
     for (int i = 0; i < action_trace.count; ++i) {
         UiRect a = action_trace.bounds[i];
         if (a.x < card.x || a.x >= card.x + card.width || a.y < card.y || a.y >= card.y + card.height) continue;
-        if (required_title && !strcmp(action_trace.text[i], required_title)) title = a.height >= 20;
+        if (required_title && !strcmp(action_trace.text[i], required_title)) title = a.height >= 14;
         if (a.x + a.width > card.x + card.width - 8 || a.y + a.height > card.y + card.height - 6) {
             fprintf(stderr, "FAIL: action card text bounds '%s'\n", action_trace.text[i]); ++failed;
         }
@@ -2192,6 +2193,7 @@ static int check_action_text(UiRect card, const char *required_title)
             }
         }
     }
+    if (!title) fprintf(stderr, "FAIL: missing required title '%s'\n", required_title);
     return failed + !title;
 }
 
@@ -2705,6 +2707,73 @@ static int check_batch6_pages_text(const PtcUiModel *baseline, int dark, int sty
     return failed;
 }
 
+static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Safety & Preferences root (Scheme A: grouped console + right dynamic preview for all 6 cards) */
+    for (int sel = 0; sel < 6; ++sel) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = PTC_UI_OVERLAY_NONE;
+        model.selected_index = sel;
+        model.activity_history_available = true;
+        model.activity_history_count = 2;
+        model.activity_history[0] = (PtcActivityHistoryRecord){.occurred_at = 950, .minutes = 30, .effective_minutes = 30};
+        snprintf(model.activity_history[0].action, sizeof(model.activity_history[0].action), "offline_grant");
+        model.activity_history[1] = (PtcActivityHistoryRecord){.occurred_at = 980, .minutes = 0, .effective_minutes = 0};
+        snprintf(model.activity_history[1].action, sizeof(model.activity_history[1].action), "protection");
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        for (int c = 0; c < 6; ++c)
+            failed += check_action_text(to_uirect(ptc_ui_settings_card_rect(c)), NULL);
+        failed += check_action_text((UiRect){840, 174, 386, 454}, NULL);
+    }
+
+    /* 2. Interface Language (Scheme B: 4 full-width vertical cards side-by-side) */
+    for (int sel = 0; sel < 4; ++sel) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_LANGUAGE;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.overlay_selection = sel;
+        model.language_preference = PTC_UI_LANGUAGE_SIMPLIFIED;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        for (int c = 0; c < 4; ++c)
+            failed += check_action_text(to_uirect(ptc_ui_language_option_rect(c)), NULL);
+    }
+
+    /* 3. Software Info & Check Updates (Scheme A: version/update workbench + switchable QR card) */
+    for (int qr_tab = 0; qr_tab < 2; ++qr_tab) {
+        for (int has_upd = 0; has_upd < 2; ++has_upd) {
+            PtcUiModel model = *baseline;
+            model.view = PTC_UI_PARENT;
+            model.parent_page = PTC_UI_PARENT_SETTINGS;
+            model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+            model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+            model.software_info_qr_tab = qr_tab;
+            model.update_status = has_upd ? PTC_UPDATE_AVAILABLE : PTC_UPDATE_CURRENT;
+            if (has_upd) snprintf(model.update_version, sizeof(model.update_version), "0.3.0");
+            else model.update_version[0] = '\0';
+            ptc_ui_graphics_draw(&model, &theme);
+            memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+            draw_support_overlay_surface(preview_pixels, 1280, &model);
+            action_trace.enabled = false;
+            failed += check_action_text((UiRect){54, 168, 730, 472}, NULL);
+            failed += check_action_text((UiRect){802, 168, 424, 472}, NULL);
+        }
+    }
+    return failed;
+}
+
 static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
 {
     int failed = 0;
@@ -2722,6 +2791,7 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                 failed += check_batch4_pages_text(baseline, dark, style);
                 failed += check_batch5_pages_text(baseline, dark, style);
                 failed += check_batch6_pages_text(baseline, dark, style);
+                failed += check_batch8_pages_text(baseline, dark, style);
                 for (int state = 0; state < 5; ++state) {
                     PtcUiModel model = *baseline;
                     model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;
@@ -2838,66 +2908,62 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
                     memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
                     draw_support_overlay_surface(preview_pixels, 1280, &model);
                     action_trace.enabled = false;
-                    /* Native prompt text is deliberately composited beneath the
-                       35%-width overlay. Check the surrounding page independently. */
-                    PtcUiRect illustration = ptc_ui_notification_preview_rect();
-                    bool notice_title_on_left = false;
+                    /* Native prompt text is deliberately composited beneath both
+                       side-by-side 16:9 simulated Switch screens. Check both
+                       illustrations and the surrounding settings page independently. */
+                    PtcUiRect screen0 = ptc_ui_notification_preview_screen_rect(0);
+                    PtcUiRect screen1 = ptc_ui_notification_preview_screen_rect(1);
+                    bool title_on_left0 = false, title_on_left1 = false;
                     for (int i = 0; i < action_trace.count; ++i) {
                         UiRect b = action_trace.bounds[i];
-                        if (ptc_ui_rect_contains(illustration, b.x, b.y)) {
+                        if (ptc_ui_rect_contains(screen0, b.x, b.y)) {
                             if (!strcmp(action_trace.text[i], ptc_ui_text(PTC_UI_T_NOTIFY_TITLE)) &&
-                                b.x + b.width < illustration.x + illustration.w / 2 &&
-                                b.y + b.height < illustration.y + illustration.h / 3)
-                                notice_title_on_left = true;
+                                b.x + b.width < screen0.x + screen0.w / 2 &&
+                                b.y + b.height < screen0.y + screen0.h / 3)
+                                title_on_left0 = true;
+                            action_trace.bounds[i] = (UiRect){-2000, -2000, 0, 0};
+                        } else if (ptc_ui_rect_contains(screen1, b.x, b.y)) {
+                            if (!strcmp(action_trace.text[i], ptc_ui_text(PTC_UI_T_NOTIFY_TITLE)) &&
+                                b.x + b.width < screen1.x + screen1.w / 2 &&
+                                b.y + b.height < screen1.y + screen1.h / 3)
+                                title_on_left1 = true;
                             action_trace.bounds[i] = (UiRect){-2000, -2000, 0, 0};
                         }
                     }
-                    if (!notice_title_on_left) {
-                        fprintf(stderr, "FAIL: notification preview not upper-left lang=%d preview=%d\n", lang, model.notification_preview);
+                    if (!title_on_left0 || !title_on_left1) {
+                        fprintf(stderr, "FAIL: notification dual preview not upper-left lang=%d preview=%d (%d,%d)\n",
+                                lang, model.notification_preview, title_on_left0, title_on_left1);
                         ++failed;
                     }
-                    UiRect dialog = to_uirect(ptc_ui_dialog_rect(1180, 680));
-                    failed += check_action_text(dialog, ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES));
+                    failed += check_action_text((UiRect){54, 168, 1172, 476}, NULL);
                     for (int i = 0; i < 3; ++i)
                         failed += check_action_text(to_uirect(ptc_ui_notification_info_rect(i)), NULL);
-                    failed += check_action_text(to_uirect(ptc_ui_notification_preview_group_rect()), NULL);
                     failed += check_action_text(to_uirect(ptc_ui_notification_verification_rect()), NULL);
-                    /* Every paragraph must survive wrapping without losing its
-                       end to max-lines clipping. Compare without wrap whitespace. */
+                    /* Every Scheme B paragraph must survive wrapping without losing
+                       its end to max-lines clipping. Compare without wrap whitespace. */
                     char all[8192] = "";
                     size_t used = 0;
                     for (int i = 0; i < action_trace.count; ++i)
                         for (const char *p = action_trace.text[i]; *p && used + 1 < sizeof(all); ++p)
                             if (*p != ' ' && *p != '\n' && *p != '\t') all[used++] = *p;
                     all[used] = '\0';
-                    PtcUiTextId paragraphs[] = {PTC_UI_T_REASON_NOTICE_EXPERIMENT, PTC_UI_T_NOTICE_PREVIEW_LABEL,
-                        PTC_UI_T_NOTICE_PREVIEW_DETAILS, PTC_UI_T_NOTICE_PREVIEW_SHORT, PTC_UI_T_NOTICE_NAV_HINT,
-                        PTC_UI_T_NOTICE_SELECTOR_TITLE, PTC_UI_T_NOTICE_VERIFY_TITLE, PTC_UI_T_NOTICE_VERIFY_HINT,
-                        PTC_UI_T_NOTICE_PROBE, PTC_UI_T_NOTICE_TEST, PTC_UI_T_NOTICE_PROBE_NOTE, PTC_UI_T_NOTICE_TEST_NOTE,
-                        preview == 0 ? PTC_UI_T_NOTICE_DETAIL_NAME : PTC_UI_T_NOTICE_BRIEF_NAME,
-                        preview == 0 ? PTC_UI_T_NOTICE_DETAIL_GUIDE : PTC_UI_T_NOTICE_BRIEF_GUIDE,
-                        preview == 0 ? PTC_UI_T_NOTICE_DETAIL_BOUNDARY : PTC_UI_T_NOTICE_BRIEF_BOUNDARY,
-                        PTC_UI_T_NOTICE_ENVIRONMENT_TITLE, PTC_UI_T_NOTICE_USAGE_TITLE, PTC_UI_T_NOTICE_RESULT_TITLE,
-                        notification_results[scenario],
-                        model.reason_external_notifications == 1 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
-                        model.reason_external_notifications == 0 ? PTC_UI_T_REASON_NOTICE_EXTERNAL_OFF : PTC_UI_T_REASON_NOTICE_EXTERNAL_UNKNOWN,
-                        !model.reason_overlay_installed ? PTC_UI_T_NOTICE_OVERLAY_MISSING :
-                        model.reason_detail_ready ? PTC_UI_T_NOTICE_DETAIL_READY : PTC_UI_T_NOTICE_DETAIL_UNREADY};
+                    PtcUiTextId paragraphs[] = {
+                        PTC_UI_T_NOTICE_SUBTITLE_B,
+                        PTC_UI_T_NOTICE_CARD1_TITLE, PTC_UI_T_NOTICE_CARD1_DESC,
+                        PTC_UI_T_NOTICE_CARD2_TITLE, PTC_UI_T_NOTICE_CARD2_DESC,
+                        PTC_UI_T_NOTICE_PROBE, PTC_UI_T_NOTICE_TEST,
+                        PTC_UI_T_NOTICE_FOOTER_SAFE,
+                        notification_results[scenario]
+                    };
                     for (unsigned i = 0; i < sizeof(paragraphs)/sizeof(paragraphs[0]); ++i) {
                         char required[1024]; size_t count = 0;
                         for (const char *p = ptc_ui_text(paragraphs[i]); *p && count + 1 < sizeof(required); ++p)
                             if (*p != ' ' && *p != '\n' && *p != '\t') required[count++] = *p;
                         required[count] = '\0';
-                        if (!strstr(all, required)) { fprintf(stderr, "FAIL: notification paragraph clipped lang=%d key=%u\n", lang, (unsigned)paragraphs[i]); ++failed; }
-                    }
-                    char inactive[512]; size_t inactive_length = 0;
-                    const char *inactive_guide = ptc_ui_text(preview == 0 ? PTC_UI_T_NOTICE_BRIEF_GUIDE : PTC_UI_T_NOTICE_DETAIL_GUIDE);
-                    for (const char *p = inactive_guide; *p && inactive_length + 1 < sizeof(inactive); ++p)
-                        if (*p != ' ' && *p != '\n' && *p != '\t') inactive[inactive_length++] = *p;
-                    inactive[inactive_length] = '\0';
-                    if (strstr(all, inactive)) {
-                        fprintf(stderr, "FAIL: inactive example guide still visible lang=%d preview=%d\n", lang, preview);
-                        ++failed;
+                        if (!strstr(all, required)) {
+                            fprintf(stderr, "FAIL: notification paragraph clipped lang=%d key=%u\n", lang, (unsigned)paragraphs[i]);
+                            ++failed;
+                        }
                     }
                     for (int i = 0; i < action_trace.count; ++i)
                         if (!strcmp(action_trace.text[i], ptc_ui_text(PTC_UI_T_SOUND_EFFECTS))) {

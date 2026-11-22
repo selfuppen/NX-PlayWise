@@ -146,7 +146,8 @@ typedef enum {
     PTC_UI_HIT_TODAY_QUOTA_PRESET,
     PTC_UI_HIT_SUPPORT_GUIDE_STEP,
     PTC_UI_HIT_ACTIVITY_FILTER,
-    PTC_UI_HIT_SHORTCUT_PREFIX
+    PTC_UI_HIT_SHORTCUT_PREFIX,
+    PTC_UI_HIT_SOFTWARE_INFO_QR_TAB
 } PtcUiHitKind;
 
 typedef struct {
@@ -206,9 +207,13 @@ PtcUiRect ptc_ui_settings_card_rect(int index);
 PtcUiRect ptc_ui_notification_option_rect(int index);
 PtcUiRect ptc_ui_notification_preview_group_rect(void);
 PtcUiRect ptc_ui_notification_preview_rect(void);
+PtcUiRect ptc_ui_notification_preview_card_rect(int index);
+PtcUiRect ptc_ui_notification_preview_screen_rect(int index);
 PtcUiRect ptc_ui_notification_preview_tab_rect(int index);
-PtcUiRect ptc_ui_notification_info_rect(int index); /* 0 example guide, 1 environment, 2 result */
+PtcUiRect ptc_ui_notification_info_rect(int index); /* 0 detail desc, 1 brief desc, 2 receipt */
 PtcUiRect ptc_ui_notification_verification_rect(void);
+PtcUiRect ptc_ui_software_info_qr_tab_rect(int index);
+PtcUiRect ptc_ui_software_info_update_banner_rect(void);
 PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_qr_panel_rect(int index);
 PtcUiRect ptc_ui_qr_code_rect(void);

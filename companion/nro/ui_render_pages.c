@@ -35,7 +35,7 @@ static const UiAction SETTINGS_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_PARENT_SHORTCUT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CURRENT_MINUS_2), UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_FAMILY_ACTIVITIES), PTC_UI_TEXT_REFERENCE(PTC_UI_T_LAST_200), UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOMEBREW_ACCESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NOT_ENABLED), UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
-    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_APPEARANCE_THEME), "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_APPEARANCE_THEME), "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_NONE},
 };
 
 const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -1066,12 +1066,218 @@ static void draw_parent_action_card(uint32_t *pixels, uint32_t stride, const Ptc
     parent_action_badge(pixels, stride, model, card, index, true);
 }
 
+static void draw_settings_grouped_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                                       const UiAction *actions, int index)
+{
+    UiRect card = to_uirect(ptc_ui_settings_card_rect(index));
+    bool selected = (index == model->selected_index && !model->parent_footer_focused);
+    const UiAction *action = &actions[index];
+    const char *title = ptc_ui_text_resolve(action->title);
+    const char *subtitle = ptc_ui_text_resolve(action->subtitle);
+    const char *badge_label = "";
+    uint32_t badge_color = UI_MUTED;
+    uint32_t badge_bg = UI_PAGE;
+    uint32_t badge_bd = UI_BORDER;
+    uint32_t icon_accent = action->accent;
+    char dynamic_sub[128];
+    char fitted[128];
+
+    if (index == 0) {
+        badge_label = ptc_ui_text(PTC_UI_T_ENABLED);
+        badge_color = UI_SUCCESS;
+        badge_bg = UI_SUCCESS_SOFT;
+        badge_bd = UI_SUCCESS_BORDER;
+    } else if (index == 1) {
+        bool en = model->reason_notifications_enabled;
+        subtitle = en ? ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXTERNAL_ON)
+                      : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED);
+        icon_accent = en ? UI_SUCCESS : UI_MUTED;
+        badge_label = en ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2);
+        badge_color = en ? UI_SUCCESS : UI_MUTED;
+        badge_bg = en ? UI_SUCCESS_SOFT : UI_PAGE;
+        badge_bd = en ? UI_SUCCESS_BORDER : UI_BORDER;
+    } else if (index == 2) {
+        bool custom = (model->custom_shortcut_enabled && model->custom_shortcut_label[0]);
+        if (custom) {
+            snprintf(dynamic_sub, sizeof(dynamic_sub), ptc_ui_text(PTC_UI_T_CURRENT_S),
+                     model->custom_shortcut_label);
+        } else {
+            snprintf(dynamic_sub, sizeof(dynamic_sub), "%s", ptc_ui_text(PTC_UI_T_CURRENT_MINUS));
+        }
+        subtitle = dynamic_sub;
+        badge_label = ptc_ui_text(custom ? PTC_UI_T_SETTINGS_BADGE_CUSTOM_COMBO
+                                         : PTC_UI_T_SETTINGS_BADGE_DEFAULT_COMBO);
+        badge_color = UI_ACCENT;
+        badge_bg = UI_ACCENT_SOFT;
+        badge_bd = UI_ACCENT;
+    } else if (index == 3) {
+        badge_label = ptc_ui_text(PTC_UI_T_UP_TO_200_ITEMS);
+        badge_color = UI_MUTED;
+        badge_bg = UI_PAGE;
+        badge_bd = UI_BORDER;
+    } else if (index == 4) {
+        if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
+            subtitle = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
+            badge_label = ptc_ui_text(PTC_UI_T_NOT_ENABLED);
+            badge_color = UI_MUTED;
+            badge_bg = UI_PAGE;
+            badge_bd = UI_BORDER;
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
+            subtitle = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON_HOLD_DOWN_X_AND);
+            badge_label = ptc_ui_text(PTC_UI_T_ENABLED);
+            badge_color = UI_SUCCESS;
+            badge_bg = UI_SUCCESS_SOFT;
+            badge_bd = UI_SUCCESS_BORDER;
+            icon_accent = UI_SUCCESS;
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
+            subtitle = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_PLEASE_VIEW_DETAILS);
+            badge_label = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
+            badge_color = UI_WARNING_TEXT;
+            badge_bg = UI_WARNING_SOFT;
+            badge_bd = UI_WARNING_BORDER;
+            icon_accent = UI_WARNING;
+        } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+            subtitle = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION_ENTRY_AVAILABLE);
+            badge_label = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
+            badge_color = UI_ACCENT;
+            badge_bg = UI_ACCENT_SOFT;
+            badge_bd = UI_ACCENT;
+            icon_accent = UI_ACCENT;
+        } else {
+            subtitle = ptc_ui_text(PTC_UI_T_STATUS_IS_UNKNOWN_PLEASE_CHECK_AGAIN);
+            badge_label = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
+            badge_color = UI_DANGER;
+            badge_bg = UI_DANGER_SOFT;
+            badge_bd = UI_DANGER_BORDER;
+            icon_accent = UI_DANGER;
+        }
+    } else if (index == 5) {
+        snprintf(dynamic_sub, sizeof(dynamic_sub), "%s / %s",
+                 ptc_ui_theme_preference_label(g_theme.preference),
+                 ptc_ui_theme_style_label(ptc_ui_theme_get_style()));
+        subtitle = dynamic_sub;
+        badge_label = ptc_ui_theme_style_label(ptc_ui_theme_get_style());
+        badge_color = UI_ACCENT;
+        badge_bg = UI_ACCENT_SOFT;
+        badge_bd = UI_ACCENT;
+    }
+
+    if (!selected) draw_card_shadow(pixels, stride, card, 14);
+    fill_round_rect(pixels, stride, card, 14, selected ? UI_ACCENT_SOFT : UI_SURFACE);
+    if (selected) draw_focus_ring(pixels, stride, card, 14);
+    else draw_rect_outline(pixels, stride, card, 14, 1, UI_BORDER);
+
+    /* Top row: 38x38 icon badge on left, status pill on right */
+    UiRect icon_box = {card.x + 14, card.y + 14, 38, 38};
+    uint32_t icon_bg = selected ? UI_ACCENT :
+        (icon_accent == UI_SUCCESS ? UI_SUCCESS_SOFT :
+        (icon_accent == UI_DANGER ? UI_DANGER_SOFT :
+        (icon_accent == UI_WARNING ? UI_WARNING_SOFT :
+        (icon_accent == UI_MUTED ? UI_RAISED : UI_ACCENT_SOFT))));
+    fill_round_rect(pixels, stride, icon_box, 10, icon_bg);
+    draw_card_action_icon(pixels, stride, icon_box.x + 19, icon_box.y + 19,
+                          action->icon, selected ? UI_ON_ACCENT : icon_accent);
+
+    if (badge_label[0]) {
+        int max_bw = card.width - 74;
+        fit_text(fitted, sizeof(fitted), badge_label, 12, max_bw - 14);
+        int bw = measure_text(fitted, 12) + 16;
+        if (bw < 52) bw = 52;
+        if (bw > max_bw) bw = max_bw;
+        UiRect pill = {card.x + card.width - 14 - bw, card.y + 20, bw, 24};
+        fill_round_rect(pixels, stride, pill, 12, badge_bg);
+        draw_rect_outline(pixels, stride, pill, 12, 1, badge_bd);
+        draw_text_center(pixels, stride, pill, fitted, 12, badge_color);
+    }
+
+    /* Title + 2-line wrapped subtitle */
+    int title_size = 18;
+    while (title_size > 14 && measure_text(title, title_size) > card.width - 28) title_size--;
+    fit_text(fitted, sizeof(fitted), title, title_size, card.width - 28);
+    draw_text_bold(pixels, stride, card.x + 14, card.y + 84, fitted, title_size,
+                   selected ? UI_ACCENT : UI_INK);
+    if (subtitle && subtitle[0]) {
+        draw_wrapped_text(pixels, stride, card.x + 14, card.y + 108, subtitle,
+                          13, card.width - 28, 17, 2, UI_MUTED);
+    }
+}
+
+static void draw_parent_settings_quick_strip(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect strip = {54, 568, 768, 60};
+    char lang_buf[64], ver_buf[80], fitted[96];
+    draw_card_shadow(pixels, stride, strip, 14);
+    fill_round_rect(pixels, stride, strip, 14, UI_SURFACE);
+    draw_rect_outline(pixels, stride, strip, 14, 1, UI_BORDER);
+
+    draw_globe_icon(pixels, stride, strip.x + 26, strip.y + 30, 9, UI_ACCENT);
+    const char *prefix = ptc_ui_text(PTC_UI_T_SETTINGS_QUICK_PREFIX);
+    draw_text_bold(pixels, stride, strip.x + 44, strip.y + 35, prefix, 14, UI_MUTED);
+    int cur_x = strip.x + 44 + measure_text(prefix, 14) + 12;
+
+    const char *hint = ptc_ui_text(PTC_UI_T_SETTINGS_QUICK_HINT);
+    int hint_w = measure_text(hint, 13);
+    int hint_x = strip.x + strip.width - 16 - hint_w;
+    draw_text_bold(pixels, stride, hint_x, strip.y + 35, hint, 13, UI_ACCENT);
+
+    /* Language status pill */
+    const char *lang_label = ptc_ui_localize(ptc_ui_language_preference_label(model->language_preference),
+                                             lang_buf, sizeof(lang_buf));
+    fit_text(fitted, sizeof(fitted), lang_label, 12, 160);
+    int lw = measure_text(fitted, 12) + 20;
+    if (cur_x + lw + 8 < hint_x) {
+        UiRect lpill = {cur_x, strip.y + 17, lw, 26};
+        fill_round_rect(pixels, stride, lpill, 13, UI_PAGE);
+        draw_rect_outline(pixels, stride, lpill, 13, 1, UI_BORDER);
+        draw_text_center(pixels, stride, lpill, fitted, 12, UI_INK);
+        cur_x += lw + 10;
+    }
+
+    /* Version / update pill */
+    bool upd = (model->update_status == PTC_UPDATE_AVAILABLE && model->update_version[0]);
+    const char *ver_str = model->software_version[0] ? model->software_version : PLAYWISE_VERSION;
+    if (upd) {
+        snprintf(ver_buf, sizeof(ver_buf), "v%.16s -> v%.16s", ver_str, model->update_version);
+    } else {
+        snprintf(ver_buf, sizeof(ver_buf), "v%.20s", ver_str);
+    }
+    int avail_w = hint_x - cur_x - 14;
+    if (avail_w > 64) {
+        fit_text(fitted, sizeof(fitted), ver_buf, 12, avail_w - 18);
+        int vw = measure_text(fitted, 12) + 20;
+        if (vw > avail_w) vw = avail_w;
+        UiRect vpill = {cur_x, strip.y + 17, vw, 26};
+        fill_round_rect(pixels, stride, vpill, 13, upd ? UI_ACCENT_SOFT : UI_PAGE);
+        draw_rect_outline(pixels, stride, vpill, 13, 1, upd ? UI_ACCENT : UI_BORDER);
+        draw_text_center(pixels, stride, vpill, fitted, 12, upd ? UI_ACCENT : UI_MUTED);
+    }
+}
+
 static void draw_parent_action_grid(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const UiAction *actions;
     int action_count;
     int index;
     actions = actions_for_page(model->parent_page, &action_count);
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
+        /* Scheme A: Two grouped sections (Security 3 + Preferences 3) + Quick Status Strip. */
+        int sec_on = 2 + ((model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED ||
+                           model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) ? 1 : 0);
+        char count_text[64];
+        snprintf(count_text, sizeof(count_text), ptc_ui_text(PTC_UI_T_SETTINGS_GROUP_SECURITY_COUNT), sec_on);
+        draw_text_bold(pixels, stride, 54, 193, ptc_ui_text(PTC_UI_T_SETTINGS_GROUP_SECURITY), 14, UI_MUTED);
+        draw_text_bold(pixels, stride, 822 - measure_text(count_text, 13), 193, count_text, 13, UI_SUCCESS);
+
+        draw_text_bold(pixels, stride, 54, 389, ptc_ui_text(PTC_UI_T_SETTINGS_GROUP_PREFS), 14, UI_MUTED);
+        const char *prefs_hint = ptc_ui_text(PTC_UI_T_SETTINGS_GROUP_PREFS_HINT);
+        draw_text(pixels, stride, 822 - measure_text(prefs_hint, 12), 389, prefs_hint, 12, UI_MUTED);
+
+        for (index = 0; index < action_count; ++index) {
+            draw_settings_grouped_card(pixels, stride, model, actions, index);
+        }
+        draw_parent_settings_quick_strip(pixels, stride, model);
+        return;
+    }
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
         UiRect quota_zone = {42, 172, 388, 452};
         UiRect parallel_zone = {428, 172, 388, 452};
@@ -1148,9 +1354,152 @@ static void draw_parent_action_grid(uint32_t *pixels, uint32_t stride, const Ptc
     }
 }
 
+static void draw_settings_dynamic_preview(uint32_t *pixels, uint32_t stride,
+                                          const PtcUiModel *model, UiRect box, int sel)
+{
+    char buf[128], fitted[128];
+    fill_round_rect(pixels, stride, box, 12, UI_PAGE);
+    draw_rect_outline(pixels, stride, box, 12, 1, UI_BORDER);
+
+    if (sel == 0) {
+        /* PIN dots + 5-attempt cooldown guarantee */
+        int dot_start_x = box.x + 22;
+        int dot_y = box.y + 34;
+        for (int i = 0; i < 6; ++i) {
+            UiRect dot = {dot_start_x + i * 26, dot_y - 7, 14, 14};
+            fill_round_rect(pixels, stride, dot, 7, UI_ACCENT);
+        }
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_PROTECTION_ENABLED), 12, 120);
+        int pw = measure_text(fitted, 12) + 16;
+        UiRect pill = {box.x + box.width - 14 - pw, dot_y - 12, pw, 24};
+        fill_round_rect(pixels, stride, pill, 12, UI_SUCCESS_SOFT);
+        draw_rect_outline(pixels, stride, pill, 12, 1, UI_SUCCESS_BORDER);
+        draw_text_center(pixels, stride, pill, fitted, 12, UI_SUCCESS);
+        draw_wrapped_text(pixels, stride, box.x + 18, box.y + 74,
+                          ptc_ui_text(PTC_UI_T_SETTINGS_PREVIEW_PIN_NOTE), 13,
+                          box.width - 36, 18, 2, UI_SUCCESS);
+    } else if (sel == 1) {
+        /* Notifications: Dual-channel live readiness */
+        draw_text_bold(pixels, stride, box.x + 14, box.y + 26,
+                       ptc_ui_text(PTC_UI_T_SETTINGS_PREVIEW_NOTICE_TITLE), 13, UI_INK);
+        bool ext_on = (model->reason_external_notifications == 1);
+        const char *ext_state = ptc_ui_text(
+            model->reason_external_notifications == 1 ? PTC_UI_T_NOTICE_STATE_READY :
+            model->reason_external_notifications == 0 ? PTC_UI_T_NOTICE_STATE_OFF : PTC_UI_T_NOTICE_STATE_UNKNOWN);
+        const char *det_state = ptc_ui_text(
+            !model->reason_overlay_installed ? PTC_UI_T_NOTICE_STATE_MISSING :
+            model->reason_detail_ready ? PTC_UI_T_NOTICE_STATE_READY : PTC_UI_T_NOTICE_STATE_NEED_HIDE);
+        int cw = (box.width - 36) / 2;
+        UiRect c0 = {box.x + 14, box.y + 42, cw, 60};
+        UiRect c1 = {box.x + 22 + cw, box.y + 42, cw, 60};
+        fill_round_rect(pixels, stride, c0, 8, UI_SURFACE);
+        draw_rect_outline(pixels, stride, c0, 8, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_NOTICE_CHANNEL_BRIEF), 11, c0.width - 14);
+        draw_text(pixels, stride, c0.x + 8, c0.y + 21, fitted, 11, UI_MUTED);
+        fit_text(fitted, sizeof(fitted), ext_state, 13, c0.width - 14);
+        draw_text_bold(pixels, stride, c0.x + 8, c0.y + 45, fitted, 13, ext_on ? UI_SUCCESS : UI_WARNING_TEXT);
+
+        fill_round_rect(pixels, stride, c1, 8, UI_SURFACE);
+        draw_rect_outline(pixels, stride, c1, 8, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_NOTICE_CHANNEL_DETAIL), 11, c1.width - 14);
+        draw_text(pixels, stride, c1.x + 8, c1.y + 21, fitted, 11, UI_MUTED);
+        fit_text(fitted, sizeof(fitted), det_state, 13, c1.width - 14);
+        draw_text_bold(pixels, stride, c1.x + 8, c1.y + 45, fitted, 13,
+                       model->reason_detail_ready ? UI_SUCCESS : (!model->reason_overlay_installed ? UI_DANGER : UI_WARNING_TEXT));
+    } else if (sel == 2) {
+        /* Shortcut keycap preview */
+        const char *combo = (model->custom_shortcut_enabled && model->custom_shortcut_label[0])
+            ? model->custom_shortcut_label : "-";
+        fit_text(fitted, sizeof(fitted), combo, 16, box.width - 56);
+        int kw = measure_text(fitted, 16) + 28;
+        if (kw < 56) kw = 56;
+        UiRect keycap = {box.x + 16, box.y + 20, kw, 36};
+        fill_round_rect(pixels, stride, keycap, 8, UI_SURFACE);
+        draw_rect_outline(pixels, stride, keycap, 8, 2, UI_ACCENT);
+        draw_text_center(pixels, stride, keycap, fitted, 16, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, box.x + 16, box.y + 78,
+                          ptc_ui_text(PTC_UI_T_SETTINGS_PREVIEW_SHORTCUT_NOTE), 13,
+                          box.width - 32, 18, 2, UI_MUTED);
+    } else if (sel == 3) {
+        /* Recent 2 family activity records preview */
+        draw_text_bold(pixels, stride, box.x + 14, box.y + 24,
+                       ptc_ui_text(PTC_UI_T_SETTINGS_PREVIEW_ACTIVITY_TITLE), 12, UI_MUTED);
+        if (model->activity_history_available && model->activity_history_count > 0) {
+            int shown = model->activity_history_count < 2 ? model->activity_history_count : 2;
+            for (int r = 0; r < shown; ++r) {
+                const PtcActivityHistoryRecord *rec = &model->activity_history[r];
+                int ry = box.y + 34 + r * 38;
+                UiRect row = {box.x + 12, ry, box.width - 24, 32};
+                char time_str[32];
+                fill_round_rect(pixels, stride, row, 8, UI_SURFACE);
+                draw_rect_outline(pixels, stride, row, 8, 1, UI_BORDER);
+                format_event_time(rec->occurred_at, false, time_str, sizeof(time_str));
+                int tw = measure_text(time_str, 11);
+                draw_text(pixels, stride, row.x + row.width - 10 - tw, row.y + 21, time_str, 11, UI_MUTED);
+                fit_text(fitted, sizeof(fitted), activity_label(rec->action), 12, row.width - tw - 26);
+                draw_text(pixels, stride, row.x + 10, row.y + 21, fitted, 12, UI_INK);
+            }
+        } else {
+            draw_wrapped_text(pixels, stride, box.x + 14, box.y + 56,
+                              ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECORD_OF_FAMILY_ACTIVITIES), 13,
+                              box.width - 28, 18, 2, UI_MUTED);
+        }
+    } else if (sel == 4) {
+        /* Compact dual-path album bypass diagram */
+        UiRect a1 = {box.x + 14, box.y + 18, 92, 32};
+        UiRect a2 = {box.x + 146, box.y + 18, box.width - 160, 32};
+        fill_round_rect(pixels, stride, a1, 8, UI_SURFACE);
+        draw_rect_outline(pixels, stride, a1, 8, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_ALBUM_DIAG_ALBUM), 12, a1.width - 10);
+        draw_text_center(pixels, stride, a1, fitted, 12, UI_INK);
+        draw_transition_arrow(pixels, stride, box.x + 126, a1.y + 16, UI_MUTED);
+        fill_round_rect(pixels, stride, a2, 8, UI_RAISED);
+        draw_rect_outline(pixels, stride, a2, 8, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_ALBUM_DIAG_NORMAL), 12, a2.width - 10);
+        draw_text_center(pixels, stride, a2, fitted, 12, UI_MUTED);
+
+        UiRect b1 = {box.x + 14, box.y + 64, 92, 34};
+        UiRect b2 = {box.x + 114, box.y + 64, 92, 34};
+        UiRect b3 = {box.x + 240, box.y + 64, box.width - 254, 34};
+        fill_round_rect(pixels, stride, b1, 8, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, b1, 8, 1, UI_ACCENT);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_ALBUM_DIAG_CTRL), 11, b1.width - 8);
+        draw_text_center(pixels, stride, b1, fitted, 11, UI_ACCENT);
+        fill_round_rect(pixels, stride, b2, 8, UI_ACCENT);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_ALBUM_DIAG_HOLD_XA), 11, b2.width - 8);
+        draw_text_center(pixels, stride, b2, fitted, 11, UI_ON_ACCENT);
+        draw_transition_arrow(pixels, stride, box.x + 222, b1.y + 17, UI_SUCCESS);
+        fill_round_rect(pixels, stride, b3, 8, UI_SUCCESS_SOFT);
+        draw_rect_outline(pixels, stride, b3, 8, 1, UI_SUCCESS_BORDER);
+        draw_text_center(pixels, stride, b3, "hbmenu", 12, UI_SUCCESS);
+    } else if (sel == 5) {
+        /* 4 live theme style palette swatches */
+        PtcUiThemeStyle active_style = ptc_ui_theme_get_style();
+        draw_text_bold(pixels, stride, box.x + 14, box.y + 24,
+                       ptc_ui_text(PTC_UI_T_SETTINGS_PREVIEW_THEME_TITLE), 12, UI_MUTED);
+        snprintf(buf, sizeof(buf), "%s", ptc_ui_theme_preference_label(g_theme.preference));
+        draw_text_bold(pixels, stride, box.x + box.width - 14 - measure_text(buf, 12),
+                       box.y + 24, buf, 12, UI_ACCENT);
+        int gap = 8;
+        int sw = (box.width - 28 - gap * 3) / 4;
+        for (int s = 0; s < PTC_UI_THEME_STYLE_COUNT; ++s) {
+            const PtcUiPalette *spal = ptc_ui_theme_style_palette(g_theme.resolved, (PtcUiThemeStyle)s);
+            UiRect tile = {box.x + 14 + s * (sw + gap), box.y + 36, sw, 68};
+            bool is_on = ((PtcUiThemeStyle)s == active_style);
+            fill_round_rect(pixels, stride, tile, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, tile, 8, is_on ? 2 : 1, is_on ? UI_ACCENT : UI_BORDER);
+            UiRect swatch = {tile.x + 8, tile.y + 8, tile.width - 16, 26};
+            fill_round_rect(pixels, stride, swatch, 5, UI_RGB(spal->accent));
+            fit_text(fitted, sizeof(fitted), ptc_ui_theme_style_label((PtcUiThemeStyle)s), 11, tile.width - 10);
+            draw_text_center(pixels, stride, (UiRect){tile.x, tile.y + 38, tile.width, 24},
+                             fitted, 11, is_on ? UI_ACCENT : UI_INK);
+        }
+    }
+}
+
 static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect help = {842, 176, 384, 452};
+    UiRect help = {840, 174, 386, 454};
     draw_plan_card(pixels, stride, help, false);
 
     int sel = model->selected_index;
@@ -1158,139 +1507,157 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
     const char *title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
     const char *status_text = ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM);
     uint32_t status_color = UI_ACCENT;
+    uint32_t status_bg = UI_ACCENT_SOFT;
+    uint32_t status_bd = UI_ACCENT;
+    UiActionIcon icon = UI_ACTION_ICON_THEME;
     const char *desc1 = "";
     const char *desc2 = "";
-    const char *desc3 = "";
     const char *action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_MODIFY_SETTINGS);
 
     switch (sel) {
-    case 0: /* 修改 PIN */
+    case 0:
         tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
         title = ptc_ui_text(PTC_UI_T_PARENT_PIN);
         status_text = ptc_ui_text(PTC_UI_T_PROTECTION_ENABLED);
         status_color = UI_SUCCESS;
+        status_bg = UI_SUCCESS_SOFT;
+        status_bd = UI_SUCCESS_BORDER;
+        icon = UI_ACTION_ICON_KEY;
         desc1 = ptc_ui_text(PTC_UI_T_USED_TO_PROTECT_PARENTAL_ZONE_SETTINGS_HIGH);
         desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_1_64_DIGIT_PIN);
-        desc3 = ptc_ui_text(PTC_UI_T_PIN_COOLDOWN_FROM_FIFTH_FAILURE);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_THE_MANAGEMENT_PASSWORD);
         break;
-    case 1: /* 受限原因与通知 */
+    case 1:
         tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
         title = ptc_ui_text(PTC_UI_T_ALERT_PREFERENCES);
         status_text = model->reason_notifications_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2);
         status_color = model->reason_notifications_enabled ? UI_SUCCESS : UI_MUTED;
-        desc1 = ptc_ui_text(PTC_UI_T_REASON_NOTIFICATIONS);
-        desc2 = ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPERIMENT);
-        desc3 = ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY);
+        status_bg = model->reason_notifications_enabled ? UI_SUCCESS_SOFT : UI_PAGE;
+        status_bd = model->reason_notifications_enabled ? UI_SUCCESS_BORDER : UI_BORDER;
+        icon = UI_ACTION_ICON_NOTIFICATION;
+        desc1 = ptc_ui_text(PTC_UI_T_NOTICE_SUBTITLE_B);
+        desc2 = ptc_ui_text(PTC_UI_T_REASON_NOTICE_EXPIRY);
         action_hint = ptc_ui_text(PTC_UI_T_REASON_NOTICE_TOGGLE);
         break;
-    case 2: /* 家长区快捷键 */
+    case 2:
         tag = ptc_ui_text(PTC_UI_T_SYSTEM_CONTROL);
         title = ptc_ui_text(PTC_UI_T_QUICK_ENTRANCE_TO_PARENT_AREA);
         status_text = (model->custom_shortcut_enabled && model->custom_shortcut_label[0])
             ? model->custom_shortcut_label : ptc_ui_text(PTC_UI_T_DEFAULT_SHORTCUT_LABEL);
         status_color = UI_ACCENT;
+        status_bg = UI_ACCENT_SOFT;
+        status_bd = UI_ACCENT;
+        icon = UI_ACTION_ICON_CONTROLLER;
         desc1 = ptc_ui_text(PTC_UI_T_LONG_PRESS_THIS_KEY_ON_ANY_INTERFACE);
         desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_CUSTOM_CONFIGURATION_OF_MINUS_CAPTURE_OR);
-        desc3 = ptc_ui_text(PTC_UI_T_IT_IS_CONVENIENT_FOR_PARENTS_TO_QUICKLY);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_SHORTCUT_KEY_BINDINGS);
         break;
-    case 3: /* 家庭活动记录 */
+    case 3:
         tag = ptc_ui_text(PTC_UI_T_SECURITY_AUDIT);
         title = ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD);
         status_text = ptc_ui_text(PTC_UI_T_UP_TO_200_ITEMS);
         status_color = UI_MUTED;
+        status_bg = UI_PAGE;
+        status_bd = UI_BORDER;
+        icon = UI_ACTION_ICON_ACTIVITY;
         desc1 = ptc_ui_text(PTC_UI_T_RECORDS_CREDIT_ADJUSTMENT_OFFLINE_GRANT_BEDTIME_SKIP);
         desc2 = ptc_ui_text(PTC_UI_T_ONLY_SAVE_LOCAL_SECURITY_AUDIT_LOGS_AND);
-        desc3 = ptc_ui_text(PTC_UI_T_SUPPORTS_HANDLE_L_R_FOR_QUICK_PAGE);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_SEE_FULL_ACTIVITY_LOG);
         break;
-    case 4: /* 自制程序高级入口 / 相册防绕过 */
+    case 4:
         tag = ptc_ui_text(PTC_UI_T_ADVANCED_SECURITY);
         title = ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS);
+        icon = UI_ACTION_ICON_HOMEBREW;
         if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
             status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
             status_color = UI_MUTED;
+            status_bg = UI_PAGE;
+            status_bd = UI_BORDER;
         } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
             status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON);
             status_color = UI_SUCCESS;
+            status_bg = UI_SUCCESS_SOFT;
+            status_bd = UI_SUCCESS_BORDER;
         } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
             status_text = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
-            status_color = UI_WARNING;
+            status_color = UI_WARNING_TEXT;
+            status_bg = UI_WARNING_SOFT;
+            status_bd = UI_WARNING_BORDER;
         } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
             status_text = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
             status_color = UI_ACCENT;
+            status_bg = UI_ACCENT_SOFT;
+            status_bd = UI_ACCENT;
         } else {
             status_text = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
             status_color = UI_DANGER;
+            status_bg = UI_DANGER_SOFT;
+            status_bd = UI_DANGER_BORDER;
         }
         desc1 = ptc_ui_text(PTC_UI_T_REDIRECT_PHOTO_ALBUM_ENTRY_TO_HOMEBREW_MENU);
         desc2 = ptc_ui_text(PTC_UI_T_ONCE_ENABLED_HOLD_X_THEN_PRESS_A);
-        desc3 = ptc_ui_text(PTC_UI_T_PREVENT_CHILDREN_FROM_BYPASSING_PARENTAL_CONTROL_RESTRICTIONS);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
         break;
-    case 5: /* 外观主题与偏好 */
+    case 5:
+    default:
         tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
         title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
         status_text = ptc_ui_theme_preference_label(g_theme.preference);
         status_color = UI_ACCENT;
+        status_bg = UI_ACCENT_SOFT;
+        status_bd = UI_ACCENT;
+        icon = UI_ACTION_ICON_THEME;
         desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_THREE_THEME_MODES_LIGHT_DARK_AND);
         desc2 = ptc_ui_text(PTC_UI_T_DARK_MODE_OPTIMIZES_OLED_SCREEN_POWER_SAVING);
-        desc3 = ptc_ui_text(PTC_UI_T_THEME_SELECTION_SAVED_ON_CONFIRM);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_THEME_SWITCHING);
         break;
-    default:
-        break;
     }
 
-    /* Render Title */
-    char fitted_title[128];
-    fit_text(fitted_title, sizeof(fitted_title), title, 22, help.width - 48);
-    draw_text(pixels, stride, help.x + 24, help.y + 72, fitted_title, 22, UI_RGB(UI_BLENDED(text_primary)));
-
-    /* Render Status Badge */
-    char fitted_badge[96], fitted_tag[96];
-    fit_text(fitted_badge, sizeof(fitted_badge), status_text, 12, (help.width - 48) / 2 - 16);
-    int badge_width = measure_text(fitted_badge, 12) + 16;
-    UiRect badge = {help.x + help.width - 24 - badge_width, help.y + 24, badge_width, 26};
-    fit_text(fitted_tag, sizeof(fitted_tag), tag, 14, badge.x - help.x - 36);
-    fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
-    draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
+    /* Header tag + status pill */
+    char fitted_badge[96], fitted_tag[96], fitted_title[128];
+    fit_text(fitted_badge, sizeof(fitted_badge), status_text, 12, (help.width - 44) / 2);
+    int badge_width = measure_text(fitted_badge, 12) + 18;
+    UiRect badge = {help.x + help.width - 20 - badge_width, help.y + 18, badge_width, 26};
+    fit_text(fitted_tag, sizeof(fitted_tag), tag, 13, badge.x - help.x - 32);
+    fill_round_rect(pixels, stride, badge, 13, status_bg);
+    draw_rect_outline(pixels, stride, badge, 13, 1, status_bd);
     draw_text_center(pixels, stride, badge, fitted_badge, 12, status_color);
-    draw_text(pixels, stride, help.x + 24, help.y + 42, fitted_tag, 14, UI_ACCENT);
+    draw_text_bold(pixels, stride, help.x + 20, help.y + 36, fitted_tag, 13, UI_ACCENT);
 
-    /* Divider line */
-    UiRect div = {help.x + 24, help.y + 92, help.width - 48, 1};
-    fill_round_rect(pixels, stride, div, 0, UI_BORDER);
+    /* Icon badge + Title */
+    UiRect icon_box = {help.x + 20, help.y + 54, 40, 40};
+    fill_round_rect(pixels, stride, icon_box, 10, UI_ACCENT_SOFT);
+    draw_card_action_icon(pixels, stride, icon_box.x + 20, icon_box.y + 20, icon, UI_ACCENT);
+    fit_text(fitted_title, sizeof(fitted_title), title, 21, help.width - 92);
+    draw_text_bold(pixels, stride, help.x + 72, help.y + 82, fitted_title, 21, UI_RGB(UI_BLENDED(text_primary)));
 
-    /* Descriptions */
+    /* Divider */
+    fill_round_rect(pixels, stride, (UiRect){help.x + 20, help.y + 106, help.width - 40, 1}, 0, UI_BORDER);
+
+    /* Description */
     int desc_y = help.y + 128;
     if (desc1 && *desc1) {
-        desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc1, 14,
-                                  help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
+        desc_y = draw_wrapped_text(pixels, stride, help.x + 20, desc_y, desc1, 14,
+                                   help.width - 40, 19, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
     }
     if (desc2 && *desc2) {
-        desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc2, 14,
-                                  help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
-    }
-    if (desc3 && *desc3) {
-        draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc3, 14,
-                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_wrapped_text(pixels, stride, help.x + 20, desc_y, desc2, 14,
+                          help.width - 40, 19, 2, UI_RGB(UI_BLENDED(text_secondary)));
     }
 
-    /* Action Hint Box */
-    UiRect hint_box = {help.x + 24, help.y + 268, help.width - 48, 44};
-    fill_round_rect(pixels, stride, hint_box, 10, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, hint_box, 10, 1, UI_ACCENT);
-    draw_button_label(pixels, stride, hint_box, action_hint, 15, UI_ACCENT);
+    /* Dynamic visual preview module */
+    UiRect preview_box = {help.x + 20, help.y + 220, help.width - 40, 118};
+    draw_settings_dynamic_preview(pixels, stride, model, preview_box, sel);
 
-    /* Bottom guidance */
-    draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 68,
-                      ptc_ui_text(PTC_UI_T_PRESS_B_WHILE_AWAY_TO_RETURN_TO), 13,
-                      help.width - 48, 17, 2, UI_MUTED);
-    draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 30,
-                      ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_DEVICE_STATUS), 13,
-                      help.width - 48, 17, 2, UI_MUTED);
+    /* Primary CTA pill */
+    UiRect hint_box = {help.x + 20, help.y + 354, help.width - 40, 44};
+    fill_round_rect(pixels, stride, hint_box, 10, UI_ACCENT);
+    draw_button_label(pixels, stride, hint_box, action_hint, 15, UI_ON_ACCENT);
+
+    /* Bottom quiet lock hint */
+    draw_wrapped_text_centered(pixels, stride, help.x + help.width / 2, help.y + 422,
+                               ptc_ui_text(PTC_UI_T_PRESS_B_WHILE_AWAY_TO_RETURN_TO), 12,
+                               help.width - 36, 16, 2, UI_MUTED);
 }
 
 static void draw_prominent_footer_action(

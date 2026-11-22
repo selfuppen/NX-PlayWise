@@ -203,16 +203,12 @@ static void handle_language_overlay_input(UiState *ui, u64 down)
 {
     if (down & HidNpadButton_B) {
         ptc_ui_cancel_overlay(&ui->model);
-    } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
-        int col = ui->model.overlay_selection % 2;
-        int row = ui->model.overlay_selection / 2;
-        col = (col + 1) % 2;
-        ui->model.overlay_selection = row * 2 + col;
-    } else if (down & (HidNpadButton_Up | HidNpadButton_Down)) {
-        int col = ui->model.overlay_selection % 2;
-        int row = ui->model.overlay_selection / 2;
-        row = (row + 1) % 2;
-        ui->model.overlay_selection = row * 2 + col;
+    } else if (down & HidNpadButton_Left) {
+        ptc_audio_play(PTC_SE_FOCUS);
+        ui->model.overlay_selection = (ui->model.overlay_selection + 3) % 4;
+    } else if (down & HidNpadButton_Right) {
+        ptc_audio_play(PTC_SE_FOCUS);
+        ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
     } else if (down & HidNpadButton_A) {
         PtcUiLanguagePreference preference = (PtcUiLanguagePreference)ui->model.overlay_selection;
         if (apply_language_preference(ui, preference)) {
@@ -266,6 +262,16 @@ static void handle_album_manager_overlay_input(UiState *ui, u64 down)
 
 static void handle_software_info_overlay_input(UiState *ui, u64 down)
 {
+    if (down & (HidNpadButton_L | HidNpadButton_Left)) {
+        ptc_audio_play(PTC_SE_TAB);
+        ui->model.software_info_qr_tab = 0;
+        return;
+    }
+    if (down & (HidNpadButton_R | HidNpadButton_Right)) {
+        ptc_audio_play(PTC_SE_TAB);
+        ui->model.software_info_qr_tab = 1;
+        return;
+    }
     if (down & HidNpadButton_X) { open_online_update(ui); return; }
             if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
                 ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !ui->model.parent_support_only) {
