@@ -16,7 +16,6 @@ static const struct {
 
 static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect dialog;
     const PtcScheduledOverride *draft = &model->draft_scheduled_override;
     uint32_t duration = draft->end_day_index >= draft->start_day_index
         ? (uint32_t)draft->end_day_index - draft->start_day_index + 1u : 1u;
@@ -24,128 +23,243 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
     uint8_t s_month = 0, s_day = 0, e_month = 0, e_day = 0;
     bool s_ok = ptc_date_from_day_index(draft->start_day_index, &s_year, &s_month, &s_day);
     bool e_ok = ptc_date_from_day_index(draft->end_day_index, &e_year, &e_month, &e_day);
-    const char *LABELS[] = {ptc_ui_text(PTC_UI_T_PLAN_STATUS), ptc_ui_text(PTC_UI_T_START_DATE), ptc_ui_text(PTC_UI_T_NUMBER_OF_DAYS_TO_LAST), ptc_ui_text(PTC_UI_T_TOTAL_DAILY_QUOTA)};
-    char values[4][128];
-    char banner_text[192];
-    bool save_danger = ptc_ui_scheduled_dirty(model) &&
+    bool dirty = ptc_ui_scheduled_dirty(model);
+    bool disabled = model->disable_flag_present || model->waiting;
+    bool limited = draft->rule.mode == PTC_RULE_MODE_LIMIT;
+    bool save_danger = dirty &&
         ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_SCHEDULED, ptc_ui_render_now());
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
+    char path[128], buf[160], fitted[160];
 
-    snprintf(values[0], sizeof(values[0]), "%s",
-             draft->enabled ? ptc_ui_text(PTC_UI_T_IS_ENABLED_PLAN_IS_IN_EFFECT) : ptc_ui_text(PTC_UI_T_CLOSED_NOT_EFFECTIVE_YET));
-    if (s_ok) {
-        snprintf(values[1], sizeof(values[1]), "%04u-%02u-%02u%s", s_year, s_month, s_day,
-                 model->status_loaded && draft->start_day_index == model->day_index ? ptc_ui_text(PTC_UI_T_TODAY_2) : "");
-    } else {
-        snprintf(values[1], sizeof(values[1]), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
-    }
-    snprintf(values[2], sizeof(values[2]), ptc_ui_text(PTC_UI_T_U_DAYS_UP_TO_366), (unsigned int)duration);
-    if (draft->rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        snprintf(values[3], sizeof(values[3]), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
-    } else {
-        snprintf(values[3], sizeof(values[3]), ptc_ui_text(PTC_UI_T_U_MIN_U_HR_U_MIN),
-                 (unsigned int)draft->rule.minutes,
-                 (unsigned int)draft->rule.minutes / 60,
-                 (unsigned int)draft->rule.minutes % 60);
+    snprintf(path, sizeof(path), ptc_ui_text(PTC_UI_T_TIME_PLANS_S),
+             ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA));
+    draw_subpage_shell(pixels, stride, model,
+                       ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA),
+                       ptc_ui_text(PTC_UI_T_SCHEDULE_DAILY_LIMITS_FOR_A_DATE_RANGE),
+                       ptc_ui_text(PTC_UI_T_B_BACK_TO_PLANS), path);
+    {
+        int64_t now = ptc_ui_render_now();
+        draw_refresh_footer_button(pixels, stride, ptc_ui_scheduled_refresh_rect(),
+            ptc_ui_text(PTC_UI_T_Y_REFRESH), ptc_ui_status_needs_refresh(model, now),
+            ptc_ui_status_refresh_failed(model), false, model->waiting);
     }
 
-    int max_label_w = 0;
-    for (int i = 0; i < 4; ++i) {
-        int lw = measure_text(LABELS[i], 16);
-        if (lw > max_label_w) max_label_w = lw;
-    }
+    /* ================= Left Column: Step 1 Card (Active Dates) ================= */
+    UiRect step1_card = {54, 174, 748, 250};
+    draw_plan_card(pixels, stride, step1_card, false);
 
-    for (int index = 0; index < 4; ++index) {
-        UiRect row = to_uirect(ptc_ui_scheduled_field_rect(index));
-        draw_plan_card(pixels, stride, row, model->overlay_selection == index);
-        draw_text(pixels, stride, row.x + 18, row.y + 38, LABELS[index], 16, UI_MUTED);
+    /* Field 0: Master toggle row inside Step 1 */
+    UiRect row0 = to_uirect(ptc_ui_scheduled_field_rect(0));
+    bool f0 = model->overlay_selection == 0;
+    fill_round_rect(pixels, stride, row0, 10, f0 ? UI_ACCENT_SOFT : UI_RAISED);
+    if (f0) draw_focus_ring(pixels, stride, row0, 10);
+    else draw_rect_outline(pixels, stride, row0, 10, 1, UI_BORDER);
 
-        int val_x = row.x + 18 + max_label_w + 16;
-        if (val_x < row.x + 130) val_x = row.x + 130;
-
-        if (index == 0) {
-            draw_text(pixels, stride, val_x, row.y + 38, values[0], 20,
-                       draft->enabled ? UI_SUCCESS : UI_MUTED);
-            UiRect toggle_rect = {row.x + row.width - 78, row.y + (row.height - 30) / 2, 60, 30};
-            draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled,
-                                model->overlay_selection == 0, model->disable_flag_present, NULL, NULL);
-        } else if (index == 1 || index == 2) {
-            draw_text(pixels, stride, val_x, row.y + 38, values[index], 20, UI_RGB(UI_BLENDED(text_primary)));
-            UiRect edit_chip = {row.x + row.width - 86, row.y + (row.height - 28) / 2, 70, 28};
-            fill_round_rect(pixels, stride, edit_chip, 6, UI_RGB(UI_BLENDED(surface)));
-            draw_rect_outline(pixels, stride, edit_chip, 6, 1, UI_BORDER);
-            draw_text_center(pixels, stride, edit_chip, ptc_ui_text(PTC_UI_T_A_EDITOR), 13, UI_MUTED);
+    char status_badge[48];
+    uint32_t badge_bg = UI_RAISED, badge_fg = UI_MUTED;
+    if (!draft->enabled) {
+        snprintf(status_badge, sizeof(status_badge), "%s", ptc_ui_text(PTC_UI_T_OFF_2));
+    } else if (s_ok && e_ok && model->status_loaded) {
+        if (model->day_index >= draft->start_day_index && model->day_index <= draft->end_day_index) {
+            snprintf(status_badge, sizeof(status_badge), "%s", ptc_ui_text(PTC_UI_T_SCHEDULED_ACTIVE_TODAY));
+            badge_bg = UI_SUCCESS_SOFT; badge_fg = UI_SUCCESS;
+        } else if (model->day_index < draft->start_day_index) {
+            snprintf(status_badge, sizeof(status_badge), ptc_ui_text(PTC_UI_T_SCHEDULED_IN_DAYS),
+                     (unsigned)(draft->start_day_index - model->day_index));
+            badge_bg = UI_ACCENT_SOFT; badge_fg = UI_ACCENT;
         } else {
-            draw_text(pixels, stride, val_x, row.y + 38, values[index], 20,
-                       draft->rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT);
-            UiRect edit_chip = {row.x + row.width - 86, row.y + (row.height - 28) / 2, 70, 28};
-            fill_round_rect(pixels, stride, edit_chip, 6, UI_RGB(UI_BLENDED(surface)));
-            draw_rect_outline(pixels, stride, edit_chip, 6, 1, UI_BORDER);
-            draw_text_center(pixels, stride, edit_chip, ptc_ui_text(PTC_UI_T_A_EDITOR), 13, UI_MUTED);
+            snprintf(status_badge, sizeof(status_badge), "%s", ptc_ui_text(PTC_UI_T_SCHEDULED_EXPIRED_SHORT));
+            badge_bg = UI_WARNING_SOFT; badge_fg = UI_WARNING_TEXT;
+        }
+    } else {
+        snprintf(status_badge, sizeof(status_badge), "%s", ptc_ui_text(PTC_UI_T_ON));
+        badge_bg = UI_SUCCESS_SOFT; badge_fg = UI_SUCCESS;
+    }
+
+    UiRect toggle_rect = {row0.x + row0.width - 74, row0.y + (row0.height - 28) / 2, 58, 28};
+    int badge_w = measure_text(status_badge, 12) + 20;
+    if (badge_w > 180) badge_w = 180;
+    UiRect badge_rect = {toggle_rect.x - badge_w - 14, row0.y + (row0.height - 24) / 2, badge_w, 24};
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SCHEDULED_STEP1_TITLE), 18,
+             badge_rect.x - (row0.x + 16) - 12);
+    draw_text_bold(pixels, stride, row0.x + 16, row0.y + 32, fitted, 18, UI_INK);
+    fill_round_rect(pixels, stride, badge_rect, 12, badge_bg);
+    fit_text(fitted, sizeof(fitted), status_badge, 12, badge_rect.width - 10);
+    draw_text_center(pixels, stride, badge_rect, fitted, 12, badge_fg);
+    draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled, f0, disabled, NULL, NULL);
+
+    /* Visual Date Range Bar */
+    UiRect range_bar = {68, 246, 720, 44};
+    fill_round_rect(pixels, stride, range_bar, 10, draft->enabled ? UI_ACCENT_SOFT : UI_PAGE);
+    draw_rect_outline(pixels, stride, range_bar, 10, 1, draft->enabled ? UI_ACCENT : UI_BORDER);
+    if (s_ok && e_ok) {
+        char start_str[32], end_str[32], span_str[32];
+        snprintf(start_str, sizeof(start_str), "%04u-%02u-%02u", s_year, s_month, s_day);
+        snprintf(end_str, sizeof(end_str), "%04u-%02u-%02u", e_year, e_month, e_day);
+        snprintf(span_str, sizeof(span_str), ptc_ui_text(PTC_UI_T_SCHEDULED_DAYS_TOTAL), (unsigned)duration);
+        int start_w = measure_text(start_str, 16);
+        int end_w = measure_text(end_str, 16);
+        int span_w = measure_text(span_str, 13) + 24;
+        if (span_w < 78) span_w = 78;
+        if (span_w > 160) span_w = 160;
+        draw_text_bold(pixels, stride, range_bar.x + 18, range_bar.y + 28, start_str, 16,
+                       draft->enabled ? UI_INK : UI_MUTED);
+        draw_text_bold(pixels, stride, range_bar.x + range_bar.width - 18 - end_w, range_bar.y + 28,
+                       end_str, 16, draft->enabled ? UI_INK : UI_MUTED);
+        int line_l = range_bar.x + 18 + start_w + 16;
+        int line_r = range_bar.x + range_bar.width - 18 - end_w - 16;
+        int mid_x = (line_l + line_r) / 2;
+        int mid_y = range_bar.y + range_bar.height / 2;
+        if (line_r > line_l + span_w + 24) {
+            draw_line(pixels, stride, line_l, mid_y, mid_x - span_w / 2 - 8, mid_y, 2,
+                      draft->enabled ? UI_ACCENT : UI_BORDER);
+            draw_line(pixels, stride, mid_x + span_w / 2 + 8, mid_y, line_r, mid_y, 2,
+                      draft->enabled ? UI_ACCENT : UI_BORDER);
+        }
+        UiRect span_pill = {mid_x - span_w / 2, range_bar.y + 9, span_w, 26};
+        fill_round_rect(pixels, stride, span_pill, 13, draft->enabled ? UI_ACCENT : UI_RAISED);
+        fit_text(fitted, sizeof(fitted), span_str, 13, span_pill.width - 10);
+        draw_text_center(pixels, stride, span_pill, fitted, 13, draft->enabled ? UI_ON_ACCENT : UI_MUTED);
+    } else {
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_THE_PLANNING_INTERVAL_IS_BEING_CALCULATED_PLEASE),
+                 14, range_bar.width - 28);
+        draw_text_center(pixels, stride, range_bar, fitted, 14, UI_MUTED);
+    }
+
+    /* Field 1: Start Date sub-box */
+    UiRect row1 = to_uirect(ptc_ui_scheduled_field_rect(1));
+    bool f1 = model->overlay_selection == 1;
+    fill_round_rect(pixels, stride, row1, 10, f1 ? UI_ACCENT_SOFT : UI_RAISED);
+    if (f1) draw_focus_ring(pixels, stride, row1, 10);
+    else draw_rect_outline(pixels, stride, row1, 10, 1, UI_BORDER);
+    {
+        const char *hint = "ZL/ZR ±7d";
+        int hw = measure_text(hint, 11);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_START_DATE), 14, row1.width - hw - 36);
+        draw_text(pixels, stride, row1.x + 14, row1.y + 24, fitted, 14, UI_MUTED);
+        draw_text(pixels, stride, row1.x + row1.width - 14 - hw, row1.y + 23, hint, 11, UI_MUTED);
+        if (s_ok) {
+            snprintf(buf, sizeof(buf), "%04u-%02u-%02u%s", s_year, s_month, s_day,
+                     model->status_loaded && draft->start_day_index == model->day_index ? ptc_ui_text(PTC_UI_T_TODAY_2) : "");
+        } else {
+            snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+        }
+        fit_text(fitted, sizeof(fitted), buf, 20, row1.width - 28);
+        draw_text_bold(pixels, stride, row1.x + 14, row1.y + 52, fitted, 20, UI_INK);
+        const char *q_labels[3] = {"-1", ptc_ui_text(PTC_UI_T_SCHEDULED_CHANGE_DATE), "+1"};
+        for (int q = 0; q < 3; ++q) {
+            UiRect chip = to_uirect(ptc_ui_scheduled_quick_rect(q));
+            fill_round_rect(pixels, stride, chip, 7, q == 1 ? UI_SURFACE : UI_PAGE);
+            draw_rect_outline(pixels, stride, chip, 7, 1, q == 1 && f1 ? UI_ACCENT : UI_BORDER);
+            fit_text(fitted, sizeof(fitted), q_labels[q], 12, chip.width - 8);
+            draw_text_center(pixels, stride, chip, fitted, 12, disabled ? UI_DISABLED : (q == 1 ? UI_ACCENT : UI_INK));
         }
     }
 
-    /* 右侧预估面板 */
-    draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_SCHEDULED, ptc_ui_scheduled_dirty(model),
-                     (UiRect){dialog.x + 626, dialog.y + 116, 460, 306});
+    /* Field 2: Duration sub-box */
+    UiRect row2 = to_uirect(ptc_ui_scheduled_field_rect(2));
+    bool f2 = model->overlay_selection == 2;
+    fill_round_rect(pixels, stride, row2, 10, f2 ? UI_ACCENT_SOFT : UI_RAISED);
+    if (f2) draw_focus_ring(pixels, stride, row2, 10);
+    else draw_rect_outline(pixels, stride, row2, 10, 1, UI_BORDER);
+    {
+        const char *hint = "1~366";
+        int hw = measure_text(hint, 11);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_NUMBER_OF_DAYS_TO_LAST), 14, row2.width - hw - 36);
+        draw_text(pixels, stride, row2.x + 14, row2.y + 24, fitted, 14, UI_MUTED);
+        draw_text(pixels, stride, row2.x + row2.width - 14 - hw, row2.y + 23, hint, 11, UI_MUTED);
+        snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_U_DAYS), (unsigned)duration);
+        fit_text(fitted, sizeof(fitted), buf, 20, row2.width - 28);
+        draw_text_bold(pixels, stride, row2.x + 14, row2.y + 52, fitted, 20, UI_INK);
+        static const uint32_t DAY_PRESETS[3] = {3, 7, 14};
+        for (int q = 0; q < 4; ++q) {
+            UiRect chip = to_uirect(ptc_ui_scheduled_quick_rect(3 + q));
+            bool active = q < 3 ? (duration == DAY_PRESETS[q]) :
+                          (duration != 3 && duration != 7 && duration != 14);
+            if (q < 3) snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_U_DAYS), (unsigned)DAY_PRESETS[q]);
+            else snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_CUSTOM));
+            fill_round_rect(pixels, stride, chip, 7, active ? UI_ACCENT : UI_PAGE);
+            draw_rect_outline(pixels, stride, chip, 7, 1, active ? UI_ACCENT : UI_BORDER);
+            fit_text(fitted, sizeof(fitted), buf, 12, chip.width - 8);
+            draw_text_center(pixels, stride, chip, fitted, 12,
+                             disabled ? UI_DISABLED : (active ? UI_ON_ACCENT : UI_INK));
+        }
+    }
 
-    /* 日期区间视觉横幅 (Date Range Visual Banner) */
-    UiRect banner = {dialog.x + 34, dialog.y + 424, dialog.width - 68, 44};
-    fill_round_rect(pixels, stride, banner, 10, UI_RGB(UI_BLENDED(surface)));
-    draw_rect_outline(pixels, stride, banner, 10, 1, UI_RGB(UI_BLENDED(border_control)));
-    if (s_ok && e_ok) {
-        bool today_in_range = model->status_loaded &&
-            model->day_index >= draft->start_day_index &&
-            model->day_index <= draft->end_day_index;
-        const char *range_status = draft->enabled
-            ? (today_in_range ? ptc_ui_text(PTC_UI_T_WITHIN_THE_RANGE_TODAY_IN_EFFECT) :
-               (model->day_index < draft->start_day_index ? ptc_ui_text(PTC_UI_T_PLAN_WILL_BE_EFFECTIVE_IN_THE_FUTURE) : ptc_ui_text(PTC_UI_T_PLAN_HAS_EXPIRED)))
-            : ptc_ui_text(PTC_UI_T_THE_MASTER_PLAN_SWITCH_IS_NOT_TURNED);
-        snprintf(banner_text, sizeof(banner_text),
-                 ptc_ui_text(PTC_UI_T_RANGE_04U_02U_02U_TO_04U_02U),
-                 s_year, s_month, s_day, e_year, e_month, e_day, (unsigned int)duration, range_status);
-        draw_text(pixels, stride, banner.x + 16, banner.y + 27, banner_text, 15,
-                  draft->enabled && today_in_range ? UI_SUCCESS : UI_RGB(UI_BLENDED(text_primary)));
+    /* ================= Left Column: Step 2 Card (Daily Quota) ================= */
+    UiRect step2_card = {54, 436, 748, 200};
+    draw_plan_card(pixels, stride, step2_card, false);
+
+    UiRect row3 = to_uirect(ptc_ui_scheduled_field_rect(3));
+    bool f3 = model->overlay_selection == 3;
+    fill_round_rect(pixels, stride, row3, 10, f3 ? UI_ACCENT_SOFT : UI_SURFACE);
+    if (f3) draw_focus_ring(pixels, stride, row3, 10);
+    else draw_rect_outline(pixels, stride, row3, 10, 1, UI_BORDER);
+
+    /* Top row inside Step 2: Title + Mode Segmented Control */
+    UiRect lim_btn = to_uirect(ptc_ui_scheduled_quick_rect(7));
+    UiRect unlim_btn = to_uirect(ptc_ui_scheduled_quick_rect(8));
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SCHEDULED_STEP2_TITLE), 18,
+             lim_btn.x - (row3.x + 14) - 12);
+    draw_text_bold(pixels, stride, row3.x + 14, row3.y + 32, fitted, 18, UI_INK);
+
+    fill_round_rect(pixels, stride, lim_btn, 8, limited ? UI_ACCENT : UI_RAISED);
+    draw_rect_outline(pixels, stride, lim_btn, 8, 1, limited ? UI_ACCENT : UI_BORDER);
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_LIMIT), 13, lim_btn.width - 10);
+    draw_text_center(pixels, stride, lim_btn, fitted, 13, disabled ? UI_DISABLED : (limited ? UI_ON_ACCENT : UI_INK));
+
+    fill_round_rect(pixels, stride, unlim_btn, 8, !limited ? UI_SUCCESS : UI_RAISED);
+    draw_rect_outline(pixels, stride, unlim_btn, 8, 1, !limited ? UI_SUCCESS : UI_BORDER);
+    fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED), 13, unlim_btn.width - 10);
+    draw_text_center(pixels, stride, unlim_btn, fitted, 13, disabled ? UI_DISABLED : (!limited ? UI_ON_ACCENT : UI_INK));
+
+    /* Middle quota readout inside Step 2 (centered vertically around Y=536) */
+    if (limited) {
+        snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_U_MIN_U_HR_U_MIN),
+                 (unsigned)draft->rule.minutes,
+                 (unsigned)(draft->rule.minutes / 60),
+                 (unsigned)(draft->rule.minutes % 60));
+        fit_text(fitted, sizeof(fitted), buf, 24, row3.width - 28);
+        draw_text_bold(pixels, stride, row3.x + 14, row3.y + 88, fitted, 24,
+                       disabled ? UI_DISABLED : UI_ACCENT);
     } else {
-        draw_text(pixels, stride, banner.x + 16, banner.y + 27,
-                  ptc_ui_text(PTC_UI_T_THE_PLANNING_INTERVAL_IS_BEING_CALCULATED_PLEASE), 15, UI_MUTED);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_NO_LIMIT), 24, row3.width - 28);
+        draw_text_bold(pixels, stride, row3.x + 14, row3.y + 84, fitted, 24,
+                       disabled ? UI_DISABLED : UI_SUCCESS);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_ALL_DAY_ACCESS), 13, row3.width - 28);
+        draw_text(pixels, stride, row3.x + 14, row3.y + 106, fitted, 13, UI_MUTED);
     }
 
-    /* 规则优先级说明 */
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 482,
-              ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_IS_IN_SEQUENCE_TODAY),
-              14, UI_RGB(UI_BLENDED(text_secondary)));
-
-    /* 动态上下文按键引导栏 (Context-Aware Action Guide Bar) */
-    UiRect guide_bar = {dialog.x + 34, dialog.y + 508, dialog.width - 68, 30};
-    fill_round_rect(pixels, stride, guide_bar, 6, UI_RGB(UI_BLENDED(surface_raised)));
-    draw_rect_outline(pixels, stride, guide_bar, 6, 1, UI_BORDER);
-
-    char guide_text[160];
-    if (model->overlay_selection == 0) {
-        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_ACTION_PRESS_A_OR_TAP_TO_SWITCH));
-    } else if (model->overlay_selection == 1) {
-        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_LEFT_AND_RIGHT_KEYS_1_DAY));
-    } else if (model->overlay_selection == 2) {
-        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_LEFT_AND_RIGHT_KEYS_1_DAY_2));
-    } else if (model->overlay_selection == 3) {
-        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_X_SWITCH_BETWEEN_UNLIMITED_LIMITED_TIME));
-    } else {
-        snprintf(guide_text, sizeof(guide_text), "%s", ptc_ui_text(PTC_UI_T_OPERATION_USE_UP_AND_DOWN_KEYS_TO));
-    }
-    draw_text(pixels, stride, guide_bar.x + 12, guide_bar.y + 20, guide_text, 13, UI_ACCENT);
-
-    if (strcmp(model->result_status, "error") == 0) {
-        draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 538,
-                          ptc_ui_text(PTC_UI_T_THE_LAST_OPERATION_WAS_NOT_COMPLETED_AND),
-                          16, dialog.width - 68, 22, 2, UI_RGB(UI_BLENDED(danger)));
+    /* Bottom quick quota preset chips (60 / 90 / 120 / 180 / Custom) */
+    static const uint16_t QUOTA_PRESETS[4] = {60, 90, 120, 180};
+    for (int q = 0; q < 5; ++q) {
+        UiRect chip = to_uirect(ptc_ui_scheduled_quick_rect(9 + q));
+        bool active = limited && (q < 4 ? (draft->rule.minutes == QUOTA_PRESETS[q]) :
+                                  (draft->rule.minutes != 60 && draft->rule.minutes != 90 &&
+                                   draft->rule.minutes != 120 && draft->rule.minutes != 180));
+        if (q < 4) snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)QUOTA_PRESETS[q]);
+        else snprintf(buf, sizeof(buf), "A %s", ptc_ui_text(PTC_UI_T_CUSTOM));
+        fill_round_rect(pixels, stride, chip, 9, active ? UI_ACCENT : UI_RAISED);
+        draw_rect_outline(pixels, stride, chip, 9, 1, active ? UI_ACCENT : UI_BORDER);
+        fit_text(fitted, sizeof(fitted), buf, 14, chip.width - 10);
+        draw_text_center(pixels, stride, chip, fitted, 14,
+                         disabled ? UI_DISABLED : (active ? UI_ON_ACCENT : (limited ? UI_INK : UI_MUTED)));
     }
 
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
-                       model->waiting ? ptc_ui_text(PTC_UI_T_SAVING) : (ptc_ui_scheduled_dirty(model)
-                           ? (save_danger ? ptc_ui_text(PTC_UI_T_SAVE_MAY_RESTRICT_USE_IMMEDIATELY) : ptc_ui_text(PTC_UI_T_SAVE_DRAFT)) : ptc_ui_text(PTC_UI_T_SAVED)),
-                       save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, false);
+    /* ================= Right Column: Summary & Impact + Discard/Save ================= */
+    draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_SCHEDULED, dirty,
+                     (UiRect){820, 174, 406, 396});
+
+    draw_candidate_button(pixels, stride, ptc_ui_discard_rect(model->overlay),
+                          ptc_ui_text(PTC_UI_T_ZL_DISCARD), UI_PAGE, UI_INK, false,
+                          !dirty || model->waiting);
+    draw_candidate_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
+                          model->disable_flag_present ? ptc_ui_text(PTC_UI_T_READ_ONLY) :
+                          (model->waiting ? ptc_ui_text(PTC_UI_T_SAVING_2) :
+                           (dirty ? (save_danger ? ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)
+                                                 : ptc_ui_text(PTC_UI_T_SAVE_DRAFT_2))
+                                  : ptc_ui_text(PTC_UI_T_SAVED))),
+                          save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, false,
+                          disabled || !dirty);
 }
 
 static void draw_scheduled_leave(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -331,7 +445,7 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
         UI_WARNING, UI_ON_ACCENT, false);
 }
 
-static void draw_bedtime_timeline_strip(
+void draw_bedtime_timeline_strip(
     uint32_t *pixels, uint32_t stride,
     UiRect bar, uint16_t start_m, uint16_t end_m, bool enabled)
 {
@@ -339,7 +453,10 @@ static void draw_bedtime_timeline_strip(
     draw_rect_outline(pixels, stride, bar, 6, 1, UI_BORDER);
 
     if (!enabled) {
-        draw_text_center(pixels, stride, bar, ptc_ui_text(PTC_UI_T_TODAY_S_BEDTIME_RESTRICTION_IS_NOT_ENABLED), 13, UI_MUTED);
+        char fitted[128];
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_TODAY_S_BEDTIME_RESTRICTION_IS_NOT_ENABLED),
+                 13, bar.width - 16);
+        draw_text_center(pixels, stride, bar, fitted, 13, UI_MUTED);
     } else {
         int x_morn_end = bar.x + (int)((float)end_m / 1440.0f * (float)bar.width + 0.5f);
         int x_eve_start = bar.x + (int)((float)start_m / 1440.0f * (float)bar.width + 0.5f);
@@ -355,8 +472,11 @@ static void draw_bedtime_timeline_strip(
         if (x_morn_end > bar.x) {
             UiRect morn_rect = {bar.x, bar.y, x_morn_end - bar.x, bar.height};
             fill_round_rect(pixels, stride, morn_rect, 6, bed_block_bg);
-            if (morn_rect.width > 44) {
-                draw_text_center(pixels, stride, morn_rect, ptc_ui_text(PTC_UI_T_GO_TO_BED_EARLY_IN_THE_MORNING), 11, bed_block_fg);
+            if (morn_rect.width > 58 && bar.height >= 24) {
+                char fitted[64];
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_GO_TO_BED_EARLY_IN_THE_MORNING),
+                         11, morn_rect.width - 8);
+                draw_text_center(pixels, stride, morn_rect, fitted, 11, bed_block_fg);
             }
         }
 
@@ -364,15 +484,21 @@ static void draw_bedtime_timeline_strip(
         if (x_eve_start < bar.x + bar.width) {
             UiRect eve_rect = {x_eve_start, bar.y, bar.x + bar.width - x_eve_start, bar.height};
             fill_round_rect(pixels, stride, eve_rect, 6, bed_block_bg);
-            if (eve_rect.width > 44) {
-                draw_text_center(pixels, stride, eve_rect, ptc_ui_text(PTC_UI_T_NIGHTTIME_BEDTIME), 11, bed_block_fg);
+            if (eve_rect.width > 58 && bar.height >= 24) {
+                char fitted[64];
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_NIGHTTIME_BEDTIME),
+                         11, eve_rect.width - 8);
+                draw_text_center(pixels, stride, eve_rect, fitted, 11, bed_block_fg);
             }
         }
 
         /* 白昼允许游玩区间 [x_morn_end, x_eve_start] */
-        if (x_eve_start > x_morn_end) {
+        if (x_eve_start > x_morn_end && (x_eve_start - x_morn_end) > 72 && bar.height >= 24) {
             UiRect day_rect = {x_morn_end, bar.y, x_eve_start - x_morn_end, bar.height};
-            draw_text_center(pixels, stride, day_rect, ptc_ui_text(PTC_UI_T_ALLOWED_PLAY_TIME_DURING_THE_DAY), 12, UI_RGB(UI_BLENDED(text_primary)));
+            char fitted[64];
+            fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_ALLOWED_PLAY_TIME_DURING_THE_DAY),
+                     12, day_rect.width - 12);
+            draw_text_center(pixels, stride, day_rect, fitted, 12, UI_RGB(UI_BLENDED(text_primary)));
         }
 
         /* 立断与解禁指示线 */
@@ -384,6 +510,50 @@ static void draw_bedtime_timeline_strip(
             fill_rect(pixels, stride, (UiRect){x_morn_end - 1, bar.y, 2, bar.height}, UI_SUCCESS);
             fill_round_rect(pixels, stride, (UiRect){x_morn_end - 3, bar.y, 6, 4}, 1, UI_SUCCESS);
         }
+    }
+}
+
+int bedtime_matching_preset_window(const PtcBedtimeWindow *window)
+{
+    if (!window || !window->enabled) return -1;
+    for (int preset = 0; preset < 5; ++preset) {
+        if (window->start_minute == PTC_BEDTIME_PRESETS[preset].start &&
+            window->end_minute == PTC_BEDTIME_PRESETS[preset].end)
+            return preset;
+    }
+    return -1;
+}
+
+void draw_bedtime_preset_chip_row(
+    uint32_t *pixels, uint32_t stride,
+    const PtcBedtimeWindow *window, bool custom,
+    const PtcUiRect *rects, int focused_index)
+{
+    int matched = custom ? bedtime_matching_preset_window(window) : -1;
+    for (int preset = 0; preset < 5; ++preset) {
+        UiRect chip = to_uirect(rects[preset]);
+        bool selected = custom && matched == preset;
+        bool focused = (focused_index == preset);
+        char times[32], fitted[48];
+        fill_round_rect(pixels, stride, chip, 9,
+            selected ? UI_ACCENT_SOFT : (custom ? UI_RAISED : UI_PAGE));
+        if (focused) draw_focus_ring(pixels, stride, chip, 9);
+        else draw_rect_outline(pixels, stride, chip, 9, selected ? 2 : 1,
+                               selected ? UI_ACCENT : UI_BORDER);
+        int top_h = chip.height >= 54 ? 26 : 18;
+        int bot_y = chip.height >= 54 ? chip.y + 30 : chip.y + 21;
+        int bot_h = chip.height >= 54 ? 22 : 18;
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_BEDTIME_PRESETS[preset].name),
+                 chip.height >= 54 ? 13 : 12, chip.width - 10);
+        draw_text_center(pixels, stride, (UiRect){chip.x, chip.y + (chip.height >= 54 ? 6 : 3), chip.width, top_h},
+            fitted, chip.height >= 54 ? 13 : 12,
+            custom ? (selected ? UI_ACCENT : UI_INK) : UI_DISABLED);
+        snprintf(times, sizeof(times), "%02u:%02u-%02u:%02u",
+            PTC_BEDTIME_PRESETS[preset].start / 60, PTC_BEDTIME_PRESETS[preset].start % 60,
+            PTC_BEDTIME_PRESETS[preset].end / 60, PTC_BEDTIME_PRESETS[preset].end % 60);
+        fit_text(fitted, sizeof(fitted), times, chip.height >= 54 ? 11 : 10, chip.width - 8);
+        draw_text_center(pixels, stride, (UiRect){chip.x, bot_y, chip.width, bot_h},
+            fitted, chip.height >= 54 ? 11 : 10, custom ? UI_MUTED : UI_DISABLED);
     }
 }
 

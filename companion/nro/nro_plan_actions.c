@@ -304,6 +304,14 @@ void open_bedtime_time_editor(UiState *ui, PtcUiBedtimeTimeTarget target)
                 ? &ui->model.draft_bedtime_policy.makeup_workday_rule
                 : &ui->model.draft_bedtime_policy.scheduled_override.rule);
         window = &rule->window;
+    } else if (return_overlay == PTC_UI_OVERLAY_NONE &&
+               ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+               ui->model.plan_page == PTC_UI_PLAN_PAGE_BEDTIME &&
+               ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY) {
+        int day = ui->model.bedtime_editor_day;
+        if (day < 0 || day >= 7) day = 1;
+        ui->model.bedtime_editor_day = day;
+        window = &ui->model.draft_bedtime_policy.week[day];
     } else {
         return;
     }

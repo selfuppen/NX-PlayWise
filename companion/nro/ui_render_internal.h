@@ -298,6 +298,12 @@ void draw_toggle_switch(
     const char *on_label,
     const char *off_label);
 const char *bedtime_override_label(PtcBedtimeOverrideMode mode);
+void draw_bedtime_timeline_strip(uint32_t *pixels, uint32_t stride,
+                                 UiRect bar, uint16_t start_m, uint16_t end_m, bool enabled);
+int bedtime_matching_preset_window(const PtcBedtimeWindow *window);
+void draw_bedtime_preset_chip_row(uint32_t *pixels, uint32_t stride,
+                                  const PtcBedtimeWindow *window, bool custom,
+                                  const PtcUiRect *rects, int focused_index);
 void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
                  const char *label, bool primary, bool selected, bool disabled);
 extern const UiAction GRANT_MANAGER_ACTIONS[];

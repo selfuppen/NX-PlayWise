@@ -162,12 +162,13 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
-        static const int left[7]  = {0, 1, 1, 3, 3, 4, 5};
-        static const int right[7] = {0, 2, 6, 4, 5, 6, 6};
-        static const int up[7]    = {0, 0, 0, 1, 1, 2, 2};
-        static const int down[7]  = {1, 3, 5, 3, 4, 5, 6};
+        /* Holiday B: left col = 0 (master), 6 (calendar); right col = 1 (statutory), 2 (makeup), 4 (discard), 5 (save). */
+        static const int left[7]  = {0, 0, 0, 0, 6, 4, 6};
+        static const int right[7] = {1, 1, 2, 4, 5, 5, 4};
+        static const int up[7]    = {0, 1, 1, 2, 2, 2, 0};
+        static const int down[7]  = {6, 2, 5, 4, 4, 5, 6};
         int previous = index;
-        if (index > 6) index = 6;
+        if (index == 3 || index > 6) index = 0;
         if (horizontal < 0) index = left[index];
         else if (horizontal > 0) index = right[index];
         else if (vertical < 0) index = up[index];
@@ -293,6 +294,7 @@ bool ptc_ui_open_today_settings(PtcUiModel *model, int index)
         model->bedtime_section = PTC_UI_BEDTIME_WEEKLY;
         model->bedtime_section_focused = false;
         model->bedtime_master_focused = false;
+        model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
         model->plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
     } else {
         if (!model->dock_dirty) model->draft_dock_policy = model->dock_policy;
@@ -415,29 +417,32 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
         model->bedtime_section > PTC_UI_BEDTIME_SCHEDULED) {
         model->bedtime_section = PTC_UI_BEDTIME_WEEKLY;
     }
-    field_count = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+    field_count = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 19 :
         (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
 
     if (model->bedtime_master_focused) {
-        if (horizontal < 0 || vertical > 0) {
+        if (horizontal > 0) {
             model->bedtime_master_focused = false;
             model->bedtime_section_focused = true;
+        } else if (vertical > 0) {
+            model->bedtime_master_focused = false;
+            model->bedtime_section_focused = false;
+            model->selected_index = 0;
+            if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY)
+                model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
         }
         return;
     }
 
     if (model->bedtime_section_focused) {
-        if (vertical < 0) {
-            model->bedtime_section_focused = false;
-            model->bedtime_master_focused = true;
-            return;
-        }
         if (horizontal != 0) {
             int next = (int)model->bedtime_section + (horizontal > 0 ? 1 : -1);
             if (next >= PTC_UI_BEDTIME_WEEKLY && next <= PTC_UI_BEDTIME_SCHEDULED) {
                 model->bedtime_section = (PtcUiBedtimeSection)next;
                 model->selected_index = 0;
-            } else if (horizontal > 0) {
+                if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY)
+                    model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
+            } else if (horizontal < 0) {
                 model->bedtime_section_focused = false;
                 model->bedtime_master_focused = true;
             }
@@ -457,6 +462,8 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
             if (best_index >= 0) {
                 model->bedtime_section_focused = false;
                 model->selected_index = best_index;
+                if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY && best_index < 7)
+                    model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(best_index);
             }
         }
         return;
@@ -516,8 +523,13 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
         }
     }
 
-    if (best_index >= 0) model->selected_index = best_index;
-    else if (best_index == -2) model->bedtime_section_focused = true;
+    if (best_index >= 0) {
+        model->selected_index = best_index;
+        if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY && best_index < 7)
+            model->bedtime_editor_day = ptc_ui_weekday_for_display_slot(best_index);
+    } else if (best_index == -2) {
+        model->bedtime_section_focused = true;
+    }
 }
 
 void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels)

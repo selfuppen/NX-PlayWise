@@ -196,7 +196,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     if ((model->overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE ||
-         model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) &&
+         model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE ||
+         model->overlay == PTC_UI_OVERLAY_SCHEDULED) &&
         ptc_ui_rect_contains(ptc_ui_discard_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
     }
@@ -248,6 +249,17 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_SCHEDULED:
+        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_scheduled_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        }
+        for (i = 0; i < 14; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_scheduled_quick_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_SCHEDULED_QUICK, i);
+            }
+        }
         for (i = 0; i < 4; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_scheduled_field_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_SCHEDULED_FIELD, i);
@@ -706,7 +718,7 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         if (ptc_ui_rect_contains(ptc_ui_bedtime_master_switch_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_BEDTIME_MASTER_SWITCH, 0);
         }
-        int fields = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+        int fields = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 19 :
             (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
         for (i = 0; i < 3; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_bedtime_section_rect(i), x, y)) {

@@ -206,10 +206,37 @@ static void handle_bedtime_page_input(UiState *ui, u64 down)
     } else if ((down & HidNpadButton_A) && !ui->model.bedtime_section_focused) {
         if (ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY) {
             if (ui->model.selected_index < 7) {
-                ptc_audio_play(PTC_SE_CONFIRM);
+                ptc_audio_play(PTC_SE_FOCUS);
                 int day = ptc_ui_weekday_for_display_slot(ui->model.selected_index);
                 ui->model.bedtime_editor_day = day;
-                open_bedtime_window_editor(ui, day);
+                ui->model.selected_index = draft->week[day].enabled ? 12 : 11;
+            } else if (ui->model.selected_index == 11) {
+                if (!ui->model.disable_flag_present) {
+                    int day = ui->model.bedtime_editor_day;
+                    if (day < 0 || day >= 7) day = 1;
+                    ptc_audio_play(PTC_SE_TOGGLE);
+                    draft->week[day].enabled = !draft->week[day].enabled;
+                    update_bedtime_dirty(ui);
+                } else {
+                    ptc_audio_play(PTC_SE_ERROR);
+                }
+            } else if (ui->model.selected_index == 12 || ui->model.selected_index == 13) {
+                int day = ui->model.bedtime_editor_day;
+                if (day < 0 || day >= 7) day = 1;
+                if (!ui->model.disable_flag_present && draft->week[day].enabled) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
+                    open_bedtime_time_editor(ui, ui->model.selected_index == 12
+                        ? PTC_UI_BEDTIME_TIME_START : PTC_UI_BEDTIME_TIME_END);
+                } else {
+                    ptc_audio_play(PTC_SE_ERROR);
+                }
+            } else if (ui->model.selected_index >= 14 && ui->model.selected_index <= 18) {
+                if (!ui->model.disable_flag_present) {
+                    ptc_audio_play(PTC_SE_STEP);
+                    apply_bedtime_preset(ui, ui->model.selected_index - 14);
+                } else {
+                    ptc_audio_play(PTC_SE_ERROR);
+                }
             } else if (ui->model.selected_index == 7 || ui->model.selected_index == 8) {
                 ptc_audio_play(PTC_SE_CONFIRM);
                 ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;

@@ -15,8 +15,15 @@ void apply_bedtime_preset(UiState *ui, int preset)
 {
     PtcBedtimeWindow *window = NULL;
     if (!ui || preset < 0 || preset >= 5) return;
-    if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW) {
-        window = &ui->model.draft_bedtime_policy.week[ui->model.bedtime_editor_day];
+    if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW ||
+        (ui->model.overlay == PTC_UI_OVERLAY_NONE &&
+         ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+         ui->model.plan_page == PTC_UI_PLAN_PAGE_BEDTIME &&
+         ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY)) {
+        int day = ui->model.bedtime_editor_day;
+        if (day < 0 || day >= 7) day = 1;
+        ui->model.bedtime_editor_day = day;
+        window = &ui->model.draft_bedtime_policy.week[day];
     } else if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_SPECIAL) {
         PtcBedtimeSpecialRule *rule = ui->model.bedtime_special_kind == 0
             ? &ui->model.draft_bedtime_policy.holiday_rule
@@ -210,6 +217,10 @@ static void handle_scheduled_overlay_input(UiState *ui, u64 down)
     int step = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 7 : 1;
     if (down & HidNpadButton_B) {
         ptc_ui_cancel_overlay(&ui->model);
+    } else if (down & HidNpadButton_Y) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+        refresh_disable_flag(ui);
+        submit_status(ui);
     } else if (down & HidNpadButton_Up) {
         ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 3 : ui->model.overlay_selection - 1;
     } else if (down & HidNpadButton_Down) {
@@ -217,6 +228,13 @@ static void handle_scheduled_overlay_input(UiState *ui, u64 down)
     } else if (down & HidNpadButton_X) {
         ptc_audio_play(PTC_SE_TOGGLE);
         draft->rule.mode = ptc_ui_next_rule_mode(draft->rule.mode);
+    } else if ((down & HidNpadButton_ZL) &&
+               (ui->model.overlay_selection == 0 || ui->model.overlay_selection == 3)) {
+        if (ptc_ui_scheduled_dirty(&ui->model)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ui->model.draft_scheduled_override = ui->model.scheduled_override;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
+        }
     } else if ((down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
         ptc_audio_play(PTC_SE_TOGGLE);
         draft->enabled = !draft->enabled;
@@ -226,6 +244,10 @@ static void handle_scheduled_overlay_input(UiState *ui, u64 down)
         (void)edit_date_range_span(ui, draft->start_day_index, &draft->end_day_index);
     } else if ((down & HidNpadButton_A) && ui->model.overlay_selection == 3) {
         edit_scheduled_minutes(ui);
+    } else if (direction != 0 && ui->model.overlay_selection == 3 &&
+               draft->rule.mode == PTC_RULE_MODE_LIMIT) {
+        draft->rule.minutes = ptc_ui_adjust_minutes(draft->rule.minutes, direction * 15, 1, 1440);
+        ptc_audio_play(PTC_SE_STEP);
     } else if (direction != 0 && ui->model.overlay_selection == 1) {
         int start = (int)draft->start_day_index + direction * step;
         if (start < (int)ui->model.day_index) start = ui->model.day_index;

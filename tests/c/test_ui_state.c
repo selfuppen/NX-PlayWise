@@ -261,13 +261,19 @@ static void test_release_navigation(void)
     model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 1, "holiday header moves down to statutory rule");
+    check_int(model.selected_index, 6, "holiday master switch moves down to calendar manager");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 0, "holiday calendar manager moves up to master switch");
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 2, "holiday navigation moves across rule cards");
+    check_int(model.selected_index, 1, "holiday master switch moves right to statutory rule");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 5, "holiday right rule moves down to save");
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 6, "holiday save reaches calendar entry to the right");
+    check_int(model.selected_index, 2, "holiday statutory rule moves down to makeup rule");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 5, "holiday makeup rule moves down to save");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 4, "holiday save moves left to discard");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 6, "holiday discard reaches calendar manager to the left");
 
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     model.recent_event_count = 3;
@@ -1617,34 +1623,31 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(0)), PTC_UI_HIT_HOLIDAY_MINUTES, 0, "holiday statutory quota target");
     check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(1)), PTC_UI_HIT_HOLIDAY_MODE, 1, "holiday makeup mode target");
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(1)), PTC_UI_HIT_HOLIDAY_MINUTES, 1, "holiday makeup quota target");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday mode action");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday discard action");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday save action");
     check_hit(hit_center(&model, ptc_ui_holiday_manage_rect()), PTC_UI_HIT_CALENDAR_MANAGER, 0,
-              "holiday calendar manager is in the status column");
+              "holiday calendar manager is in the left column");
     {
         PtcUiRect footer = ptc_ui_parent_subpage_footer_rect(0);
-        for (int index = 0; index < 6; ++index) {
-            check_true(!rects_overlap(ptc_ui_holiday_card_rect(index), footer),
+        int indices[] = {0, 1, 2, 4, 5};
+        for (int i = 0; i < 5; ++i) {
+            check_true(!rects_overlap(ptc_ui_holiday_card_rect(indices[i]), footer),
                        "holiday control does not overlap subpage footer");
         }
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_manage_rect()),
+                   "holiday master switch does not overlap calendar manager button");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(1)),
-                   "holiday header does not overlap rule controls");
+                   "holiday left column does not overlap right rule rows");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
-                   "holiday rule cards sit side by side without overlap");
-        check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(3)),
-                   "holiday rule card does not overlap bottom actions");
-        check_true(!rects_overlap(ptc_ui_holiday_card_rect(3), ptc_ui_holiday_card_rect(4)) &&
-                   !rects_overlap(ptc_ui_holiday_card_rect(4), ptc_ui_holiday_card_rect(5)),
+                   "holiday rule rows stack without overlap");
+        check_true(!rects_overlap(ptc_ui_holiday_mode_rect(0), ptc_ui_holiday_minutes_rect(0)) &&
+                   !rects_overlap(ptc_ui_holiday_mode_rect(1), ptc_ui_holiday_minutes_rect(1)),
+                   "holiday inline mode toggle does not overlap quota button");
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(4), ptc_ui_holiday_card_rect(5)),
                    "holiday bottom actions do not overlap each other");
-        check_true(ptc_ui_holiday_card_rect(3).w == 240 && ptc_ui_holiday_card_rect(4).w == 240 &&
-                   ptc_ui_holiday_card_rect(5).w == 248,
-                   "holiday bottom actions share the left control width");
-        for (int index = 0; index < 6; ++index) {
-            PtcUiRect card = ptc_ui_holiday_card_rect(index);
-            check_true(card.x >= 54 && card.x + card.w <= 814,
-                       "holiday controls stay in the 760px left column");
-        }
+        check_true(ptc_ui_holiday_card_rect(0).x == 54 && ptc_ui_holiday_card_rect(0).w == 396 &&
+                   ptc_ui_holiday_card_rect(1).x >= 466 && ptc_ui_holiday_card_rect(5).x + ptc_ui_holiday_card_rect(5).w == 1226,
+                   "holiday plan B aligns left 396px column and right 760px column");
     }
 
     model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
@@ -3137,6 +3140,16 @@ static void test_plan_polish(void)
         check_true(!rects_overlap(ptc_ui_scheduled_field_rect(i), ptc_ui_confirm_rect(model.overlay)),
                    "scheduled field does not overlap save");
     }
+    for (int q = 0; q < 14; ++q) {
+        check_hit(hit_center(&model, ptc_ui_scheduled_quick_rect(q)), PTC_UI_HIT_SCHEDULED_QUICK, q,
+                  "scheduled quick control is touchable");
+    }
+    check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
+              "scheduled discard button is touchable");
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "scheduled breadcrumb back button is touchable");
+    check_hit(hit_center(&model, ptc_ui_scheduled_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
+              "scheduled footer refresh button is touchable");
     model.waiting = true;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
               "pending schedule blocks repeated touch save");
@@ -3335,15 +3348,17 @@ static void test_today_decision_and_plan_review(void)
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
     model.selected_index = 2;
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 6, "holiday rule moves right to calendar button");
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 5, "calendar button moves left to save");
+    check_int(model.selected_index, 0, "holiday rule moves left to master switch");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "holiday master switch moves down to calendar button");
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 6, "holiday save moves right to calendar button");
+    check_int(model.selected_index, 4, "calendar button moves right to discard");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 6, "holiday discard moves left to calendar button");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 2, "calendar button moves up to makeup rule");
+    check_int(model.selected_index, 0, "calendar button moves up to master switch");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 6, "calendar button keeps its content selection on footer entry");
@@ -3408,7 +3423,7 @@ static void test_time_menu_modal_touch_guards(void)
     model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
 
     for (int section = PTC_UI_BEDTIME_WEEKLY; section <= PTC_UI_BEDTIME_SCHEDULED; ++section) {
-        int field_count = section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+        int field_count = section == PTC_UI_BEDTIME_WEEKLY ? 19 :
             (section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
         model.bedtime_section = (PtcUiBedtimeSection)section;
         check_hit(hit_center(&model, ptc_ui_bedtime_section_rect(section)),
@@ -3673,9 +3688,12 @@ static void test_global_time_projection_and_direct_inputs(void)
     model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
     model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
     model.selected_index = 0;
+    model.bedtime_editor_day = ptc_ui_weekday_for_display_slot(0);
     model.bedtime_section_focused = false;
     ptc_ui_move_bedtime_focus(&model, 1, 0);
     check_int(model.selected_index, 1, "bedtime focus moves right within the weekly row");
+    check_int(model.bedtime_editor_day, ptc_ui_weekday_for_display_slot(1),
+              "bedtime weekly navigation updates inline editor day");
     ptc_ui_move_bedtime_focus(&model, -1, 0);
     check_int(model.selected_index, 0, "bedtime focus moves left within the weekly row");
     ptc_ui_move_bedtime_focus(&model, 0, -1);
@@ -3692,13 +3710,17 @@ static void test_global_time_projection_and_direct_inputs(void)
     check_hit(hit_center(&model, master_switch), PTC_UI_HIT_BEDTIME_MASTER_SWITCH, 0,
               "bedtime master switch card is touchable");
     model.bedtime_section_focused = true;
-    model.bedtime_section = PTC_UI_BEDTIME_SCHEDULED;
-    ptc_ui_move_bedtime_focus(&model, 1, 0);
-    check_true(model.bedtime_master_focused && !model.bedtime_section_focused,
-               "right from last bedtime tab reaches master switch");
+    model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
     ptc_ui_move_bedtime_focus(&model, -1, 0);
+    check_true(model.bedtime_master_focused && !model.bedtime_section_focused,
+               "left from first bedtime tab reaches master switch");
+    ptc_ui_move_bedtime_focus(&model, 1, 0);
     check_true(!model.bedtime_master_focused && model.bedtime_section_focused,
-               "left from master switch returns to tabs");
+               "right from master switch returns to tabs");
+    ptc_ui_move_bedtime_focus(&model, -1, 0);
+    ptc_ui_move_bedtime_focus(&model, 0, 1);
+    check_true(!model.bedtime_master_focused && model.selected_index == 0,
+               "down from master switch enters bedtime content");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     check_hit(hit_center(&model, ptc_ui_bedtime_overlay_field_rect(model.overlay, 0)),

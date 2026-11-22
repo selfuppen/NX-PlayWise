@@ -252,10 +252,11 @@ static int check_bedtime_editors(const PtcUiModel *baseline)
                     model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1380, 480};
                     snprintf(model.overlay_body, sizeof(model.overlay_body), "%s", ptc_ui_text(state == 0 ?
                         PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT : PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
+                    ptc_ui_graphics_draw(&model, &theme);
                     memset(&bedtime_trace, 0, sizeof(bedtime_trace));
                     bedtime_trace.enabled = true;
                     bedtime_trace.overlay = model.overlay;
-                    ptc_ui_graphics_draw(&model, &theme);
+                    draw_plan_overlay_surface(preview_pixels, 1280, &model);
                     bedtime_trace.enabled = false;
                     if (bedtime_trace.failed || bedtime_trace.hints != 2 ||
                         strcmp(bedtime_trace.guide, model.overlay_body) != 0) {
@@ -1569,6 +1570,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SAVED_PLAN_LOADED));
         model.parent_page = PTC_UI_PARENT_PLAN;
         model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+        model.calendar_builtin = true;
         model.holiday_rule = model.draft_holiday_rule = rules.holiday_rule;
         model.makeup_workday_rule = model.draft_makeup_workday_rule = rules.makeup_workday_rule;
         model.draft_holiday_enabled = true;
@@ -1620,6 +1622,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         failed |= save_preview(directory, "holiday", "holiday-disabled", &model, dark);
         model.disable_flag_present = false;
         model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+        model.bedtime_editor_day = 1;
         model.draft_bedtime_policy.enabled = true;
         model.draft_bedtime_policy.week[1] = (PtcBedtimeWindow){true, 1327, 420};
         model.bedtime_dirty = true;
@@ -2230,6 +2233,95 @@ static int check_weekly_page_text(const PtcUiModel *baseline, bool dark, int sty
     return failed;
 }
 
+static int check_batch3_pages_text(const PtcUiModel *baseline, bool dark, int style)
+{
+    int failed = 0;
+    PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
+        (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+
+    /* 1. Holiday Plan B across on/off/unlimited/stale/read-only states */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.draft_holiday_enabled = (state != 1);
+        model.holiday_dirty = (state != 0);
+        if (state == 2) model.draft_holiday_rule.mode = PTC_RULE_MODE_UNLIMITED;
+        if (state == 3) { model.disable_flag_present = true; model.status_updated_at = 879; }
+        model.selected_index = state == 0 ? 0 : (state == 1 ? 6 : 1);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(0)), NULL);
+        failed += check_action_text((UiRect){54, 314, 396, 260}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(1)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(2)), NULL);
+        failed += check_action_text((UiRect){466, 398, 760, 176}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(4)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_holiday_card_rect(5)), NULL);
+    }
+
+    /* 2. Scheduled Quota Plan B across active/unlimited/disabled/stale states */
+    for (int state = 0; state < 4; ++state) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SCHEDULED;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.draft_scheduled_override = (PtcScheduledOverride){
+            state != 2, (uint16_t)(model.day_index + (state == 3 ? 3 : 0)),
+            (uint16_t)(model.day_index + (state == 3 ? 9 : 6)),
+            {state == 1 ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT, 90}
+        };
+        model.overlay_selection = state;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_plan_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 174, 748, 250}, NULL);
+        failed += check_action_text((UiRect){54, 436, 748, 200}, NULL);
+        failed += check_action_text((UiRect){820, 174, 406, 396}, NULL);
+        failed += check_action_text(to_uirect(ptc_ui_discard_rect(PTC_UI_OVERLAY_SCHEDULED)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_confirm_rect(PTC_UI_OVERLAY_SCHEDULED)), NULL);
+    }
+
+    /* 3. Bedtime Plan A across all 3 tabs + master off */
+    for (int sec = 0; sec < 3; ++sec) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME; model.overlay = PTC_UI_OVERLAY_NONE;
+        model.bedtime_section = (PtcUiBedtimeSection)sec;
+        model.bedtime_editor_day = 1;
+        model.draft_bedtime_policy.enabled = true;
+        model.draft_bedtime_policy.week[1] = (PtcBedtimeWindow){true, 1320, 420};
+        model.draft_bedtime_policy.calendar_enabled = true;
+        model.draft_bedtime_policy.holiday_rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+        model.draft_bedtime_policy.holiday_rule.window = (PtcBedtimeWindow){true, 1350, 450};
+        model.draft_bedtime_policy.scheduled_override.present = true;
+        model.draft_bedtime_policy.scheduled_override.start_day_index = model.day_index;
+        model.draft_bedtime_policy.scheduled_override.end_day_index = (uint16_t)(model.day_index + 6);
+        model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+        model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1320, 420};
+        model.bedtime_dirty = true;
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        ptc_ui_graphics_draw(&model, &theme);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_bedtime_master_switch_rect()), NULL);
+        for (int t = 0; t < 3; ++t) failed += check_action_text(to_uirect(ptc_ui_bedtime_section_rect(t)), NULL);
+        failed += check_action_text((UiRect){838, 228, 388, 338}, NULL);
+        if (sec == PTC_UI_BEDTIME_WEEKLY) {
+            for (int d = 0; d < 7; ++d) failed += check_action_text(to_uirect(ptc_ui_bedtime_field_rect(0, d)), NULL);
+            failed += check_action_text(to_uirect(ptc_ui_bedtime_inline_editor_rect()), NULL);
+        } else if (sec == PTC_UI_BEDTIME_CALENDAR) {
+            for (int f = 0; f < 3; ++f) failed += check_action_text(to_uirect(ptc_ui_bedtime_field_rect(1, f)), NULL);
+        } else {
+            failed += check_action_text((UiRect){54, 228, 768, 178}, NULL);
+            failed += check_action_text(to_uirect(ptc_ui_bedtime_field_rect(2, 3)), NULL);
+        }
+    }
+    return failed;
+}
+
 static int check_action_confirmations(const PtcUiModel *baseline, const char *directory)
 {
     int failed = 0;
@@ -2243,6 +2335,7 @@ static int check_action_confirmations(const PtcUiModel *baseline, const char *di
             for (int style = 0; style < PTC_UI_THEME_STYLE_COUNT; ++style) {
                 ptc_ui_theme_set_style((PtcUiThemeStyle)style);
                 failed += check_weekly_page_text(baseline, dark, style);
+                failed += check_batch3_pages_text(baseline, dark, style);
                 for (int state = 0; state < 5; ++state) {
                     PtcUiModel model = *baseline;
                     model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;

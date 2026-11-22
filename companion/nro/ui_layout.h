@@ -100,6 +100,7 @@ typedef enum {
     PTC_UI_HIT_HISTORY_PREV,
     PTC_UI_HIT_HISTORY_NEXT,
     PTC_UI_HIT_SCHEDULED_FIELD,
+    PTC_UI_HIT_SCHEDULED_QUICK,
     PTC_UI_HIT_AUTONOMY_OPTION,
     PTC_UI_HIT_EYE_CARE_FIELD,
     PTC_UI_HIT_QUICK_ADD_OPTION,
@@ -251,6 +252,8 @@ PtcUiRect ptc_ui_support_guide_nav_rect(int index);
 PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);
+PtcUiRect ptc_ui_scheduled_quick_rect(int index);
+PtcUiRect ptc_ui_scheduled_refresh_rect(void);
 PtcUiRect ptc_ui_autonomy_option_rect(int index);
 PtcUiRect ptc_ui_eye_care_field_rect(int index);
 PtcUiRect ptc_ui_eye_care_page_master_rect(void);
@@ -273,6 +276,8 @@ PtcUiRect ptc_ui_bedtime_manage_rect(int index);
 PtcUiRect ptc_ui_bedtime_overlay_field_rect(PtcUiOverlay overlay, int index);
 PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index);
 PtcUiRect ptc_ui_bedtime_timeline_rect(PtcUiOverlay overlay);
+PtcUiRect ptc_ui_bedtime_inline_editor_rect(void);
+PtcUiRect ptc_ui_bedtime_inline_timeline_rect(void);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);
