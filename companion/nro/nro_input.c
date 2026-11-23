@@ -11,16 +11,6 @@ void handle_overlay_input(UiState *ui, u64 down)
         handle_config_backup_input(ui, down);
         return;
     }
-    if (down & (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)) {
-        ptc_audio_play(PTC_SE_FOCUS);
-    } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
-        ptc_audio_play(PTC_SE_CONFIRM);
-    } else if (down & HidNpadButton_B) {
-        ptc_audio_play(PTC_SE_CANCEL);
-    }
-
-    if (handle_plan_overlay_input(ui, down) || handle_account_overlay_input(ui, down)) return;
-
     if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
         if (down & (HidNpadButton_B | HidNpadButton_A)) {
             ptc_audio_play(PTC_SE_CANCEL);
@@ -48,9 +38,15 @@ void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
         if (down & (HidNpadButton_Up | HidNpadButton_Left)) {
-            if (ui->model.overlay_selection > 0) --ui->model.overlay_selection;
+            if (ui->model.overlay_selection > 0) {
+                --ui->model.overlay_selection;
+                ptc_audio_play(PTC_SE_FOCUS);
+            }
         } else if (down & (HidNpadButton_Down | HidNpadButton_Right)) {
-            if (ui->model.overlay_selection < 5) ++ui->model.overlay_selection;
+            if (ui->model.overlay_selection < 5) {
+                ++ui->model.overlay_selection;
+                ptc_audio_play(PTC_SE_FOCUS);
+            }
         } else if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
             ptc_audio_play(PTC_SE_CANCEL);
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
@@ -149,6 +145,7 @@ void handle_overlay_input(UiState *ui, u64 down)
 
     if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_EVENT) {
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_cancel_overlay(&ui->model);
         }
         return;
@@ -156,10 +153,21 @@ void handle_overlay_input(UiState *ui, u64 down)
 
     if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
             close_code_result(ui);
         }
         return;
     }
+    if (down & (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)) {
+        ptc_audio_play(PTC_SE_FOCUS);
+    } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+    } else if (down & HidNpadButton_B) {
+        ptc_audio_play(PTC_SE_CANCEL);
+    }
+
+    if (handle_plan_overlay_input(ui, down) || handle_account_overlay_input(ui, down)) return;
+
     if (down & HidNpadButton_B) {
         ui->today_limit_refresh_pending = false;
         ui->today_limit_save_pending = false;

@@ -26,6 +26,7 @@ void handle_touch(UiState *ui, int x, int y)
     }
     switch (hit.kind) {
     case PTC_UI_HIT_NOTIFICATION_PREVIEW:
+        if (ui->model.notification_preview != hit.index) ptc_audio_play(PTC_SE_TAB);
         ui->model.notification_preview = hit.index;
         break;
     case PTC_UI_HIT_NOTIFICATION_OPTION:
@@ -41,7 +42,7 @@ void handle_touch(UiState *ui, int x, int y)
         open_online_update_badge(ui);
         break;
     case PTC_UI_HIT_UPDATE_ACTION:
-        if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) open_online_update(ui);
+        if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) handle_overlay_input(ui, HidNpadButton_X);
         else if (hit.index == 8) online_update_action(ui, 8);
         else if (hit.index == 13) handle_online_update_input(ui, HidNpadButton_A);
         else if (hit.index >= 9) {
@@ -124,16 +125,13 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SETUP_BEDTIME:
     case PTC_UI_HIT_SETUP_NOTIFICATIONS:
     case PTC_UI_HIT_SETUP_SKIP:
-        ptc_audio_play(PTC_SE_CONFIRM);
         setup_action(ui, hit.kind, hit.index);
         break;
     case PTC_UI_HIT_SETUP_PRIMARY:
-        ptc_audio_play(PTC_SE_CONFIRM);
         if (ui->model.setup_review_active) setup_review_action(ui, hit.index);
         else setup_primary(ui);
         break;
     case PTC_UI_HIT_SETUP_BACK:
-        ptc_audio_play(PTC_SE_CANCEL);
         setup_previous(ui);
         break;
     case PTC_UI_HIT_SETUP_PIN:
@@ -278,7 +276,6 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP ||
@@ -302,7 +299,7 @@ void handle_touch(UiState *ui, int x, int y)
             /* 返回键放弃未提交的主题草稿并恢复已保存外观。 */
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
-            close_code_result(ui);
+            handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
                    (ui->model.operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
                     ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
@@ -317,6 +314,7 @@ void handle_touch(UiState *ui, int x, int y)
                     ui->model.operation == PTC_UI_OPERATION_SAVE_WEEKLY)) {
             handle_overlay_input(ui, HidNpadButton_B);
         } else {
+            ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_cancel_overlay(&ui->model);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
         }
@@ -328,7 +326,7 @@ void handle_touch(UiState *ui, int x, int y)
             break;
         }
         if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
-            close_code_result(ui);
+            handle_overlay_input(ui, HidNpadButton_A);
             break;
         }
         if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
@@ -395,12 +393,10 @@ void handle_touch(UiState *ui, int x, int y)
         handle_overlay_input(ui, HidNpadButton_X);
         break;
     case PTC_UI_HIT_HISTORY_PREV:
-        ptc_audio_play(PTC_SE_TAB);
-        handle_overlay_input(ui, HidNpadButton_Left);
+        handle_overlay_input(ui, HidNpadButton_L);
         break;
     case PTC_UI_HIT_HISTORY_NEXT:
-        ptc_audio_play(PTC_SE_TAB);
-        handle_overlay_input(ui, HidNpadButton_Right);
+        handle_overlay_input(ui, HidNpadButton_R);
         break;
     case PTC_UI_HIT_SCHEDULED_FIELD:
         ptc_audio_play(PTC_SE_CONFIRM);
@@ -1023,7 +1019,6 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_SETUP_THEME_OPTION:
-        ptc_audio_play(PTC_SE_CONFIRM);
         setup_action(ui, hit.kind, hit.index);
         break;
     case PTC_UI_HIT_GRANT_ADJUST:

@@ -310,6 +310,7 @@ void finish_setup(UiState *ui, bool activated)
 void setup_previous(UiState *ui)
 {
     if (!ui) return;
+    ptc_audio_play(PTC_SE_CANCEL);
     if (ui->model.setup_step <= PTC_UI_SETUP_PREPARE) ui->exit_requested = true;
     else (void)save_setup_step(ui, ui->model.setup_step - 1);
     ui->model.setup_focus = 0;
@@ -318,6 +319,7 @@ void setup_previous(UiState *ui)
 void setup_primary(UiState *ui)
 {
     if (!ui) return;
+    ptc_audio_play(PTC_SE_CONFIRM);
     if (ui->model.setup_step == PTC_UI_SETUP_PREPARE) {
         (void)save_setup_step(ui, PTC_UI_SETUP_PARENT);
         (void)ensure_default_setup_pin(ui);
@@ -359,29 +361,38 @@ void setup_action(UiState *ui, int action, int index)
     if (!ui) return;
     switch (action) {
     case PTC_UI_HIT_SETUP_NOTIFICATIONS:
+        ptc_audio_play(PTC_SE_POPUP);
         open_notification_preferences(ui);
         break;
     case PTC_UI_HIT_SETUP_PCTL_HELP:
+        ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_setup_pctl_help(&ui->model);
         break;
     case PTC_UI_HIT_SETUP_LANGUAGE:
-        if (index >= 0 && index <= PTC_UI_LANGUAGE_ENGLISH)
+        if (index >= 0 && index <= PTC_UI_LANGUAGE_ENGLISH) {
+            ptc_audio_play(PTC_SE_TOGGLE);
             (void)apply_language_preference(ui, (PtcUiLanguagePreference)index);
+        }
         break;
     case PTC_UI_HIT_SETUP_TIME_HELP:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.setup_time_help = !ui->model.setup_time_help;
         break;
     case PTC_UI_HIT_SETUP_MORE:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.setup_more = !ui->model.setup_more;
         break;
     case PTC_UI_HIT_SETUP_SHORTCUT:
+        ptc_audio_play(PTC_SE_POPUP);
         open_shortcut_manager(ui);
         break;
     case PTC_UI_HIT_SETUP_THEME_OPTION:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.setup_theme_index = index;
         (void)apply_theme_preference(ui, (PtcUiThemePreference)index);
         break;
     case PTC_UI_HIT_SETUP_EYE_CARE:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.setup_eye_care_enabled = !ui->model.setup_eye_care_enabled;
         ui->model.draft_eye_care_policy.enabled = ui->model.setup_eye_care_enabled;
         if (ui->model.setup_eye_care_enabled) {
@@ -390,6 +401,7 @@ void setup_action(UiState *ui, int action, int index)
         }
         break;
     case PTC_UI_HIT_SETUP_BEDTIME:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.setup_bedtime_enabled = !ui->model.setup_bedtime_enabled;
         ui->model.draft_bedtime_policy.enabled = ui->model.setup_bedtime_enabled;
         if (ui->model.setup_bedtime_enabled) {
@@ -404,6 +416,7 @@ void setup_action(UiState *ui, int action, int index)
         }
         break;
     case PTC_UI_HIT_SETUP_SKIP:
+        ptc_audio_play(PTC_SE_CANCEL);
         finish_setup(ui, false);
         break;
     default:
@@ -419,26 +432,34 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
     if (ui->model.setup_review_active) {
         if (down & HidNpadButton_B) setup_review_action(ui, 2);
         else if (down & HidNpadButton_X) setup_review_action(ui, 3);
-        else if (down & HidNpadButton_Up) ui->model.setup_review_selection = (ui->model.setup_review_selection + 3) % 4;
-        else if (down & HidNpadButton_Down) ui->model.setup_review_selection = (ui->model.setup_review_selection + 1) % 4;
-        else if (down & (HidNpadButton_Left | HidNpadButton_Right)) ui->model.setup_review_selection ^= 1;
-        else if (down & HidNpadButton_A) setup_review_action(ui, ui->model.setup_review_selection);
+        else if (down & (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)) {
+            if (down & HidNpadButton_Up) ui->model.setup_review_selection = (ui->model.setup_review_selection + 3) % 4;
+            else if (down & HidNpadButton_Down) ui->model.setup_review_selection = (ui->model.setup_review_selection + 1) % 4;
+            else ui->model.setup_review_selection ^= 1;
+            ptc_audio_play(PTC_SE_FOCUS);
+        } else if (down & HidNpadButton_A) setup_review_action(ui, ui->model.setup_review_selection);
         return;
     }
     if (down & HidNpadButton_B) { setup_previous(ui); return; }
     max_focus = ui->model.setup_step == PTC_UI_SETUP_PREPARE ? 3 :
         ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 : 6;
-    if (down & HidNpadButton_Down) ui->model.setup_focus = (ui->model.setup_focus + 1) % (max_focus + 1);
-    else if (down & HidNpadButton_Up) ui->model.setup_focus = (ui->model.setup_focus + max_focus) % (max_focus + 1);
-    else if (down & HidNpadButton_X) {
-        if (ui->model.setup_step == PTC_UI_SETUP_PARENT) setup_pin(ui);
-        else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) finish_setup(ui, false);
+    if (down & (HidNpadButton_Down | HidNpadButton_Up)) {
+        int step = down & HidNpadButton_Down ? 1 : max_focus;
+        ui->model.setup_focus = (ui->model.setup_focus + step) % (max_focus + 1);
+        ptc_audio_play(PTC_SE_FOCUS);
+    } else if (down & HidNpadButton_X) {
+        if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            setup_pin(ui);
+        } else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) setup_action(ui, PTC_UI_HIT_SETUP_SKIP, 0);
         else setup_action(ui, PTC_UI_HIT_SETUP_TIME_HELP, 0);
     } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+        int previous = ui->model.setup_focus;
         int direction = down & HidNpadButton_Right ? 1 : -1;
         if (ui->model.setup_step == PTC_UI_SETUP_PREPARE) {
             ui->model.setup_focus = 1;
             setup_action(ui, PTC_UI_HIT_SETUP_LANGUAGE, ((int)ui->language_preference + direction + 4) % 4);
+            return;
         } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
             if (ui->model.setup_focus == 2) {
                 int next_theme = (int)ui->theme_preference + direction;
@@ -450,6 +471,7 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
                 ui->model.setup_focus -= 3;
             }
         } else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) ui->model.setup_focus ^= 1;
+        if (ui->model.setup_focus != previous) ptc_audio_play(PTC_SE_FOCUS);
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
         int focus = down & HidNpadButton_Plus ? 0 : ui->model.setup_focus;
         if (focus == 0) setup_primary(ui);
@@ -457,13 +479,15 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
             if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_PCTL_HELP, 0);
             else if (focus == 3) setup_action(ui, PTC_UI_HIT_SETUP_TIME_HELP, 0);
         } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
-            if (focus == 1) setup_pin(ui);
-            else if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, ((int)ui->theme_preference + 1) % 3);
+            if (focus == 1) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                setup_pin(ui);
+            } else if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, ((int)ui->theme_preference + 1) % 3);
             else if (focus == 3) setup_action(ui, PTC_UI_HIT_SETUP_SHORTCUT, 0);
             else if (focus == 4) setup_action(ui, PTC_UI_HIT_SETUP_EYE_CARE, 0);
             else if (focus == 5) setup_action(ui, PTC_UI_HIT_SETUP_BEDTIME, 0);
             else if (focus == 6) setup_action(ui, PTC_UI_HIT_SETUP_NOTIFICATIONS, 0);
-        } else finish_setup(ui, false);
+        } else setup_action(ui, PTC_UI_HIT_SETUP_SKIP, 0);
     }
 }
 

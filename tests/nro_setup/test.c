@@ -6,6 +6,15 @@
 #include "../../platform/reason_detail.h"
 
 static int failures;
+static int sound_count;
+static PtcSoundEffect last_sound;
+
+void __wrap_ptc_audio_play(PtcSoundEffect effect)
+{
+    ++sound_count;
+    last_sound = effect;
+}
+
 static int glyph_refreshes;
 static SetLanguage system_language = SetLanguage_ENUS;
 static int system_focus_state = AppletFocusState_InFocus;
@@ -1009,12 +1018,20 @@ int main(void)
     ptc_ui_cancel_overlay(&ui.model);
     ptc_ui_cancel_overlay(&ui.model);
 
+    sound_count = 0;
     handle_setup_input(&ui, HidNpadButton_Down, 0);
     handle_setup_input(&ui, HidNpadButton_Down, 0);
+    check(sound_count == 2 && last_sound == PTC_SE_FOCUS, "setup focus plays once per move");
     handle_setup_input(&ui, HidNpadButton_A, 0);
+    check(sound_count == 3 && last_sound == PTC_SE_POPUP, "setup help plays one opening sound");
     check(ui.model.setup_focus == 2 && ui.model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP &&
           ui.model.setup_step == PTC_UI_SETUP_PREPARE && !ui.waiting && !ui.active_request_id[0],
           "controller opens parental control help without advancing or submitting setup");
+    ptc_ui_cancel_overlay(&ui.model);
+    setup_action(&ui, PTC_UI_HIT_SETUP_PCTL_HELP, 0);
+    check(sound_count == 4 && last_sound == PTC_SE_POPUP &&
+          ui.model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP,
+          "touch action shares the setup help opening sound");
     ptc_ui_cancel_overlay(&ui.model);
     handle_setup_input(&ui, HidNpadButton_Down, 0);
     handle_setup_input(&ui, HidNpadButton_A, 0);
@@ -1373,12 +1390,22 @@ int main(void)
             notes->model.view = PTC_UI_PARENT;
             notes->model.parent_support_only = true;
             strcpy(notes->model.update_notes, "Read-only release notes");
+            sound_count = 0;
             online_update_action(notes, 8);
+            check(sound_count == 1 && last_sound == PTC_SE_POPUP, "update notes play one opening sound");
             check(notes->model.update_notes_open, "read-only parent may read complete update notes");
             handle_online_update_input(notes, HidNpadButton_R);
+            check(sound_count == 2 && last_sound == PTC_SE_STEP, "update notes play one page sound");
             check(notes->model.update_notes_page == 1 && !notes->exit_requested, "reading next page does not execute an install action");
             handle_online_update_input(notes, HidNpadButton_B);
+            check(sound_count == 3 && last_sound == PTC_SE_CANCEL, "update notes play one closing sound");
             check(!notes->model.update_notes_open && notes->model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE, "reading back returns to update details");
+            handle_online_update_input(notes, HidNpadButton_Y);
+            check(sound_count == 4 && last_sound == PTC_SE_POPUP && notes->model.update_notes_open,
+                  "controller shortcut shares the update notes opening sound");
+            handle_online_update_input(notes, HidNpadButton_Y);
+            check(sound_count == 5 && last_sound == PTC_SE_CANCEL && !notes->model.update_notes_open,
+                  "controller shortcut plays the closing sound once");
             notes->model.update_busy = true;
             online_update_action(notes, 8);
             check(!notes->model.update_notes_open, "worker completion owns notes until join");
@@ -1386,6 +1413,7 @@ int main(void)
             open_online_update(notes);
             online_update_action(notes, 8);
             check(!notes->model.update_notes_open, "child cannot enter update reading or actions");
+            check(sound_count == 5, "blocked update notes actions are silent");
             free(notes);
         }
     }

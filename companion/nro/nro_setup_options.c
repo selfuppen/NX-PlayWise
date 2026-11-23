@@ -97,8 +97,9 @@ void setup_review_action(UiState *ui, int action)
 {
     int item = ptc_ui_setup_next_option(&ui->model);
     if (!ui->model.setup_review_active || item < 0 || action < 0 || action > 3) return;
+    if (action == 0 && ui->waiting) return;
+    ptc_audio_play(action >= 2 ? PTC_SE_CANCEL : PTC_SE_CONFIRM);
     if (action == 0) {
-        if (ui->waiting) return;
         /* Upgrades retain the existing parental boundary for settings edits. */
         if (item != PTC_UI_SETUP_OPTION_LANGUAGE && !ui->setup_parent_authorized) {
             if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_SETUP_REVIEW_TITLE))) return;

@@ -163,6 +163,7 @@ void online_update_action(UiState *ui, int action)
     if (!ui || ui->model.view != PTC_UI_PARENT) return;
     if (action == 8) {
         if (!ui->model.update_busy && ui->model.update_notes[0]) {
+            ptc_audio_play(PTC_SE_POPUP);
             ui->model.update_notes_open = true; ui->model.update_notes_page = 0;
         }
         return;
@@ -171,14 +172,20 @@ void online_update_action(UiState *ui, int action)
     if (!ptc_ui_update_action_enabled(&ui->model, action)) return;
     PtcOnlineUpdater *u = &ui->updater;
     if (action == 4 && !u->worker_live) {
+        ptc_audio_play(PTC_SE_POPUP);
         ui->model.update_cleanup_failed = false;
         list_backups(ui); ui->model.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS; ui->model.overlay_selection = 0; return;
     }
-    if (action == 6 && u->worker_live && u->job <= 2) { atomic_store(&u->cancel, true); return; }
+    if (action == 6 && u->worker_live && u->job <= 2) {
+        ptc_audio_play(PTC_SE_CANCEL);
+        atomic_store(&u->cancel, true);
+        return;
+    }
     if (u->worker_live || ui_busy(ui)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UPDATE_BUSY)); return;
     }
     if (action == 0) {
+        ptc_audio_play(PTC_SE_CONFIRM);
         if (u->backup_submitted) u->status = PTC_UPDATE_BACKUP_PENDING;
         else { u->stable_only = ui->model.update_stable_only; (void)ptc_online_update_start(u, 1); }
     }
@@ -189,20 +196,33 @@ void online_update_action(UiState *ui, int action)
     } else if ((action == 2 || action == 3) && !ui->model.parent_support_only) {
         bool old = action == 2 ? ui->model.update_check_on_startup : ui->model.update_stable_only;
         if (action == 2) ui->model.update_check_on_startup = !old; else ui->model.update_stable_only = !old;
-        if (!save_ui_preferences(ui)) { if (action == 2) ui->model.update_check_on_startup = old; else ui->model.update_stable_only = old; }
+        if (!save_ui_preferences(ui)) {
+            if (action == 2) ui->model.update_check_on_startup = old;
+            else ui->model.update_stable_only = old;
+            ptc_audio_play(PTC_SE_ERROR);
+        } else {
+            ptc_audio_play(PTC_SE_TOGGLE);
+        }
         if (action == 3 && u->feed.count) {
             (void)ptc_update_feed_select(&u->feed, ui->model.update_stable_only, &u->offer);
             u->status = ptc_update_offer_status(&u->offer, PLAYWISE_VERSION, ui->model.update_stable_only);
         }
     } else if (action == 5 && !ui->model.parent_support_only) {
-        if (u->status == PTC_UPDATE_RECONFIRM) { ui->model.overlay = PTC_UI_OVERLAY_NONE; ui->model.parent_page = PTC_UI_PARENT_SUPPORT; }
+        if (u->status == PTC_UPDATE_RECONFIRM) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
+        }
         else open_hot_reload_confirmation(ui);
     }
     else if (action == 6 && !ui->model.parent_support_only && u->status == PTC_UPDATE_RECOVERY_REQUIRED) {
         if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_UPDATE_RECOVER))) return;
         open_confirm_overlay(ui, PTC_UI_OPERATION_UPDATE_RECOVER, ptc_ui_text(PTC_UI_T_UPDATE_RECOVER), ptc_ui_text(PTC_UI_T_UPDATE_RECOVER_CONFIRM));
         ui->model.confirm_hold_required = true;
-    } else if (action == 7) ui->exit_requested = true;
+    } else if (action == 7) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+        ui->exit_requested = true;
+    }
     sync_model(ui);
 #else
     (void)ui; (void)action;
@@ -222,17 +242,28 @@ void handle_online_update_input(UiState *ui, u64 down)
 {
     if (ui->model.view != PTC_UI_PARENT) { ui->model.overlay = PTC_UI_OVERLAY_NONE; return; }
     if (ui->model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE && ui->model.update_notes_open) {
-        if (down & (HidNpadButton_B | HidNpadButton_Y)) ui->model.update_notes_open = false;
-        else if (down & (HidNpadButton_L | HidNpadButton_Left | HidNpadButton_Up))
+        if (down & (HidNpadButton_B | HidNpadButton_Y)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ui->model.update_notes_open = false;
+        } else if (down & (HidNpadButton_L | HidNpadButton_Left | HidNpadButton_Up)) {
+            ptc_audio_play(PTC_SE_STEP);
             ui->model.update_notes_page = ui->model.update_notes_page > -32768 ? ui->model.update_notes_page - 1 : 0;
-        else if (down & (HidNpadButton_R | HidNpadButton_Right | HidNpadButton_Down | HidNpadButton_A))
+        } else if (down & (HidNpadButton_R | HidNpadButton_Right | HidNpadButton_Down | HidNpadButton_A)) {
+            ptc_audio_play(PTC_SE_STEP);
             ui->model.update_notes_page = ui->model.update_notes_page < 32768 ? ui->model.update_notes_page + 1 : 0;
+        }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS) {
+        if (down & HidNpadButton_B) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            open_online_update(ui);
+            return;
+        }
 #ifndef PLAYWISE_EDEN
         int selected = ui->model.update_backup_index + ui->model.overlay_selection;
-        if (down & HidNpadButton_B) { open_online_update(ui); return; }
+        int previous_selected = selected;
+        int previous_page = ui->model.update_backup_index;
         if (down & (HidNpadButton_L | HidNpadButton_R)) {
             int first = ui->model.update_backup_index;
             if (down & HidNpadButton_L) first = first >= 4 ? first - 4 : 0;
@@ -244,10 +275,13 @@ void handle_online_update_input(UiState *ui, u64 down)
         if (selected < ui->model.update_backup_index) ui->model.update_backup_index = selected;
         if (selected >= ui->model.update_backup_index + 4) ui->model.update_backup_index = selected - 3;
         ui->model.overlay_selection = selected - ui->model.update_backup_index;
+        if (ui->model.update_backup_index != previous_page) ptc_audio_play(PTC_SE_STEP);
+        else if (selected != previous_selected) ptc_audio_play(PTC_SE_FOCUS);
         if (selected < 0 || selected >= ui->model.update_backup_count || ui->model.parent_support_only) return;
         if (down & HidNpadButton_A) {
             PtcUpdateJournal j;
             if (!history(&ui->updater, ui->update_backup_ids[selected], &j)) return;
+            ptc_audio_play(PTC_SE_POPUP);
             snprintf(ui->config_backup_selected_path, sizeof(ui->config_backup_selected_path), APP_ROOT "/updates/%s/config-backup.json", j.transaction_id);
             open_config_backup(ui); ui->model.config_backup_tab = 1; ui->model.overlay_selection = 14;
         } else if (down & HidNpadButton_X) {
@@ -256,13 +290,17 @@ void handle_online_update_input(UiState *ui, u64 down)
             open_confirm_overlay(ui, PTC_UI_OPERATION_UPDATE_CLEANUP, ptc_ui_text(PTC_UI_T_UPDATE_CLEANUP), ptc_ui_text(PTC_UI_T_UPDATE_DELETE_CONFIRM));
             ui->model.confirm_hold_required = true;
         }
-#else
-        if (down & HidNpadButton_B) open_online_update(ui);
 #endif
         return;
     }
     if (down & HidNpadButton_Y) { online_update_action(ui, 8); return; }
-    if (down & HidNpadButton_B) { if (!ui->model.update_busy) ptc_ui_cancel_overlay(&ui->model); return; }
+    if (down & HidNpadButton_B) {
+        if (!ui->model.update_busy) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
     int selection = ui->model.overlay_selection;
     if (selection < 0 || selection >= 8) selection = 0;
     /* Spatial navigation matching the 3-row layout:
@@ -277,6 +315,7 @@ void handle_online_update_input(UiState *ui, u64 down)
     if (down & HidNpadButton_Right) selection = nav_right[selection];
     if (down & HidNpadButton_Down) selection = nav_down[selection];
     if (down & HidNpadButton_Up) selection = nav_up[selection];
+    if (selection != ui->model.overlay_selection) ptc_audio_play(PTC_SE_FOCUS);
     ui->model.overlay_selection = selection;
     if (down & HidNpadButton_A) online_update_action(ui, selection);
 }
