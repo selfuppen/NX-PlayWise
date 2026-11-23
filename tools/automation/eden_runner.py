@@ -201,9 +201,14 @@ class McpClient:
         self.messages: queue.Queue = queue.Queue()
         self.output, self.counter = output, 0
         threading.Thread(target=self._read, daemon=True).start()
-        self.request("initialize", {"protocolVersion": "2025-11-25", "capabilities": {},
-                     "clientInfo": {"name": "playwise-eden-runner", "version": "1"}})
-        self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        try:
+            # Cold imports run before the server can answer the first request.
+            self.request("initialize", {"protocolVersion": "2025-11-25", "capabilities": {},
+                         "clientInfo": {"name": "playwise-eden-runner", "version": "1"}}, timeout=60)
+            self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        except Exception:
+            self.close()
+            raise
 
     def _read(self) -> None:
         try:

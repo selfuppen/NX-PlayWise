@@ -140,8 +140,25 @@ class WebFlow(MainFlow):
         self.wait_ui(overlay=22, pin_length=0)
         self.enter_pin('110')
         self.wait_ui(overlay=7, waiting=False)
-        # QR rendering is not a camera/optical decoding qualification.
+        self.action(button='R')  # QR -> pairing file.
+        self.wait_ui(overlay=7, waiting=False)
+        self.action(button='R')  # Pairing file -> on-console generator.
+        self.wait_ui(overlay=10, waiting=False)
+        self.capture('grant-hub-local')
+        self.action(button='R')  # Returning to QR requires a fresh PIN.
+        self.wait_ui(overlay=22, pin_length=0)
+        self.enter_pin('110')
+        self.wait_ui(overlay=7, waiting=False)
+        self.action(button='R')
+        self.wait_ui(overlay=7, waiting=False)
         self.action(button='A')
+        self.wait_ui(overlay=22, pin_length=0)
+        self.action(button='B')
+        self.wait_ui(overlay=7, waiting=False)
+        require(not export.exists(), 'cancelled file authorization created an export')
+        self.action(button='A')
+        self.wait_ui(overlay=22, pin_length=0)
+        self.enter_pin('110')
         self.wait_ui(overlay=38, waiting=False)
         pair = read(export)
         require(pair == {'version': 1, 'device_id': 'eden-switch',
@@ -149,7 +166,10 @@ class WebFlow(MainFlow):
         target = self.output / 'browser/input/parent-import.json'
         target.parent.mkdir(parents=True)
         shutil.copy2(export, target)
-        self.checked('web_pair_export', ['normal parent PIN opens pairing page', 'UI export creates fresh matching fixture'],
+        self.checked('web_pair_export', ['normal input switches among QR, file and local generation',
+                                         'return to QR requires a fresh PIN',
+                                         'cancelled authorization creates no file',
+                                         'file export after PIN creates fresh matching fixture'],
                      export_sha256=digest(export))
 
     def web_issue(self) -> None:

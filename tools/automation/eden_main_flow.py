@@ -163,15 +163,22 @@ class MainFlow:
     def weekly(self, minutes: int) -> int:
         value = self.plan(2, page=1)
         weekday = value["ui"]["editor_index"]
+        expected_week = read(self.app / "rules.json")["week"]
+        other_day = (weekday + 1) % 7
+        self.action(target=f"week_{(other_day + 6) % 7}")
+        self.wait_ui(overlay=0, editor_index=other_day, weekly_dirty=False)
         self.action(target=f"week_{(weekday + 6) % 7}")
+        self.wait_ui(overlay=0, editor_index=weekday, selected_index=0, weekly_dirty=False)
+        self.action(button="A")
         self.duration(minutes)
         self.wait_ui(overlay=0, weekly_dirty=True)
         before = self.ids()
         self.action(button="Plus")
         self.submitted("set_weekly_template", before)
         self.wait_ui(overlay=0, weekly_dirty=False)
-        require(read(self.app / "rules.json")["week"][weekday] == {"mode": "limit", "minutes": minutes},
-                "saved week differs from UI edit")
+        expected_week[weekday] = {"mode": "limit", "minutes": minutes}
+        require(read(self.app / "rules.json")["week"] == expected_week,
+                "weekly save must change only the selected day")
         self.action(button="B")
         self.wait_ui(plan_page=0, overlay=0)
         return weekday
@@ -191,7 +198,8 @@ class MainFlow:
         self.weekday = self.weekly(180)
         self.page(0)
         self.refresh(today_minutes=180)
-        self.checked("plan_journey", ["discard leaves persisted week unchanged", "save reaches backend",
+        self.checked("plan_journey", ["discard leaves persisted week unchanged", "date selection leaves the draft clean",
+                                     "save reaches backend and changes only the selected day",
                                      "today projects saved 180 minutes"], weekday=self.weekday)
 
     def priority_journey(self) -> None:

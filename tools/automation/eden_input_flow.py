@@ -45,7 +45,10 @@ def verify_input(output: Path, include_matrix: bool = True) -> None:
         for row in rows:
             for editor, overlay in (("weekly", 31), ("special", 32)):
                 value = read(output / f"checkpoints/{row['style']}-{row['theme']}-{editor}.json")["ui"]
-                require(value["overlay"] == overlay and value["bedtime_dirty"] is True, "editor checkpoint missing")
+                inline_weekly = (editor == "weekly" and value["overlay"] == 0 and value["plan_page"] == 3
+                                 and value["bedtime_editor_day"] == 1 and value["selected_index"] == 12)
+                require((value["overlay"] == overlay or inline_weekly) and value["bedtime_dirty"] is True,
+                        "editor checkpoint missing")
             returned = read(output / f"checkpoints/{row['style']}-{row['theme']}-returned.json")["ui"]
             require(returned["overlay"] == 0 and returned["plan_page"] == 0 and returned["selected_index"] == 3,
                     "touch return lost source focus or leaked modal input")
@@ -116,23 +119,34 @@ class InputFlow(PlanFlow):
         if special:
             self.action(button="R")
             self.wait_ui(bedtime_section=1)
-        self.action(target=f"bedtime_field_{1 if special else 0}")
-        overlay = 32 if special else 31
-        self.wait_ui(overlay=overlay)
-        if special:
+            self.action(target="bedtime_field_1")
+            self.wait_ui(overlay=32)
             current = ("inherit", "disabled", "custom").index(read(self.app / "rules.json")["bedtime_holiday_mode"])
             for _ in range((2 - current) % 3 or 3):
                 self.action(button="X")
-        self.action(button="Y")
-        self.wait_ui(bedtime_dirty=True)
-        self.capture(f"{style}-{mode}-{'special' if special else 'weekly'}")
-        self.action(target="bedtime_editor_1")
-        self.wait_ui(overlay=20)
-        self.action(button="Right")
-        self.action(button="Plus")
-        self.wait_ui(overlay=overlay)
-        self.action(target="overlay_complete")
-        self.wait_ui(overlay=0, bedtime_dirty=True)
+            self.action(button="Y")
+            self.wait_ui(bedtime_dirty=True)
+            self.capture(f"{style}-{mode}-special")
+            self.action(target="bedtime_editor_1")
+            self.wait_ui(overlay=20)
+            self.action(button="Right")
+            self.action(button="Plus")
+            self.wait_ui(overlay=32)
+            self.action(target="overlay_complete")
+            self.wait_ui(overlay=0, bedtime_dirty=True)
+        else:
+            self.action(target="bedtime_field_0")
+            self.wait_ui(overlay=0, selected_index=0, bedtime_editor_day=1, bedtime_dirty=False)
+            self.action(button="A")
+            self.wait_ui(overlay=0, selected_index=12)
+            self.action(button="A")
+            self.wait_ui(overlay=20)
+            self.action(target="duration_0")
+            self.action(target="code_2")
+            self.action(target="code_1")
+            self.action(target="overlay_complete")
+            self.wait_ui(overlay=0, selected_index=12, bedtime_dirty=True)
+            self.capture(f"{style}-{mode}-weekly")
         self.action(target="plan_back")
         self.wait_ui(overlay=33, bedtime_dirty=True)
         self.action(button="X")
@@ -155,7 +169,8 @@ class InputFlow(PlanFlow):
                 rows.append(row)
         verify_matrix(rows, self.identity["input_language"], styles)
         save(self.output / "input-evidence/matrix.json", {"schema_version": 1, "rows": rows})
-        self.checked("input_matrix", [f"{len(styles) * 2} declared theme pairs through normal preferences", "touch opens both editor types; controller edits time",
+        self.checked("input_matrix", [f"{len(styles) * 2} declared theme pairs through normal preferences",
+                                      "touch selects a weekly day and opens the special editor; controller opens the weekly time field",
                                       "touch completes and returns; discard retains exact rules and source focus"])
 
     def input_cancel_hold(self) -> None:

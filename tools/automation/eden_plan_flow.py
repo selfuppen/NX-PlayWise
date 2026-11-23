@@ -113,7 +113,12 @@ def verify_plans(output: Path) -> None:
         actual = after["bedtime_week"][window_ui["bedtime_editor_day"]] if section == 0 else {
             "start_minute": after[f"bedtime_{'holiday' if section == 1 else 'scheduled'}_start_minute"],
             "end_minute": after[f"bedtime_{'holiday' if section == 1 else 'scheduled'}_end_minute"]}
-        require((actual["start_minute"], actual["end_minute"]) == expected, "saved preset differs from edited UI")
+        require((actual["start_minute"], actual["end_minute"]) == expected, "saved time differs from edited UI")
+        if section == 0:
+            expected_week = before["bedtime_week"].copy()
+            expected_week[window_ui["bedtime_editor_day"]] = {
+                "enabled": True, "start_minute": expected[0], "end_minute": expected[1]}
+            require(after["bedtime_week"] == expected_week, "weekly bedtime save changed another day")
         matching = [r for r in requests if r["type"] == "set_bedtime_policy" and
                     r["payload"]["bedtime_days"] == after["bedtime_week"] and
                     all(r["payload"].get(k) == v for k, v in after.items() if k.startswith("bedtime_") and
@@ -219,13 +224,27 @@ class PlanFlow(MainFlow):
         return sorted(p.stem for p in (self.app / "results").glob("*.json") if read(p).get("type") != "status")
 
     def edit_window(self, section: int, phase: str) -> None:
+        if section == 0:
+            self.action(target="bedtime_field_0")
+            self.wait_ui(overlay=0, selected_index=0, bedtime_editor_day=1, bedtime_dirty=False)
+            self.action(button="A")
+            self.wait_ui(overlay=0, selected_index=12, bedtime_editor_day=1)
+            self.action(button="A")
+            self.duration(1290)
+            self.wait_ui(overlay=0, selected_index=12, bedtime_dirty=True)
+            self.action(button="Right")
+            self.wait_ui(overlay=0, selected_index=13)
+            self.action(button="A")
+            self.duration(420)
+            self.wait_ui(overlay=0, bedtime_dirty=True)
+            self.capture(f"bedtime-0-window-{phase}")
+            return
         field = (0, 1, 3)[section]
         self.action(target=f"bedtime_field_{field}")
-        self.wait_ui(overlay=31 if section == 0 else 32)
-        if section:
-            self.action(button="A")
-            self.action(button="A")
-        self.action(target=f"bedtime_preset_{(1, 3, 4)[section]}")
+        self.wait_ui(overlay=32)
+        self.action(button="A")
+        self.action(button="A")
+        self.action(target=f"bedtime_preset_{(3, 4)[section - 1]}")
         self.wait_ui(bedtime_dirty=True)
         self.capture(f"bedtime-{section}-window-{phase}")
         self.action(button="Plus")

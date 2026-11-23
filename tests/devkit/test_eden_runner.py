@@ -107,6 +107,11 @@ for line in sys.stdin:
             assert len(list((root / "calls").glob("*.json"))) == 2
         finally:
             client.close()
+        with patch.object(McpClient, "request", autospec=True, side_effect=GateError("initialize timed out")) as request:
+            rejected(lambda: McpClient([sys.executable, "-u", "-c", script], root / "failed-stderr.log", root))
+            assert request.call_count == 1 and request.call_args.kwargs["timeout"] == 60
+            failed_client, method, _ = request.call_args.args
+            assert method == "initialize" and failed_client.process.poll() == 0 and failed_client.log.closed
 
 
 def test_snapshot_replace_contention() -> None:
