@@ -79,6 +79,7 @@ void ptc_ui_open_setup_pctl_help(PtcUiModel *model)
     if (!model || model->view != PTC_UI_SETUP ||
         model->setup_step != PTC_UI_SETUP_PREPARE || model->overlay != PTC_UI_OVERLAY_NONE) return;
     model->overlay = PTC_UI_OVERLAY_SETUP_PCTL_HELP;
+    model->overlay_selection = 0;
     snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
         ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_TITLE));
     model->overlay_body[0] = '\0';

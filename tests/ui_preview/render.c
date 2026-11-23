@@ -984,11 +984,11 @@ static int render_support_guide_previews(const char *directory, const PtcUiModel
     return failed;
 }
 
-/* Sample an unobstructed part of the actual convergence banner. This catches
- * the stale-state regression where all cards were unknown but the gate was green. */
+/* Sample an unobstructed part of the top conclusion hero banner ({40, 72, 1200, 70}).
+ * This catches the stale-state regression where all cards were unknown but the hero was green. */
 static int check_rules_gate_color(uint32_t color)
 {
-    if (preview_pixels[580 * 1280 + 200] == resolve_color(color)) return 0;
+    if (preview_pixels[78 * 1280 + 1000] == resolve_color(color)) return 0;
     fprintf(stderr, "FAIL: rendered rule gate has the wrong semantic state\n");
     return 1;
 }

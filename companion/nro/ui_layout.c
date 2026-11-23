@@ -20,7 +20,14 @@ PtcUiRect ptc_ui_update_action_rect(int index)
 PtcUiRect ptc_ui_update_backup_rect(int index)
 {
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54, 200 + index * 96, 1172, 84};
+    return (PtcUiRect){54, 206 + index * 106, 586, 94};
+}
+
+PtcUiRect ptc_ui_update_backup_action_rect(int index)
+{
+    if (index == 0) return (PtcUiRect){676, 574, 314, 46};
+    if (index == 1) return (PtcUiRect){1002, 574, 204, 46};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){990, 194, 200, 30}; }
@@ -818,7 +825,7 @@ PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model)
 {
     if (model && model->overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){124, 354, 1032, 26};
-    return (PtcUiRect){56, 358, 1168, 26};
+    return (PtcUiRect){1054, 88, 170, 38};
 }
 
 PtcUiRect ptc_ui_rules_dialog_rect(void)
@@ -988,8 +995,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 610;
         break;
     case PTC_UI_OVERLAY_SETUP_PCTL_HELP:
-        *width = 1060;
-        *height = 570;
+        *width = 1080;
+        *height = 620;
         break;
     case PTC_UI_OVERLAY_NOTICE_DETAILS:
         *width = 780;
@@ -1097,7 +1104,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         break;
     case PTC_UI_OVERLAY_SUPPORT_EVENT:
         *width = 960;
-        *height = 560;
+        *height = 580;
         break;
     case PTC_UI_OVERLAY_WEEKLY_BULK:
         *width = 1040;
@@ -1446,8 +1453,10 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 220, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
+    if (overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP)
+        return (PtcUiRect){dialog.x + dialog.w - 32 - 230, dialog_button_top(dialog), 230, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT ||
-        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_DOCK_RULES ||
+        overlay == PTC_UI_OVERLAY_DOCK_RULES ||
         overlay == PTC_UI_OVERLAY_EYE_CARE_RULES)
         return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
@@ -1458,6 +1467,13 @@ PtcUiRect ptc_ui_auth_error_guide_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_AUTH_ERROR);
     return (PtcUiRect){dialog.x + (dialog.w - 230) / 2, dialog_button_top(dialog), 230, PTC_UI_DIALOG_BTN_H};
+}
+
+PtcUiRect ptc_ui_setup_pctl_step_rect(int index)
+{
+    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_SETUP_PCTL_HELP);
+    return (PtcUiRect){dialog.x + 32, dialog.y + 104 + index * 70, 508, 62};
 }
 
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)

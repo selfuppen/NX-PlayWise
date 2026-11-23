@@ -147,7 +147,8 @@ typedef enum {
     PTC_UI_HIT_SUPPORT_GUIDE_STEP,
     PTC_UI_HIT_ACTIVITY_FILTER,
     PTC_UI_HIT_SHORTCUT_PREFIX,
-    PTC_UI_HIT_SOFTWARE_INFO_QR_TAB
+    PTC_UI_HIT_SOFTWARE_INFO_QR_TAB,
+    PTC_UI_HIT_SETUP_PCTL_STEP
 } PtcUiHitKind;
 
 typedef struct {
@@ -375,8 +376,10 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now);
 PtcUiRect ptc_ui_config_backup_field_rect(int index);
 PtcUiRect ptc_ui_update_action_rect(int index);
 PtcUiRect ptc_ui_update_backup_rect(int index);
+PtcUiRect ptc_ui_update_backup_action_rect(int index);
 PtcUiRect ptc_ui_update_notes_rect(void);
 PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model);
+PtcUiRect ptc_ui_setup_pctl_step_rect(int index);
 PtcUiRect ptc_ui_dock_field_rect(int index);
 PtcUiRect ptc_ui_today_status_rect(int index);
 PtcUiRect ptc_ui_config_backup_group_rect(int group);

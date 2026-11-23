@@ -23,42 +23,408 @@ static void draw_update_step_arrow(uint32_t *pixels, uint32_t stride, int x_star
     draw_line(pixels, stride, x_end - 5, cy + 4, x_end, cy, 2, color);
 }
 
+typedef struct {
+    char date[40];
+    char status[64];
+    char release_id[112];
+    char short_ver[64];
+    char build_hash[32];
+    bool verified;
+} BackupLabelInfo;
+
+static void parse_backup_label(const char *raw, BackupLabelInfo *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->verified = true;
+    if (!raw || !raw[0]) {
+        snprintf(out->date, sizeof(out->date), "-");
+        snprintf(out->short_ver, sizeof(out->short_ver), "-");
+        snprintf(out->release_id, sizeof(out->release_id), "-");
+        return;
+    }
+    const char *nl = strchr(raw, '\n');
+    size_t line1_len = nl ? (size_t)(nl - raw) : strlen(raw);
+    char line1[128];
+    if (line1_len >= sizeof(line1)) line1_len = sizeof(line1) - 1;
+    memcpy(line1, raw, line1_len);
+    line1[line1_len] = '\0';
+
+    const char *sep = strstr(line1, " / ");
+    if (sep) {
+        size_t dlen = (size_t)(sep - line1);
+        if (dlen >= sizeof(out->date)) dlen = sizeof(out->date) - 1;
+        memcpy(out->date, line1, dlen);
+        out->date[dlen] = '\0';
+        snprintf(out->status, sizeof(out->status), "%.63s", sep + 3);
+    } else {
+        snprintf(out->date, sizeof(out->date), "%.39s", line1);
+    }
+
+    const char *failed_lbl = ptc_ui_text(PTC_UI_T_UPDATE_FAILED);
+    if (out->status[0] && failed_lbl && strcmp(out->status, failed_lbl) == 0) {
+        out->verified = false;
+    }
+
+    const char *rel = (nl && nl[1]) ? (nl + 1) : "";
+    snprintf(out->release_id, sizeof(out->release_id), "%.111s", rel[0] ? rel : "-");
+
+    /* Derive compact version string and optional build hash from release_id */
+    const char *vstart = rel;
+    if (strncmp(vstart, "playwise-", 9) == 0) vstart += 9;
+    const char *plus = strchr(vstart, '+');
+    if (plus) {
+        size_t vlen = (size_t)(plus - vstart);
+        if (vlen >= sizeof(out->short_ver) - 2) vlen = sizeof(out->short_ver) - 2;
+        if (vlen > 0 && vstart[0] != 'v' && vstart[0] != 'V') {
+            out->short_ver[0] = 'v';
+            memcpy(out->short_ver + 1, vstart, vlen);
+            out->short_ver[vlen + 1] = '\0';
+        } else {
+            memcpy(out->short_ver, vstart, vlen);
+            out->short_ver[vlen] = '\0';
+        }
+        snprintf(out->build_hash, sizeof(out->build_hash), "build %.15s", plus);
+    } else if (vstart[0]) {
+        if (vstart[0] != 'v' && vstart[0] != 'V')
+            snprintf(out->short_ver, sizeof(out->short_ver), "v%.60s", vstart);
+        else
+            snprintf(out->short_ver, sizeof(out->short_ver), "%.62s", vstart);
+    } else {
+        snprintf(out->short_ver, sizeof(out->short_ver), "-");
+    }
+}
+
 static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiModel *m)
 {
     char text[512];
-    draw_settings_page_shell(pixels, stride, m, ptc_ui_text(PTC_UI_T_UPDATE_TITLE), ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
     if (m->overlay == PTC_UI_OVERLAY_ONLINE_UPDATE && m->update_notes_open) {
-        home_button(pixels, stride, ptc_ui_settings_page_back_rect(), ptc_ui_text(PTC_UI_T_B_BACK), false, false, false);
-        const int lines_per_page = 14;
-        int lines = count_wrapped_lines(m->update_notes, 20, 1124, 2048);
+        char fitted[256];
+        draw_subpage_shell(pixels, stride, m,
+                           ptc_ui_text(PTC_UI_T_UPDATE_NOTES_PAGE_TITLE),
+                           ptc_ui_text(PTC_UI_T_UPDATE_TRUST),
+                           ptc_ui_text(PTC_UI_T_UPDATE_BACK_TO_UPDATE),
+                           ptc_ui_text(PTC_UI_T_UPDATE_NOTES_PATH));
+
+        /* Left version metadata panel (x=54..394, w=340, y=174..638) */
+        UiRect meta = {54, 174, 340, 464};
+        draw_plan_card(pixels, stride, meta, false);
+        {
+            bool is_avail = (m->update_status == PTC_UPDATE_AVAILABLE);
+            bool is_err = (m->update_status == PTC_UPDATE_FAILED || m->update_status == PTC_UPDATE_RECOVERY_REQUIRED ||
+                           m->update_status == PTC_UPDATE_MANUAL_REQUIRED);
+            uint32_t p_bg = is_err ? UI_DANGER_SOFT : (is_avail ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT);
+            uint32_t p_bd = is_err ? UI_DANGER_BORDER : (is_avail ? UI_SUCCESS_BORDER : UI_ACCENT);
+            uint32_t p_fg = is_err ? UI_DANGER : (is_avail ? UI_SUCCESS : UI_ACCENT);
+
+            const char *st_txt = ptc_ui_text(update_status_key(m->update_status));
+            int pw = measure_text(st_txt, 12) + 22;
+            if (pw > meta.width - 40) pw = meta.width - 40;
+            UiRect st_pill = {meta.x + 20, meta.y + 20, pw, 26};
+            fill_round_rect(pixels, stride, st_pill, 13, p_bg);
+            draw_rect_outline(pixels, stride, st_pill, 13, 1, p_bd);
+            fit_text(fitted, sizeof(fitted), st_txt, 12, st_pill.width - 12);
+            draw_text_center(pixels, stride, st_pill, fitted, 12, p_fg);
+
+            char ver_disp[80];
+            if (m->update_version[0]) {
+                if (m->update_version[0] == 'v' || m->update_version[0] == 'V')
+                    snprintf(ver_disp, sizeof(ver_disp), "%s", m->update_version);
+                else
+                    snprintf(ver_disp, sizeof(ver_disp), "v%s", m->update_version);
+            } else {
+                snprintf(ver_disp, sizeof(ver_disp), "v%s", PLAYWISE_VERSION);
+            }
+            fit_text(fitted, sizeof(fitted), ver_disp, 28, meta.width - 40);
+            draw_text_bold(pixels, stride, meta.x + 20, meta.y + 84, fitted, 28, UI_INK);
+
+            const char *chan_txt = ptc_ui_text(m->update_stable_only
+                ? PTC_UI_T_UPDATE_STABLE : PTC_UI_T_UPDATE_FOLLOW);
+            fit_text(fitted, sizeof(fitted), chan_txt, 13, meta.width - 40);
+            draw_text(pixels, stride, meta.x + 20, meta.y + 108, fitted, 13, UI_MUTED);
+
+            /* 4-row metadata key-value subcard */
+            UiRect kv = {meta.x + 20, meta.y + 124, meta.width - 40, 152};
+            fill_round_rect(pixels, stride, kv, 10, UI_PAGE);
+            draw_rect_outline(pixels, stride, kv, 10, 1, UI_BORDER);
+            const PtcUiTextId kv_labels[4] = {
+                PTC_UI_T_UPDATE_NOTES_FIELD_NOW,
+                PTC_UI_T_UPDATE_NOTES_FIELD_SIZE,
+                PTC_UI_T_UPDATE_NOTES_FIELD_SOURCE,
+                PTC_UI_T_UPDATE_NOTES_FIELD_VERIFY
+            };
+            char kv_vals[4][64];
+            snprintf(kv_vals[0], sizeof(kv_vals[0]), "v%s", PLAYWISE_VERSION);
+            if (m->update_size_kib) snprintf(kv_vals[1], sizeof(kv_vals[1]), "%u KiB", m->update_size_kib);
+            else snprintf(kv_vals[1], sizeof(kv_vals[1]), "-");
+            snprintf(kv_vals[2], sizeof(kv_vals[2]), "%s",
+                     m->update_source == 2 ? "GitHub" : (m->update_source == 1 ? "Gitee" : "Gitee / GitHub"));
+            snprintf(kv_vals[3], sizeof(kv_vals[3]), "SHA-256");
+
+            for (int r = 0; r < 4; ++r) {
+                int ry = kv.y + 28 + r * 35;
+                if (r > 0) draw_line(pixels, stride, kv.x + 14, ry - 23, kv.x + kv.width - 14, ry - 23, 1, UI_BORDER);
+                const char *lbl = ptc_ui_text(kv_labels[r]);
+                draw_text(pixels, stride, kv.x + 14, ry, lbl, 13, UI_MUTED);
+                fit_text(fitted, sizeof(fitted), kv_vals[r], 14, kv.width - 120);
+                int vw = measure_text(fitted, 14);
+                draw_text_bold(pixels, stride, kv.x + kv.width - 14 - vw, ry, fitted, 14,
+                               r == 3 ? UI_SUCCESS : UI_INK);
+            }
+
+            /* Side assurance note */
+            UiRect note_card = {meta.x + 20, meta.y + 292, meta.width - 40, 152};
+            fill_round_rect(pixels, stride, note_card, 10, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, note_card, 10, 1, UI_BORDER);
+            draw_wrapped_text(pixels, stride, note_card.x + 12, note_card.y + 28,
+                              ptc_ui_text(PTC_UI_T_UPDATE_NOTES_SIDE_NOTE),
+                              13, note_card.width - 24, 21, 6, UI_INK);
+        }
+
+        /* Right comfortable reading surface (x=410..1226, w=816, y=174..638) */
+        const int reader_w = 760;
+        const int lines_per_page = 11;
+        int lines = count_wrapped_lines(m->update_notes, 18, reader_w, 2048);
         int pages = (lines + lines_per_page - 1) / lines_per_page;
         if (pages < 1) pages = 1;
         int page = (m->update_notes_page % pages + pages) % pages;
-        draw_plan_card(pixels, stride, (UiRect){54, 166, 1172, 438}, false);
-        draw_wrapped_text_from_line(pixels, stride, 78, 198, m->update_notes, 20, 1124,
-            28, lines_per_page, page * lines_per_page, UI_INK);
-        snprintf(text, sizeof(text), "%d / %d", page + 1, pages);
-        draw_text(pixels, stride, 78, 638, text, 18, UI_MUTED);
-        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2), ptc_ui_text(PTC_UI_T_GUIDE_PREV), false, false, false);
-        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(), ptc_ui_text(PTC_UI_T_GUIDE_NEXT), false, false, false);
-        return;
-    }
-    if (m->overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS) {
-        home_button(pixels, stride, ptc_ui_settings_page_back_rect(), ptc_ui_text(PTC_UI_T_B_BACK), false, false, false);
-        if (!m->update_backup_count) draw_text(pixels, stride, 72, 180, ptc_ui_text(PTC_UI_T_UPDATE_NO_BACKUPS), 22, UI_MUTED);
-        for (int i = 0; i < 4 && m->update_backup_index + i < m->update_backup_count; ++i) {
-            PtcUiRect rect = ptc_ui_update_backup_rect(i);
-            draw_plan_card(pixels, stride, (UiRect){rect.x, rect.y, rect.w, rect.h}, m->overlay_selection == i);
-            draw_wrapped_text(pixels, stride, rect.x + 24, rect.y + 28,
-                m->update_backup_labels[m->update_backup_index + i], 20, rect.w - 48, 26, 2, UI_INK);
+
+        UiRect reader = {410, 174, 816, 464};
+        draw_plan_card(pixels, stride, reader, false);
+
+        /* Reader top header bar */
+        draw_text_bold(pixels, stride, reader.x + 24, reader.y + 34,
+                       ptc_ui_text(PTC_UI_T_UPDATE_NOTES_READER_TITLE), 18, UI_INK);
+        {
+            int dots = pages < 8 ? pages : 8;
+            int active_dot = pages < 8 ? page : (page * (dots - 1) / (pages > 1 ? pages - 1 : 1));
+            int dot_w = 24, dot_gap = 6;
+            int total_dots_w = dots * dot_w + (dots - 1) * dot_gap;
+            int dx = reader.x + reader.width - 24 - total_dots_w;
+            for (int d = 0; d < dots; ++d) {
+                fill_round_rect(pixels, stride, (UiRect){dx + d * (dot_w + dot_gap), reader.y + 24, dot_w, 6},
+                                3, d == active_dot ? UI_ACCENT : UI_BORDER);
+            }
         }
-        draw_wrapped_text(pixels, stride, 72, 620, ptc_ui_text(m->update_cleanup_failed ? PTC_UI_T_UPDATE_ERROR_CONFLICT : PTC_UI_T_UPDATE_BACKUP_HINT), 17, 1120, 21, 2, UI_MUTED);
-        bool selected = m->update_backup_count > 0;
-        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1), ptc_ui_text(PTC_UI_T_UPDATE_DELETE), false, false, !selected || m->parent_support_only);
-        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2), ptc_ui_text(PTC_UI_T_GUIDE_PREV), false, false, m->update_backup_index == 0);
-        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(), ptc_ui_text(PTC_UI_T_GUIDE_NEXT), false, false, m->update_backup_index + 4 >= m->update_backup_count);
+        draw_line(pixels, stride, reader.x + 24, reader.y + 52, reader.x + reader.width - 24, reader.y + 52, 1, UI_BORDER);
+
+        /* Reader main text body */
+        draw_wrapped_text_from_line(pixels, stride, reader.x + 28, reader.y + 84,
+                                    m->update_notes, 18, reader_w, 28, lines_per_page, page * lines_per_page, UI_INK);
+
+        /* Reader bottom pagination footer */
+        draw_line(pixels, stride, reader.x + 24, reader.y + reader.height - 48,
+                  reader.x + reader.width - 24, reader.y + reader.height - 48, 1, UI_BORDER);
+        draw_text(pixels, stride, reader.x + 24, reader.y + reader.height - 18,
+                  ptc_ui_text(PTC_UI_T_UPDATE_NOTES_NAV_HINT), 13, UI_MUTED);
+        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_NOTES_PAGE_FMT), page + 1, pages);
+        int pg_w = measure_text(text, 14);
+        draw_text_bold(pixels, stride, reader.x + reader.width - 24 - pg_w,
+                       reader.y + reader.height - 18, text, 14, UI_ACCENT);
+
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2), ptc_ui_text(PTC_UI_T_GUIDE_PREV), false, false, pages <= 1);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(), ptc_ui_text(PTC_UI_T_GUIDE_NEXT), false, false, pages <= 1);
         return;
     }
+
+    if (m->overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS) {
+        char fitted[256];
+        draw_subpage_shell(pixels, stride, m,
+                           ptc_ui_text(PTC_UI_T_UPDATE_BACKUPS),
+                           ptc_ui_text(PTC_UI_T_UPDATE_BACKUPS_SUB),
+                           ptc_ui_text(PTC_UI_T_UPDATE_BACK_TO_UPDATE),
+                           ptc_ui_text(PTC_UI_T_UPDATE_BACKUPS_PATH));
+
+        if (!m->update_backup_count) {
+            UiRect empty_card = {54, 174, 1172, 464};
+            draw_plan_card(pixels, stride, empty_card, false);
+            UiRect icon_box = {empty_card.x + (empty_card.width - 68) / 2, empty_card.y + 116, 68, 68};
+            fill_round_rect(pixels, stride, icon_box, 18, UI_RAISED);
+            draw_rect_outline(pixels, stride, icon_box, 18, 1, UI_BORDER);
+            draw_text_center(pixels, stride, icon_box, "0", 28, UI_MUTED);
+
+            const char *no_title = ptc_ui_text(PTC_UI_T_UPDATE_NO_BACKUPS);
+            int tw = measure_text(no_title, 22);
+            draw_text_bold(pixels, stride, empty_card.x + (empty_card.width - tw) / 2,
+                           empty_card.y + 226, no_title, 22, UI_INK);
+            draw_wrapped_text_centered(pixels, stride, empty_card.x + empty_card.width / 2,
+                                       empty_card.y + 266, ptc_ui_text(PTC_UI_T_UPDATE_NO_BACKUPS_DESC),
+                                       15, 620, 24, 3, UI_MUTED);
+        } else {
+            /* Left column: compact SD archive list (x=54..640, w=586) */
+            snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_BACKUPS_LIST_HDR), m->update_backup_count);
+            draw_text_bold(pixels, stride, 58, 194, text, 14, UI_MUTED);
+
+            char cur_pill_txt[64];
+            snprintf(cur_pill_txt, sizeof(cur_pill_txt), ptc_ui_text(PTC_UI_T_UPDATE_CURRENT_VER_PILL), PLAYWISE_VERSION);
+            int cpw = measure_text(cur_pill_txt, 12) + 20;
+            if (cpw > 180) cpw = 180;
+            UiRect cur_pill = {640 - cpw, 174, cpw, 24};
+            fill_round_rect(pixels, stride, cur_pill, 12, UI_RAISED);
+            draw_rect_outline(pixels, stride, cur_pill, 12, 1, UI_BORDER);
+            fit_text(fitted, sizeof(fitted), cur_pill_txt, 12, cur_pill.width - 10);
+            draw_text_center(pixels, stride, cur_pill, fitted, 12, UI_MUTED);
+
+            int sel_idx = m->update_backup_index + m->overlay_selection;
+            if (sel_idx < 0 || sel_idx >= m->update_backup_count) sel_idx = m->update_backup_index;
+            if (sel_idx < 0 || sel_idx >= m->update_backup_count) sel_idx = 0;
+
+            for (int i = 0; i < 4 && m->update_backup_index + i < m->update_backup_count; ++i) {
+                int abs_i = m->update_backup_index + i;
+                PtcUiRect pr = ptc_ui_update_backup_rect(i);
+                UiRect r = {pr.x, pr.y, pr.w, pr.h};
+                bool focused = (abs_i == sel_idx);
+                BackupLabelInfo info;
+                parse_backup_label(m->update_backup_labels[abs_i], &info);
+
+                draw_plan_card(pixels, stride, r, focused);
+
+                /* Row 1: Version + optional latest badge + right verification pill */
+                const char *st_txt = ptc_ui_text(info.verified
+                    ? PTC_UI_T_UPDATE_BACKUP_COMP_SHA : PTC_UI_T_UPDATE_BACKUP_INCOMPLETE_BADGE);
+                int sw = measure_text(st_txt, 12) + 18;
+                if (sw > 148) sw = 148;
+                UiRect st_pill = {r.x + r.width - 16 - sw, r.y + 16, sw, 24};
+                fill_round_rect(pixels, stride, st_pill, 12, info.verified ? UI_SUCCESS_SOFT : UI_DANGER_SOFT);
+                draw_rect_outline(pixels, stride, st_pill, 12, 1, info.verified ? UI_SUCCESS_BORDER : UI_DANGER_BORDER);
+                fit_text(fitted, sizeof(fitted), st_txt, 12, st_pill.width - 10);
+                draw_text_center(pixels, stride, st_pill, fitted, 12, info.verified ? UI_SUCCESS : UI_DANGER);
+
+                int vx = r.x + 18;
+                int latest_w = 0;
+                const char *latest_txt = ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_LATEST_BADGE);
+                if (abs_i == 0) latest_w = measure_text(latest_txt, 11) + 16;
+                int max_ver_w = st_pill.x - vx - (latest_w ? latest_w + 18 : 12);
+                if (max_ver_w < 80) max_ver_w = 80;
+                fit_text(fitted, sizeof(fitted), info.short_ver, 18, max_ver_w);
+                draw_text_bold(pixels, stride, vx, r.y + 35, fitted, 18, focused ? UI_ACCENT : UI_INK);
+                if (abs_i == 0) {
+                    int vw = measure_text(fitted, 18);
+                    UiRect lpill = {vx + vw + 10, r.y + 17, latest_w, 22};
+                    if (lpill.x + lpill.width < st_pill.x - 6) {
+                        fill_round_rect(pixels, stride, lpill, 11, UI_WARNING_SOFT);
+                        draw_rect_outline(pixels, stride, lpill, 11, 1, UI_WARNING_BORDER);
+                        draw_text_center(pixels, stride, lpill, latest_txt, 11, UI_WARNING_TEXT);
+                    }
+                }
+
+                /* Row 2: Timestamp on left, build hash or release suffix on right */
+                char time_row[96];
+                snprintf(time_row, sizeof(time_row), ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_TIME_FMT), info.date);
+                int bh_w = info.build_hash[0] ? measure_text(info.build_hash, 12) : 0;
+                if (bh_w > 0) {
+                    draw_text(pixels, stride, r.x + r.width - 16 - bh_w, r.y + 72, info.build_hash, 12, UI_MUTED);
+                }
+                fit_text(fitted, sizeof(fitted), time_row, 13, r.width - 36 - (bh_w ? bh_w + 12 : 0));
+                draw_text(pixels, stride, vx, r.y + 72, fitted, 13, UI_MUTED);
+            }
+
+            /* Right column: Selected archive verification & action panel (x=656..1226, w=570, y=174..638) */
+            UiRect detail = {656, 174, 570, 464};
+            draw_plan_card(pixels, stride, detail, false);
+            {
+                BackupLabelInfo sel;
+                parse_backup_label(m->update_backup_labels[sel_idx], &sel);
+
+                const char *ready_txt = ptc_ui_text(sel.verified
+                    ? PTC_UI_T_UPDATE_BACKUP_READY_BADGE : PTC_UI_T_UPDATE_BACKUP_INCOMPLETE_BADGE);
+                int rw = measure_text(ready_txt, 12) + 20;
+                if (rw > 180) rw = 180;
+                UiRect rpill = {detail.x + detail.width - 20 - rw, detail.y + 18, rw, 26};
+                fill_round_rect(pixels, stride, rpill, 13, sel.verified ? UI_SUCCESS_SOFT : UI_DANGER_SOFT);
+                draw_rect_outline(pixels, stride, rpill, 13, 1, sel.verified ? UI_SUCCESS_BORDER : UI_DANGER_BORDER);
+                fit_text(fitted, sizeof(fitted), ready_txt, 12, rpill.width - 10);
+                draw_text_center(pixels, stride, rpill, fitted, 12, sel.verified ? UI_SUCCESS : UI_DANGER);
+
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_DETAIL_TITLE),
+                         17, rpill.x - (detail.x + 20) - 10);
+                draw_text_bold(pixels, stride, detail.x + 20, detail.y + 37, fitted, 17, UI_INK);
+
+                /* Version comparison subcard */
+                UiRect vdiff = {detail.x + 20, detail.y + 54, detail.width - 40, 78};
+                fill_round_rect(pixels, stride, vdiff, 10, UI_PAGE);
+                draw_rect_outline(pixels, stride, vdiff, 10, 1, UI_BORDER);
+                draw_text(pixels, stride, vdiff.x + 16, vdiff.y + 26,
+                          ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_VER_NOW), 12, UI_MUTED);
+                char cur_v[48];
+                snprintf(cur_v, sizeof(cur_v), "v%s", PLAYWISE_VERSION);
+                fit_text(fitted, sizeof(fitted), cur_v, 19, 210);
+                draw_text_bold(pixels, stride, vdiff.x + 16, vdiff.y + 58, fitted, 19, UI_INK);
+
+                int mid_x = vdiff.x + vdiff.width / 2;
+                draw_update_step_arrow(pixels, stride, mid_x - 16, mid_x + 16, vdiff.y + 42, UI_ACCENT);
+
+                const char *arch_lbl = ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_VER_ARCHIVED);
+                int alw = measure_text(arch_lbl, 12);
+                draw_text(pixels, stride, vdiff.x + vdiff.width - 16 - alw, vdiff.y + 26, arch_lbl, 12, UI_MUTED);
+                fit_text(fitted, sizeof(fitted), sel.short_ver, 19, 220);
+                int svw = measure_text(fitted, 19);
+                draw_text_bold(pixels, stride, vdiff.x + vdiff.width - 16 - svw, vdiff.y + 58, fitted, 19, UI_ACCENT);
+
+                /* Source release ID subcard */
+                UiRect src_box = {detail.x + 20, detail.y + 144, detail.width - 40, 66};
+                fill_round_rect(pixels, stride, src_box, 10, UI_PAGE);
+                draw_rect_outline(pixels, stride, src_box, 10, 1, UI_BORDER);
+                draw_text(pixels, stride, src_box.x + 16, src_box.y + 24,
+                          ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_SOURCE_ID_LBL), 12, UI_MUTED);
+                int dw = measure_text(sel.date, 12);
+                draw_text(pixels, stride, src_box.x + src_box.width - 16 - dw, src_box.y + 24, sel.date, 12, UI_MUTED);
+                fit_text(fitted, sizeof(fitted), sel.release_id, 15, src_box.width - 32);
+                draw_text_bold(pixels, stride, src_box.x + 16, src_box.y + 52, fitted, 15, UI_INK);
+
+                /* Component status chips */
+                const char *c1 = ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_COMP_CONFIG);
+                int c1w = measure_text(c1, 13) + 24;
+                UiRect chip1 = {detail.x + 20, detail.y + 222, c1w, 28};
+                fill_round_rect(pixels, stride, chip1, 14, sel.verified ? UI_SUCCESS_SOFT : UI_RAISED);
+                draw_rect_outline(pixels, stride, chip1, 14, 1, sel.verified ? UI_SUCCESS_BORDER : UI_BORDER);
+                draw_text_center(pixels, stride, chip1, c1, 13, sel.verified ? UI_SUCCESS : UI_MUTED);
+
+                const char *c2 = ptc_ui_text(sel.verified
+                    ? PTC_UI_T_UPDATE_BACKUP_COMP_SHA : PTC_UI_T_UPDATE_BACKUP_INCOMPLETE_BADGE);
+                int c2w = measure_text(c2, 13) + 24;
+                UiRect chip2 = {chip1.x + chip1.width + 10, detail.y + 222, c2w, 28};
+                fill_round_rect(pixels, stride, chip2, 14, sel.verified ? UI_SUCCESS_SOFT : UI_DANGER_SOFT);
+                draw_rect_outline(pixels, stride, chip2, 14, 1, sel.verified ? UI_SUCCESS_BORDER : UI_DANGER_BORDER);
+                draw_text_center(pixels, stride, chip2, c2, 13, sel.verified ? UI_SUCCESS : UI_DANGER);
+
+                /* Safety callout box */
+                UiRect safe_box = {detail.x + 20, detail.y + 264, detail.width - 40, 114};
+                bool err_box = m->update_cleanup_failed || !sel.verified;
+                fill_round_rect(pixels, stride, safe_box, 10, err_box ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
+                draw_rect_outline(pixels, stride, safe_box, 10, 1, err_box ? UI_WARNING_BORDER : UI_SUCCESS_BORDER);
+                draw_text_bold(pixels, stride, safe_box.x + 16, safe_box.y + 26,
+                               ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_SAFE_TITLE), 14,
+                               err_box ? UI_WARNING_TEXT : UI_SUCCESS);
+                const char *safe_msg = ptc_ui_text(m->update_cleanup_failed
+                    ? PTC_UI_T_UPDATE_ERROR_CONFLICT
+                    : (sel.verified ? PTC_UI_T_UPDATE_BACKUP_SAFE_BODY : PTC_UI_T_UPDATE_BACKUP_FAILED_BODY));
+                draw_wrapped_text(pixels, stride, safe_box.x + 16, safe_box.y + 52,
+                                  safe_msg, 14, safe_box.width - 32, 20, 3,
+                                  m->update_cleanup_failed ? UI_DANGER : UI_INK);
+
+                /* Action divider + Restore / Clean buttons (shared layout rects) */
+                draw_line(pixels, stride, detail.x + 20, detail.y + 390,
+                          detail.x + detail.width - 20, detail.y + 390, 1, UI_BORDER);
+                home_button(pixels, stride, ptc_ui_update_backup_action_rect(0),
+                            ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_RESTORE_BTN),
+                            true, false, !sel.verified || m->parent_support_only);
+                home_button(pixels, stride, ptc_ui_update_backup_action_rect(1),
+                            ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_CLEAN_BTN),
+                            false, false, m->parent_support_only);
+            }
+        }
+
+        bool has_any = m->update_backup_count > 0;
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(1),
+                    ptc_ui_text(PTC_UI_T_UPDATE_DELETE), false, false, !has_any || m->parent_support_only);
+        home_button(pixels, stride, ptc_ui_settings_page_footer_rect(2),
+                    ptc_ui_text(PTC_UI_T_GUIDE_PREV), false, false, m->update_backup_index == 0);
+        home_button(pixels, stride, ptc_ui_settings_page_primary_rect(),
+                    ptc_ui_text(PTC_UI_T_GUIDE_NEXT), false, false, m->update_backup_index + 4 >= m->update_backup_count);
+        return;
+    }
+
+    draw_settings_page_shell(pixels, stride, m, ptc_ui_text(PTC_UI_T_UPDATE_TITLE), ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
 
     /* Tier 1: Version info (Scheme A chips & banner) + Release notes / progress summary box */
     draw_plan_card(pixels, stride, (UiRect){54, 168, 1172, 206}, false);
@@ -1166,28 +1532,142 @@ static void draw_support_event_overlay(uint32_t *pixels, uint32_t stride, const 
 {
     UiRect dialog;
     int index = model->overlay_selection;
-    char time_text[48];
-    char row[224];
-    int y;
-    draw_dialog_shell(pixels, stride, model, &dialog, 960, 560);
+    char time_text[64];
+    char row[256];
+    char fitted[256];
+    draw_dialog_shell(pixels, stride, model, &dialog, 960, 580);
+
+    bool has_event = model->recent_event_count > 0;
     if (index < 0 || index >= model->recent_event_count) index = 0;
-    format_event_time(model->recent_event_timestamps[index], true, time_text, sizeof(time_text));
-    y = dialog.y + 132;
-    snprintf(row, sizeof(row), ptc_ui_text(PTC_UI_T_EVENT_S), model->recent_event_names[index][0] ? model->recent_event_names[index] : ptc_ui_text(PTC_UI_T_UNKNOWN));
-    y = draw_wrapped_text(pixels, stride, dialog.x + 42, y, row, 18, dialog.width - 84, 28, 2, UI_INK);
-    snprintf(row, sizeof(row), ptc_ui_text(PTC_UI_T_ACTION_TYPE_S), model->recent_event_types[index][0] ? model->recent_event_types[index] : ptc_ui_text(PTC_UI_T_NOT_DOCUMENTED));
-    y = draw_wrapped_text(pixels, stride, dialog.x + 42, y + 8, row, 17, dialog.width - 84, 26, 2, UI_MUTED);
-    snprintf(row, sizeof(row), ptc_ui_text(PTC_UI_T_RESULT_S), model->recent_event_errors[index][0] ? model->recent_event_errors[index] : ptc_ui_text(PTC_UI_T_SUCCESS));
-    y = draw_wrapped_text(pixels, stride, dialog.x + 42, y + 8, row, 17, dialog.width - 84, 26, 2,
-                          model->recent_event_errors[index][0] ? UI_DANGER : UI_SUCCESS);
-    snprintf(row, sizeof(row), ptc_ui_text(PTC_UI_T_TIME_S), time_text);
-    y = draw_wrapped_text(pixels, stride, dialog.x + 42, y + 8, row, 17, dialog.width - 84, 26, 2, UI_MUTED);
-    snprintf(row, sizeof(row), ptc_ui_text(PTC_UI_T_REQUEST_ID_S), model->recent_event_request_ids[index][0] ? model->recent_event_request_ids[index] : ptc_ui_text(PTC_UI_T_NOT_DOCUMENTED));
-    y = draw_wrapped_text(pixels, stride, dialog.x + 42, y + 8, row, 16, dialog.width - 84, 24, 3, UI_MUTED);
-    snprintf(row, sizeof(row), ptc_ui_text(PTC_UI_T_INTERNAL_DETAILS_S), model->recent_event_details[index][0] ? model->recent_event_details[index] : ptc_ui_text(PTC_UI_T_NONE));
-    draw_wrapped_text(pixels, stride, dialog.x + 42, y + 8, row, 16, dialog.width - 84, 24, 3, UI_MUTED);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_CLOSE),
-                       UI_ACCENT, UI_ON_ACCENT, false);
+
+    bool has_err = has_event && model->recent_event_errors[index][0] != '\0';
+    bool is_sparse = has_event && !has_err &&
+                     model->recent_event_types[index][0] == '\0' &&
+                     model->recent_event_request_ids[index][0] == '\0';
+
+    /* 1. Modal header */
+    {
+        const char *title = model->overlay_title[0]
+            ? model->overlay_title : ptc_ui_text(PTC_UI_T_RECENT_EVENT_DETAILS);
+        fit_text(fitted, sizeof(fitted), title, 24, dialog.width - 64);
+        draw_text_bold(pixels, stride, dialog.x + 32, dialog.y + 52, fitted, 24, UI_INK);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_SUBTITLE), 14, dialog.width - 64);
+        draw_text(pixels, stride, dialog.x + 32, dialog.y + 78, fitted, 14, UI_MUTED);
+    }
+
+    /* 2. Semantic result verdict banner */
+    {
+        UiRect banner = {dialog.x + 32, dialog.y + 96, dialog.width - 64, 84};
+        uint32_t bg = (!has_event || is_sparse) ? UI_RAISED : (has_err ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
+        uint32_t bd = (!has_event || is_sparse) ? UI_BORDER : (has_err ? UI_DANGER_BORDER : UI_SUCCESS_BORDER);
+        uint32_t fg = (!has_event || is_sparse) ? UI_MUTED : (has_err ? UI_DANGER : UI_SUCCESS);
+        int sym_kind = !has_event ? 0 : (has_err ? 3 : 1);
+        const char *badge_txt = ptc_ui_text(!has_event ? PTC_UI_T_SUPPORT_EVENT_EMPTY_BADGE
+                                            : (has_err ? PTC_UI_T_SUPPORT_EVENT_ERR_BADGE
+                                                       : PTC_UI_T_SUPPORT_EVENT_OK_BADGE));
+
+        fill_round_rect(pixels, stride, banner, 12, bg);
+        draw_rect_outline(pixels, stride, banner, 12, 2, bd);
+
+        UiRect icon_tile = {banner.x + 16, banner.y + 20, 44, 44};
+        fill_round_rect(pixels, stride, icon_tile, 10, UI_SURFACE);
+        draw_rect_outline(pixels, stride, icon_tile, 10, 1, bd);
+        draw_status_symbol(pixels, stride, icon_tile.x + 22, icon_tile.y + 22, fg, sym_kind);
+
+        int pw = measure_text(badge_txt, 13) + 24;
+        if (pw > 180) pw = 180;
+        UiRect pill = {banner.x + banner.width - 16 - pw, banner.y + 28, pw, 28};
+        fill_round_rect(pixels, stride, pill, 14, UI_SURFACE);
+        draw_rect_outline(pixels, stride, pill, 14, 1, bd);
+        fit_text(fitted, sizeof(fitted), badge_txt, 13, pill.width - 12);
+        draw_text_center(pixels, stride, pill, fitted, 13, fg);
+
+        int tx = banner.x + 74;
+        int tw = pill.x - tx - 14;
+        const char *ev_name = (has_event && model->recent_event_names[index][0])
+            ? model->recent_event_names[index] : ptc_ui_text(PTC_UI_T_UNKNOWN);
+        fit_text(fitted, sizeof(fitted), ev_name, 19, tw);
+        draw_text_bold(pixels, stride, tx, banner.y + 36, fitted, 19, UI_INK);
+
+        const char *res_val = has_err ? model->recent_event_errors[index]
+            : (has_event ? ptc_ui_text(PTC_UI_T_SUCCESS) : ptc_ui_text(PTC_UI_T_NONE));
+        snprintf(row, sizeof(row), ptc_ui_text(PTC_UI_T_RESULT_S), res_val);
+        fit_text(fitted, sizeof(fitted), row, 15, tw);
+        draw_text_bold(pixels, stride, tx, banner.y + 64, fitted, 15, fg);
+    }
+
+    /* 3. Two-column metadata cards + full-width Request ID card */
+    if (has_event) {
+        format_event_time(model->recent_event_timestamps[index], true, time_text, sizeof(time_text));
+    } else {
+        snprintf(time_text, sizeof(time_text), "%s", ptc_ui_text(PTC_UI_T_NOT_DOCUMENTED));
+    }
+    {
+        int col_w = (dialog.width - 64 - 12) / 2;
+        UiRect c_type = {dialog.x + 32, dialog.y + 194, col_w, 68};
+        UiRect c_time = {c_type.x + col_w + 12, dialog.y + 194, col_w, 68};
+
+        fill_round_rect(pixels, stride, c_type, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, c_type, 10, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_FIELD_TYPE), 13, c_type.width - 28);
+        draw_text(pixels, stride, c_type.x + 14, c_type.y + 24, fitted, 13, UI_MUTED);
+        const char *ev_type = (has_event && model->recent_event_types[index][0])
+            ? model->recent_event_types[index] : ptc_ui_text(PTC_UI_T_NOT_DOCUMENTED);
+        fit_text(fitted, sizeof(fitted), ev_type, 16, c_type.width - 28);
+        draw_text_bold(pixels, stride, c_type.x + 14, c_type.y + 51, fitted, 16, UI_INK);
+
+        fill_round_rect(pixels, stride, c_time, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, c_time, 10, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_FIELD_TIME), 13, c_time.width - 28);
+        draw_text(pixels, stride, c_time.x + 14, c_time.y + 24, fitted, 13, UI_MUTED);
+        fit_text(fitted, sizeof(fitted), time_text, 16, c_time.width - 28);
+        draw_text_bold(pixels, stride, c_time.x + 14, c_time.y + 51, fitted, 16, UI_INK);
+
+        UiRect c_req = {dialog.x + 32, dialog.y + 274, dialog.width - 64, 68};
+        fill_round_rect(pixels, stride, c_req, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, c_req, 10, 1, UI_BORDER);
+
+        const char *redacted = ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_REDACTED_BADGE);
+        int rw = measure_text(redacted, 12) + 22;
+        if (rw > 260) rw = 260;
+        UiRect rpill = {c_req.x + c_req.width - 14 - rw, c_req.y + 21, rw, 26};
+        fill_round_rect(pixels, stride, rpill, 13, UI_SURFACE);
+        draw_rect_outline(pixels, stride, rpill, 13, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), redacted, 12, rpill.width - 10);
+        draw_text_center(pixels, stride, rpill, fitted, 12, UI_MUTED);
+
+        int req_max_w = rpill.x - (c_req.x + 14) - 14;
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_FIELD_REQ_ID), 13, req_max_w);
+        draw_text(pixels, stride, c_req.x + 14, c_req.y + 24, fitted, 13, UI_MUTED);
+        const char *req_id = (has_event && model->recent_event_request_ids[index][0])
+            ? model->recent_event_request_ids[index] : ptc_ui_text(PTC_UI_T_NOT_DOCUMENTED);
+        fit_text(fitted, sizeof(fitted), req_id, 16, req_max_w);
+        draw_text_bold(pixels, stride, c_req.x + 14, c_req.y + 51, fitted, 16, UI_INK);
+    }
+
+    /* 4. Diagnostic detail box */
+    {
+        UiRect dbox = {dialog.x + 32, dialog.y + 354, dialog.width - 64, 134};
+        fill_round_rect(pixels, stride, dbox, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, dbox, 10, 1, UI_BORDER);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_FIELD_DETAILS), 13, dbox.width - 28);
+        draw_text_bold(pixels, stride, dbox.x + 14, dbox.y + 25, fitted, 13, UI_MUTED);
+
+        const char *details = (has_event && model->recent_event_details[index][0])
+            ? model->recent_event_details[index] : ptc_ui_text(PTC_UI_T_NONE);
+        draw_wrapped_text(pixels, stride, dbox.x + 14, dbox.y + 52, details, 15,
+                          dbox.width - 28, 24, 4, UI_INK);
+    }
+
+    /* 5. Footer hint + primary close button */
+    {
+        PtcUiRect btn_rect = ptc_ui_confirm_rect(model->overlay);
+        int hint_max = btn_rect.x - (dialog.x + 32) - 20;
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_FOOTER_HINT), 14, hint_max);
+        draw_text(pixels, stride, dialog.x + 32, btn_rect.y + 32, fitted, 14, UI_MUTED);
+        draw_dialog_button(pixels, stride, btn_rect, ptc_ui_text(PTC_UI_T_A_B_CLOSE),
+                           UI_ACCENT, UI_ON_ACCENT, false);
+    }
 }
 
 static void draw_setup_pctl_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1197,23 +1677,161 @@ static void draw_setup_pctl_help(uint32_t *pixels, uint32_t stride, const PtcUiM
         PTC_UI_T_SETUP_PCTL_HELP_STEP_3, PTC_UI_T_SETUP_PCTL_HELP_STEP_4,
         PTC_UI_T_SETUP_PCTL_HELP_STEP_5, PTC_UI_T_SETUP_PCTL_HELP_STEP_6
     };
+    static const PtcUiTextId descs[] = {
+        PTC_UI_T_SETUP_PCTL_HELP_DESC_1, PTC_UI_T_SETUP_PCTL_HELP_DESC_2,
+        PTC_UI_T_SETUP_PCTL_HELP_DESC_3, PTC_UI_T_SETUP_PCTL_HELP_DESC_4,
+        PTC_UI_T_SETUP_PCTL_HELP_DESC_5, PTC_UI_T_SETUP_PCTL_HELP_DESC_6
+    };
+    static const PtcUiTextId mock_navs[] = {
+        PTC_UI_T_SETUP_PCTL_MOCK_NAV_1, PTC_UI_T_SETUP_PCTL_MOCK_NAV_2,
+        PTC_UI_T_SETUP_PCTL_MOCK_NAV_3, PTC_UI_T_SETUP_PCTL_MOCK_NAV_4,
+        PTC_UI_T_SETUP_PCTL_MOCK_NAV_5
+    };
     UiRect dialog;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1060, 570);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 91,
-        ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_INTRO), 18, UI_MUTED);
-    for (int i = 0; i < 6; ++i) {
-        char number[8];
-        snprintf(number, sizeof(number), "%d", i + 1);
-        UiRect badge = {dialog.x + 34, dialog.y + 115 + i * 46, 32, 32};
-        fill_round_rect(pixels, stride, badge, 8, UI_ACCENT_SOFT);
-        draw_text_center(pixels, stride, badge, number, 18, UI_ACCENT);
-        draw_wrapped_text(pixels, stride, dialog.x + 82, dialog.y + 138 + i * 46,
-            ptc_ui_text(steps[i]), 18, dialog.width - 116, 22, 2, UI_INK);
+    char fitted[256];
+    char buf[96];
+    PtcUiRect base_dialog = ptc_ui_dialog_rect(1080, 620);
+    draw_dialog_shell(pixels, stride, model, &dialog, 1080, 620);
+    int anim_dy = dialog.y - base_dialog.y;
+
+    int active = model->overlay_selection;
+    if (active < 0 || active >= 6) active = 0;
+
+    /* 1. Header with interactive guide badge */
+    {
+        const char *badge = ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_INTERACT_BADGE);
+        int bw = measure_text(badge, 12) + 24;
+        if (bw > 280) bw = 280;
+        UiRect pill = {dialog.x + dialog.width - 32 - bw, dialog.y + 28, bw, 28};
+        fill_round_rect(pixels, stride, pill, 14, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, pill, 14, 1, UI_ACCENT);
+        fit_text(fitted, sizeof(fitted), badge, 12, pill.width - 12);
+        draw_text_center(pixels, stride, pill, fitted, 12, UI_ACCENT);
+
+        int title_max = pill.x - (dialog.x + 32) - 16;
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_TITLE), 23, title_max);
+        draw_text_bold(pixels, stride, dialog.x + 32, dialog.y + 50, fitted, 23, UI_INK);
+
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_SUBTITLE), 14, dialog.width - 64);
+        draw_text(pixels, stride, dialog.x + 32, dialog.y + 80, fitted, 14, UI_MUTED);
     }
-    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 432,
-        ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_RETURN), 17, dialog.width - 68, 24, 2, UI_MUTED);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
-        ptc_ui_text(PTC_UI_T_A_B_RETURN), UI_ACCENT, UI_ON_ACCENT, false);
+
+    /* 2. Left column: 6 interactive step cards */
+    for (int i = 0; i < 6; ++i) {
+        UiRect sr = to_uirect(ptc_ui_setup_pctl_step_rect(i));
+        sr.y += anim_dy;
+        bool is_sel = (i == active);
+
+        fill_round_rect(pixels, stride, sr, 10, is_sel ? UI_ACCENT_SOFT : UI_PAGE);
+        draw_rect_outline(pixels, stride, sr, 10, is_sel ? 2 : 1, is_sel ? UI_ACCENT : UI_BORDER);
+        if (is_sel) draw_focus_ring(pixels, stride, sr, 10);
+
+        UiRect num_box = {sr.x + 12, sr.y + 15, 32, 32};
+        fill_round_rect(pixels, stride, num_box, 8, is_sel ? UI_ACCENT : UI_RAISED);
+        draw_rect_outline(pixels, stride, num_box, 8, 1, is_sel ? UI_ACCENT : UI_BORDER);
+        snprintf(buf, sizeof(buf), "%d", i + 1);
+        draw_text_center(pixels, stride, num_box, buf, 15, is_sel ? UI_ON_ACCENT : UI_INK);
+
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(steps[i]), 15, sr.width - 68);
+        draw_text_bold(pixels, stride, sr.x + 56, sr.y + 27, fitted, 15, is_sel ? UI_ACCENT : UI_INK);
+
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(descs[i]), 13, sr.width - 68);
+        draw_text(pixels, stride, sr.x + 56, sr.y + 49, fitted, 13, UI_MUTED);
+    }
+
+    /* 3. Right column: Live Nintendo Switch System Settings mock preview */
+    {
+        UiRect mock = {dialog.x + 562, dialog.y + 104, 486, 330};
+        fill_round_rect(pixels, stride, mock, 14, UI_RGB(0x141821));
+        draw_rect_outline(pixels, stride, mock, 14, 2, UI_RGB(0x2E3648));
+
+        /* Mock top bar */
+        snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_SETUP_PCTL_MOCK_STEP_FMT), active + 1);
+        int sw = measure_text(buf, 12) + 20;
+        if (sw > 140) sw = 140;
+        UiRect sp = {mock.x + mock.width - 14 - sw, mock.y + 11, sw, 24};
+        fill_round_rect(pixels, stride, sp, 12, UI_RGB(0x2563EB));
+        fit_text(fitted, sizeof(fitted), buf, 12, sp.width - 10);
+        draw_text_center(pixels, stride, sp, fitted, 12, UI_RGB(0xFFFFFF));
+
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SETUP_PCTL_MOCK_HEADER), 13,
+                 sp.x - (mock.x + 16) - 10);
+        draw_text(pixels, stride, mock.x + 16, mock.y + 28, fitted, 13, UI_RGB(0x94A3B8));
+        draw_line(pixels, stride, mock.x + 14, mock.y + 43, mock.x + mock.width - 14, mock.y + 43,
+                  1, UI_RGB(0x2A3244));
+
+        /* Mock left settings sidebar */
+        UiRect sb = {mock.x + 14, mock.y + 54, 152, 262};
+        fill_round_rect(pixels, stride, sb, 9, UI_RGB(0x1C2230));
+        for (int j = 0; j < 5; ++j) {
+            UiRect item = {sb.x + 8, sb.y + 10 + j * 49, sb.width - 16, 40};
+            if (j == 2) {
+                bool blue_hi = (active <= 1);
+                fill_round_rect(pixels, stride, item, 7,
+                                blue_hi ? UI_RGB(0x2563EB) : UI_RGB(0x452414));
+                draw_rect_outline(pixels, stride, item, 7, 1,
+                                  blue_hi ? UI_RGB(0x60A5FA) : UI_RGB(0xFB923C));
+                fill_round_rect(pixels, stride, (UiRect){item.x + 8, item.y + 16, 8, 8}, 4,
+                                blue_hi ? UI_RGB(0xFFFFFF) : UI_RGB(0xFB923C));
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(mock_navs[j]), 13, item.width - 26);
+                draw_text_bold(pixels, stride, item.x + 22, item.y + 25, fitted, 13, UI_RGB(0xFFFFFF));
+            } else {
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(mock_navs[j]), 13, item.width - 14);
+                draw_text(pixels, stride, item.x + 8, item.y + 25, fitted, 13, UI_RGB(0x94A3B8));
+            }
+        }
+
+        /* Mock right detail pane */
+        UiRect pane = {mock.x + 176, mock.y + 54, 296, 262};
+        fill_round_rect(pixels, stride, pane, 9, UI_RGB(0x1C2230));
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(steps[active]), 14, pane.width - 24);
+        draw_text_bold(pixels, stride, pane.x + 12, pane.y + 26, fitted, 14, UI_RGB(0xFFFFFF));
+
+        PtcUiTextId opts[3] = {
+            PTC_UI_T_SETUP_PCTL_MOCK_OPT_1,
+            PTC_UI_T_SETUP_PCTL_MOCK_OPT_2,
+            active == 5 ? PTC_UI_T_SETUP_PCTL_MOCK_OPT_DONE : PTC_UI_T_SETUP_PCTL_MOCK_OPT_3
+        };
+        for (int k = 0; k < 3; ++k) {
+            UiRect opt = {pane.x + 12, pane.y + 42 + k * 50, pane.width - 24, 40};
+            bool hi = (k == 0 && active == 2) || (k == 1 && active == 3) || (k == 2 && active >= 4);
+            uint32_t obg = UI_RGB(0x242C3D);
+            uint32_t obd = UI_RGB(0x2E384D);
+            if (hi) {
+                obg = (k == 0) ? UI_RGB(0x2563EB) : (k == 1 ? UI_RGB(0xEA580C) : UI_RGB(0x16A34A));
+                obd = (k == 0) ? UI_RGB(0x93C5FD) : (k == 1 ? UI_RGB(0xFDBA74) : UI_RGB(0x86EFAC));
+            }
+            fill_round_rect(pixels, stride, opt, 8, obg);
+            draw_rect_outline(pixels, stride, opt, 8, hi ? 2 : 1, obd);
+            fit_text(fitted, sizeof(fitted), ptc_ui_text(opts[k]), 13, opt.width - 20);
+            if (hi) draw_text_bold(pixels, stride, opt.x + 10, opt.y + 25, fitted, 13, UI_RGB(0xFFFFFF));
+            else draw_text(pixels, stride, opt.x + 10, opt.y + 25, fitted, 13, UI_RGB(0xCBD5E1));
+        }
+
+        draw_line(pixels, stride, pane.x + 12, pane.y + 198, pane.x + pane.width - 12, pane.y + 198,
+                  1, UI_RGB(0x2B354A));
+        draw_wrapped_text(pixels, stride, pane.x + 12, pane.y + 219, ptc_ui_text(descs[active]),
+                          13, pane.width - 24, 19, 2, UI_RGB(0x93C5FD));
+
+        /* Return-check card below mock */
+        UiRect note = {dialog.x + 562, dialog.y + 446, 486, 70};
+        fill_round_rect(pixels, stride, note, 10, UI_SUCCESS_SOFT);
+        draw_rect_outline(pixels, stride, note, 10, 1, UI_SUCCESS_BORDER);
+        draw_status_symbol(pixels, stride, note.x + 24, note.y + 35, UI_SUCCESS, 1);
+        draw_wrapped_text(pixels, stride, note.x + 46, note.y + 29,
+                          ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_RETURN),
+                          14, note.width - 60, 20, 2, UI_INK);
+    }
+
+    /* 4. Footer hint + primary return button */
+    {
+        PtcUiRect btn_rect = ptc_ui_cancel_rect(model->overlay);
+        int hint_max = btn_rect.x - (dialog.x + 32) - 20;
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SETUP_PCTL_NAV_HINT), 14, hint_max);
+        draw_text(pixels, stride, dialog.x + 32, btn_rect.y + 32, fitted, 14, UI_MUTED);
+        draw_dialog_button(pixels, stride, btn_rect,
+                           ptc_ui_text(PTC_UI_T_A_B_RETURN), UI_ACCENT, UI_ON_ACCENT, false);
+    }
 }
 
 static void draw_support_guide(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

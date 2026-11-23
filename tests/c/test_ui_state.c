@@ -1704,7 +1704,18 @@ static void test_release_hit_targets(void)
     model.setup_focus = 2;
     ptc_ui_open_setup_pctl_help(&model);
     check_int(model.overlay, PTC_UI_OVERLAY_SETUP_PCTL_HELP, "unknown controls can open setup instructions");
+    check_int(model.overlay_selection, 0, "setup instructions start on step 1");
     check_true(!model.restriction_enabled_available, "viewing instructions does not fabricate enabled controls");
+    for (int i = 0; i < 6; ++i) {
+        check_hit(hit_center(&model, ptc_ui_setup_pctl_step_rect(i)), PTC_UI_HIT_SETUP_PCTL_STEP, i,
+                  "setup instructions step cards share touch geometry");
+        check_true(!rects_overlap(ptc_ui_setup_pctl_step_rect(i), ptc_ui_cancel_rect(model.overlay)),
+                   "setup instructions step cards do not overlap return button");
+        if (i > 0) {
+            check_true(!rects_overlap(ptc_ui_setup_pctl_step_rect(i - 1), ptc_ui_setup_pctl_step_rect(i)),
+                       "adjacent setup instructions step cards do not overlap");
+        }
+    }
     check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
               "setup instructions have a touchable return action");
     check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_NONE, 0,
@@ -5167,10 +5178,27 @@ static void test_online_update_layout(void)
             "quota refresh failure triggers danger refresh highlight");
     }
     model.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
-    for (int i = 0; i < 4; ++i) check_hit(hit_center(&model, ptc_ui_update_backup_rect(i)), PTC_UI_HIT_UPDATE_ACTION, i, "backup selection shares touch geometry");
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_update_backup_rect(i)), PTC_UI_HIT_UPDATE_ACTION, i, "backup selection shares touch geometry");
+        check_true(!rects_overlap(ptc_ui_update_backup_rect(i), ptc_ui_update_backup_action_rect(0)),
+                   "backup list cards do not overlap restore button");
+        check_true(!rects_overlap(ptc_ui_update_backup_rect(i), ptc_ui_update_backup_action_rect(1)),
+                   "backup list cards do not overlap clean button");
+    }
+    check_hit(hit_center(&model, ptc_ui_update_backup_action_rect(0)), PTC_UI_HIT_UPDATE_ACTION, 13, "backup detail restore button is touch accessible");
+    check_hit(hit_center(&model, ptc_ui_update_backup_action_rect(1)), PTC_UI_HIT_UPDATE_ACTION, 11, "backup detail cleanup button is touch accessible");
+    check_true(!rects_overlap(ptc_ui_update_backup_action_rect(0), ptc_ui_update_backup_action_rect(1)),
+               "backup detail restore and clean buttons do not overlap");
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_UPDATE_ACTION, 12, "backup top back button is touch accessible");
     check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(1)), PTC_UI_HIT_UPDATE_ACTION, 11, "backup cleanup is touch accessible");
     check_hit(hit_center(&model, ptc_ui_settings_page_footer_rect(2)), PTC_UI_HIT_UPDATE_ACTION, 9, "backup previous page is touch accessible");
     check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()), PTC_UI_HIT_UPDATE_ACTION, 10, "backup next page is touch accessible");
+    model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0, "support event detail close button is touch accessible");
+    model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+    model.home_details_page = 1;
+    model.rules_dialog_open = false;
+    check_hit(hit_center(&model, ptc_ui_rules_independent_tip_rect(&model)), PTC_UI_HIT_HOME_DETAILS_ACTION, 0, "rules guard principles button is touch accessible");
     model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
     check_hit(hit_center(&model, ptc_ui_update_notes_rect()), PTC_UI_HIT_UPDATE_ACTION, 8, "long notes have a touch reading entry");
     check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()), PTC_UI_HIT_UPDATE_ACTION, 12, "update back is touch accessible");

@@ -840,61 +840,369 @@ static void draw_today_rules(uint32_t *pixels, uint32_t stride, const PtcUiModel
     PtcUiRect body = ptc_ui_home_details_body_rect();
     ui_set_vertical_clip(body.y, body.y + body.h);
 
-    /* Use the same current-state projection as the overview. A future break
-     * must never turn a blocked or stale result into permission to play. */
+    int target_minutes = (int)model->forecast[0].minutes;
+    int played_minutes = (int)model->played_minutes;
+    uint8_t wd = ptc_weekday_from_day_index(model->day_index);
+    bool available = detail_available(model, p);
+    bool blocked = p->fresh && p->active_reasons != 0;
+
+    /* 1. Top Conclusion-First Hero Banner (y = 72, h = 70) */
     {
-        bool available = detail_available(model, p);
-        bool blocked = p->fresh && p->active_reasons != 0;
-        uint32_t fg = available ? UI_SUCCESS : blocked ? UI_DANGER : UI_WARNING;
-        uint32_t bg = available ? UI_SUCCESS_SOFT : blocked ? UI_DANGER_SOFT : UI_WARNING_SOFT;
-        UiRect banner = {40, 72, 1200, 34};
-        char current[256], fitted[256];
-        detail_current(model, p, current, sizeof(current));
-        fit_text(fitted, sizeof(fitted), current, 13, banner.width - 64);
-        fill_round_rect(pixels, stride, banner, 8, bg);
-        draw_rect_outline(pixels, stride, banner, 8, 1, fg);
-        support_draw_checkmark(pixels, stride, banner.x + 22, banner.y + 17, 9, fg, bg);
-        draw_text_bold(pixels, stride, banner.x + 40, banner.y + 22, fitted, 13, UI_INK);
+        uint32_t fg = available ? UI_SUCCESS : (blocked ? UI_DANGER : UI_WARNING_TEXT);
+        uint32_t icon_fg = available ? UI_SUCCESS : (blocked ? UI_DANGER : UI_WARNING);
+        uint32_t bg = available ? UI_SUCCESS_SOFT : (blocked ? UI_DANGER_SOFT : UI_WARNING_SOFT);
+        uint32_t bd = available ? UI_SUCCESS_BORDER : (blocked ? UI_DANGER_BORDER : UI_WARNING_BORDER);
+        UiRect banner = {40, 72, 1200, 70};
+        fill_round_rect(pixels, stride, banner, 12, bg);
+        draw_rect_outline(pixels, stride, banner, 12, 2, bd);
+
+        UiRect icon_tile = {banner.x + 16, banner.y + 16, 38, 38};
+        fill_round_rect(pixels, stride, icon_tile, 10, UI_SURFACE);
+        draw_rect_outline(pixels, stride, icon_tile, 10, 1, bd);
+        if (available) {
+            support_draw_checkmark(pixels, stride, icon_tile.x + 19, icon_tile.y + 19, 11, icon_fg, UI_SURFACE);
+        } else {
+            support_draw_info(pixels, stride, icon_tile.x + 19, icon_tile.y + 19, 11, icon_fg);
+        }
+
+        /* Right action button: X Guard Principles (shared hit rect) */
+        UiRect explain_btn = to_uirect(ptc_ui_rules_independent_tip_rect(model));
+        bool exp_focus = (model->home_details_focus == 0);
+        fill_round_rect(pixels, stride, explain_btn, 10, exp_focus ? UI_ACCENT_SOFT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, explain_btn, 10, exp_focus ? 2 : 1, exp_focus ? UI_ACCENT : bd);
+        char fitted_btn[64];
+        fit_text(fitted_btn, sizeof(fitted_btn), ptc_ui_text(PTC_UI_T_RULES_EXPLAIN_KEY_BTN), 14, explain_btn.width - 16);
+        draw_text_center(pixels, stride, explain_btn, fitted_btn, 14, exp_focus ? UI_ACCENT : UI_INK);
+
+        int text_x = banner.x + 68;
+        int text_max_w = explain_btn.x - text_x - 16;
+        char headline[256], sub[256], fitted[256], val[64];
+        if (available) {
+            snprintf(headline, sizeof(headline), "%s", ptc_ui_text(PTC_UI_T_RULES_HERO_OK));
+        } else if (blocked) {
+            char reasons[160];
+            detail_reasons(p->active_reasons, reasons, sizeof(reasons));
+            snprintf(headline, sizeof(headline), ptc_ui_text(PTC_UI_T_RULES_HERO_BLOCKED_FMT), reasons);
+        } else {
+            detail_current(model, p, headline, sizeof(headline));
+        }
+        fit_text(fitted, sizeof(fitted), headline, 19, text_max_w);
+        draw_text_bold(pixels, stride, text_x, banner.y + 32, fitted, 19, fg);
+
+        if (!p->fresh) {
+            snprintf(sub, sizeof(sub), "%s", ptc_ui_text(PTC_UI_T_RULES_HERO_STALE_SUB));
+        } else if (p->total_known && !p->total_unlimited && model->played_minutes_available && played_minutes >= 0) {
+            detail_balance(p->total_known, p->total_unlimited, target_minutes, val, sizeof(val));
+            snprintf(sub, sizeof(sub), ptc_ui_text(PTC_UI_T_RULES_HERO_QUOTA_SUB_FMT),
+                     val, ptc_ui_effective_rule_label(decision->effective.source),
+                     (unsigned)played_minutes, (unsigned)(p->total_remaining > 0 ? p->total_remaining : 0));
+        } else {
+            detail_balance(p->total_known, p->total_unlimited, target_minutes, val, sizeof(val));
+            snprintf(sub, sizeof(sub), "%s: %s (%s)",
+                     ptc_ui_text(PTC_UI_T_DETAIL_RULES_CONFIRM_TOTAL), val,
+                     ptc_ui_effective_rule_label(decision->effective.source));
+        }
+        fit_text(fitted, sizeof(fitted), sub, 14, text_max_w);
+        draw_text(pixels, stride, text_x, banner.y + 56, fitted, 14, UI_INK);
     }
 
-    /* 2. 区块 ① 先算总量：今天一共能玩多久？ (y = 110, h = 152) */
-    draw_rules_priority_pipeline(pixels, stride, model, decision, 40, 110, 1200, 152,
-                                 (int)model->forecast[0].minutes, (int)model->played_minutes,
-                                 p->total_remaining, true, p->total_known, p->total_unlimited);
-
-    /* 3. 中间因果流向提示：从步骤①输出注入步骤②门禁 (y = 262 ~ 330, 间距扩大至 68px，垂直箭头舒展无遮盖) */
+    /* 2. Left Column (56%): 4 Independent Real-Time Guards in spacious 2x2 grid */
     {
-        int mid_x = 40 + 1200 / 2;
-        int flow_y1 = 262;
-        int flow_y2 = 330;
-        const char *flow_txt = ptc_ui_text(PTC_UI_T_DETAIL_RULES_FLOW_INTO_GATE);
-        int flow_w = measure_text(flow_txt, 11);
-        int pill_w = flow_w + 24;
-        int pill_h = 20;
-        int pill_y = 272;
-        UiRect flow_pill = {mid_x - pill_w / 2, pill_y, pill_w, pill_h};
+        UiRect left_card = {40, 154, 668, 462};
+        detail_panel(pixels, stride, left_card);
 
-        /* 上方导流线 */
-        draw_line(pixels, stride, mid_x, flow_y1, mid_x, pill_y, 2, UI_ACCENT);
+        const char *g_sub = ptc_ui_text(PTC_UI_T_RULES_GUARDS_SUB);
+        int g_sub_w = measure_text(g_sub, 13);
+        draw_text(pixels, stride, left_card.x + left_card.width - 18 - g_sub_w, left_card.y + 28, g_sub, 13, UI_MUTED);
+        char fitted_hdr[128];
+        fit_text(fitted_hdr, sizeof(fitted_hdr), ptc_ui_text(PTC_UI_T_RULES_GUARDS_TITLE), 16,
+                 left_card.width - 36 - g_sub_w - 14);
+        draw_text_bold(pixels, stride, left_card.x + 18, left_card.y + 28, fitted_hdr, 16, UI_INK);
 
-        /* 流程流向胶囊 */
-        fill_round_rect(pixels, stride, flow_pill, 6, UI_ACCENT_SOFT);
-        draw_rect_outline(pixels, stride, flow_pill, 6, 1, UI_ACCENT);
-        draw_text_center(pixels, stride, flow_pill, flow_txt, 11, UI_ACCENT);
+        const int grid_x = left_card.x + 16;
+        const int grid_y = left_card.y + 44;
+        const int gap = 12;
+        const int cw = (left_card.width - 32 - gap) / 2;
+        const int ch = (left_card.height - 60 - gap) / 2;
 
-        /* 下方导流长轴与实心向下大三角箭头直达步骤②顶部 (38px 舒展流道，完全不被文字条框遮盖) */
-        int shaft_start_y = pill_y + pill_h;
-        int arrow_tip_y = flow_y2;
-        int arrow_h = 14;
-        draw_line(pixels, stride, mid_x, shaft_start_y, mid_x, arrow_tip_y - arrow_h, 3, UI_ACCENT);
-        support_draw_arrow_down(pixels, stride, mid_x, arrow_tip_y, 20, arrow_h, UI_ACCENT);
+        for (int i = 0; i < 4; ++i) {
+            int col = i % 2;
+            int row = i / 2;
+            UiRect c = {grid_x + col * (cw + gap), grid_y + row * (ch + gap), cw, ch};
+            PtcUiCondition cond = p->conditions[i];
+            bool is_block = (cond == PTC_UI_CONDITION_BLOCK);
+            bool is_unknown = (cond == PTC_UI_CONDITION_UNKNOWN);
+            bool is_off = (cond == PTC_UI_CONDITION_OFF);
+            uint32_t domain = (i == 0) ? UI_ACCENT : ((i == 1) ? UI_HERO : ((i == 2) ? UI_SUCCESS : UI_WARNING));
+
+            uint32_t c_bg = is_block ? UI_DANGER_SOFT : (is_unknown ? UI_WARNING_SOFT : UI_PAGE);
+            uint32_t c_bd = is_block ? UI_DANGER : (is_unknown ? UI_WARNING_BORDER : UI_BORDER);
+            uint32_t val_fg = is_block ? UI_DANGER : (is_unknown ? UI_WARNING_TEXT : (is_off ? UI_MUTED : domain));
+            uint32_t bar_fg = is_block ? UI_DANGER : (is_unknown ? UI_WARNING : (is_off ? UI_BORDER : domain));
+            fill_round_rect(pixels, stride, c, 12, c_bg);
+            draw_rect_outline(pixels, stride, c, 12, (is_block || is_unknown) ? 2 : 1, c_bd);
+            fill_round_rect(pixels, stride, (UiRect){c.x + 6, c.y + 14, 4, c.height - 28}, 2, bar_fg);
+
+            /* Top row: Guard Title + Status Pill */
+            const char *st_lbl = detail_condition_label(cond);
+            int pw = measure_text(st_lbl, 12) + 18;
+            if (pw > 116) pw = 116;
+            UiRect pill = {c.x + c.width - 12 - pw, c.y + 12, pw, 24};
+            uint32_t p_bg = is_block ? UI_DANGER : (is_unknown ? UI_WARNING : (is_off ? UI_RAISED : UI_SUCCESS_SOFT));
+            uint32_t p_fg = (is_block || is_unknown) ? UI_ON_ACCENT : (is_off ? UI_MUTED : UI_SUCCESS);
+            fill_round_rect(pixels, stride, pill, 12, p_bg);
+            if (!is_block && !is_unknown && !is_off) {
+                draw_rect_outline(pixels, stride, pill, 12, 1, UI_SUCCESS_BORDER);
+            }
+            char fitted_pill[48];
+            fit_text(fitted_pill, sizeof(fitted_pill), st_lbl, 12, pill.width - 10);
+            draw_text_center(pixels, stride, pill, fitted_pill, 12, p_fg);
+
+            char fitted_t[64];
+            fit_text(fitted_t, sizeof(fitted_t), ptc_ui_text(DETAIL_CONDITION_TITLES[i]), 16,
+                     pill.x - (c.x + 20) - 8);
+            draw_text_bold(pixels, stride, c.x + 20, c.y + 30, fitted_t, 16, UI_INK);
+
+            /* Primary Metric + Multi-line Explanation */
+            char big[96], desc[192], fitted_big[96];
+            big[0] = '\0';
+            desc[0] = '\0';
+            if (i == 0) {
+                detail_balance(p->total_known, p->total_unlimited, p->total_remaining, big, sizeof(big));
+                if (is_unknown) {
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_STALE_DESC));
+                } else if (p->total_known && !p->total_unlimited && model->played_minutes_available && played_minutes >= 0) {
+                    snprintf(desc, sizeof(desc), ptc_ui_text(PTC_UI_T_DETAIL_RULE_USED_TOTAL_SUB),
+                             (unsigned)played_minutes, (unsigned)target_minutes);
+                } else {
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_effective_rule_label(decision->effective.source));
+                }
+            } else if (i == 1) {
+                if (is_off) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_OFF_VALUE));
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_BEDTIME_OFF_DESC));
+                } else if (is_unknown) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_STALE_DESC));
+                } else {
+                    unsigned b_st = model->bedtime_policy.week[wd].start_minute;
+                    unsigned b_en = model->bedtime_policy.week[wd].end_minute;
+                    char s1[64], s2[64];
+                    snprintf(big, sizeof(big), "%02u:%02u ~ %02u:%02u", b_st / 60, b_st % 60, b_en / 60, b_en % 60);
+                    snprintf(s1, sizeof(s1), ptc_ui_text(PTC_UI_T_DETAIL_RULE_BEDTIME_START), b_st / 60, b_st % 60);
+                    snprintf(s2, sizeof(s2), ptc_ui_text(PTC_UI_T_DETAIL_RULE_BEDTIME_NEXT), b_en / 60, b_en % 60);
+                    snprintf(desc, sizeof(desc), "%s / %s", s1, s2);
+                }
+            } else if (i == 2) {
+                if (is_off) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_OFF_VALUE));
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_EYE_OFF_DESC));
+                } else if (is_unknown) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_STALE_DESC));
+                } else if (is_block && model->eye_care_rest_remaining_seconds > 0) {
+                    snprintf(big, sizeof(big), ptc_ui_text(PTC_UI_T_RULES_GUARD_EYE_RESTING_FMT),
+                             (unsigned)(model->eye_care_rest_remaining_seconds / 60),
+                             (unsigned)(model->eye_care_rest_remaining_seconds % 60));
+                    snprintf(desc, sizeof(desc), ptc_ui_text(PTC_UI_T_DETAIL_RULE_EYE_PLAYED),
+                             (unsigned)model->eye_care_used_minutes, (unsigned)model->eye_care_policy.play_minutes);
+                } else {
+                    unsigned left_p = model->eye_care_policy.play_minutes > model->eye_care_used_minutes
+                        ? (unsigned)(model->eye_care_policy.play_minutes - model->eye_care_used_minutes)
+                        : (unsigned)model->eye_care_policy.play_minutes;
+                    snprintf(big, sizeof(big), ptc_ui_text(PTC_UI_T_DETAIL_RULE_EYE_PLAYED),
+                             (unsigned)model->eye_care_used_minutes, (unsigned)model->eye_care_policy.play_minutes);
+                    snprintf(desc, sizeof(desc), ptc_ui_text(PTC_UI_T_DETAIL_RULE_EYE_LEFT),
+                             left_p, (unsigned)model->eye_care_policy.rest_minutes);
+                }
+            } else {
+                const char *dmode = ptc_ui_text(strcmp(model->operation_mode, "docked") == 0
+                    ? PTC_UI_T_DETAIL_TAG_DOCKED : PTC_UI_T_DETAIL_TAG_HANDHELD);
+                if (is_off) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_OFF_VALUE));
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_DOCK_OFF_DESC));
+                } else if (is_unknown) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+                    snprintf(desc, sizeof(desc), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_STALE_DESC));
+                } else if (model->dock_policy.force_docked) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_DOCK_TV_ONLY));
+                    snprintf(desc, sizeof(desc), "%s / %s", dmode, ptc_ui_text(PTC_UI_T_RULES_GUARD_DOCK_TV_OK_DESC));
+                } else if (model->undocked_remaining_minutes <= 0 && model->dock_policy.undocked_limit_enabled) {
+                    snprintf(big, sizeof(big), "%s", ptc_ui_text(PTC_UI_T_RULES_GUARD_DOCK_EMPTY));
+                    snprintf(desc, sizeof(desc), "%s / %s", dmode, ptc_ui_text(PTC_UI_T_RULES_GUARD_DOCK_TV_OK_DESC));
+                } else {
+                    snprintf(big, sizeof(big), ptc_ui_text(PTC_UI_T_DETAIL_RULE_DOCK_REMAIN),
+                             (unsigned)(model->undocked_remaining_minutes > 0 ? model->undocked_remaining_minutes : 0));
+                    snprintf(desc, sizeof(desc), "%s / %s", dmode, ptc_ui_text(PTC_UI_T_RULES_GUARD_DOCK_TV_OK_DESC));
+                }
+            }
+
+            fit_text(fitted_big, sizeof(fitted_big), big, 21, c.width - 32);
+            draw_text_bold(pixels, stride, c.x + 20, c.y + 88, fitted_big, 21, val_fg);
+            draw_wrapped_text(pixels, stride, c.x + 20, c.y + 124, desc, 14, c.width - 32, 20, 3, UI_MUTED);
+        }
     }
 
-    /* 4. 区块 ② 再看能不能玩：现在能开机吗？ (y = 330, h = 284) */
-    draw_rules_conditions_gate(pixels, stride, model, decision, 40, 330, 1200, 284,
-                               (int)model->forecast[0].minutes, (int)model->played_minutes,
-                               p->total_remaining, ptc_weekday_from_day_index(model->day_index),
-                               true, p->total_known, p->total_unlimited, p->conditions);
+    /* 3. Right Column (44%): Top-Down Quota Priority Ladder (P1 -> P4) */
+    {
+        UiRect right_card = {724, 154, 516, 462};
+        detail_panel(pixels, stride, right_card);
+
+        const PtcUiDecisionStep *steps[] = {
+            &decision->today_override, &decision->scheduled_override,
+            &decision->holiday, &decision->weekly
+        };
+        const PtcUiTextId tier_titles[] = {
+            PTC_UI_T_TODAY_S_ADJUSTMENT,
+            PTC_UI_T_SPECIFIED_DATE_QUOTA,
+            PTC_UI_T_HOLIDAY,
+            PTC_UI_T_WEEKLY_PLAN
+        };
+        const PtcUiTextId tier_descs[] = {
+            PTC_UI_T_DETAIL_RULES_TEMP_DESC,
+            PTC_UI_T_DETAIL_RULES_SPEC_DESC,
+            PTC_UI_T_DETAIL_RULES_HOLIDAY_DESC,
+            PTC_UI_T_DETAIL_RULES_WEEKLY_PLAN_DESC
+        };
+
+        int selected_idx = -1;
+        for (int i = 0; i < 4; ++i) {
+            if (steps[i]->state == PTC_UI_DECISION_SELECTED) {
+                selected_idx = i;
+                break;
+            }
+        }
+
+        int badge_w = 0;
+        if (selected_idx >= 0) {
+            char hit_buf[48];
+            snprintf(hit_buf, sizeof(hit_buf), ptc_ui_text(PTC_UI_T_RULES_HIT_TIER_FMT), selected_idx + 1);
+            badge_w = measure_text(hit_buf, 12) + 20;
+            if (badge_w > 110) badge_w = 110;
+            UiRect hit_pill = {right_card.x + right_card.width - 16 - badge_w, right_card.y + 12, badge_w, 24};
+            fill_round_rect(pixels, stride, hit_pill, 12, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, hit_pill, 12, 1, UI_ACCENT);
+            draw_text_center(pixels, stride, hit_pill, hit_buf, 12, UI_ACCENT);
+        }
+        char fitted_hdr[128];
+        fit_text(fitted_hdr, sizeof(fitted_hdr), ptc_ui_text(PTC_UI_T_RULES_QUOTA_TITLE), 16,
+                 right_card.width - 36 - (badge_w ? badge_w + 12 : 0));
+        draw_text_bold(pixels, stride, right_card.x + 18, right_card.y + 28, fitted_hdr, 16, UI_INK);
+
+        int y = right_card.y + 46;
+        const int row_x = right_card.x + 16;
+        const int row_w = right_card.width - 32;
+
+        for (int i = 0; i < 4; ++i) {
+            bool is_hit = (i == selected_idx);
+            bool is_overridden = (selected_idx >= 0 && i > selected_idx);
+            int row_h = is_hit ? 142 : 66;
+            UiRect r = {row_x, y, row_w, row_h};
+            char ptag[8];
+            snprintf(ptag, sizeof(ptag), "P%d", i + 1);
+
+            if (is_hit) {
+                fill_round_rect(pixels, stride, r, 11, UI_SUCCESS_SOFT);
+                draw_rect_outline(pixels, stride, r, 11, 2, UI_SUCCESS);
+
+                UiRect p_chip = {r.x + 14, r.y + 12, 34, 22};
+                fill_round_rect(pixels, stride, p_chip, 6, UI_SUCCESS);
+                draw_text_center(pixels, stride, p_chip, ptag, 12, UI_ON_ACCENT);
+
+                char val_str[64];
+                format_decision_rule(steps[i], val_str, sizeof(val_str));
+                int val_w = measure_text(val_str, 18);
+                draw_text_bold(pixels, stride, r.x + r.width - 14 - val_w, r.y + 29, val_str, 18, UI_SUCCESS);
+
+                const char *act_txt = ptc_ui_text(PTC_UI_T_DETAIL_RULES_ACTIVE_BADGE);
+                int act_w = measure_text(act_txt, 11) + 14;
+                int name_x = p_chip.x + p_chip.width + 8;
+                int max_name_w = (r.x + r.width - 14 - val_w - 10) - name_x - act_w - 8;
+                if (max_name_w < 60) max_name_w = 60;
+                char fitted_name[64];
+                fit_text(fitted_name, sizeof(fitted_name), ptc_ui_text(tier_titles[i]), 16, max_name_w);
+                draw_text_bold(pixels, stride, name_x, r.y + 29, fitted_name, 16, UI_INK);
+                int nw = measure_text(fitted_name, 16);
+                if (name_x + nw + 8 + act_w < r.x + r.width - 14 - val_w - 6) {
+                    UiRect act_pill = {name_x + nw + 8, r.y + 13, act_w, 20};
+                    fill_round_rect(pixels, stride, act_pill, 10, UI_SURFACE);
+                    draw_rect_outline(pixels, stride, act_pill, 10, 1, UI_SUCCESS_BORDER);
+                    draw_text_center(pixels, stride, act_pill, act_txt, 11, UI_SUCCESS);
+                }
+
+                /* Progress bar showing remaining vs total */
+                UiRect bar_track = {r.x + 14, r.y + 48, r.width - 28, 10};
+                fill_round_rect(pixels, stride, bar_track, 5, UI_SURFACE);
+                draw_rect_outline(pixels, stride, bar_track, 5, 1, UI_SUCCESS_BORDER);
+                int fill_pct = 100;
+                if (p->total_known && !p->total_unlimited && target_minutes > 0) {
+                    int rem_clamped = p->total_remaining > 0 ? p->total_remaining : 0;
+                    fill_pct = rem_clamped * 100 / target_minutes;
+                    if (fill_pct > 100) fill_pct = 100;
+                    if (fill_pct < 0) fill_pct = 0;
+                }
+                int fill_w = bar_track.width * fill_pct / 100;
+                if (fill_w >= 6) {
+                    fill_round_rect(pixels, stride, (UiRect){bar_track.x, bar_track.y, fill_w, bar_track.height},
+                                    5, UI_SUCCESS);
+                }
+
+                /* Used / Remaining summary row */
+                char left_s[64], right_s[96], rem_val[48];
+                detail_balance(p->total_known, p->total_unlimited, p->total_remaining, rem_val, sizeof(rem_val));
+                snprintf(right_s, sizeof(right_s), ptc_ui_text(PTC_UI_T_RULES_LEFT_SHORT_FMT), rem_val);
+                int rw = measure_text(right_s, 14);
+                draw_text_bold(pixels, stride, r.x + r.width - 14 - rw, r.y + 84, right_s, 14, UI_INK);
+                if (p->total_known && !p->total_unlimited && model->played_minutes_available && played_minutes >= 0) {
+                    snprintf(left_s, sizeof(left_s), ptc_ui_text(PTC_UI_T_RULES_USED_SHORT_FMT), (unsigned)played_minutes);
+                    draw_text(pixels, stride, r.x + 14, r.y + 84, left_s, 14, UI_INK);
+                }
+
+                /* Tier description */
+                char fitted_d[128];
+                fit_text(fitted_d, sizeof(fitted_d), ptc_ui_text(tier_descs[i]), 13, r.width - 28);
+                draw_text(pixels, stride, r.x + 14, r.y + 116, fitted_d, 13, UI_MUTED);
+            } else {
+                fill_round_rect(pixels, stride, r, 10, is_overridden ? UI_RAISED : UI_PAGE);
+                draw_rect_outline(pixels, stride, r, 10, 1, UI_BORDER);
+
+                UiRect p_chip = {r.x + 12, r.y + 11, 32, 20};
+                fill_round_rect(pixels, stride, p_chip, 5, UI_RAISED);
+                draw_rect_outline(pixels, stride, p_chip, 5, 1, UI_BORDER);
+                draw_text_center(pixels, stride, p_chip, ptag, 11, is_overridden ? UI_DISABLED : UI_MUTED);
+
+                const char *st_txt = is_overridden
+                    ? ptc_ui_text(PTC_UI_T_DETAIL_RULES_OVERRIDDEN_BADGE)
+                    : ptc_ui_text(PTC_UI_T_DETAIL_RULES_NOT_SET_BADGE);
+                int st_w = measure_text(st_txt, 13);
+                draw_text(pixels, stride, r.x + r.width - 14 - st_w, r.y + 26, st_txt, 13,
+                          is_overridden ? UI_DISABLED : UI_MUTED);
+
+                int name_x = p_chip.x + p_chip.width + 8;
+                int max_name_w = (r.x + r.width - 14 - st_w - 10) - name_x;
+                char fitted_name[64];
+                fit_text(fitted_name, sizeof(fitted_name), ptc_ui_text(tier_titles[i]), 15, max_name_w);
+                draw_text_bold(pixels, stride, name_x, r.y + 26, fitted_name, 15,
+                               is_overridden ? UI_DISABLED : UI_INK);
+
+                char fitted_d[128];
+                fit_text(fitted_d, sizeof(fitted_d), ptc_ui_text(tier_descs[i]), 13, r.width - 26);
+                draw_text(pixels, stride, r.x + 12, r.y + 52, fitted_d, 13,
+                          is_overridden ? UI_DISABLED : UI_MUTED);
+            }
+
+            y += row_h + 10;
+        }
+
+        /* Bottom integrated reminder bar inside right panel */
+        UiRect note_box = {row_x, right_card.y + right_card.height - 46, row_w, 34};
+        fill_round_rect(pixels, stride, note_box, 8, UI_PAGE);
+        draw_rect_outline(pixels, stride, note_box, 8, 1, UI_BORDER);
+        char fitted_note[160];
+        fit_text(fitted_note, sizeof(fitted_note), ptc_ui_text(PTC_UI_T_DETAIL_RULES_PRIORITY_NOTE),
+                 13, note_box.width - 24);
+        draw_text(pixels, stride, note_box.x + 12, note_box.y + 22, fitted_note, 13, UI_MUTED);
+    }
 
     ui_set_vertical_clip(0, SCREEN_HEIGHT);
 }
