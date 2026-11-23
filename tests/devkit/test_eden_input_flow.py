@@ -41,10 +41,7 @@ def test_preference_navigation() -> None:
 
                 def wait_ui(self, **expected: object) -> dict:
                     self.calls.append(("wait", expected))
-                    if expected.get("overlay") == 21:
-                        self.theme_waits += 1
-                        return {"ui": {"overlay_selection": 0 if self.theme_waits % 2 else 3}}
-                    return {"ui": expected}
+                    return {"ui": {"overlay_selection": 0, **expected}}
 
                 def enter_pin(self, digits: str) -> None:
                     assert digits == "110"
@@ -56,29 +53,39 @@ def test_preference_navigation() -> None:
             with tempfile.TemporaryDirectory() as folder:
                 flow = Flow()
                 flow.app = Path(folder)
-                flow.calls, flow.theme_waits = [], 0
+                flow.calls = []
                 flow.identity = {"input_language": language}
                 save(flow.app / "config.json", {"ui_language": language, "theme": "dark", "theme_style": "amethyst"})
                 flow.setup()
                 prefix = [("setup",), ("page", 0), ("action", {"target": "header_language"}),
-                          ("wait", {"overlay": 37, "overlay_selection": 0})]
-                buttons = ["Right"] if language == "zh-Hans" else ["Down"] + (["Right"] if language == "en" else [])
-                prefix += [("action", {"button": button}) for button in buttons + ["A"]]
-                prefix += [("wait", {"overlay": 0})]
+                          ("wait", {"overlay": 37})]
+                selections = {"zh-Hans": (1,), "zh-Hant": (1, 2), "en": (1, 2, 3)}
+                for selection in selections[language]:
+                    prefix += [("action", {"button": "Right"}),
+                               ("wait", {"overlay": 37, "overlay_selection": selection})]
+                prefix += [("action", {"button": "A"}), ("wait", {"overlay": 0})]
                 assert flow.calls[:len(prefix)] == prefix, (flow_type.__name__, language, flow.calls)
+                pairing = [
+                    ("page", 2), ("wait", {"selected_index": 0}),
+                    ("action", {"button": "Right"}), ("wait", {"selected_index": 1}),
+                    ("action", {"button": "A"}), ("wait", {"overlay": 22, "pin_length": 0}),
+                    ("pin",), ("wait", {"overlay": 7, "waiting": False}),
+                ]
+                assert flow.calls[len(prefix):len(prefix) + len(pairing)] == pairing
                 assert not any(call == ("action", {"target": "card_3"}) for call in flow.calls)
                 if flow_type is InputHoldFlow:
                     assert ("action", {"target": "card_5"}) in flow.calls
 
                 # Exercise the shared theme method itself, not a replaced mock.
-                flow.calls, flow.theme_waits = [], 0
+                flow.calls = []
                 flow.theme("amethyst", "dark")
                 assert flow.calls == [
                     ("page", 3), ("action", {"target": "card_5"}), ("wait", {"overlay": 21}),
-                    ("action", {"button": "Right"}), ("action", {"button": "Right"}),
-                    ("action", {"button": "Down"}), ("wait", {"overlay": 21}),
-                    ("action", {"button": "Right"}), ("action", {"button": "Right"}),
-                    ("action", {"button": "Right"}), ("action", {"button": "A"}), ("wait", {"overlay": 0}),
+                    ("action", {"button": "Right"}), ("wait", {"overlay": 21, "overlay_selection": 1}),
+                    ("action", {"button": "Right"}), ("wait", {"overlay": 21, "overlay_selection": 2}),
+                    ("action", {"button": "Down"}), ("wait", {"overlay": 21, "overlay_selection": 4}),
+                    ("action", {"button": "Down"}), ("wait", {"overlay": 21, "overlay_selection": 6}),
+                    ("action", {"button": "A"}), ("wait", {"overlay": 0}),
                 ]
 
 

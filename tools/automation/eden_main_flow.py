@@ -92,6 +92,17 @@ class MainFlow:
         self.action(target=f"tab_{index}")
         self.wait_ui(parent_page=index, overlay=0, waiting=False)
 
+    def open_pairing(self) -> None:
+        self.page(2)
+        # The observer's generic card targets do not describe the grant page.
+        self.wait_ui(selected_index=0)
+        self.action(button="Right")
+        self.wait_ui(selected_index=1)
+        self.action(button="A")
+        self.wait_ui(overlay=22, pin_length=0)
+        self.enter_pin("110")
+        self.wait_ui(overlay=7, waiting=False)
+
     def plan(self, card: int, page: int | None = None, overlay: int = 0) -> dict:
         self.page(1)
         if card == 5:
@@ -465,6 +476,18 @@ class MainFlow:
         self.checked("business_reopen", ["normal close/reopen preserves saved week and restored policies",
                                         "claimed buffer remains unavailable", "nonce ledger remains consumed"], ledger_sha256=ledger)
 
+    def select_language(self, language: str) -> None:
+        self.page(0)
+        self.action(target="header_language")
+        selection = self.wait_ui(overlay=37)["ui"]["overlay_selection"]
+        desired = ("system", "zh-Hans", "zh-Hant", "en").index(language)
+        for offset in range(1, (desired - selection) % 4 + 1):
+            self.action(button="Right")
+            self.wait_ui(overlay=37, overlay_selection=(selection + offset) % 4)
+        self.action(button="A")
+        self.wait_ui(overlay=0)
+        require(read(self.app / "config.json")["ui_language"] == language, "language preference did not persist")
+
     def preferences_journey(self) -> None:
         config = self.app / "config.json"
         self.page(3)
@@ -474,8 +497,8 @@ class MainFlow:
         self.action(button="Right")
         self.wait_ui(overlay_selection=1)
         self.action(button="Down")
-        self.wait_ui(overlay_selection=4)
-        self.action(button="Right")
+        self.wait_ui(overlay_selection=3)
+        self.action(button="Down")
         self.wait_ui(overlay_selection=5)
         require(read(config)["theme"] == "system" and read(config)["theme_style"] == "slate",
                 "theme preview wrote config before confirm")
@@ -502,17 +525,7 @@ class MainFlow:
         self.action(button="B")
         self.wait_ui(overlay=0)
         require(read(config)["theme"] == "dark", "discarded theme draft reached config")
-        # The language badge is rendered/hit-tested only on Today's Schedule.
-        self.page(0)
-        self.action(target="header_language")
-        self.wait_ui(overlay=37, overlay_selection=0)
-        self.action(button="Down")
-        self.wait_ui(overlay_selection=2)
-        self.action(button="Right")
-        self.wait_ui(overlay_selection=3)
-        self.action(button="A")
-        self.wait_ui(overlay=0)
-        require(read(self.app / "config.json")["ui_language"] == "en", "English did not persist")
+        self.select_language("en")
         self.capture("preference-english")
         self.checked("preferences_journey", ["theme mode and style preview without writing config",
                                             "A saves both radio groups together and B discards the draft",

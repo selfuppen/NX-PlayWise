@@ -17,11 +17,28 @@ async (page) => {
     const pairing = JSON.parse(bytes.toString("utf8"));
     await tab.goto(origin + "/", {waitUntil: "networkidle"});
     await tab.locator("#generate").waitFor({state: "visible"});
-    await tab.locator("#importFile").setInputFiles({name: "parent-import.json", mimeType: "application/json", buffer: bytes});
+    const drawer = tab.locator("#pairingDrawer");
+    await drawer.waitFor({state: "hidden"});
+    await tab.locator("#openDrawerBtn").click();
+    await drawer.waitFor({state: "visible"});
+    const configKey = "ptc.frontend.config.v1";
+    const beforeImport = await tab.evaluate(key => localStorage.getItem(key), configKey);
+    const file = {name: "parent-import.json", mimeType: "application/json", buffer: bytes};
+    const importFile = drawer.locator("#pairingSettings[open] #importFile");
+    const dialog = tab.locator("#pairingDialog");
+    await importFile.setInputFiles(file);
+    await tab.locator("#cancelPairing").click();
+    await dialog.waitFor({state: "hidden"});
+    await drawer.waitFor({state: "visible"});
+    if (await tab.evaluate(key => localStorage.getItem(key), configKey) !== beforeImport) {
+      throw new Error("cancelled import changed the active pairing");
+    }
+    await importFile.setInputFiles(file);
     await tab.locator("#pairingDialog[open]").waitFor();
     if ((await tab.locator("#pairingDevice").textContent()) !== pairing.device_id) throw new Error("wrong imported device");
-    await tab.locator('#pairingDialog button[value="confirm"]').click();
-    await tab.locator("#pairingDialog").waitFor({state: "hidden"});
+    await tab.locator("#confirmPairing").click();
+    await dialog.waitFor({state: "hidden"});
+    await drawer.waitFor({state: "hidden"});
     await tab.reload({waitUntil: "networkidle"});
     const persisted = await tab.evaluate(pairing => {
       const saved = JSON.parse(localStorage.getItem("ptc.frontend.config.v1"));
@@ -29,8 +46,11 @@ async (page) => {
         document.querySelector("#device").value === pairing.device_id && document.querySelector("#secret").value === pairing.grant_secret;
     }, pairing);
     if (!persisted) throw new Error("pairing did not persist");
+    if ((await tab.locator("#headerDeviceName").innerText()) !== pairing.device_id) {
+      throw new Error("home still shows the wrong device after reload");
+    }
     await tab.locator("#date").fill(request.date);
-    await tab.locator("#tierMinutes").selectOption("30");
+    await tab.locator('#tierShortcuts button[value="30"]').click();
     await tab.locator("#generate").click();
     await tab.locator("#result:not([hidden])").waitFor();
     const code = (await tab.locator("#code").textContent()).trim();

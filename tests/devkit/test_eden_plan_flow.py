@@ -34,7 +34,7 @@ def test_language_navigation() -> None:
 
         def wait_ui(self, **expected: object) -> dict:
             self.calls.append(("wait", expected))
-            return {"ui": expected}
+            return {"ui": {"overlay_selection": 0, **expected}}
 
     with tempfile.TemporaryDirectory() as folder:
         flow = Flow()
@@ -47,9 +47,10 @@ def test_language_navigation() -> None:
         flow.setup()
         assert flow.calls == [
             ("setup",), ("page", 0), ("action", {"target": "header_language"}),
-            ("wait", {"overlay": 37, "overlay_selection": 0}),
-            ("action", {"button": "Down"}), ("wait", {"overlay_selection": 2}),
-            ("action", {"button": "Right"}), ("wait", {"overlay_selection": 3}),
+            ("wait", {"overlay": 37}),
+            ("action", {"button": "Right"}), ("wait", {"overlay": 37, "overlay_selection": 1}),
+            ("action", {"button": "Right"}), ("wait", {"overlay": 37, "overlay_selection": 2}),
+            ("action", {"button": "Right"}), ("wait", {"overlay": 37, "overlay_selection": 3}),
             ("action", {"button": "A"}), ("wait", {"overlay": 0}),
         ]
         (flow.app / "config.json").write_text('{"ui_language":"zh-Hans"}', encoding="utf-8")

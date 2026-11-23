@@ -131,11 +131,7 @@ class SafeguardFlow(MainFlow):
                                       "normal PIN works after expiry"], before_reopen=before, after_reopen=after)
 
     def export_pairing(self) -> tuple[dict, str]:
-        self.page(2)
-        self.action(target="card_1")
-        self.wait_ui(overlay=22, pin_length=0)
-        self.enter_pin("110")
-        self.wait_ui(overlay=7, waiting=False)
+        self.open_pairing()
         self.action(button="A")
         self.wait_ui(overlay=38, waiting=False)
         path = self.app / "parent-import.json"

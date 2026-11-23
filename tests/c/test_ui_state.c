@@ -2015,7 +2015,9 @@ static void test_user_state_mapping(void)
         "\"activate_after\":0,\"compatibility_status\":\"verified\",\"last_error\":\"pctl_read_failed\"},"
         "\"environment\":{\"available\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
         "\"recent_events\":[{\"ts\":4294967296,\"request_id\":\"weekly-1\",\"type\":\"set_weekly_template\","
-        "\"event\":\"result_ok\",\"error\":\"\",\"detail\":\"rules\"}],\"completed_at\":106}";
+        "\"event\":\"result_ok\",\"error\":\"ok\",\"detail\":\"rules\"},"
+        "{\"event\":\"result_ok\",\"error\":\"\"},"
+        "{\"event\":\"result_error\",\"error\":\"pctl_read_failed\"}],\"completed_at\":106}";
     const char *protection =
         "{\"version\":1,\"request_id\":\"status-error\",\"type\":\"status\",\"status\":\"error\","
         "\"error\":{\"code\":312,\"reason\":\"protection_mode\",\"message\":\"已进入保护模式\"},"
@@ -2103,12 +2105,18 @@ static void test_user_state_mapping(void)
     check_true(model.environment_available && strcmp(model.environment_hos, "22.5.0") == 0 &&
                strcmp(model.environment_model, "mariko-oled") == 0 && model.environment_atmosphere,
                "support environment fields map independently for multiline display");
-    check_true(model.recent_events_available && model.recent_event_count == 1 &&
+    check_true(model.recent_events_available && model.recent_event_count == 3 &&
                strstr(model.recent_events[0], "操作已完成") != NULL &&
+               strstr(model.recent_events[0], ptc_ui_text(PTC_UI_T_SUCCESS)) != NULL &&
+               model.recent_event_errors[0][0] == '\0' &&
                strcmp(model.recent_event_types[0], "set_weekly_template") == 0 &&
                strcmp(model.recent_event_request_ids[0], "weekly-1") == 0 &&
                model.recent_event_timestamps[0] == INT64_C(4294967296),
                "recent event keeps readable summary and complete diagnostic detail");
+    check_true(model.recent_event_errors[1][0] == '\0' &&
+               strcmp(model.recent_event_errors[2], "pctl_read_failed") == 0 &&
+               strstr(model.recent_events[2], "pctl_read_failed") != NULL,
+               "legacy success and real event failures retain their display classifications");
     ptc_ui_mark_status_updated(&model, 1000);
     check_int((int)ptc_ui_status_age_seconds(&model, 1030), 30, "status age is measured from last refresh");
     check_int((int)ptc_ui_status_age_seconds(&model, 999), -1, "clock rollback invalidates status age");

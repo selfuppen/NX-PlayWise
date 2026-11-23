@@ -133,13 +133,9 @@ class BrowserBridge:
 
 class WebFlow(MainFlow):
     def web_pair_export(self) -> None:
-        self.page(2)
         export = self.app / 'parent-import.json'
         require(not export.exists(), 'pairing export must be created by this UI journey')
-        self.action(target='card_1')
-        self.wait_ui(overlay=22, pin_length=0)
-        self.enter_pin('110')
-        self.wait_ui(overlay=7, waiting=False)
+        self.open_pairing()
         self.action(button='R')  # QR -> pairing file.
         self.wait_ui(overlay=7, waiting=False)
         self.action(button='R')  # Pairing file -> on-console generator.
@@ -184,8 +180,10 @@ class WebFlow(MainFlow):
             require(bridge.done.wait(timeout=min(180, max(0, self.deadline - time.monotonic()))),
                     'browser handoff timed out; no NRO code input or retry')
             self.web_code = bridge.result
-        self.checked('web_issue', ['real browser UI confirms exported device', 'reload retains pairing and generated nonce',
-                                   'DOM-generated code bound to guest date/device/amount'], browser_result_sha256=digest(self.output / 'browser/result.json'))
+        self.checked('web_issue', ['real browser drawer cancels without changing pairing and then confirms the exported device',
+                                   'reload retains the paired device in the header and the generated nonce',
+                                   'home duration chip issues a DOM code bound to guest date/device/amount'],
+                     browser_result_sha256=digest(self.output / 'browser/result.json'))
 
     def web_redeem(self) -> None:
         self.wait_ui(view=1, overlay=0)

@@ -90,6 +90,17 @@ def verify_support(output: Path) -> None:
     require(read(output / "checkpoints/support_diagnostics.json")["ui"]["diagnostic_status"] == 2 and
             read(output / "checkpoints/support_disable.json")["ui"]["disable_flag_present"] is True,
             "support UI evidence differs")
+    diagnostics = read(output / "assertions/support_diagnostics.json")
+    if "navigation_status_id" in diagnostics:
+        status = read(output / f"receipts/{diagnostics['navigation_status_id']}.json")
+        events = status["recent_events"][-3:]
+        require(status["type"] == "status" and status["status"] == "ok" and events, "missing support event receipts")
+        event = read(output / "checkpoints/support-event.json")["ui"]
+        guide = read(output / "checkpoints/support-guide.json")["ui"]
+        require(event["parent_page"] == guide["parent_page"] == 4 and
+                event["overlay"] == 17 and event["overlay_selection"] == len(events) - 1 and
+                guide["overlay"] == 43 and guide["selected_index"] == 6 + len(events),
+                "support event or guide UI evidence differs")
 
 
 class SupportFlow(MainFlow):
@@ -123,9 +134,9 @@ class SupportFlow(MainFlow):
         self.checked("support_seed", ["normal UI redemption creates a consumed nonce and business activity",
                                       "installation snapshot and observable baseline retained"])
 
-    def export_diagnostic(self, name: str, disabled: bool) -> None:
+    def export_diagnostic(self, name: str, disabled: bool) -> dict:
         self.page(4)
-        self.refresh(disable_flag_present=disabled)
+        status = self.refresh(disable_flag_present=disabled)
         before = set((self.app / "support").glob("diagnostic-*.json"))
         self.action(target="card_4")
         self.confirm()
@@ -136,11 +147,31 @@ class SupportFlow(MainFlow):
         verify_diagnostic(read(source), disabled)
         save(self.output / f"diagnostics/{name}.json", read(source))
         save(self.output / f"diagnostics/{name}-identity.json", {"filename": source.name, "sha256": digest(source)})
+        return status
 
     def support_diagnostics(self) -> None:
-        self.export_diagnostic("active", False)
+        status = self.export_diagnostic("active", False)
+        events = status["recent_events"][-3:]
+        require(events, "seeded support history is missing")
+        self.wait_ui(overlay=0, selected_index=4)
+        self.action(button="Down")
+        self.wait_ui(selected_index=6)
+        self.action(button="A")
+        self.wait_ui(overlay=17, overlay_selection=len(events) - 1)
+        self.capture("support-event")
+        self.action(target="overlay_back")
+        self.wait_ui(overlay=0, selected_index=6)
+        for index in range(7, 7 + len(events)):
+            self.action(button="Down")
+            self.wait_ui(selected_index=index)
+        self.action(button="A")
+        self.wait_ui(overlay=43)
+        self.capture("support-guide")
+        self.action(button="B")
+        self.wait_ui(parent_page=4, overlay=0)
         self.checked("support_diagnostics", ["normal support UI exports readable redacted JSON",
-                                             "success stays on support page"])
+                                             "latest event detail and official guide return to support"],
+                     navigation_status_id=status["request_id"])
 
     def support_disable(self) -> None:
         self.reenter_support()

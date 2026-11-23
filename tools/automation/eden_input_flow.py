@@ -72,24 +72,8 @@ def verify_input(output: Path, include_matrix: bool = True) -> None:
 class InputFlow(PlanFlow):
     def setup(self) -> None:
         super().setup()
-        self.page(0)
-        self.action(target="header_language")
-        self.wait_ui(overlay=37, overlay_selection=0)
-        language = self.identity["input_language"]
-        if language == "zh-Hans":
-            self.action(button="Right")
-        else:
-            self.action(button="Down")
-            if language == "en":
-                self.action(button="Right")
-        self.action(button="A")
-        self.wait_ui(overlay=0)
-        require(read(self.app / "config.json")["ui_language"] == language, "normal language selection failed")
-        self.page(2)
-        self.action(target="card_1")
-        self.wait_ui(overlay=22, pin_length=0)
-        self.enter_pin("110")
-        self.wait_ui(overlay=7)
+        self.select_language(self.identity["input_language"])
+        self.open_pairing()
         self.capture("optical-pairing-qr")
         self.action(button="B")
         self.wait_ui(overlay=0)
@@ -102,12 +86,20 @@ class InputFlow(PlanFlow):
         self.action(target="card_5")
         current = self.wait_ui(overlay=21)["ui"]["overlay_selection"]
         desired = ("system", "light", "dark").index(mode)
-        for _ in range((desired - current) % 3):
+        for offset in range(1, (desired - current) % 3 + 1):
             self.action(button="Right")
+            self.wait_ui(overlay=21, overlay_selection=(current + offset) % 3)
+        # Down enters the upper style row from the mode group.
+        column = int(desired == 2)
         self.action(button="Down")
-        current = self.wait_ui(overlay=21)["ui"]["overlay_selection"] - 3
-        for _ in range((STYLES.index(style) - current) % 4):
+        self.wait_ui(overlay=21, overlay_selection=3 + column)
+        style_index = STYLES.index(style)
+        if style_index >= 2:
+            self.action(button="Down")
+            self.wait_ui(overlay=21, overlay_selection=5 + column)
+        if style_index % 2 != column:
             self.action(button="Right")
+            self.wait_ui(overlay=21, overlay_selection=3 + style_index)
         self.action(button="A")
         self.wait_ui(overlay=0)
         saved = read(self.app / "config.json")
@@ -216,11 +208,7 @@ class InputFlow(PlanFlow):
                 "reopen changed persisted preferences or rules")
         self.page(3)
         self.capture("input-preferences-reopened")
-        self.page(2)
-        self.action(target="card_1")
-        self.wait_ui(overlay=22, pin_length=0)
-        self.enter_pin("110")
-        self.wait_ui(overlay=7)
+        self.open_pairing()
         self.capture("optical-pairing-qr-reopened")
         self.checked("input_reopen", ["new NRO instance retains exact rules and language/theme preferences",
                                       "parent PIN and preference navigation still work after activation"])

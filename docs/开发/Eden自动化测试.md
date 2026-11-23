@@ -91,7 +91,7 @@ shared模式在业务和健康收尾成功后验证来源／共享缓存未变�
 
 选择`--suite web --timeout 600`，使用全新profile和报告目录，执行5项：首次设置、NRO正常PIN配对／导出、真实浏览器导入／发码、NRO兑换、重开持久化。使用固定Eden测试资料，不接触真实家庭配置。网页源码和浏览器驱动封存在本批artifacts，环回HTTP只服务该冻结网页与测试导出；不把Python或CLI生成的码作为网页结果。
 
-执行到发码阶段会保存`browser-request.json`并输出`browser_required`，最多等待180秒。读取该JSON的origin，将本批`artifacts/eden_web_browser.js`中的唯一`__EDEN_ORIGIN__`替换为该origin，通过Playwright代码执行工具运行（本环境为`browser_run_code_unsafe`）。驱动新建独立browser context，通过文件选择／确认导入和普通发码表单操作，验证重载后配对／nonce仍在，上传必要截图与一次JSON结果后关闭context。单独启动CLI不会自行启动浏览器，须由外部工具在期限内驱动；无浏览器结果、绑定错误或超时则禁止NRO码输入，不重发或自动重启。
+执行到发码阶段会保存`browser-request.json`并输出`browser_required`，最多等待180秒。读取该JSON的origin，将本批`artifacts/eden_web_browser.js`中的唯一`__EDEN_ORIGIN__`替换为该origin，再通过Playwright运行。驱动新建独立浏览器上下文，从首页打开配对抽屉，核对取消导入时配对存储保持原值，再确认导入并检查抽屉关闭。重载后检查首页设备名与配对存储，使用首页的30分钟快捷按钮发码，再次重载检查nonce。上传截图和一份JSON结果后关闭上下文。单独启动CLI不会自行启动浏览器，须由外部工具在期限内驱动；无浏览器结果、绑定错误或超时则停止该场景，不向NRO输码、不重发或自动重启。
 
 浏览器码来自DOM，日期取NRO新鲜status的day_index；核对实际导出设备、30分钟面额、浏览器nonce、NRO预览／成功回执、活动、120→150额度和重开后的同一nonce。浏览器存储是本批真实Chromium上下文，非全局浏览器资料；手机摄像头光学扫码、PWA安装和断网能力不在本项范围。`web`不计入main17；浏览器和两次NRO退出均须通过，结束后沿用shared收尾。
 

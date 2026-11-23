@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "../file_protocol.h"
+#include "../../common/protocol/error_code.h"
 #include "../../third_party/cjson/cJSON.h"
 
 static int json_int(const cJSON *object, const char *name, int fallback)
@@ -589,6 +590,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 const char *request_id = cJSON_IsObject(item) ? json_string(item, "request_id") : "";
                 int64_t timestamp = cJSON_IsObject(item) ? json_int64(item, "ts", 0) : 0;
                 if (!event_name[0]) continue;
+                /* The audit wire format names success; the UI uses an empty error. */
+                if (strcmp(error_name, ptc_error_reason(PTC_ERR_OK)) == 0) error_name = "";
                 int target = model->recent_event_count;
                 snprintf(model->recent_event_names[target], sizeof(model->recent_event_names[target]), "%s", event_name);
                 snprintf(model->recent_event_types[target], sizeof(model->recent_event_types[target]), "%s", event_type);
@@ -596,11 +599,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 snprintf(model->recent_event_details[target], sizeof(model->recent_event_details[target]), "%s", event_detail);
                 snprintf(model->recent_event_request_ids[target], sizeof(model->recent_event_request_ids[target]), "%s", request_id);
                 model->recent_event_timestamps[target] = timestamp;
-                snprintf(model->recent_events[model->recent_event_count],
-                         sizeof(model->recent_events[model->recent_event_count]),
-                         "%s  |  %s", event_label(event_name), error_name[0] ? error_name : ptc_ui_text(PTC_UI_T_SUCCESS));
                 ++model->recent_event_count;
             }
+            ptc_ui_refresh_recent_event_labels(model);
         }
     }
     if (status && strcmp(status, "error") == 0) {

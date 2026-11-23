@@ -143,16 +143,7 @@ class PlanFlow(MainFlow):
         super().setup()
         if self.identity.get('plans_language', 'system') != 'en':
             return
-        self.page(0)
-        self.action(target='header_language')
-        self.wait_ui(overlay=37, overlay_selection=0)
-        self.action(button='Down')
-        self.wait_ui(overlay_selection=2)
-        self.action(button='Right')
-        self.wait_ui(overlay_selection=3)
-        self.action(button='A')
-        self.wait_ui(overlay=0)
-        require(read(self.app / 'config.json')['ui_language'] == 'en', 'explicit English UI selection did not persist')
+        self.select_language("en")
 
     def archive_plan_status(self, name: str, imported: bool) -> dict:
         self.page(0)
