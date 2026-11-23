@@ -92,8 +92,8 @@ def render_standalone() -> str:
     )
     page = replace_once(
         page,
-        "加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。",
-        "此单文件完全在当前浏览器中生成加时码，不需要 Python、服务器或网络连接。",
+        "加时码在当前浏览器本地计算，本项目不会把生成输入提交给业务后端。",
+        "此单文件在当前浏览器本地生成加时码，无需 Python、服务器或网络连接。",
         "standalone introduction",
     )
     page = replace_once(
@@ -104,7 +104,7 @@ def render_standalone() -> str:
     )
     page = replace_once(
         page,
-        "正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。",
+        "正式使用请通过可信的 HTTPS 站点访问；电脑本机预览可使用 localhost。",
         "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",
         "standalone footer",
     )

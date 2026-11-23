@@ -36,7 +36,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 ## Stage-specific material
 
-Consult these only for the relevant task; they are not global development or testing prerequisites. The [October 2026 progress summary](开发/当前进度与后续指导.md) covers the 1952 migration, removal of the 1440-minute proxy and associated hardware validation. [Acceptance records](开发/验收记录/README.md) retain each batch's facts and scope.
+Read as needed: the [October 2026 progress summary](开发/当前进度与后续指导.md) covers the 1952 migration, removal of the 1440-minute proxy, and associated hardware validation. [Acceptance records](开发/验收记录/README.md) retain each batch's facts and scope.
 
 ## Design — `设计/`
 

@@ -610,7 +610,13 @@ static void test_reason_detail_transport(void)
         ptc_input_owner_writer_init(&writer, storage, "app", "release1", 900000000);
         if (mode == 0 || mode == 1 || mode == 3 || mode == 9 || mode == 12)
             check_true(ptc_input_owner_acquire(&writer, 1100000000), "detail input lease fixture");
+        if (mode != 11) {
+            PtcReasonDetail accepted = offer;
+            accepted.stage_ms = 1100;
+            check_true(ptc_reason_detail_write(storage, "app", "accepted", &accepted), "write detail pickup");
+        }
         ack = offer;
+        ack.stage_ms = 1200;
         snprintf(ack.owner, sizeof(ack.owner), "%s", mode == 0 || mode == 1 || mode == 3 || mode == 9 || mode == 12 ? writer.owner : "0123456789abcdef0123456789abcdef");
         if (mode == 1) ++ack.ui_instance;
         if (mode == 3) ++ack.instance;
@@ -647,11 +653,73 @@ static void test_reason_detail_transport(void)
                 ptc_reason_notification_tick(&n, &s, 3000, 102, true, true, false, PTC_UI_LANGUAGE_ENGLISH);
                 check_true(n.detail_pending && !n.pending, "expired offer waits briefly for cached owner release");
             }
-            notify_tick(&n, &s, 3000, 102, true);
+            uint64_t timeout_ms = mode == 11 ? 3000 : 3600;
+            notify_tick(&n, &s, timeout_ms, 102, true);
             check_true(!n.detail_pending && n.pending && n.sequence == 1,
                 "exact timeout issues one fresh short fallback without retrying wake");
-            notify_tick(&n, &s, 3250, 102, true);
+            notify_tick(&n, &s, timeout_ms + 250, 102, true);
             check_true(n.sequence == 1 && n.detail_sequence == 1, "fallback does not multiply under status storm");
+        }
+    }
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        ptc_mem_storage_init(mem);
+        storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+        storage->vtable->write_text_atomic(storage, "app/handover/runtime-ready.json",
+            "{\"profile\":\"release\",\"release_id\":\"release1\",\"boot_id\":\"0123456789abcdef\"}");
+        PtcReasonNotification n;
+        PtcReasonObservation s = reason_sample(1, PTC_REASON_DAILY, 7, 100);
+        PtcReasonDetail ready = {.release = "release1", .boot = "0123456789abcdef", .ui_instance = 900,
+            .issued_ms = 950, .expires_ms = 2450}, offer = {0};
+        ptc_reason_detail_write(storage, "app", "ready", &ready);
+        ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+        notify_tick(&n, &s, 1000, 100, true);
+        check_true(ptc_reason_detail_read(storage, "app", "request", &offer), "write bounded pickup offer");
+
+        PtcReasonDetail accepted = offer;
+        accepted.stage_ms = mode == 3 ? 3000 : mode == 5 ? 2890 : 2690;
+        uint64_t draw_deadline = accepted.stage_ms + PTC_REASON_DETAIL_DRAW_MS;
+        if (mode == 4) ++accepted.sequence;
+        ptc_reason_detail_write(storage, "app", "accepted", &accepted);
+        /* The scheduler reads the acceptance on its first poll after pickup expiry. */
+        s.revision++; s.captured_at = 102;
+        notify_tick(&n, &s, 3100, 102, true);
+        if (mode == 3 || mode == 4) {
+            check_true(!n.detail_pending && n.sequence == 1 && !n.detail_draw_deadline_ms,
+                "late or unrelated acceptance cannot extend pickup");
+            continue;
+        }
+        check_true(n.detail_pending && n.detail_accepted_ms == accepted.stage_ms &&
+            n.detail_draw_deadline_ms == draw_deadline && n.sequence == 0,
+            "pickup 1.69 or 1.89 seconds after issue earns its own two-second draw budget");
+        if (mode == 2) {
+            s.reason = PTC_REASON_BEDTIME; ++s.instance; ++s.revision;
+            notify_tick(&n, &s, 3300, 102, true);
+            check_true(!n.detail_pending && !n.sequence &&
+                !storage->vtable->exists(storage, "app/support/reason-detail-request.json"),
+                "reason handoff cancels accepted offer without replaying the old reason");
+            continue;
+        }
+        PtcInputOwnerWriter writer;
+        ptc_input_owner_writer_init(&writer, storage, "app", "release1", 2600000000);
+        check_true(ptc_input_owner_acquire(&writer, (accepted.stage_ms + 10) * UINT64_C(1000000)),
+            "automatic detail owns visible input");
+        PtcReasonDetail ack = offer;
+        bool timely_frame = mode != 1;
+        ack.stage_ms = timely_frame ? draw_deadline - 40 : draw_deadline;
+        snprintf(ack.owner, sizeof(ack.owner), "%s", writer.owner);
+        ptc_reason_detail_write(storage, "app", "ack", &ack);
+        ptc_reason_notification_tick(&n, &s, draw_deadline + 60, 104, true, true, false, PTC_UI_LANGUAGE_ENGLISH);
+        if (timely_frame) {
+            check_true(!n.detail_pending && !n.sequence && !strcmp(n.state, "detail_drawn_confirmed"),
+                "a frame drawn in time is confirmed during ACK readback grace");
+        } else {
+            check_true(n.detail_pending && n.sequence == 0, "a frame drawn at the deadline never confirms");
+            ptc_input_owner_release(&writer, 4800000000);
+            s.revision++; s.captured_at = 104;
+            notify_tick(&n, &s, 5190, 104, true);
+            notify_tick(&n, &s, 5440, 104, true);
+            check_true(!n.detail_pending && n.sequence == 1 && n.detail_sequence == 1,
+                "expired drawn frame takes one fallback after input release");
         }
     }
     ptc_mem_storage_init(mem);

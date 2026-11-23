@@ -169,8 +169,6 @@ Selecting PIN also requires the backup PIN and ends the parent session after suc
 
 </details>
 
-Time Plan's independent column contains four compact cards: bedtime, eye care, TV rules, buffer. Public modes are TV and non-TV, which includes handheld/tabletop. Eden's TV rules page adds simulation buttons; switching keeps today's usage and the mode file survives restart. Daily allowance, bedtime and eye care still apply.
-
 ## Daily Playtime Management
 
 Parent Zone consists of five top-level tabs: **Today's Schedule, Time Plans, Offline Grants, Security & Preferences, Support & Recovery**. Press controller `L/R` shoulder buttons to cycle through tabs. The top status bar displays console local time, remaining playtime for today, and last update timestamp; if status has not updated for over 120 seconds, it displays the rule category and timestamp labeled "Last Confirmed" with a prompt to press `Y` to refresh, hiding outdated remaining minutes. When status has not yet been fetched on first launch, it likewise prompts pressing `Y` to refresh.
@@ -183,9 +181,9 @@ Parent Zone consists of five top-level tabs: **Today's Schedule, Time Plans, Off
 
 #### Child Zone Home and Usage Details
 
-The task board on the Child Zone home leads with the conclusion: the large number on the left is today's remaining playtime, and under the progress gauge "Played ~X min" and "Y min left" share one 16px size while the remaining minutes are bold, so a child can read at a glance how much is gone and how much is left. The three guard cards on the right cover Eye Care, Bedtime and TV mode rules with larger titles and body text; the TV rules card is taller because it carries the state, the mode with estimated usage, and the rule summary in three lines. To make room for the larger text the seven-day forecast moves down and becomes slightly shorter, so it and the right-hand code, buffer, usage-details and status cards all end on one bottom edge. The "Usage details" button now says what is inside: today's total, played and left, and why each rule applies.
+The Child Zone home screen presents the current state at a glance: the left panel shows today's remaining playtime alongside used and remaining minutes under the progress gauge; the right panel shows Eye Care, Bedtime, and TV Mode rule cards; the bottom row holds the seven-day forecast and quick entries for grant codes, Self Buffer, and usage details.
 
-The "+ Usage details" entry on the right of the Child Zone opens a read-only details page whose header now carries a short guide bar: it states the reading order (today's total first, then played and left) and that Bedtime, Eye Care and TV rules are judged separately, so a blocked one has to be handled first. The parent-side Today's Schedule Details keeps its previous layout and does not show this child guide. Every figure on the details page still comes only from fresh status; after 120 seconds or a failed refresh the page shows unconfirmed instead of reusing old readings.
+Press `+` or tap **Usage details** to open the read-only breakdown showing today's total, used, and remaining time along with each independent rule's status. Readings older than 120 seconds or after a failed refresh show as unconfirmed until you press `Y` to refresh.
 
 ### Core Time Control Logic
 
@@ -318,7 +316,7 @@ Weekly schedules are edited day by day; national holidays support official statu
 
 To import a region calendar, place a UTF-8 JSON file in SD `/switch/playwise/calendar-import/`. In Parent Zone, open Time Plans → Holiday Schedule → Manage Calendars, preview and confirm the import, then select a saved region and hold to apply. Re-importing the active region also requires applying again. The mainland China option includes 2026 and 2027. Open Manage Calendars → Calendar Updates and press `A` to check and import new years. Press `Y` to toggle the separate startup check. A selected custom region continues to use its own calendar. Uncovered years use the weekly plan. Use `B` to return, `Y` to refresh and `X` for brief format help; these buttons also support touch. Help preserves your list selection. See the [custom calendar format, complete example, and invalid example](CUSTOM_HOLIDAY_CALENDAR_FORMAT.md).
 
-Import Files displays brief steps, the save directory and the complete format-document URL. View Holiday Schedule opens the page nearest the current console date, including makeup days; ties prefer upcoming dates. Manual paging remains available. "Skip this break" matches neighboring Today actions in width and uses the same short confirmation title. The status bar and left summary use the current reliable reading for the next-break preview; unavailable readings still show an unknown state.
+Import Files displays brief steps, the save directory, and the full format-document URL. View Holiday Schedule opens the page nearest the current console date (including makeup days; ties prefer upcoming dates), and supports manual paging. The status bar and summary card use the latest reliable reading for the next-break preview; unavailable readings show as unknown.
 
 Bedtime schedules can be configured across weekly, holiday, and scheduled date tiers, supporting overnight windows; each of the three sub-pages saves independently. When switching or exiting with unsaved changes, prompt dialogs allow saving, discarding, or continuing edits. Autonomy buffer is disabled by default and can be configured as a once-daily 5, 10, or 15-minute allowance; it adds to today's playtime without altering bedtime windows.
 
@@ -783,12 +781,12 @@ When an eligible newer version is found, a quiet Update hint appears in the uppe
 
 ### Play restriction reminders (experimental)
 
-When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode rules prevent play, PlayWise can explain the reason automatically. This feature is experimental and **off by default**; enabling or testing it does not change your playtime rules. Hardware testing uses **Ultrahand 2.5.3 + nx-ovlloader 2.0.2** (overlay manager installed separately; see [hardware test record](../开发/验收记录/2026-11/自动化与交互/3.1.8-beta.1简要提示未显示排查与合批复测-20261114.md)).
+When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode rules prevent play, PlayWise can explain the reason automatically. This feature is experimental and **off by default**; hardware testing uses **Ultrahand 2.5.3 + nx-ovlloader 2.0.2** (overlay manager installed separately; see [hardware test record](../开发/验收记录/2026-11/自动化与交互/3.1.8-beta.1简要提示未显示排查与合批复测-20261114.md)).
 
 When a new restriction starts, PlayWise triggers an automatic reminder; during ongoing eye-rest or bedtime restrictions, brief remaining-time reminders repeat at most once per minute. There are two formats:
 
 - **Detailed view**: when the PlayWise overlay is already loaded and hidden, it opens the child home page, refreshes status, and shows the restriction and available actions. It works without Ultrahand notifications, stays clear of other overlays, and never interrupts PIN entry, code entry, or parent actions.
-- **Brief notice**: when automatic details are not ready or do not open within about two seconds, PlayWise sends a compatible Ultrahand brief notice showing the reason, remaining time at that moment, and how to open details.
+- **Brief notice**: if the overlay is unavailable, has not picked up the request within about two seconds, or has not drawn the details within about two seconds of pickup, PlayWise sends a compatible Ultrahand brief notice showing the reason, remaining time at that moment, and how to open details.
 
 Brief notices use child-friendly lines such as “Play time is up today”, “Time for bed”, “Let your eyes rest”, or “Please connect a TV”. Displayed times are a snapshot from when the notice was sent; open PlayWise and refresh to see live countdowns or other active limits.
 
@@ -814,7 +812,7 @@ These UI previews are rendered from current code to show the setup layout and no
 3. **Check reminder setup**: select **1 Check reminder setup** to inspect notification config, shortcut, overlay file, and automatic-detail readiness.
 4. **Test brief notice**: with notifications enabled, select **2 Test brief notice** to send “PlayWise · Test notice / This is a test notice / Play time rules are unchanged” and check the upper-left corner of the screen. If you do not see it, reopen the overlay manager once and wait 10 seconds before retrying—no console reboot is needed. Any unready item or failed test can be skipped.
 
-Use **Switch example** (`L` / `R` or tap) to preview both reminder styles and their guides without changing settings or sending notices. Both **1 Check reminder setup** and **2 Test brief notice** can be run independently, even while automatic reminders are off.
+Use **Switch example** (`L` / `R` or tap) to preview both reminder styles and their guides. Both **1 Check reminder setup** and **2 Test brief notice** can be run independently, even while automatic reminders are off.
 
 | Notice setting on (dark) | Notice setting off while PlayWise reminders remain enabled |
 | --- | --- |
@@ -844,4 +842,4 @@ Use **Switch example** (`L` / `R` or tap) to preview both reminder styles and th
 | --- | --- |
 | ![Eye-rest preview on the child home page](../images/usage-en/overlay/overlay-auto-detail-eye.png) | ![Bedtime end time and time remaining on the child home page](../images/usage-en/overlay/overlay-bedtime.png) |
 
-Disabling **Show restriction reasons automatically** turns off PlayWise reminders only; it leaves Ultrahand's global notification setting and your playtime rules unchanged. Restoring a preference backup likewise restores PlayWise settings only.
+Disabling **Show restriction reasons automatically** turns off PlayWise reminders only and leaves Ultrahand's global notification setting unchanged. Restoring a preference backup likewise restores PlayWise settings only.

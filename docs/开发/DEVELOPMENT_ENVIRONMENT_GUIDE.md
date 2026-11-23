@@ -8,7 +8,7 @@
 
 # Development Environment Guide
 
-This document differentiates general project requirements, the maintainer's default environment, the devkitPro build environment, and physical Nintendo Switch hardware qualification. Paths, ports, and tool versions on individual machines are not project protocols; all developers must meet the same testing, packaging, and security quality gates.
+This document explains general project requirements, the maintainer's default environment, the devkitPro build environment, and physical Nintendo Switch hardware qualification; all development environments must pass the same testing, packaging, and security quality gates.
 
 ## Environment Layers
 
@@ -66,9 +66,9 @@ When primary features have been manually verified on real hardware, record a man
 python tools/package_remote.py --clean --manual-device-verified
 ```
 
-`--manual-device-verified` records `--verified-model "Nintendo Switch OLED" --verified-hos 22.5.0 --verified-atmosphere 1.11.2` by default; when verifying on different hardware or environments, explicitly override any parameter. These three environment values must correspond to the actual test console. In the standard package `build.json`, `qualification.status` and `verified_environment.result` are written as `manual_verified`, with `method=manual` and `scope=main_features`; Device Lab and Eden manifests remain `pending`. This declaration represents manual feature verification only, accurately preserves `source_dirty` in the manifest, and does not substitute for a full Device Lab qualification report. Once full qualification passes, verification and promotion tools can still be run against the original package.
+`--manual-device-verified` records `--verified-model "Nintendo Switch OLED" --verified-hos 22.5.0 --verified-atmosphere 1.11.2` by default; when verifying on different hardware or environments, explicitly override any parameter. These three environment values must correspond to the actual test console. In the standard package `build.json`, `qualification.status` and `verified_environment.result` are written as `manual_verified`, with `method=manual` and `scope=main_features`; Device Lab and Eden manifests remain `pending`. The manifest continues to record `source_dirty`; once full qualification passes, verification and promotion tools can still be run against the original package.
 
-The script requires the host and build container to share the exact same workspace: build artifacts are written into the mounted directory by the container and validated by the host. It is not a generic remote builder that pushes source code to an arbitrary machine and copies artifacts back. Avoid improvising candidate builds using multiple manual SSH commands, `docker exec`, or copying artifacts across machines.
+The script requires the host and build container to share the exact same workspace: build artifacts are written into the mounted directory by the container and validated by the host. Avoid improvising candidate builds using multiple manual SSH commands, `docker exec`, or copying artifacts across machines.
 
 ## Maintainer Default Windows Environment
 
@@ -82,7 +82,7 @@ The current maintenance workflow runs on Windows, PowerShell, Docker Desktop, Wi
 | Container workspace | `/ws/playwise` |
 | Local Docker container name | `devkitpro-ssh-v1` |
 
-These values represent the maintainer's default configuration covered by scripts and tests, not a network topology mandatory for all contributors. An equivalent shared devkitPro environment can be targeted using these arguments:
+An equivalent shared devkitPro environment can be targeted using these arguments:
 
 ```text
 python tools/package_remote.py \

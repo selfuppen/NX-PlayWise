@@ -1,6 +1,6 @@
 # NRO与浮窗的输入占用
 
-标准manifest的`nro_overlay_input_owner_version:1`表示生产NRO与Overlay实现协作输入占用；Eden和Device Lab不声明该能力。它防止同一按键在PlayWise浮窗显示期间同时触发底层PlayWise图形NRO，包含其内部PIN页。它不是HID系统权限、请求鉴权或游戏侧隔离证明，也不覆盖系统软件键盘等外部applet；真实游戏效果仍须单独验证。
+标准manifest的`nro_overlay_input_owner_version:1`表示生产NRO与Overlay实现协作输入占用；Eden和Device Lab不声明该能力。它防止同一按键在PlayWise浮窗显示期间同时触发底层PlayWise图形NRO（包含其内部PIN页），不覆盖系统软件键盘等外部applet；真实游戏效果须单独验证。
 
 ## 生命周期与记录
 

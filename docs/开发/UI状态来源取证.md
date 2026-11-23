@@ -1,6 +1,6 @@
 # UI status 来源的限期取证
 
-标准候选manifest声明`ui_status_trace_version:1`时，NRO和Overlay提供默认关闭的status来源日志。它用于区分同一观察窗内的多个客户端、NRO直接Y刷新及恢复/焦点事件自动刷新。日志不修改HID权限、不新增Switch服务、不注入按键、不提交额外status或控制请求；也不证明游戏实际可用或输入隔离。Eden不启用该生产取证。
+标准候选manifest声明`ui_status_trace_version:1`时，NRO和Overlay提供默认关闭的status来源日志，用于区分同一观察窗内的多个客户端、NRO直接Y刷新及恢复/焦点事件自动刷新。日志不修改HID权限、不新增Switch服务、不注入按键、不提交额外status或控制请求。Eden不启用该生产取证。
 
 先完成统一构建与默认Eden校验，冻结实际clean标准Zip及三个组件，并核对安装文件和运行身份。配置仅在各前端进程初始化时读取；不用重启后台或整机。NRO需正常重开，Overlay需正常退出旧模块再重新加载，不把隐藏后再次显示当成重载。更新/后台交接期间不启用此取证；先完成交接，再绑定实际目标boot，按有界计划准备日志和收尾材料。
 
@@ -18,7 +18,7 @@
 python tools/device/ui_status_trace.py prepare --manifest <冻结build.json> --runtime <实际runtime-ready.json> --sample <新鲜有效标准sample.json> --run-id <全新32位hex> --duration-s 600 --max-records 32 --out <独立目录/ui-status-trace.json>
 ```
 
-调用方另行核对sample的新鲜度、原raw/候选哈希和同一OS单调时间基准，原字节写入并回读专用配置后才正常重开前端。该命令不建立执行租期、重开应用或改变设备。不能只因配置生成成功认定任何前端已加载它。
+调用方另行核对sample的新鲜度、原raw/候选哈希和同一OS单调时间基准，原字节写入并回读专用配置后才正常重开前端。该命令仅离线生成文件，不建立执行租期、重开应用或改变设备。
 
 前端输出`support/ui-status-trace-<run>-<client>-<实例单调时间hex>.jsonl`，同名已存在则拒绝启用，绝不覆盖。头记录绑定实际编译commit/release、后台boot、client（nro/overlay）、开始/截止tick和条数上限。每次原status提交记录sequence、原请求ID、`origin`、设备单调纳秒、`focus_state`及`transport_status`。它是前端提交结果，不是后台ok回执，必须另配原ID/type/content及结果。
 

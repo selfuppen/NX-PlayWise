@@ -2,7 +2,7 @@
 
 [文档索引](../README.md) · [中文使用指南](../使用/使用指南.md#查看今日详情) · [English User Guide](../使用/USER_GUIDE.md#viewing-todays-rule-details)
 
-使用指南按“查看余额与安排 → 调整额度 → 解释限制 → 浮窗兑换与恢复”展示功能。主机应用保留浅暗主题示例，浮窗使用固定深色；截图中的日期、分钟数、代码和密码掩码均为固定示例数据。所有自动图带 `HOST PREVIEW / SAMPLE DATA`，不代表真机计时、解除效果或输入验收。
+使用指南按“查看余额与安排 → 调整额度 → 解释限制 → 浮窗兑换与恢复”展示功能。主机应用保留浅暗主题示例，浮窗使用固定深色；自动预览图带 `HOST PREVIEW / SAMPLE DATA` 水印，日期、分钟数、代码和密码掩码均为固定示例数据。
 
 ## 生成与同步
 
@@ -12,13 +12,13 @@
 python tools/package_remote.py --with-previews
 ```
 
-此命令执行统一构建门禁、生成预览并同步中文 `usage/` 与英文 `usage-en/`，默认同时打包和校验 Eden 测试应用。只更新图片可用 `python tools/package_remote.py --previews`；它不构建安装包，也不运行完整测试。生成后可运行 `python tools/build/sync_doc_previews.py --check`，逐字节核对两种文档图片与本轮生成物一致。
+此命令执行统一构建门禁、生成预览并同步中文 `usage/` 与英文 `usage-en/`，默认同时打包和校验 Eden 测试应用。仅更新图片可运行 `python tools/package_remote.py --previews`。生成后可运行 `python tools/build/sync_doc_previews.py --check`，逐字节核对两种文档图片与本轮生成物一致。
 
-路径映射：简体中文 `build/ui-previews/<场景>` → `docs/images/usage/<场景>`；英文 `build/ui-previews/en/<场景>` → `docs/images/usage-en/<场景>`。繁体中文与其余主题/边界场景仍由生成器输出到 `build/ui-previews/`，文档按用途选图，不全量复制。配对二维码页面由同一渲染器生成（`parent/pairing-qr-demo-light.png`），二维码编码官方网页应用地址（`https://selfuppen.github.io/NX-PlayWise/`），不使用真实家庭凭据；历史真机照片与网页示意仍按使用指南单独维护。
+路径映射：简体中文 `build/ui-previews/<场景>` → `docs/images/usage/<场景>`；英文 `build/ui-previews/en/<场景>` → `docs/images/usage-en/<场景>`。繁体中文与其余主题/边界场景仍由生成器输出到 `build/ui-previews/`，文档按用途选图。配对二维码页面由同一渲染器生成（`parent/pairing-qr-demo-light.png`），编码官方网页地址（`https://selfuppen.github.io/NX-PlayWise/`）和演示配置；历史真机照片与网页示意按使用指南单独维护。
 
 ## 从 174 张复核预览选取的补充场景
 
-选景参考“新UI复核与60分钟测试窗口”的 Host 预览复核：本机原始索引为 `device-reports/ui-opt-preview-review-after-20261016-01/gallery.html`，复核结果为同目录 `review.json`。该批包含 24 个主机场景的三语浅暗主题（144 张）与 10 个固定深色浮窗场景的三语图片（30 张）。这些本机归档不随文档分发，也不是构建依赖；原件保持不变。
+选景参考“新UI复核与60分钟测试窗口”的 Host 预览复核：本机原始索引为 `device-reports/ui-opt-preview-review-after-20261016-01/gallery.html`，复核结果为同目录 `review.json`。该批包含 24 个主机场景的三语浅暗主题（144 张）与 10 个固定深色浮窗场景的三语图片（30 张），留存在本机 `device-reports/`，不随发布包分发。
 
 已有同步清单覆盖孩子首页、自主缓冲、正常规则裁决、加时/不限时确认、浮窗输码与兑换确认等功能。本次补充以下 15 张选景，每张均同步简体中文和英文版本。场景标识沿用原复核索引，图片始终从当前代码重新生成。
 
@@ -59,7 +59,7 @@ README 只展示孩子首页、深色时间轴、额度来源与多项限制四�
 | `overlay/overlay-code-pending.png` | 浮窗操作过程：提交后仍在核对最终结果 |
 | `overlay/overlay-code-failed.png` | 浮窗操作过程：后台已确认失败与具体错误提示 |
 | `overlay/overlay-rest-stale.png` | 浮窗操作过程：状态过期仍保留休息倒计时与刷新提醒 |
-| `overlay/overlay-rest-expired.png` | 浮窗操作过程：倒计时到零后自动刷新一次，仍待后台确认，不表示已解除 |
+| `overlay/overlay-rest-expired.png` | 浮窗操作过程：倒计时到零后自动刷新一次，等待后台确认是否解除 |
 | `overlay/overlay-language-confirm.png` | 浮窗操作过程：语言选择、当前生效项与确认入口 |
 
 配置恢复中选择 PIN／配对资料的 `settings/config-backup-security-dark.png` 已在清单内，本次在备份过程示例中复用。所有图片仍由 `--with-previews`、`--previews`、`--release` 的同一流程生成与核验。

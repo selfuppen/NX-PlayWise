@@ -244,8 +244,8 @@ static void test_overlay_reason_wake(void)
         .issued_ms = 1900, .expires_ms = 3400};
     check_true(ptc_reason_detail_write(storage, "app", "ready", &ready), "ready for the real detail producer");
     notify_tick(&publisher, &observation, 2000, 100, true);
-    check_true(publisher.detail_pending && fixture.pulses == 1 && !fixture.published_at_wake,
-        "detail producer signals before publishing the request");
+    check_true(publisher.detail_pending && fixture.pulses == 1 && fixture.published_at_wake,
+        "detail producer signals after publishing the request");
     notify_tick(&publisher, &observation, 4000, 102, true);
     check_true(fixture.pulses == 1 && !publisher.detail_pending, "expiry and cleanup do not signal");
     check_true(storage->vtable->remove_path(storage, "app/support/reason-detail-ready.json"),

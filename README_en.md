@@ -72,7 +72,7 @@ When daily time runs out, bedtime begins, an eye-rest break is due, or TV mode r
 | --- | --- |
 | ![Play restriction reminders with automatic reasons enabled and a detailed-view preview](docs/images/usage-en/settings/settings-notifications-ready-light.png) | ![Upper-left brief-notice preview in dark settings](docs/images/usage-en/settings/settings-notifications-short-dark.png) |
 
-Enable **Show restriction reasons automatically** (off by default) in setup step two or **Security & Preferences → Play restriction reminders**. Use **1 Check setup → 2 Test brief notice** below to check dependencies and send a test notice without affecting your playtime rules; press `B` to skip if anything is not ready.
+Enable **Show restriction reasons automatically** (off by default) in setup step two or **Security & Preferences → Play restriction reminders**. Use **1 Check setup → 2 Test brief notice** below to verify dependencies and send a test notice; press `B` to skip if anything is not ready.
 
 Automatic details require PlayWise to stay loaded and hidden, and never interrupt PIN or code entry. When the overlay is not ready, PlayWise sends a compatible Ultrahand brief notice instead. If a test notice does not appear, reopen the overlay manager once—no console reboot is needed.
 
@@ -80,10 +80,9 @@ This feature is experimental and tested on **Ultrahand 2.5.3 + nx-ovlloader 2.0.
 
 ## Key Features
 
-- **Play restriction reminders (experimental)**: optional automatic explanations, environment checks, and test notices; detailed view first, brief notice as a fallback, without changing restriction rules. Ongoing eye-rest and bedtime restrictions receive remaining-time brief notices at minute intervals without reopening details. See the [setup steps](docs/使用/USER_GUIDE.md#hint-previews-and-setup).
-
+- **Play restriction reminders (experimental)**: automatic restriction explanations with detailed overlay first and brief notice fallback, plus setup checks and test notices. Ongoing eye-rest and bedtime restrictions receive remaining-time brief notices at minute intervals. See the [setup steps](docs/使用/USER_GUIDE.md#hint-previews-and-setup).
 - **Configuration backup/import**: eleven selective groups, PIN/hold verification, transactional rollback, calendar restore and fresh pairing keys; available in Security & Preferences.
-- **TV mode rules**: require TV mode, a uniform 0–1440-minute daily non-TV ceiling within the total, and a PIN-authorized today waiver. Disabled by default; functional testing completed.
+- **TV mode rules**: require TV mode, set a daily non-TV limit (0–1440 min within the daily total), and grant a PIN-authorized today waiver. Disabled by default.
 
 - **Daily Dispatch**: Today's playtime limit, quick grant, unlimited play for today, and reset today's adjustments.
 - **Long-Term Schedules**: Weekly schedules, statutory holidays, specific date overrides, and bedtime schedules.
@@ -141,14 +140,14 @@ The PlayWise PIN is separate from Nintendo's official Parental Controls PIN—it
 | Multi-language internationalization (Traditional Chinese & English) | Implemented (bilingual interface & docs, language decoupling) | 2026-10-02 |
 | Destructive action long-press charge-up & safety protection | Implemented (charge-up confirmation with continuous audio feedback, instant cancel) | 2026-10-02 |
 | Configuration backup & import | Implemented; full backup, 11 selective restore groups, PIN/hold confirmation, transactional rollback, calendar restore, and pairing key rotation | 2026-10-06 |
-| TV mode rules | Implemented and functionally tested; force TV mode, uniform daily non-TV mode limit (0–1440 min), and PIN today exemption; disabled by default, non-TV usage counted into daily limit | 2026-10-06 |
-| Eye protection break | Implemented and functionally tested; continuous play/break cycles, overlay and Today's Schedule skip | 2026-10 |
+| TV mode rules | Implemented; TV-only mode, daily non-TV limit (0–1440 min, counted into daily total), and PIN today waiver; disabled by default | 2026-10-06 |
+| Eye protection break | Implemented; continuous play/break cycles with skip in overlay and Today's Schedule | 2026-10 |
 | [In-app online updates](docs/使用/USER_GUIDE.md#in-app-online-updates) | Implemented; automatic/manual checks, version channels, PIN/hold installation, independent pre-update backups and failure rollback; new-version hints displayed separately from data refresh status | 2026-10-28 |
 | Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
 | Multiple restricted time slots | TODO; support configuring multiple blackout/curfew intervals per day (e.g. study & dinner hours) | TBD |
 | Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |
 
-Once daily limit or bedtime takes effect, use the in-game overlay for PlayWise actions: redeem grant codes, grant temporary minutes, set unlimited play for today, skip or disable bedtime, or restore pre-installation settings. You can also temporarily unlock Nintendo's native dialog with your official Nintendo PIN, or recover via PC and SD card if both the overlay and background service are unavailable.
+Besides the in-game overlay, you can temporarily unlock Nintendo's native dialog with your official Nintendo PIN, or recover via PC and SD card if both the overlay and background service are unavailable.
 
 ## Documentation
 

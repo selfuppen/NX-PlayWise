@@ -41,7 +41,7 @@
       <div class="intro">
         <div>
           <h1 id="pageTitle" data-i18n="page_title">生成今日加时码</h1>
-          <p data-i18n="intro_p">加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。</p>
+          <p data-i18n="intro_p">加时码在当前浏览器本地计算，本项目不会把生成输入提交给业务后端。</p>
         </div>
         <div class="intro-actions">
           <button id="introPairBtn" class="secondary compact" type="button" data-i18n="btn_manage_pairing">管理配对</button>
@@ -53,7 +53,7 @@
       <div id="compatibilityWarning" class="notice warning" role="status" hidden></div>
       <div id="demoWarning" class="notice danger" role="alert" hidden>
         <strong data-i18n="demo_warning_title">当前使用公开演示密钥。</strong>
-        <span data-i18n="demo_warning_desc">任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。</span>
+        <span data-i18n="demo_warning_desc">此密钥已公开，任何人都能用它生成加时码（单日最高累计 1440 分钟）。仅用于已开启演示模式的 Switch。</span>
         <button id="demoPairCta" class="secondary compact demo-pair-cta" type="button" data-i18n="btn_pair_now">立即配对我的 Switch</button>
       </div>
       <div id="importError" class="notice danger" role="alert" hidden></div>
@@ -219,11 +219,11 @@
         <h3 data-i18n="faq_2_title">加时码无效或提示已使用</h3>
         <p data-i18n="faq_2_p">确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。</p>
         <h3 data-i18n="faq_3_title">日期不正确</h3>
-        <p data-i18n="faq_3_p">加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
+        <p data-i18n="faq_3_p">加时码按 Switch 主机本地日期生效。请核对 Switch 日期后刷新状态，并按该日期重新生成。</p>
         <h3 data-i18n="faq_4_title">设备没有响应</h3>
         <p data-i18n="faq_4_p">在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。</p>
         <h3 data-i18n="faq_5_title">紧急停用已开启</h3>
-        <p data-i18n="faq_5_p">紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
+        <p data-i18n="faq_5_p">紧急停用会阻止新的额度、周计划和加时码写入，状态、诊断与恢复保持可用。排查完成后由家长在“支持与恢复”解除停用。</p>
         <h3 data-i18n="faq_6_title">进一步诊断</h3>
         <p data-i18n-html="faq_6_p">诊断包不含家长密码、加时密钥和 8 位码，可发给可信人员排查。如需深入查看日志，可检查 <code>sdmc:/switch/playwise/logs/</code> 和 <code>flags/disable.flag</code>；请勿对外分享 <code>credentials.json</code>、<code>auth.json</code> 或防重复记录。</p>
       </details>
@@ -234,7 +234,7 @@
 
   <footer>
     <p data-i18n="slogan">Play Wise. Play More.</p>
-    <p data-i18n="footer_p">正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。</p>
+    <p data-i18n="footer_p">正式使用请通过可信的 HTTPS 站点访问；电脑本机预览可使用 localhost。</p>
     <nav aria-label="项目链接" data-i18n-aria="footer_nav_aria">
       <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer" data-i18n="footer_author">作者 GitHub</a>
       <span aria-hidden="true">·</span>
@@ -261,7 +261,7 @@
   <dialog id="demoDialog" aria-labelledby="demoDialogTitle">
     <form method="dialog" class="dialog-card">
       <h2 id="demoDialogTitle" data-i18n="demo_dialog_title">确认使用公开演示密钥</h2>
-      <p data-i18n="demo_dialog_p">任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。请仅在 Switch 已主动启用演示模式时继续。</p>
+      <p data-i18n="demo_dialog_p">任何知道设备名的人都能用此密钥生成有效加时码（单日最高累计 1440 分钟）。仅在 Switch 已开启演示模式时继续。</p>
       <div class="dialog-actions">
         <button class="secondary" value="cancel" data-i18n="btn_cancel">取消</button>
         <button class="primary no-margin" value="confirm" data-i18n="btn_understand_risk">了解风险并继续</button>

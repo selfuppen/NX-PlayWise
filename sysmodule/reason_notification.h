@@ -47,6 +47,8 @@ typedef struct {
     bool detail_pending;
     uint64_t ready_wait_deadline_ms;
     uint64_t detail_sequence;
+    uint64_t detail_accepted_ms;
+    uint64_t detail_draw_deadline_ms;
     unsigned detail_failures;
     PtcReasonDetail detail;
     PtcReasonDetailDecision detail_decision;

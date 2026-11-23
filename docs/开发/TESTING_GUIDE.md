@@ -10,7 +10,7 @@
 
 ## Batch execution and evidence
 
-Select regression coverage for the change and use the [test procedure](测试操作手册.md) (Chinese) for execution and recovery. Keep stage progress, scheduling and pending confirmations in the relevant task documents, without making any particular handoff a global prerequisite. A failed prerequisite stops dependent deployment or commit commands. Read persisted JSON back and repeat offline verification before sealing; schema keys and types must follow the relevant contract.
+Select regression coverage for the change and use the [test procedure](测试操作手册.md) (Chinese) for execution and recovery. Keep stage progress, scheduling and pending confirmations in the relevant task documents. A failed prerequisite stops dependent deployment or commit commands. Read persisted JSON back and repeat offline verification before sealing; schema keys and types must follow the relevant contract.
 
 Keep human statements in separate records bound to the gallery, image and machine-index hashes. Do not ask again for unchanged, already-confirmed frames or infer visible effects from machine state. Preserve successful business records when restoring test policy, while retaining failure rollback semantics. Host, Eden, hardware capability, candidate-specific observations and full qualification remain separate scopes.
 
@@ -384,23 +384,23 @@ Calendar UI regression: verify B back, Y refresh, X format help, L/R lists, ZL/Z
 
 ## Overlay previews and troubleshooting regression
 
-Child eye-care regression covers backend play minutes independent of wall time, rest seconds, boundary confirmation, paused/disabled states, missing instances or legacy fields, failed refreshes and stale/cross-day/clock-rollback snapshots. Inspect three-language `overlay-eye-*` overview, rest, details and concurrent-limit scenes. Common child pages must fit one screen with fixed entry, buffer and parent controls unobstructed. Run `python tools/package_remote.py --with-previews` with standard Zip and default Eden NRO validation; previews and simulation do not prove device enforcement.
+Child eye-care regression covers backend play minutes independent of wall time, rest seconds, boundary confirmation, paused/disabled states, missing instances or legacy fields, failed refreshes and stale/cross-day/clock-rollback snapshots. Inspect three-language `overlay-eye-*` overview, rest, details and concurrent-limit scenes. Common child pages must fit one screen with fixed entry, buffer and parent controls unobstructed. Run `python tools/package_remote.py --with-previews` with standard Zip and default Eden NRO validation.
 
 Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including standard package and default Eden validation. Production Overlay previews are 448x720 in all three languages; documentation includes eye-care play and rest scenes. Support previews cover four help pages plus unknown, disabled and stale parental controls in light/dark themes. Run `python tools/build/sync_doc_previews.py --check` to check documentation freshness.
 
-Host checks cover guide navigation with zero/three events, touch paging, wraparound, focus preservation, emergency-disable access, input blocking underneath and inactive-guide navigation. Inspect long text, page numbers, check status and buttons in all three languages/themes. Time sync is manual; unknown controls must not appear off. Verify controller/touch and unavailable-backend help on a Switch; manually refresh after DBI/QuickNTP sync and retest restrictions with a non-critical game. Host previews do not prove PCTL effects.
+Host checks cover guide navigation with zero/three events, touch paging, wraparound, focus preservation, emergency-disable access, input blocking underneath and inactive-guide navigation. Inspect long text, page numbers, check status and buttons in all three languages/themes. Time sync is manual; unknown controls must not appear off. Verify controller/touch and unavailable-backend help on a Switch; manually refresh after DBI/QuickNTP sync and retest restrictions with a non-critical game.
 
 ## Merged Today details and continuous-use estimates
 
 Pure UI projection/navigation regression covers the fixed 16:00 example (16:15 break, 16:25 resume, 16:28 stop with 33 total minutes left), TV/non-TV consumption, unlimited total, TV-only rules, today's waiver, existing break deadlines, repeated cycles, simultaneous limits, previous-night windows with different rules, instance skips and midnight. Unsaved health drafts do not affect forecasts. Unknown, stale, cross-day, failed-refresh, recovery and pending-readback states suppress estimates. Refresh integration verifies status-only requests and preserved page/focus/expansion/drafts, including child failures staying in details. Missing consumption readings and next-day refreshes must not inherit cached numbers.
 
-Run `python tools/test.py` and `python tools/package_remote.py --with-previews`. Inspect all three languages and both themes for `today-planning`, `parent-details-rules`, `parent-details-rules-restricted`, `child-exhausted`, `plan/eye-care-switch-on`, `today-child-data`, `today-stale` and `today-multiple-limits`, including text, legends, concurrent restrictions, clipping and child privacy. The unified build must produce and validate production components, standard Zip and default Eden NRO; host/Eden do not establish device qualification.
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews`. Inspect all three languages and both themes for `today-planning`, `parent-details-rules`, `parent-details-rules-restricted`, `child-exhausted`, `plan/eye-care-switch-on`, `today-child-data`, `today-stale` and `today-multiple-limits`, including text, legends, concurrent restrictions, clipping and child privacy. The unified build must produce and validate production components, standard Zip and default Eden NRO.
 
 ## Bedtime and TV overview regression
 
 `tests/c/test_policy_status.inc` runs in the host UI suite with explicit civil dates and seconds. It covers today's upcoming bedtime, overnight release, positive partial-minute rounding, boundary confirmation, future dates, instance skips, disabled policies, stale/cross-day snapshots, clock rollback and missing fields. TV cases cover mode changes, balances independent of wall time, empty non-TV allowance while on TV, active restrictions, waivers, TV-only and unknown usage. Layout checks cover the global bar with all policies enabled and the Overlay strip boundaries; existing touch, settings-return and focus tests remain active.
 
-Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including default Eden NRO and standard Zip build/validation. New previews include three-language NRO light/dark `child/policy-*` and `parent/policy-*` scenes and `overlay/overlay-policy-*` scenes. Inspect upcoming/overnight/skipped bedtime, empty allowance on TV, stale state, no bedtime today, simultaneous restrictions, expanded details and success/failure details. Screenshots do not replace device enforcement evidence.
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including default Eden NRO and standard Zip build/validation. New previews include three-language NRO light/dark `child/policy-*` and `parent/policy-*` scenes and `overlay/overlay-policy-*` scenes. Inspect upcoming/overnight/skipped bedtime, empty allowance on TV, stale state, no bedtime today, simultaneous restrictions, expanded details and success/failure details.
 
 
 ## Child overview layout B
@@ -412,7 +412,7 @@ The four actions are code, buffer, details, and PIN-protected parent entry; a re
 
 ## Today details A regression
 
-Host checks cover the five child/parent panels, separate balance, rules entry and footer, plus three non-overlapping event cells below the continuous-use rail and above its note. Production rendering covers TV/unlimited, rest, concurrent limits, dense cycles, stale/failed refresh, recovery and disabled guardians. Three-language, dual-theme previews check the child guide and shared bottom at 616. Existing projection tests retain timing, freshness and concurrent-reason behavior; previews do not prove real restriction release.
+Host checks cover the five child/parent panels, separate balance, rules entry and footer, plus three non-overlapping event cells below the continuous-use rail and above its note. Production rendering covers TV/unlimited, rest, concurrent limits, dense cycles, stale/failed refresh, recovery and disabled guardians. Three-language, dual-theme previews check the child guide and shared bottom at 616. Existing projection tests retain timing, freshness and concurrent-reason behavior.
 
 Use the unified `tools/package_remote.py --with-previews --preview-scope docs` gate for C rendering/layout changes, retaining default Eden NRO build and artifact validation. Daily emulator scenarios are not executed by policy.
 

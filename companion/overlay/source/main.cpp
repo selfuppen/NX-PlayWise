@@ -280,6 +280,7 @@ public:
 
     void start_child_open()
     {
+        finish_refresh_while_hidden_ = false;
         if (!child_detail_page_available() || (error_ && last_request_kind_ != OverlayRequestKind::Status)) return;
         child_open_tick_ = armGetSystemTick();
         open_status_pending_ = true;
@@ -296,14 +297,35 @@ public:
         open_status_pending_ = false;
     }
 
+    void on_child_hidden(bool unfinished_automatic)
+    {
+        cancel_child_open();
+        if (unfinished_automatic && bridge_->waiting && status_for_open_ &&
+            active_request_kind_ == OverlayRequestKind::Status)
+            finish_refresh_while_hidden_ = true;
+    }
+
+    void poll_hidden_refresh()
+    {
+        if (!finish_refresh_while_hidden_) return;
+        PtcCompanionStatus status = poll_active_request();
+        if (status == PTC_COMPANION_PENDING) return;
+        finish_refresh_while_hidden_ = false;
+        active_request_kind_ = OverlayRequestKind::None;
+        if (status == PTC_COMPANION_OK && ptc_overlay_bridge_status_succeeded(bridge_)) {
+            /* Drain the original read-only refresh so a timed-out opening
+               doesn't leave the hidden instance permanently unready. */
+            remember_status();
+        }
+    }
+
     bool automatic_detail_drawn(const PtcReasonDetail &offer) const
     {
-        const uint64_t now_ms = armTicksToNs(armGetSystemTick()) / 1000000;
         return s_owner_visible && !status_expanded_ && child_detail_page_available() &&
             !bridge_->waiting && !error_ && child_drawn_reason_ == offer.reason &&
             has_status_snapshot_ && last_refresh_tick_ >= request_started_tick_ &&
             armTicksToNs(request_started_tick_) / 1000000 >= offer.issued_ms &&
-            ptc_reason_detail_fresh(&offer, PLAYWISE_BUILD_RELEASE_ID, s_input_owner.context.boot, now_ms) &&
+            std::strcmp(offer.boot, s_input_owner.context.boot) == 0 &&
             ptc_overlay_detail_matches(&offer, &displayed_summary_);
     }
 
@@ -344,15 +366,7 @@ public:
             (void)begin_status_refresh(PTC_UI_STATUS_COUNTDOWN_END);
         }
         if (!bridge_->waiting) return;
-        const u64 elapsed_ns = armTicksToNs(armGetSystemTick() - request_started_tick_);
-        const u64 elapsed_ms_u64 = elapsed_ns / 1000000ULL;
-        const int elapsed_ms = elapsed_ms_u64 > static_cast<u64>(std::numeric_limits<int>::max())
-            ? std::numeric_limits<int>::max()
-            : static_cast<int>(elapsed_ms_u64);
-        const int elapsed_delta_ms = elapsed_ms - last_elapsed_ms_;
-        last_elapsed_ms_ = elapsed_ms;
-        PtcCompanionStatus status = ptc_overlay_bridge_poll(
-            bridge_, elapsed_delta_ms, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
+        PtcCompanionStatus status = poll_active_request();
         if (status == PTC_COMPANION_PENDING) return;
         const bool completing_ready = active_request_kind_ == OverlayRequestKind::OverlayReady;
         const bool completed_open_status = active_request_kind_ == OverlayRequestKind::Status && status_for_open_;
@@ -380,11 +394,7 @@ public:
                 cancel_child_open();
                 (void)begin_status_refresh(PTC_UI_STATUS_OVERLAY_READY, true);
             } else if (ptc_overlay_bridge_status_succeeded(bridge_)) {
-                displayed_summary_ = bridge_->summary;
-                usage_snapshot_tick_ = request_started_tick_;
-                last_refresh_tick_ = armGetSystemTick();
-                has_status_snapshot_ = true;
-                error_ = false;
+                remember_status();
             } else if (ptc_overlay_bridge_preview_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 usage_snapshot_tick_ = request_started_tick_;
@@ -562,6 +572,26 @@ public:
         active_request_kind_ = OverlayRequestKind::None;
         pending_code_[0] = '\0';
         ptc_overlay_input_init(input_);
+    }
+
+    PtcCompanionStatus poll_active_request()
+    {
+        const u64 elapsed_ms_u64 = armTicksToNs(armGetSystemTick() - request_started_tick_) / 1000000ULL;
+        const int elapsed_ms = elapsed_ms_u64 > static_cast<u64>(std::numeric_limits<int>::max())
+            ? std::numeric_limits<int>::max()
+            : static_cast<int>(elapsed_ms_u64);
+        const int elapsed_delta_ms = elapsed_ms - last_elapsed_ms_;
+        last_elapsed_ms_ = elapsed_ms;
+        return ptc_overlay_bridge_poll(bridge_, elapsed_delta_ms, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
+    }
+
+    void remember_status()
+    {
+        displayed_summary_ = bridge_->summary;
+        usage_snapshot_tick_ = request_started_tick_;
+        last_refresh_tick_ = armGetSystemTick();
+        has_status_snapshot_ = true;
+        error_ = false;
     }
 
     bool begin_status_refresh(PtcUiStatusOrigin origin = PTC_UI_STATUS_OTHER, bool for_open = false)
@@ -1322,6 +1352,7 @@ private:
     int last_elapsed_ms_ = 0;
     bool error_ = false;
     bool has_status_snapshot_ = false;
+    bool finish_refresh_while_hidden_ = false;
     bool status_expanded_ = false;
     bool details_tech_expanded_ = false;
     bool parent_pin_standard_keypad_ = false;
@@ -1487,9 +1518,11 @@ public:
     {
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
         PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
-        if (!gui_ || !gui_->automatic_detail_allowed()) return false;
+        if (!gui_) return false;
         if (ms < next_detail_poll_ms_) return false;
         next_detail_poll_ms_ = ms + PTC_OVERLAY_HIDDEN_DETAIL_MS;
+        gui_->poll_hidden_refresh();
+        if (!gui_->automatic_detail_allowed()) return false;
         ptc_overlay_hidden_timing_poll(&hidden_timing_, ms, neutral);
         /* The preference check does not depend on input: with the five second
            disabled cadence a window without any key is rare during play, and the
@@ -1520,6 +1553,7 @@ public:
                 next_reason_subscribe_ms_ = 0;
                 std::snprintf(runtime_boot_, sizeof(runtime_boot_), "%s", boot);
                 next_ready_ms_ = 0; /* a lease bound to the previous backend is useless */
+                seen_sequence_ = 0;
                 brief_notice_.active = false;
             }
             next_runtime_ms_ = ptc_overlay_hidden_runtime_next_ms(ms, runtime_known_);
@@ -1574,7 +1608,22 @@ public:
         if (!ptc_reason_detail_fresh(&offer, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, ms) ||
             offer.ui_instance != ui_instance_ms_ || offer.sequence <= seen_sequence_) return false;
         seen_sequence_ = offer.sequence;
+        PtcReasonDetail accepted = offer;
+        accepted.stage_ms = ms;
+        uint64_t deadline = ptc_reason_detail_draw_deadline(&offer, &accepted);
+        if (!deadline) return false;
+        if (!ptc_reason_detail_write(s, APP_ROOT, "accepted", &accepted)) {
+            ++automatic_failures_;
+            return false;
+        }
+        PtcReasonDetail current{};
+        if (!ptc_reason_detail_read(s, APP_ROOT, "request", &current) ||
+            !ptc_reason_detail_same(&offer, &current) ||
+            armTicksToNs(armGetSystemTick()) / 1000000 >= offer.expires_ms) return false;
         automatic_offer_ = offer;
+        automatic_accepted_ms_ = ms;
+        automatic_draw_deadline_ms_ = deadline;
+        next_automatic_check_ms_ = ms;
         s_automatic_detail = true;
         s_automatic_detail_confirmed = false;
         automatic_ack_written_ = false;
@@ -1583,22 +1632,33 @@ public:
 
     void onFrameRendered() override
     {
-        uint64_t ns = armTicksToNs(armGetSystemTick());
-        if (s_automatic_detail && !automatic_ack_written_ &&
-            (ns / 1000000 < automatic_offer_.issued_ms || ns / 1000000 >= automatic_offer_.expires_ms)) {
+        if (!s_automatic_detail || automatic_ack_written_) return;
+        uint64_t ns = armTicksToNs(armGetSystemTick()), ms = ns / 1000000;
+        if (ms < automatic_accepted_ms_ || ms >= automatic_draw_deadline_ms_) {
             hide();
             return;
         }
-        if (!s_automatic_detail || automatic_ack_written_ || !gui_ ||
-            fadeAnimationPlaying() || !gui_->automatic_detail_drawn(automatic_offer_)) return;
         PtcStorage *s = ptc_fs_storage_as_storage(&storage_);
-        PtcReasonDetail current{};
+        bool drawn = gui_ && !fadeAnimationPlaying() && gui_->automatic_detail_drawn(automatic_offer_);
+        if (drawn || ms >= next_automatic_check_ms_) {
+            /* The backend withdraws the file on cancellation. Check during
+               refresh as well as before acknowledging a completed frame. */
+            PtcReasonDetail current{};
+            if (!ptc_reason_detail_read(s, APP_ROOT, "request", &current) ||
+                !ptc_reason_detail_same(&current, &automatic_offer_)) {
+                hide();
+                return;
+            }
+            next_automatic_check_ms_ = ms + PTC_OVERLAY_HIDDEN_DETAIL_MS;
+        }
+        if (!drawn) return;
         if (!ptc_input_owner_accept(&s_input_owner, ns) ||
-            !ptc_reason_detail_read(s, APP_ROOT, "request", &current) ||
-            !ptc_reason_detail_same(&current, &automatic_offer_)) return;
-        std::snprintf(automatic_offer_.owner, sizeof(automatic_offer_.owner), "%s", s_input_owner.owner);
+            armTicksToNs(armGetSystemTick()) / 1000000 >= automatic_draw_deadline_ms_) return;
+        PtcReasonDetail ack = automatic_offer_;
+        ack.stage_ms = ms;
+        std::snprintf(ack.owner, sizeof(ack.owner), "%s", s_input_owner.owner);
         /* A rendered fresh correct page and a live input lease, not file deletion. */
-        if (ptc_reason_detail_write(s, APP_ROOT, "ack", &automatic_offer_)) {
+        if (ptc_reason_detail_write(s, APP_ROOT, "ack", &ack)) {
             automatic_ack_written_ = true;
             s_automatic_detail_confirmed = true;
         } else {
@@ -1624,7 +1684,7 @@ public:
 
     void onHide() override
     {
-        if (gui_) gui_->cancel_child_open();
+        if (gui_) gui_->on_child_hidden(s_automatic_detail && !automatic_ack_written_);
         ptc_overlay_hidden_timing_init(&hidden_timing_);
         next_detail_poll_ms_ = 0;
         next_request_audit_ms_ = next_reason_audit_ms_ = 0;
@@ -1719,6 +1779,7 @@ private:
     PtcOverlayInput input_{};
     PctcGui *gui_ = nullptr;
     PtcReasonDetail automatic_offer_{};
+    uint64_t automatic_accepted_ms_ = 0, automatic_draw_deadline_ms_ = 0, next_automatic_check_ms_ = 0;
     PtcOverlayBriefNotice brief_notice_{};
     Event reason_event_{};
     Handle reason_session_ = INVALID_HANDLE;

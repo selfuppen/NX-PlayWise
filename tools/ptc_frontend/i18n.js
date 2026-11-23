@@ -12,13 +12,13 @@ export const TRANSLATIONS = {
 
     page_title: "生成今日加时码",
     slogan: "Play Wise. Play More.",
-    intro_p_online: "加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。",
-    intro_p_standalone: "此单文件完全在当前浏览器中生成加时码，不需要 Python、服务器或网络连接。",
+    intro_p_online: "加时码在当前浏览器本地计算，本项目不会把生成输入提交给业务后端。",
+    intro_p_standalone: "此单文件在当前浏览器本地生成加时码，无需 Python、服务器或网络连接。",
     download_standalone: "下载单文件离线版",
     install_button: "安装到设备",
 
     demo_warning_title: "当前使用公开演示密钥。",
-    demo_warning_desc: "任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。",
+    demo_warning_desc: "此密钥已公开，任何人都能用它生成加时码（单日最高累计 1440 分钟）。仅用于已开启演示模式的 Switch。",
     err_browser_capability: "当前浏览器缺少生成加时码所需的基础能力，请升级浏览器。",
     err_web_crypto: "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。",
     err_selftest: "加时码算法自检失败，已停止生成：",
@@ -91,7 +91,7 @@ export const TRANSLATIONS = {
     minutes_unit: "{m} 分钟",
 
     demo_dialog_title: "确认使用公开演示密钥",
-    demo_dialog_p: "任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。请仅在 Switch 已主动启用演示模式时继续。",
+    demo_dialog_p: "任何知道设备名的人都能用此密钥生成有效加时码（单日最高累计 1440 分钟）。仅在 Switch 已开启演示模式时继续。",
     btn_understand_risk: "了解风险并继续",
 
     result_label: "请把下面的数字告诉孩子",
@@ -111,15 +111,15 @@ export const TRANSLATIONS = {
     faq_2_title: "加时码无效或提示已使用",
     faq_2_p: "确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。",
     faq_3_title: "日期不正确",
-    faq_3_p: "加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。",
+    faq_3_p: "加时码按 Switch 主机本地日期生效。请核对 Switch 日期后刷新状态，并按该日期重新生成。",
     faq_4_title: "设备没有响应",
     faq_4_p: "在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。",
     faq_5_title: "紧急停用已开启",
-    faq_5_p: "紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。",
+    faq_5_p: "紧急停用会阻止新的额度、周计划和加时码写入，状态、诊断与恢复保持可用。排查完成后由家长在“支持与恢复”解除停用。",
     faq_6_title: "进一步诊断",
     faq_6_p: "诊断包不含家长密码、加时密钥和 8 位码，可发给可信人员排查。如需深入查看日志，可检查 <code>sdmc:/switch/playwise/logs/</code> 和 <code>flags/disable.flag</code>；请勿对外分享 <code>credentials.json</code>、<code>auth.json</code> 或防重复记录。",
 
-    footer_p_online: "正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。",
+    footer_p_online: "正式使用请通过可信的 HTTPS 站点访问；电脑本机预览可使用 localhost。",
     footer_p_standalone: "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",
     footer_nav_aria: "项目链接",
     footer_author: "作者 GitHub",
@@ -141,7 +141,7 @@ export const TRANSLATIONS = {
     install_button: "Install App",
 
     demo_warning_title: "Public demo secret in use.",
-    demo_warning_desc: "Anyone who knows this secret can generate valid grant codes, potentially accumulating up to 1440 minutes today. Use only on devices with Demo Mode explicitly enabled.",
+    demo_warning_desc: "This secret is public; anyone can generate grant codes up to 1440 min per day. Use only on consoles with Demo Mode enabled.",
     err_browser_capability: "Your browser lacks essential cryptographic features required to generate grant codes. Please upgrade your browser.",
     err_web_crypto: "Web Crypto is unavailable on this page. Please open via HTTPS or localhost.",
     err_selftest: "Grant code algorithm self-test failed; generation aborted: ",
@@ -214,7 +214,7 @@ export const TRANSLATIONS = {
     minutes_unit: "{m} min",
 
     demo_dialog_title: "Confirm Using Public Demo Secret",
-    demo_dialog_p: "Anyone knowing this device ID can generate valid grant codes, potentially accumulating up to 1440 minutes today. Continue only if Demo Mode is explicitly enabled on your Switch.",
+    demo_dialog_p: "Anyone who knows the device ID can generate valid grant codes up to 1440 min per day. Continue only if Demo Mode is enabled on your Switch.",
     btn_understand_risk: "Accept Risk & Continue",
 
     result_label: "Share this code with your child",
@@ -234,7 +234,7 @@ export const TRANSLATIONS = {
     faq_2_title: "Grant code invalid or already used",
     faq_2_p: "Verify that device ID, secret, effective date, and Switch system date match exactly. After changing the secret, existing pairings and codes signed with the old secret become invalid; generate a new one if marked as already used.",
     faq_3_title: "Incorrect date",
-    faq_3_p: "Grant codes take effect based on the Switch console's local date. Confirm that your parental device date matches the Switch date, refresh status, and regenerate. Do not attempt to redeem codes generated for an incorrect date.",
+    faq_3_p: "Grant codes follow the Switch console's local date. Check the Switch date, refresh status, and generate a new code for that date.",
     faq_4_title: "Console not responding",
     faq_4_p: "Refresh status in Switch Child or Parent Zone and wait for synchronization to finish. If still unresponsive, export diagnostic logs and verify that SD card files are readable.",
     faq_5_title: "Emergency disable active",

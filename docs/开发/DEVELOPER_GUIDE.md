@@ -8,7 +8,7 @@
 
 # Developer Guide
 
-Use the [test procedure](测试操作手册.md) (Chinese) to select validation for the change. Keep cross-task rules in AGENTS and stable guides. Stage progress, next steps, temporary authorization and candidate-specific results belong in the relevant task documents and acceptance records; no particular handoff document is a global reading prerequisite. Date console snapshots and recheck before device operations. Documentation commits do not require redeploying an unchanged frozen production candidate. Preserve successful consumption, claims, nonces and activity when restoring test policy; failed transactions retain their protocol rollback rules.
+Use the [test procedure](测试操作手册.md) (Chinese) to select validation for the change. Keep cross-task rules in AGENTS and stable guides. Stage progress, next steps, temporary authorization and candidate-specific results belong in the relevant task documents and acceptance records. Date console snapshots and recheck before device operations. Documentation commits do not require redeploying an unchanged frozen production candidate. Preserve successful consumption, claims, nonces and activity when restoring test policy; failed transactions retain their protocol rollback rules.
 
 Check each dependent command's exit code before building, deploying or committing. Verify reports after JSON serialization and repeat the offline checks before sealing. Later corrections and human observations must bind unchanged original hashes in separate supplements.
 
@@ -120,7 +120,7 @@ Bedtime is included in standard releases, but disabled by default on new install
 
 ## Standard Release Builds, Support, and Device Lab
 
-Standard distribution builds use the `release` profile, driven by paired versions in `common/version.h` and `common/version.mk`. Python manifest generation and package validation read both files via `tools/build/playwise_version.py`; any mismatch immediately fails the build. Support is an intrinsic feature of standard releases, not a separate package.
+Standard distribution builds use the `release` profile, driven by paired versions in `common/version.h` and `common/version.mk`. Python manifest generation and package validation read both files via `tools/build/playwise_version.py`; any mismatch immediately fails the build. Support is a built-in feature of standard releases.
 
 Public artifacts are divided into two tiers: `playwise-<version>.zip` is the standard Switch installation package containing only runtime directories; `playwise-complete-<version>.zip` is the recommended full delivery bundle for end users, strictly embedding the standard package and generated `playwise-offline.html`. Aggregation wrappers must never alter or unwrap the standard package, nor attach Device Lab, install scripts, or extra notes.
 

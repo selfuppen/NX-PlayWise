@@ -5,7 +5,8 @@
 
 static bool path(char out[256], const char *root, const char *kind)
 {
-    if (strcmp(kind, "ready") && strcmp(kind, "request") && strcmp(kind, "ack")) return false;
+    if (strcmp(kind, "ready") && strcmp(kind, "request") && strcmp(kind, "accepted") &&
+        strcmp(kind, "ack")) return false;
     int n = snprintf(out, 256, "%s/support/reason-detail-%s.json", root, kind);
     return n > 0 && n < 256;
 }
@@ -43,7 +44,10 @@ bool ptc_reason_detail_read(PtcStorage *s, const char *root, const char *kind, P
     memset(out, 0, sizeof(*out));
     if (!path(file, root, kind) || !s->vtable->read_text(s, file, text, sizeof(text))) return false;
     cJSON *j = cJSON_ParseWithOpts(text, NULL, true);
-    bool ok = cJSON_IsObject(j) && cJSON_GetArraySize(j) == 12;
+    bool accepted = !strcmp(kind, "accepted"), ack = !strcmp(kind, "ack");
+    bool stage = cJSON_GetObjectItemCaseSensitive(j, "stage_ms") != NULL;
+    bool ok = cJSON_IsObject(j) && cJSON_GetArraySize(j) == (stage ? 13 : 12) &&
+        (!accepted || stage) && (!stage || accepted || ack);
     for (const cJSON *a = j ? j->child : NULL; ok && a; a = a->next)
         for (const cJSON *b = a->next; b; b = b->next)
             if (!strcmp(a->string, b->string)) ok = false;
@@ -52,11 +56,13 @@ bool ptc_reason_detail_read(PtcStorage *s, const char *root, const char *kind, P
     ok = ok && cJSON_IsNumber(v) && v->valuedouble == 1 &&
         !strcmp(string(j, "kind"), kind) && strlen(string(j, "release")) > 0 &&
         strlen(string(j, "release")) < sizeof(out->release) && hex(string(j, "boot"), 16) &&
-        (!strcmp(kind, "ack") ? hex(string(j, "owner"), 32) : !string(j, "owner")[0]) &&
+        cJSON_IsString(cJSON_GetObjectItemCaseSensitive(j, "owner")) &&
+        (ack ? hex(string(j, "owner"), 32) : !string(j, "owner")[0]) &&
         number(j, "ui_instance", &out->ui_instance) && out->ui_instance &&
         number(j, "sequence", &out->sequence) && number(j, "issued_ms", &out->issued_ms) &&
         number(j, "expires_ms", &out->expires_ms) && number(j, "instance", &out->instance) &&
-        number(j, "day", &day) && day <= UINT16_MAX && number(j, "reason", &reason) && reason <= PTC_REASON_DOCK;
+        number(j, "day", &day) && day <= UINT16_MAX && number(j, "reason", &reason) && reason <= PTC_REASON_DOCK &&
+        (!stage || (number(j, "stage_ms", &out->stage_ms) && out->stage_ms));
     if (ok) {
         snprintf(out->release, sizeof(out->release), "%s", string(j, "release"));
         snprintf(out->boot, sizeof(out->boot), "%s", string(j, "boot"));
@@ -74,15 +80,16 @@ bool ptc_reason_detail_write(PtcStorage *s, const char *root, const char *kind, 
 {
     /* cJSON's preallocated printer needs spare capacity; retain the original
        1024-byte wire limit separately. Stack nodes keep library JSON escaping. */
-    char file[256], text[1024 + 5], numbers[7][32];
+    char file[256], text[1024 + 5], numbers[8][32];
     if (!path(file, root, kind)) return false;
-    cJSON object = {0}, nodes[12] = {{0}};
+    cJSON object = {0}, nodes[13] = {{0}};
     object.type = cJSON_Object;
     const char *keys[] = {"version", "kind", "release", "boot", "owner",
-        "ui_instance", "sequence", "issued_ms", "expires_ms", "instance", "day", "reason"};
+        "ui_instance", "sequence", "issued_ms", "expires_ms", "instance", "day", "reason", "stage_ms"};
     const char *strings[] = {NULL, kind, v->release, v->boot, v->owner};
-    uint64_t values[] = {v->ui_instance, v->sequence, v->issued_ms, v->expires_ms, v->instance, v->day, v->reason};
-    for (unsigned i = 0; i < 12; ++i) {
+    uint64_t values[] = {v->ui_instance, v->sequence, v->issued_ms, v->expires_ms, v->instance, v->day, v->reason,
+        v->stage_ms};
+    for (unsigned i = 0; i < (v->stage_ms ? 13u : 12u); ++i) {
         nodes[i].type = i ? cJSON_String | cJSON_IsReference : cJSON_Number;
         if (!i) {
             nodes[i].valueint = 1;
@@ -96,9 +103,9 @@ bool ptc_reason_detail_write(PtcStorage *s, const char *root, const char *kind, 
     }
     /* All nodes and referenced strings are borrowed; never cJSON_Delete them. */
     if (!cJSON_PrintPreallocated(&object, text, sizeof(text), false) || strlen(text) >= 1024) return false;
-    /* Only readiness may be lost. Readers still require current identity and
-       a fresh lease before offering detail; request and ACK retain commit. */
-    if (!strcmp(kind, "ready") && s->vtable->write_text_transient)
+    /* A lost readiness or acceptance only loses this automatic display.
+       Request and frame ACK retain the durable replacement. */
+    if ((!strcmp(kind, "ready") || !strcmp(kind, "accepted")) && s->vtable->write_text_transient)
         return s->vtable->write_text_transient(s, file, text);
     return s->vtable->write_text_atomic(s, file, text);
 }
@@ -107,7 +114,15 @@ bool ptc_reason_detail_fresh(const PtcReasonDetail *v, const char *release, cons
 {
     return !strcmp(v->release, release) && !strcmp(v->boot, boot) &&
         v->issued_ms <= ms && ms < v->expires_ms && v->expires_ms > v->issued_ms &&
-        v->expires_ms - v->issued_ms <= 2000;
+        v->expires_ms - v->issued_ms <= PTC_REASON_DETAIL_PICKUP_MS;
+}
+
+uint64_t ptc_reason_detail_draw_deadline(const PtcReasonDetail *offer, const PtcReasonDetail *accepted)
+{
+    uint64_t pickup = accepted->stage_ms;
+    return pickup && ptc_reason_detail_same(offer, accepted) &&
+        ptc_reason_detail_fresh(offer, accepted->release, accepted->boot, pickup) &&
+        pickup <= UINT64_MAX - PTC_REASON_DETAIL_DRAW_MS ? pickup + PTC_REASON_DETAIL_DRAW_MS : 0;
 }
 
 bool ptc_reason_detail_same(const PtcReasonDetail *a, const PtcReasonDetail *b)

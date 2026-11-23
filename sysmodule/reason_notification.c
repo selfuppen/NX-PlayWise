@@ -9,6 +9,7 @@
 
 #define NOTIFICATION_DIR "sdmc:/config/ultrahand/notifications/"
 #define READY_RENEWAL_WAIT_MS UINT64_C(500)
+#define DETAIL_SETTLE_MS UINT64_C(500)
 
 static const char *str(const cJSON *o, const char *key)
 {
@@ -36,6 +37,7 @@ static void state(PtcReasonNotification *n, const char *value)
         "\"receiver\":\"unknown\",\"io_failures\":%u,\"sequence\":%llu,\"io_max_ms\":%llu,"
         "\"release_id\":\"%s\",\"backend_boot_id\":\"%s\",\"day_index\":%u,\"reason\":%u,"
         "\"instance\":\"%llu\",\"captured_at\":%lld,\"expires_mono_ms\":\"%llu\","
+        "\"detail_accepted_ms\":\"%llu\",\"detail_draw_deadline_ms\":\"%llu\","
         "\"detail_decision\":{\"version\":1,\"available\":%s,\"decision_ms\":\"%llu\","
         "\"day_index\":%u,\"reason\":%u,\"instance\":\"%llu\",\"repeat\":%s,"
         "\"failures\":%u,\"ready_read_attempted\":%s,\"ready_read_ok\":%s,"
@@ -45,7 +47,8 @@ static void state(PtcReasonNotification *n, const char *value)
         value, n->failures, (unsigned long long)n->sequence, (unsigned long long)n->io_max_ms,
         n->event.release, n->event.boot, n->event.latest.day, (unsigned)n->event.latest.reason,
         (unsigned long long)n->event.latest.instance, (long long)n->event.latest.captured_at,
-        (unsigned long long)n->expires_ms,
+        (unsigned long long)n->expires_ms, (unsigned long long)n->detail_accepted_ms,
+        (unsigned long long)n->detail_draw_deadline_ms,
         d->available ? "true" : "false", (unsigned long long)d->ms,
         d->day, (unsigned)d->reason, (unsigned long long)d->instance, d->repeat ? "true" : "false",
         d->failures, d->ready_read_attempted ? "true" : "false", d->ready_read_ok ? "true" : "false",
@@ -143,13 +146,18 @@ void ptc_reason_notification_init(PtcReasonNotification *n, PtcStorage *s,
         if (!((boot[i] >= '0' && boot[i] <= '9') || (boot[i] >= 'a' && boot[i] <= 'f'))) n->blocked = true;
 }
 
-static bool observation_current(const PtcReasonObservation *s, int64_t wall)
+static bool observation_same_day(const PtcReasonObservation *s, int64_t wall)
 {
     if (!s->reliable || !s->restricted || s->reason <= PTC_REASON_NONE || s->reason > PTC_REASON_DOCK ||
-        wall < s->captured_at) return false;
+        s->captured_at <= 0 || wall < s->captured_at) return false;
     uint64_t age = (uint64_t)wall - (uint64_t)s->captured_at;
-    return age < 2 && (!s->local_clock_available ||
-        (s->local_second_of_day < 86400 && age < 86400u - s->local_second_of_day));
+    return !s->local_clock_available ||
+        (s->local_second_of_day < 86400 && age < 86400u - s->local_second_of_day);
+}
+
+static bool observation_current(const PtcReasonObservation *s, int64_t wall)
+{
+    return observation_same_day(s, wall) && wall - s->captured_at < 2;
 }
 
 bool ptc_reason_notification_body(const PtcReasonObservation *s, int64_t wall,
@@ -246,25 +254,35 @@ static DetailResult advance_detail(PtcReasonNotification *n, const PtcReasonObse
     uint64_t ms, int64_t wall, bool cancel, bool suppressed)
 {
     if (!n->detail_pending) return DETAIL_CONTINUE;
+    if (!cancel && !n->detail_draw_deadline_ms && ms >= n->detail.issued_ms &&
+        ms - n->detail.issued_ms < PTC_REASON_DETAIL_PICKUP_MS + PTC_REASON_DETAIL_DRAW_MS + DETAIL_SETTLE_MS) {
+        PtcReasonDetail accepted;
+        if (ptc_reason_detail_read(n->storage, n->root, "accepted", &accepted) && accepted.stage_ms <= ms) {
+            n->detail_draw_deadline_ms = ptc_reason_detail_draw_deadline(&n->detail, &accepted);
+            if (n->detail_draw_deadline_ms) {
+                n->detail_accepted_ms = accepted.stage_ms;
+            }
+        }
+    }
+    uint64_t deadline = n->detail_draw_deadline_ms ? n->detail_draw_deadline_ms : n->detail.expires_ms;
+    /* A frame drawn in time can take another poll to commit and be read.
+       Keep the same bounded grace for a cached visible owner to clear. */
+    bool expired = ms >= deadline;
+    bool grace = expired && ms - deadline < DETAIL_SETTLE_MS && (n->detail_draw_deadline_ms || suppressed);
     PtcReasonDetail ack;
-    bool current = observation_current(s, wall);
     /* A live visible owner is expected when confirming a drawn detail. */
-    bool confirmed = !cancel && current &&
-        ptc_reason_detail_fresh(&n->detail, n->event.release, n->event.boot, ms) &&
+    bool confirmed = !cancel && n->detail_draw_deadline_ms && (!expired || grace) &&
         ptc_reason_detail_read(n->storage, n->root, "ack", &ack) &&
         ptc_reason_detail_same(&n->detail, &ack) &&
+        ack.stage_ms >= n->detail_accepted_ms && ack.stage_ms < deadline && ack.stage_ms <= ms &&
         ptc_input_owner_confirm(n->storage, n->root, n->event.release, n->event.boot,
             ack.owner, ms * UINT64_C(1000000));
-    /* The reader may cache the UI's release for one 250ms poll. Give that
-       release at most 500ms to drain; the UI offer itself still expires at 2s. */
-    bool timed_out = ms >= n->detail.expires_ms &&
-        (!suppressed || ms - n->detail.expires_ms >= 500);
-    if (!confirmed && !cancel && current && !timed_out) return DETAIL_CONTINUE;
+    if (!confirmed && !cancel && (!expired || grace)) return DETAIL_CONTINUE;
     if (!ptc_reason_detail_clear(n->storage, n->root, &n->detail)) return DETAIL_CLEANUP_FAILED;
     n->detail_pending = false;
     state(n, confirmed ? "detail_drawn_confirmed" : cancel ? "detail_cancelled" : "detail_timeout");
     if (confirmed) return DETAIL_CONFIRMED;
-    return !cancel && !suppressed && current ? DETAIL_FALLBACK : DETAIL_CONTINUE;
+    return !cancel && !suppressed && observation_current(s, wall) ? DETAIL_FALLBACK : DETAIL_CONTINUE;
 }
 
 /* True when the event is waiting for a renewed ready lease or a detail ACK. */
@@ -274,7 +292,8 @@ static bool try_detail(PtcReasonNotification *n, const PtcReasonObservation *s, 
     PtcReasonDetailDecision *d = &n->detail_decision;
     *d = (PtcReasonDetailDecision){.available = true, .repeat = n->event.repeat,
         .failures = n->detail_failures, .day = s->day, .reason = s->reason,
-        .instance = s->instance, .ms = ms, .clock_budget_available = ms <= UINT64_MAX - 2000,
+        .instance = s->instance, .ms = ms,
+        .clock_budget_available = ms <= UINT64_MAX - PTC_REASON_DETAIL_PICKUP_MS - PTC_REASON_DETAIL_DRAW_MS,
         .sequence_available = n->detail_sequence != UINT64_MAX};
     n->detail_decision_dirty = true;
     /* A continuing countdown gets only a brief notice, never another focus grab. */
@@ -307,11 +326,12 @@ static bool try_detail(PtcReasonNotification *n, const PtcReasonObservation *s, 
     ptc_reason_event_attempted(&n->event, ms);
     if (!d->ready_fresh || !d->clock_budget_available || !d->sequence_available) return false;
     detail.sequence = ++n->detail_sequence;
-    detail.issued_ms = ms; detail.expires_ms = ms + 2000;
+    detail.issued_ms = ms; detail.expires_ms = ms + PTC_REASON_DETAIL_PICKUP_MS;
     detail.day = s->day; detail.reason = s->reason; detail.instance = s->instance;
     n->detail = detail; n->detail_pending = true;
-    if (n->wake) n->wake(n->wake_ctx);
+    n->detail_accepted_ms = n->detail_draw_deadline_ms = 0;
     if (ptc_reason_detail_write(n->storage, n->root, "request", &detail)) {
+        if (n->wake) n->wake(n->wake_ctx);
         state(n, "detail_requested");
     } else {
         /* A failed write may already have renamed. Let the offer expire before fallback. */
@@ -333,7 +353,7 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
     bool change = (n->pending || n->detail_pending || n->ready_wait_deadline_ms) &&
         (s->reason != n->event.latest.reason || s->instance != n->event.latest.instance ||
             s->day != n->event.latest.day);
-    bool detail_cancel = stopping || !enabled || !s->reliable || !s->restricted ||
+    bool detail_cancel = stopping || !enabled || !observation_same_day(s, wall) ||
         ms < n->event.last_ms || wall < n->event.last_wall || change;
     bool cancel = detail_cancel || suppressed;
     if (cancel) n->ready_wait_deadline_ms = 0;
@@ -346,7 +366,7 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
     if (stopping) return;
     bool ready = ptc_reason_event_update(&n->event, n->event.release, n->event.boot, s, ms, wall,
         enabled, suppressed);
-    if ((!enabled || suppressed) && detail != DETAIL_CONFIRMED) state(n, "suppressed");
+    if ((!enabled || suppressed) && detail == DETAIL_CONTINUE && !n->detail_pending) state(n, "suppressed");
     if (n->pending || n->detail_pending) return;
     if (detail != DETAIL_FALLBACK && (!ready || try_detail(n, s, ms))) return;
     /* The receiver switch and shortcut label matter only when a fallback toast
