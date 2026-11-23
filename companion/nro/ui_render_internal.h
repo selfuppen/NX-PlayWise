@@ -235,6 +235,7 @@ void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                           const char *confirm_label);
 void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size);
+const char *activity_label(const char *action);
 
 void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
@@ -286,6 +287,8 @@ void draw_unchanged_quota_card(
     uint32_t *pixels, uint32_t stride, UiRect rect, const char *reason);
 void draw_redeem_step_bar(
     uint32_t *pixels, uint32_t stride, UiRect area, int active_step);
+void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int cy,
+                           UiActionIcon icon, uint32_t color);
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                       const UiAction *action, bool selected, PtcUiActionState state,
                       int reserved_right, UiRect status_badge);

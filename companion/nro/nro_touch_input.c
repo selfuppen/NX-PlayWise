@@ -32,6 +32,10 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
+    case PTC_UI_HIT_SOFTWARE_INFO_QR_TAB:
+        ptc_audio_play(PTC_SE_TAB);
+        ui->model.software_info_qr_tab = hit.index ? 1 : 0;
+        break;
     case PTC_UI_HIT_UPDATE_BADGE:
         ptc_audio_play(PTC_SE_CONFIRM);
         open_online_update_badge(ui);
@@ -39,13 +43,26 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_UPDATE_ACTION:
         if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) open_online_update(ui);
         else if (hit.index == 8) online_update_action(ui, 8);
+        else if (hit.index == 13) handle_online_update_input(ui, HidNpadButton_A);
         else if (hit.index >= 9) {
             u64 buttons[] = {HidNpadButton_L, HidNpadButton_R, HidNpadButton_X, HidNpadButton_B};
             if (hit.index <= 12) handle_online_update_input(ui, buttons[hit.index - 9]);
         }
+        else if (ui->model.overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS &&
+                 ui->model.overlay_selection != hit.index &&
+                 ui->model.update_backup_index + hit.index < ui->model.update_backup_count) {
+            ui->model.overlay_selection = hit.index;
+            ptc_audio_play(PTC_SE_FOCUS);
+        }
         else {
             ui->model.overlay_selection = hit.index;
             handle_online_update_input(ui, HidNpadButton_A);
+        }
+        break;
+    case PTC_UI_HIT_SETUP_PCTL_STEP:
+        if (ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP && hit.index >= 0 && hit.index < 6) {
+            ui->model.overlay_selection = hit.index;
+            ptc_audio_play(PTC_SE_FOCUS);
         }
         break;
     case PTC_UI_HIT_CONFIG_BACKUP_FIELD:

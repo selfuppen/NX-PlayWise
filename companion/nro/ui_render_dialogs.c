@@ -11,7 +11,9 @@ void draw_dialog_shell(
     bool numeric = model->overlay == PTC_UI_OVERLAY_NUMPAD || model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR;
     bool pin = model->overlay == PTC_UI_OVERLAY_PIN;
     bool custom_header = model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
-                         model->overlay == PTC_UI_OVERLAY_DAY_DECISION;
+                         model->overlay == PTC_UI_OVERLAY_DAY_DECISION ||
+                         model->overlay == PTC_UI_OVERLAY_SUPPORT_EVENT ||
+                         model->overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP;
     bool today_limit_editor = model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
         model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
         model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;

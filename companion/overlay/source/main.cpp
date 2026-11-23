@@ -976,7 +976,9 @@ public:
                     // Freeze the order during this parent session so a refresh cannot move a focused action.
                     promoted_parent_action_ = priority != PTC_OVERLAY_PARENT_ADD_MINUTES && !parent_action_reason(priority)
                         ? static_cast<int>(priority) : -1;
-                    parent_action_ = ptc_overlay_parent_action_at(0, promoted_parent_action_);
+                    parent_tab_ = 0;
+                    parent_unavailable_expanded_ = false;
+                    parent_action_ = promoted_parent_action_ >= 0 ? promoted_parent_action_ : parent_first_action_for_tab(0);
                     reset_page_scroll();
                     parent_view_ = ParentView::Actions;
                     pin_message_[0] = '\0';
@@ -999,23 +1001,64 @@ public:
         }
         if (parent_view_ == ParentView::Actions) {
             bool action_changed = false;
+            auto switch_parent_tab = [&](int next_tab) {
+                parent_tab_ = (next_tab % 3 + 3) % 3;
+                page_scroll_ = page_scroll_target_ = 0;
+                parent_action_ = parent_first_action_for_tab(parent_tab_);
+                ptc_overlay_hold_reset(&confirm_hold_);
+                action_changed = true;
+            };
             if (touch_pressed && page_hit(page_layout_.refresh, tx, ty))
                 keysDown |= HidNpadButton_Y;
             if ((keysDown & HidNpadButton_Y) && !bridge_->waiting)
                 (void)begin_status_refresh();
+            if (keysDown & HidNpadButton_L) {
+                switch_parent_tab(parent_tab_ - 1);
+            } else if (keysDown & HidNpadButton_R) {
+                switch_parent_tab(parent_tab_ + 1);
+            }
+            if ((keysDown & HidNpadButton_X) && parent_tab_ == 1 && page_layout_.parent_drawer.w > 0) {
+                parent_unavailable_expanded_ = !parent_unavailable_expanded_;
+                if (!parent_unavailable_expanded_ && parent_action_ >= 0 &&
+                    parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) != nullptr) {
+                    parent_action_ = parent_first_action_for_tab(1);
+                }
+                ptc_overlay_hold_reset(&confirm_hold_);
+                action_changed = true;
+            }
             const unsigned int direction = ptc_overlay_direction_step(&action_repeat_,
                 to_overlay_buttons(keysDown), to_overlay_buttons(keysHeld), elapsed_ms);
             if (touch_pressed) {
-                for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
-                    if (flow_hit(page_layout_.actions[index], tx, ty)) {
-                        const bool was_selected = parent_action_ == index;
-                        parent_action_ = index;
-                        focus_parent_action();
-                        ptc_overlay_hold_reset(&confirm_hold_);
-                        action_changed = true;
-                        if (was_selected && !parent_action_requires_hold(
-                                static_cast<PtcOverlayParentAction>(index))) keysDown |= HidNpadButton_A;
+                bool handled_touch = false;
+                for (int t = 0; t < 3; ++t) {
+                    if (flow_hit(page_layout_.parent_tabs[t], tx, ty)) {
+                        switch_parent_tab(t);
+                        handled_touch = true;
                         break;
+                    }
+                }
+                if (!handled_touch && flow_hit(page_layout_.parent_drawer, tx, ty)) {
+                    parent_unavailable_expanded_ = !parent_unavailable_expanded_;
+                    if (!parent_unavailable_expanded_ && parent_action_ >= 0 &&
+                        parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) != nullptr) {
+                        parent_action_ = parent_first_action_for_tab(1);
+                    }
+                    ptc_overlay_hold_reset(&confirm_hold_);
+                    action_changed = true;
+                    handled_touch = true;
+                }
+                if (!handled_touch) {
+                    for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
+                        if (flow_hit(page_layout_.actions[index], tx, ty)) {
+                            const bool was_selected = parent_action_ == index;
+                            parent_action_ = index;
+                            focus_parent_action();
+                            ptc_overlay_hold_reset(&confirm_hold_);
+                            action_changed = true;
+                            if (was_selected && !parent_action_requires_hold(
+                                    static_cast<PtcOverlayParentAction>(index))) keysDown |= HidNpadButton_A;
+                            break;
+                        }
                     }
                 }
             }
@@ -1023,22 +1066,31 @@ public:
                 daily_add_minutes_ = daily_add_minutes_ <= 5 ? 5 : daily_add_minutes_ - 5;
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_RIGHT))
                 daily_add_minutes_ = daily_add_minutes_ >= 120 ? 120 : daily_add_minutes_ + 5;
+            int vis_actions[PTC_OVERLAY_PARENT_ACTION_COUNT];
+            const int vis_count = parent_visible_actions(vis_actions);
             if (direction & PTC_OVERLAY_BUTTON_UP) {
-                if (parent_action_ == ptc_overlay_parent_action_at(0, promoted_parent_action_)) {
+                if (vis_count == 0 || parent_action_ == vis_actions[0]) {
                     parent_action_ = -1;
                 } else if (parent_action_ >= 0) {
-                    parent_action_ = ptc_overlay_parent_action_move_with_priority(parent_action_, -1, promoted_parent_action_);
+                    int pos = -1;
+                    for (int i = 0; i < vis_count; ++i)
+                        if (vis_actions[i] == parent_action_) { pos = i; break; }
+                    parent_action_ = pos > 0 ? vis_actions[pos - 1] : vis_actions[vis_count - 1];
                     focus_parent_action();
                 }
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
             }
             if (direction & PTC_OVERLAY_BUTTON_DOWN) {
-                if (parent_action_ == -1) {
-                    parent_action_ = ptc_overlay_parent_action_at(0, promoted_parent_action_);
-                    focus_parent_action();
-                } else {
-                    parent_action_ = ptc_overlay_parent_action_move_with_priority(parent_action_, 1, promoted_parent_action_);
+                if (vis_count > 0) {
+                    if (parent_action_ == -1) {
+                        parent_action_ = vis_actions[0];
+                    } else {
+                        int pos = -1;
+                        for (int i = 0; i < vis_count; ++i)
+                            if (vis_actions[i] == parent_action_) { pos = i; break; }
+                        parent_action_ = (pos >= 0 && pos + 1 < vis_count) ? vis_actions[pos + 1] : vis_actions[0];
+                    }
                     focus_parent_action();
                 }
                 ptc_overlay_hold_reset(&confirm_hold_);

@@ -1,6 +1,6 @@
 PTC_UI_TEXT_VALUE(PTC_UI_T_THE_ADDITIONAL_TIME_CODE_MUST_BE_8, "The additional time code must be 8 digits")
 PTC_UI_TEXT_VALUE(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE, "No time limit today, grant codes are not available")
-PTC_UI_TEXT_VALUE(PTC_UI_T_A_ENTER_CODE, "A  🎁 Enter Code")
+PTC_UI_TEXT_VALUE(PTC_UI_T_A_ENTER_CODE, "A  Enter Code")
 PTC_UI_TEXT_VALUE(PTC_UI_T_ENTER_CODE, "🎁 Enter Code")
 PTC_UI_TEXT_VALUE(PTC_UI_T_ENTER_8_DIGIT_CODE_ENTERED_U_8, "Enter 8-digit code   |   Entered %u/8 digits")
 PTC_UI_TEXT_VALUE(PTC_UI_T_PLEASE_ENTER_COMPLETE_8_DIGIT_CODE, "Please enter complete 8-digit code")

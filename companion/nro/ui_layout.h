@@ -146,7 +146,9 @@ typedef enum {
     PTC_UI_HIT_TODAY_QUOTA_PRESET,
     PTC_UI_HIT_SUPPORT_GUIDE_STEP,
     PTC_UI_HIT_ACTIVITY_FILTER,
-    PTC_UI_HIT_SHORTCUT_PREFIX
+    PTC_UI_HIT_SHORTCUT_PREFIX,
+    PTC_UI_HIT_SOFTWARE_INFO_QR_TAB,
+    PTC_UI_HIT_SETUP_PCTL_STEP
 } PtcUiHitKind;
 
 typedef struct {
@@ -206,9 +208,13 @@ PtcUiRect ptc_ui_settings_card_rect(int index);
 PtcUiRect ptc_ui_notification_option_rect(int index);
 PtcUiRect ptc_ui_notification_preview_group_rect(void);
 PtcUiRect ptc_ui_notification_preview_rect(void);
+PtcUiRect ptc_ui_notification_preview_card_rect(int index);
+PtcUiRect ptc_ui_notification_preview_screen_rect(int index);
 PtcUiRect ptc_ui_notification_preview_tab_rect(int index);
-PtcUiRect ptc_ui_notification_info_rect(int index); /* 0 example guide, 1 environment, 2 result */
+PtcUiRect ptc_ui_notification_info_rect(int index); /* 0 detail desc, 1 brief desc, 2 receipt */
 PtcUiRect ptc_ui_notification_verification_rect(void);
+PtcUiRect ptc_ui_software_info_qr_tab_rect(int index);
+PtcUiRect ptc_ui_software_info_update_banner_rect(void);
 PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_qr_panel_rect(int index);
 PtcUiRect ptc_ui_qr_code_rect(void);
@@ -370,8 +376,10 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now);
 PtcUiRect ptc_ui_config_backup_field_rect(int index);
 PtcUiRect ptc_ui_update_action_rect(int index);
 PtcUiRect ptc_ui_update_backup_rect(int index);
+PtcUiRect ptc_ui_update_backup_action_rect(int index);
 PtcUiRect ptc_ui_update_notes_rect(void);
 PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model);
+PtcUiRect ptc_ui_setup_pctl_step_rect(int index);
 PtcUiRect ptc_ui_dock_field_rect(int index);
 PtcUiRect ptc_ui_today_status_rect(int index);
 PtcUiRect ptc_ui_config_backup_group_rect(int group);

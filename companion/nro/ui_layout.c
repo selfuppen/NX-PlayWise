@@ -20,7 +20,14 @@ PtcUiRect ptc_ui_update_action_rect(int index)
 PtcUiRect ptc_ui_update_backup_rect(int index)
 {
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54, 200 + index * 96, 1172, 84};
+    return (PtcUiRect){54, 206 + index * 106, 586, 94};
+}
+
+PtcUiRect ptc_ui_update_backup_action_rect(int index)
+{
+    if (index == 0) return (PtcUiRect){676, 574, 314, 46};
+    if (index == 1) return (PtcUiRect){1002, 574, 204, 46};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){990, 194, 200, 30}; }
@@ -62,7 +69,7 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {920, 120, 312, 121};
+    PtcUiRect rect = {48, 596, 236, 48};
     return rect;
 }
 
@@ -74,14 +81,14 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {920, 255, 312, 121};
+    PtcUiRect rect = {296, 596, 256, 48};
     return rect;
 }
 
 PtcUiRect ptc_ui_child_status_rect(void)
 {
-    /* 状态卡是右列最后一项，底边与左侧七日预测、孩子首页内容底边（644）齐平。 */
-    PtcUiRect rect = {920, 525, 312, 119};
+    /* Parent entry sits at the far right of the bottom action row, bottom-aligned at y=644. */
+    PtcUiRect rect = {1004, 596, 228, 48};
     return rect;
 }
 
@@ -307,54 +314,72 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
 
 PtcUiRect ptc_ui_settings_card_rect(int index)
 {
-    int column = index % 2;
-    int row = index / 2;
-    PtcUiRect rect = {54 + column * 385, 176 + row * 136, 365, 120};
-    return rect;
+    /* Scheme A: 2 grouped rows x 3 cards on the left column (indices 0,2,4 = Security; 1,3,5 = Preferences). */
+    int row = index % 2;
+    int col = index / 2;
+    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + col * 260, row == 0 ? 204 : 400, 248, 152};
 }
 
 PtcUiRect ptc_ui_notification_option_rect(int index)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
     if (index < 0 || index >= PTC_UI_NOTIFICATION_OPTION_COUNT) return (PtcUiRect){0, 0, 0, 0};
     if (index == PTC_UI_NOTIFICATION_TOGGLE)
-        return (PtcUiRect){d.x + 34, d.y + 126, d.w - 68, 56};
-    return (PtcUiRect){d.x + (index == PTC_UI_NOTIFICATION_PROBE ? 312 : 742), d.y + 620,
-        index == PTC_UI_NOTIFICATION_PROBE ? 382 : 388, 44};
+        return (PtcUiRect){54, 168, 1172, 74};
+    return (PtcUiRect){index == PTC_UI_NOTIFICATION_PROBE ? 70 : 332, 586, 224, 44};
+}
+
+PtcUiRect ptc_ui_notification_preview_card_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + index * 594, 252, 578, 310};
+}
+
+PtcUiRect ptc_ui_notification_preview_screen_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    /* Exact 16:9 (384x216) centered inside each 578px comparison card. */
+    return (PtcUiRect){151 + index * 594, 292, 384, 216};
 }
 
 PtcUiRect ptc_ui_notification_preview_group_rect(void)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 34, d.y + 198, 624, 385};
+    return (PtcUiRect){54, 252, 1172, 310};
 }
 
 PtcUiRect ptc_ui_notification_preview_rect(void)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 50, d.y + 242, 592, 333};
+    return ptc_ui_notification_preview_screen_rect(0);
 }
 
 PtcUiRect ptc_ui_notification_preview_tab_rect(int index)
 {
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 210 + index * 216, d.y + 206, 216, 30};
+    return (PtcUiRect){54 + index * 594, 252, 578, 38};
 }
 
 PtcUiRect ptc_ui_notification_info_rect(int index)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    const int ys[] = {198, 372, 510};
-    const int heights[] = {162, 126, 73};
-    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){d.x + 686, d.y + ys[index], 460, heights[index]};
+    if (index == 0) return (PtcUiRect){70, 512, 546, 44};
+    if (index == 1) return (PtcUiRect){664, 512, 546, 44};
+    if (index == 2) return (PtcUiRect){574, 582, 636, 52};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_notification_verification_rect(void)
 {
-    PtcUiRect d = ptc_ui_dialog_for(PTC_UI_OVERLAY_NOTIFICATIONS);
-    return (PtcUiRect){d.x + 296, d.y + 591, 850, 78};
+    return (PtcUiRect){54, 572, 1172, 72};
+}
+
+PtcUiRect ptc_ui_software_info_qr_tab_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){826 + index * 188, 224, 188, 36};
+}
+
+PtcUiRect ptc_ui_software_info_update_banner_rect(void)
+{
+    return (PtcUiRect){54, 412, 730, 108};
 }
 
 /* Unified 3-in-1 Grant & Pairing full-page shell (Scheme A2):
@@ -493,44 +518,42 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 412, 452} : (PtcUiRect){48, 120, 852, 524};
+    return parent ? (PtcUiRect){48, 176, 412, 452} : (PtcUiRect){48, 116, 1184, 468};
 }
 
-/* The 320px status/balance row and 190px forecast share the action bottom at 644. */
+/* Batch 7 Plan A: Full-width today projection hero (276px) + 12px gap + 7-day calendar (180px)
+ * + 12px gap + subtle single-row action strip (48px), sharing the bottom edge at y=644. */
 PtcUiRect ptc_ui_child_hero_rect(void)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(false);
-    return (PtcUiRect){box.x, box.y, box.w, 320};
+    return (PtcUiRect){box.x, box.y, box.w, 276};
 }
 
 PtcUiRect ptc_ui_child_forecast_rect(void)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(false);
-    return (PtcUiRect){box.x, box.y + 334, box.w, 190};
+    return (PtcUiRect){box.x, box.y + 288, box.w, 180};
 }
 
 PtcUiRect ptc_ui_child_forecast_day_rect(int offset, int count)
 {
     PtcUiRect panel = ptc_ui_child_forecast_rect();
-    int width = 108, gap = 10;
-    return (PtcUiRect){panel.x + 16 + offset * (width + gap), panel.y + 40,
-        count * (width + gap) - gap, panel.h - 54};
+    int width = 156, gap = 10;
+    return (PtcUiRect){panel.x + 16 + offset * (width + gap), panel.y + 38,
+        count * (width + gap) - gap, panel.h - 48};
 }
 
 PtcUiRect ptc_ui_child_balance_rect(void)
 {
     PtcUiRect hero = ptc_ui_child_hero_rect();
-    return (PtcUiRect){hero.x + 528, hero.y, 324, hero.h};
+    return (PtcUiRect){hero.x, hero.y + 174, 316, hero.h - 174};
 }
 
 PtcUiRect ptc_ui_child_guard_rect(int index)
 {
     if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
-    PtcUiRect balance = ptc_ui_child_balance_rect();
-    int start = 128, gap = 7, height = balance.h - start - 16;
-    int top = index * (height - 2 * gap) / 3 + index * gap;
-    int bottom = (index + 1) * (height - 2 * gap) / 3 + index * gap;
-    return (PtcUiRect){balance.x + 16, balance.y + start + top, balance.w - 32, bottom - top};
+    PtcUiRect hero = ptc_ui_child_hero_rect();
+    return (PtcUiRect){hero.x + 338 + index * 188, hero.y + hero.h - 36, 180, 24};
 }
 
 PtcUiRect ptc_ui_child_action_rect(int index)
@@ -741,7 +764,7 @@ PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? ptc_ui_parent_footer_details_rect() : (PtcUiRect){920, 390, 312, 121};
+    return parent ? ptc_ui_parent_footer_details_rect() : (PtcUiRect){564, 596, 212, 48};
 }
 
 PtcUiRect ptc_ui_home_rules_rect(void)
@@ -802,7 +825,7 @@ PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model)
 {
     if (model && model->overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){124, 354, 1032, 26};
-    return (PtcUiRect){56, 358, 1168, 26};
+    return (PtcUiRect){1054, 88, 170, 38};
 }
 
 PtcUiRect ptc_ui_rules_dialog_rect(void)
@@ -972,8 +995,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 610;
         break;
     case PTC_UI_OVERLAY_SETUP_PCTL_HELP:
-        *width = 1060;
-        *height = 570;
+        *width = 1080;
+        *height = 620;
         break;
     case PTC_UI_OVERLAY_NOTICE_DETAILS:
         *width = 780;
@@ -1081,7 +1104,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         break;
     case PTC_UI_OVERLAY_SUPPORT_EVENT:
         *width = 960;
-        *height = 560;
+        *height = 580;
         break;
     case PTC_UI_OVERLAY_WEEKLY_BULK:
         *width = 1040;
@@ -1383,22 +1406,21 @@ static bool settings_page_overlay(PtcUiOverlay overlay)
     return overlay == PTC_UI_OVERLAY_THEME || overlay == PTC_UI_OVERLAY_LANGUAGE ||
            overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER || overlay == PTC_UI_OVERLAY_ALBUM_MANAGER ||
            overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY || overlay == PTC_UI_OVERLAY_SOFTWARE_INFO ||
-           overlay == PTC_UI_OVERLAY_GRANT_MANAGER;
+           overlay == PTC_UI_OVERLAY_GRANT_MANAGER || overlay == PTC_UI_OVERLAY_NOTIFICATIONS;
 }
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (settings_page_overlay(overlay)) {
-        /* The album, activity and grant manager pages have no single "confirm" action; their
-           A key acts on the focused row instead. */
+        /* The album, activity, notifications and grant manager pages have no single
+           "confirm" action; their A key acts on the focused control instead. */
         if (overlay == PTC_UI_OVERLAY_ALBUM_MANAGER || overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY ||
-            overlay == PTC_UI_OVERLAY_GRANT_MANAGER)
+            overlay == PTC_UI_OVERLAY_GRANT_MANAGER || overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
             return (PtcUiRect){0, 0, 0, 0};
         return ptc_ui_settings_page_primary_rect();
     }
-    if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS ||
-        overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
         overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE ||
         overlay == PTC_UI_OVERLAY_EYE_CARE_RULES)
         return (PtcUiRect){0, 0, 0, 0};
@@ -1427,14 +1449,14 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return ptc_ui_settings_page_back_rect();
     if (overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE)
         return ptc_ui_settings_page_primary_rect();
-    if (overlay == PTC_UI_OVERLAY_NOTIFICATIONS)
-        return (PtcUiRect){dialog.x + 34, dialog.y + 620, 246, 44};
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
         return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 220, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
+    if (overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP)
+        return (PtcUiRect){dialog.x + dialog.w - 32 - 230, dialog_button_top(dialog), 230, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT ||
-        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_DOCK_RULES ||
+        overlay == PTC_UI_OVERLAY_DOCK_RULES ||
         overlay == PTC_UI_OVERLAY_EYE_CARE_RULES)
         return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
@@ -1445,6 +1467,13 @@ PtcUiRect ptc_ui_auth_error_guide_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_AUTH_ERROR);
     return (PtcUiRect){dialog.x + (dialog.w - 230) / 2, dialog_button_top(dialog), 230, PTC_UI_DIALOG_BTN_H};
+}
+
+PtcUiRect ptc_ui_setup_pctl_step_rect(int index)
+{
+    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_SETUP_PCTL_HELP);
+    return (PtcUiRect){dialog.x + 32, dialog.y + 104 + index * 70, 508, 62};
 }
 
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
@@ -1686,23 +1715,22 @@ PtcUiRect ptc_ui_album_refresh_rect(void)
 PtcUiRect ptc_ui_theme_option_rect(int index)
 {
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + index * 396, 178, 380, 226};
+    return (PtcUiRect){54 + index * 206, 202, 196, 96};
 }
 
 PtcUiRect ptc_ui_theme_style_rect(int index)
 {
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + index * 297, 452, 281, 174};
+    int col = index % 2;
+    int row = index / 2;
+    return (PtcUiRect){54 + col * 310, 344 + row * 152, 298, 140};
 }
 
 PtcUiRect ptc_ui_language_option_rect(int index)
 {
-    int col;
-    int row;
+    /* Scheme B: 4 full-width vertical language cards side-by-side. */
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    col = index % 2;
-    row = index / 2;
-    return (PtcUiRect){54 + col * 598, 186 + row * 228, 574, 210};
+    return (PtcUiRect){54 + index * 297, 176, 281, 456};
 }
 
 PtcUiRect ptc_ui_dock_preset_rect(int index)

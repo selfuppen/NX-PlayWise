@@ -39,6 +39,8 @@
 
     void focus_parent_action()
     {
+        if (parent_action_ < 0 || parent_action_ >= PTC_OVERLAY_PARENT_ACTION_COUNT) return;
+        if (page_layout_.actions[parent_action_].h <= 0) return;
         page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_parent_action(
             &page_layout_, parent_action_, static_cast<int>(page_scroll_target_)));
     }

@@ -15,51 +15,36 @@
   <header class="site-header">
     <div class="brand-cluster">
       <span class="brand-mark" aria-hidden="true">+∴</span>
-      <div>
+      <div class="brand-text">
         <p class="eyebrow" data-i18n="brand_eyebrow">PlayWise</p>
         <strong data-i18n="brand_name">任我玩</strong>
       </div>
     </div>
     <div class="header-actions">
-      <label class="appearance">
-        <span class="sr-only" data-i18n="appearance">配色</span>
-        <select id="appearance">
-          <option value="slate" data-i18n="appearance_slate">石墨</option>
-          <option value="paper" data-i18n="appearance_paper">纸墨</option>
-          <option value="teal" data-i18n="appearance_teal">雾青</option>
-          <option value="dusk" data-i18n="appearance_dusk">暮霭</option>
-        </select>
-      </label>
-      <label class="appearance">
-        <span class="sr-only" data-i18n="color_mode">亮暗模式</span>
-        <select id="colorMode">
-          <option value="system" data-i18n="color_system">跟随系统</option>
-          <option value="light" data-i18n="color_light">浅色</option>
-          <option value="dark" data-i18n="color_dark">深色</option>
-        </select>
-      </label>
-      <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language">
-        <svg class="globe-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="2" y1="12" x2="22" y2="12"></line>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-        </svg>
-        <span data-i18n="lang_toggle_btn">English</span>
+      <button id="headerDeviceBtn" class="host-pill" type="button" aria-expanded="false" aria-controls="pairingDrawer">
+        <span class="host-dot" aria-hidden="true"></span>
+        <span id="headerDeviceName" class="host-pill-name">kid-switch</span>
+        <span class="host-caret" aria-hidden="true">▾</span>
       </button>
       <span id="offlineBadge" class="badge" hidden data-i18n="badge_offline">可离线使用</span>
+      <button id="openDrawerBtn" class="icon-btn" type="button" aria-expanded="false" aria-controls="pairingDrawer" data-i18n-aria="btn_open_settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
     </div>
   </header>
 
   <main>
-    <section class="tool" aria-labelledby="pageTitle">
+    <section id="toolRoot" class="tool" aria-labelledby="pageTitle">
       <div class="intro">
         <div>
           <h1 id="pageTitle" data-i18n="page_title">生成今日加时码</h1>
           <p data-i18n="intro_p">加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。</p>
         </div>
         <div class="intro-actions">
-          <a id="downloadStandalone" class="secondary compact" href="./playwise-offline.html" download data-i18n="download_standalone">下载单文件离线版</a>
-          <button id="install" class="secondary compact" type="button" hidden data-i18n="install_button">安装到设备</button>
+          <button id="introPairBtn" class="secondary compact" type="button" data-i18n="btn_manage_pairing">管理配对</button>
         </div>
       </div>
 
@@ -69,66 +54,39 @@
       <div id="demoWarning" class="notice danger" role="alert" hidden>
         <strong data-i18n="demo_warning_title">当前使用公开演示密钥。</strong>
         <span data-i18n="demo_warning_desc">任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。</span>
+        <button id="demoPairCta" class="secondary compact demo-pair-cta" type="button" data-i18n="btn_pair_now">立即配对我的 Switch</button>
       </div>
       <div id="importError" class="notice danger" role="alert" hidden></div>
+      <div id="error" class="notice danger" role="alert" hidden></div>
+
+      <section id="result" class="result" aria-label="生成结果" data-i18n-aria="result_label" aria-live="polite" tabindex="-1" hidden>
+        <div class="result-head">
+          <p id="resultHeading" class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
+          <span class="result-badge" data-i18n="result_badge_single">单次有效 · 4-4 分段</span>
+        </div>
+        <div class="ticket-code-box">
+          <p id="code" class="code"><span></span><span></span></p>
+          <p id="meta" class="meta"></p>
+        </div>
+        <div class="result-actions">
+          <button id="copy" class="primary no-margin" type="button" data-i18n="btn_copy">复制加时码</button>
+          <button id="regenerate" class="secondary" type="button" data-i18n="btn_regenerate">换一个新码</button>
+        </div>
+        <button id="copyMessage" class="secondary accent-outline share-action" type="button" data-i18n="btn_copy_message">复制分享文字</button>
+        <p class="collision-note" data-i18n="collision_note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
+      </section>
 
       <form id="generator">
-        <div id="pairedBar" class="paired-device-bar" hidden>
-          <div class="paired-device-meta">
-            <span class="paired-target-eyebrow" data-i18n="paired_target_label">当前发码目标主机</span>
-            <div class="paired-device-row">
-              <strong id="pairedDeviceName" class="paired-device-name">kid-switch</strong>
-              <span id="pairedStatusBadge" class="status-pill" data-i18n="paired_badge">已配对</span>
-            </div>
-          </div>
-          <div class="paired-device-controls">
-            <label id="savedDevices" class="device-picker-wrap" hidden>
-              <span class="sr-only" data-i18n="saved_devices">已保存的 Switch</span>
-              <select id="devicePicker"></select>
-            </label>
-            <button id="togglePairingBtn" class="secondary compact" type="button" data-i18n="btn_manage_pairing">管理配对</button>
-          </div>
-        </div>
-
-        <details id="pairingSettings" class="settings pairing-settings" open>
-          <summary data-i18n="pairing_title">配对 Switch</summary>
-          <section class="pairing-tools">
-            <div>
-              <p data-i18n-html="pairing_p">可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
-            </div>
-            <label class="file-button secondary compact">
-              <span data-i18n="import_file_button">导入配置文件</span>
-              <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
-            </label>
-          </section>
-
-          <div class="fields">
-            <label>
-              <span data-i18n="label_device">Switch 设备 ID</span>
-              <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_\-]{1,32}" autocomplete="off" required>
-            </label>
-
-            <label>
-              <span data-i18n="label_secret">加时密钥</span>
-              <span class="secret-field">
-                <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
-                <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
-              </span>
-              <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
-            </label>
-          </div>
-        </details>
-
         <div class="workbench-card">
           <div class="workbench-block">
             <div class="workbench-block-head">
               <span class="workbench-step-label" data-i18n="step_duration">① 选择加时时长</span>
+              <label class="inline-tier-select">
+                <span class="inline-tier-label" data-i18n="custom_duration_short">更多时长</span>
+                <select id="tierMinutes" name="tier_minutes"></select>
+              </label>
             </div>
             <div id="tierShortcuts" class="tier-chips-grid" role="group" data-i18n-aria="label_tier"></div>
-            <label class="custom-tier-row">
-              <span data-i18n="custom_duration_label">更多自定义时长</span>
-              <select id="tierMinutes" name="tier_minutes"></select>
-            </label>
           </div>
 
           <div class="workbench-block workbench-divider">
@@ -145,36 +103,113 @@
 
           <button id="generate" class="primary" type="submit" data-i18n="btn_generate">生成 8 位数字加时码</button>
         </div>
+
+        <div id="pairingDrawer" class="pwa-drawer" role="dialog" aria-modal="true" aria-labelledby="pairingDrawerTitle" hidden>
+          <div id="pairingDrawerBackdrop" class="drawer-backdrop"></div>
+          <div class="drawer-sheet">
+            <div class="drawer-handle" aria-hidden="true"></div>
+            <div class="drawer-head">
+              <h2 id="pairingDrawerTitle" data-i18n="drawer_title">设备配对与离线设置</h2>
+              <button id="closeDrawerBtn" class="secondary compact" type="button" data-i18n="btn_done">完成</button>
+            </div>
+            <div class="drawer-body">
+              <div id="pairedBar" class="paired-device-bar" hidden>
+                <div class="paired-device-meta">
+                  <span class="paired-target-eyebrow" data-i18n="paired_target_label">当前发码目标主机</span>
+                  <div class="paired-device-row">
+                    <strong id="pairedDeviceName" class="paired-device-name">kid-switch</strong>
+                    <span id="pairedStatusBadge" class="status-pill" data-i18n="paired_badge">已配对</span>
+                  </div>
+                </div>
+                <div class="paired-device-controls">
+                  <label id="savedDevices" class="device-picker-wrap" hidden>
+                    <span class="sr-only" data-i18n="saved_devices">已保存的 Switch</span>
+                    <select id="devicePicker"></select>
+                  </label>
+                </div>
+              </div>
+
+              <details id="pairingSettings" class="settings pairing-settings" open>
+                <summary data-i18n="pairing_title">配对 Switch</summary>
+                <section class="pairing-tools">
+                  <div>
+                    <p data-i18n-html="pairing_p">可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
+                  </div>
+                  <label class="file-button secondary compact">
+                    <span data-i18n="import_file_button">导入配置文件</span>
+                    <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
+                  </label>
+                </section>
+
+                <div class="fields">
+                  <label>
+                    <span data-i18n="label_device">Switch 设备 ID</span>
+                    <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_\-]{1,32}" autocomplete="off" required>
+                  </label>
+
+                  <label>
+                    <span data-i18n="label_secret">加时密钥</span>
+                    <span class="secret-field">
+                      <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
+                      <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
+                    </span>
+                    <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
+                  </label>
+                </div>
+              </details>
+
+              <div class="drawer-section">
+                <h3 class="drawer-section-title" data-i18n="drawer_prefs_title">外观与语言</h3>
+                <div class="drawer-prefs-grid">
+                  <label class="appearance">
+                    <span data-i18n="appearance">配色</span>
+                    <select id="appearance">
+                      <option value="slate" data-i18n="appearance_slate">石墨</option>
+                      <option value="paper" data-i18n="appearance_paper">纸墨</option>
+                      <option value="teal" data-i18n="appearance_teal">雾青</option>
+                      <option value="dusk" data-i18n="appearance_dusk">暮霭</option>
+                    </select>
+                  </label>
+                  <label class="appearance">
+                    <span data-i18n="color_mode">亮暗模式</span>
+                    <select id="colorMode">
+                      <option value="system" data-i18n="color_system">跟随系统</option>
+                      <option value="light" data-i18n="color_light">浅色</option>
+                      <option value="dark" data-i18n="color_dark">深色</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="drawer-action-row">
+                  <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language">
+                    <svg class="globe-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="2" y1="12" x2="22" y2="12"></line>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                    <span data-i18n="lang_toggle_btn">English</span>
+                  </button>
+          <a id="downloadStandalone" class="secondary compact" href="./playwise-offline.html" download data-i18n="download_standalone">下载单文件离线版</a>
+                  <button id="install" class="secondary compact" type="button" hidden data-i18n="install_button">安装到设备</button>
+                </div>
+              </div>
+
+              <details class="settings drawer-data-box">
+                <summary data-i18n="settings_summary">本机数据与安全说明</summary>
+                <p data-i18n="settings_p">此页面会保存设备 ID、密钥、常用时长和本浏览器的签发记录。清除本机配置会删除所有已保存的 Switch 与签发记录。</p>
+                <button id="clearConfig" class="danger-button" type="button" data-i18n="btn_clear_config">清除本机配置</button>
+              </details>
+            </div>
+          </div>
+        </div>
       </form>
 
-      <div id="error" class="notice danger" role="alert" hidden></div>
-
-      <section id="result" class="result" aria-label="生成结果" data-i18n-aria="result_label" aria-live="polite" tabindex="-1" hidden>
-        <div class="result-head">
-          <p class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
-          <span class="result-badge" data-i18n="result_badge_single">单次有效 · 4-4 分段</span>
-        </div>
-        <div class="ticket-code-box">
-          <p id="code" class="code"><span></span><span></span></p>
-        </div>
-        <p id="meta" class="meta"></p>
-        <div class="result-actions">
-          <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
-          <button id="copyMessage" class="secondary accent-outline" type="button" data-i18n="btn_copy_message">复制分享文字</button>
-        </div>
-        <p class="collision-note" data-i18n="collision_note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
-      </section>
-
-      <details id="issuedHistory" class="settings issued-history" hidden open>
-        <summary id="issuedSummary" data-i18n="issued_summary">本浏览器的签发记录</summary>
+      <details id="issuedHistory" class="settings issued-history" hidden>
+        <summary class="history-summary-row">
+          <span id="issuedSummary" data-i18n="issued_summary">本浏览器的签发记录</span>
+          <span id="issuedLatest" class="history-latest-pill"></span>
+        </summary>
         <p data-i18n="issued_help">这里记录本浏览器生成的加时码，是否已兑换请在 Switch 上查看。</p>
         <ul id="issuedList" class="history-list"></ul>
-      </details>
-
-      <details class="settings">
-        <summary data-i18n="settings_summary">本机数据与安全说明</summary>
-        <p data-i18n="settings_p">此页面会保存设备 ID、密钥、常用时长和本浏览器的签发记录。清除本机配置会删除所有已保存的 Switch 与签发记录。</p>
-        <button id="clearConfig" class="danger-button" type="button" data-i18n="btn_clear_config">清除本机配置</button>
       </details>
 
       <details class="settings troubleshooting">
@@ -192,6 +227,8 @@
         <h3 data-i18n="faq_6_title">进一步诊断</h3>
         <p data-i18n-html="faq_6_p">诊断包不含家长密码、加时密钥和 8 位码，可发给可信人员排查。如需深入查看日志，可检查 <code>sdmc:/switch/playwise/logs/</code> 和 <code>flags/disable.flag</code>；请勿对外分享 <code>credentials.json</code>、<code>auth.json</code> 或防重复记录。</p>
       </details>
+
+      <p class="local-trust-strip" data-i18n="local_trust_strip">纯浏览器本地计算 · 不上传密钥 · 点右上角可管理配对、外观与离线版</p>
     </section>
   </main>
 

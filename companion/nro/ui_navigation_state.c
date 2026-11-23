@@ -246,6 +246,24 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         model->selected_index = best;
         return;
     }
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
+        /* Scheme A: 2 grouped rows x 3 cards (row 0 = {0,2,4}, row 1 = {1,3,5}). */
+        int r = index % 2;
+        int c = index / 2;
+        if (horizontal < 0 && c > 0) --c;
+        else if (horizontal > 0 && c < 2) ++c;
+        else if (vertical < 0 && r > 0) --r;
+        else if (vertical > 0 && r == 0) ++r;
+        else if (vertical > 0 && r == 1) {
+            model->parent_content_selection = index;
+            model->parent_footer_focused = true;
+            model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
+                PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
+            return;
+        }
+        model->selected_index = c * 2 + r;
+        return;
+    }
     column = index % 2;
     if (horizontal < 0 && column > 0) {
         --index;

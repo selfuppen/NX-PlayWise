@@ -444,6 +444,7 @@ void handle_parent_action(UiState *ui)
         sync_hot_reload_model(ui);
 #endif
         ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+        ui->model.software_info_qr_tab = 0;
         snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
         ui->model.overlay_body[0] = '\0';
         snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_VERSION);

@@ -783,6 +783,7 @@ typedef struct {
     bool hot_reload_capture_restart;
     char repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
+    int software_info_qr_tab;
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
     PtcUiDiagnosticStatus diagnostic_status;
     char diagnostic_path[192];

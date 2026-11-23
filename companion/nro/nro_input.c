@@ -37,9 +37,21 @@ void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
-        ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            ui->model.overlay_title[0] = '\0';
+            ui->model.overlay_body[0] = '\0';
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
+        if (down & (HidNpadButton_Up | HidNpadButton_Left)) {
+            if (ui->model.overlay_selection > 0) --ui->model.overlay_selection;
+        } else if (down & (HidNpadButton_Down | HidNpadButton_Right)) {
+            if (ui->model.overlay_selection < 5) ++ui->model.overlay_selection;
+        } else if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
             ptc_audio_play(PTC_SE_CANCEL);
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             ui->model.overlay_title[0] = '\0';

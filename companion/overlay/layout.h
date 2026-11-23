@@ -88,6 +88,8 @@ typedef struct {
     PtcOverlayRect lang_options[4];
     PtcOverlayRect backspace;
     PtcOverlayRect actions[PTC_OVERLAY_PARENT_ACTION_COUNT];
+    PtcOverlayRect parent_tabs[3];
+    PtcOverlayRect parent_drawer;
     PtcOverlayRect pin_keys[16];
     int scroll_max;
 } PtcOverlayPageLayout;

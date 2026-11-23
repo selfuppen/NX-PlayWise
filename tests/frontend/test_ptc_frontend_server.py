@@ -66,6 +66,8 @@ def test_static_assets_and_copy() -> None:
     assert_true("history.replaceState" in app, "fragment is cleared after parsing")
     assert_true("importFile" in index + app, "configuration file import")
     assert_true("langToggle" in index and "data-i18n" in index, "i18n language toggle and attributes")
+    assert_true("headerDeviceBtn" in index and "pairingDrawer" in index, "compact host pill and pairing bottom drawer")
+    assert_true(index.index('id="result"') < index.index('id="generator"'), "result ticket sits above the workbench")
     assert_true("Generate Daily Grant Code" in i18n, "English translation presence")
     assert_true("生成 8 位数字加时码" in index, "v2 generation copy")
     assert_true("常见排错指南" in index and "紧急停用已开启" in index, "PWA troubleshooting guide")
