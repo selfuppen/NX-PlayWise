@@ -153,7 +153,7 @@ static void handle_redemption_history_overlay_input(UiState *ui, u64 down)
     return;
 }
 
-/* 主题页两组单选：上排主题模式（跟随系统/浅色/深色），下排设计风格。
+/* 主题页两组单选：上方三列明暗模式，下方 2x2 设计风格，右侧联动实景对比预览窗。
  * 移动只改草稿并即时预览；A 一次提交并保存两组选择，B 放弃草稿。 */
 static void handle_theme_overlay_input(UiState *ui, u64 down)
 {
@@ -165,24 +165,28 @@ static void handle_theme_overlay_input(UiState *ui, u64 down)
             theme_draft_select_mode(ui, (PtcUiThemePreference)(ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1));
         } else {
             int style_idx = ui->model.overlay_selection - 3;
-            theme_draft_select_style(ui, (PtcUiThemeStyle)(style_idx <= 0 ? PTC_UI_THEME_STYLE_COUNT - 1 : style_idx - 1));
+            theme_draft_select_style(ui, (PtcUiThemeStyle)(style_idx ^ 1));
         }
     } else if (down & HidNpadButton_Right) {
         if (ui->model.overlay_selection < 3) {
             theme_draft_select_mode(ui, (PtcUiThemePreference)((ui->model.overlay_selection + 1) % 3));
         } else {
             int style_idx = ui->model.overlay_selection - 3;
-            theme_draft_select_style(ui, (PtcUiThemeStyle)((style_idx + 1) % PTC_UI_THEME_STYLE_COUNT));
+            theme_draft_select_style(ui, (PtcUiThemeStyle)(style_idx ^ 1));
         }
     } else if (down & HidNpadButton_Up) {
-        if (ui->model.overlay_selection >= 3) {
-            int style_idx = ui->model.overlay_selection - 3;
-            theme_draft_select_mode(ui, (PtcUiThemePreference)(style_idx < 3 ? style_idx : 2));
+        if (ui->model.overlay_selection >= 5) {
+            theme_draft_select_style(ui, (PtcUiThemeStyle)(ui->model.overlay_selection - 3 - 2));
+        } else if (ui->model.overlay_selection >= 3) {
+            int col = ui->model.overlay_selection - 3;
+            theme_draft_select_mode(ui, (PtcUiThemePreference)(col == 0 ? 0 : 2));
         }
     } else if (down & HidNpadButton_Down) {
         if (ui->model.overlay_selection < 3) {
-            int mode_idx = ui->model.overlay_selection;
-            theme_draft_select_style(ui, (PtcUiThemeStyle)mode_idx);
+            int col = ui->model.overlay_selection <= 1 ? 0 : 1;
+            theme_draft_select_style(ui, (PtcUiThemeStyle)col);
+        } else if (ui->model.overlay_selection < 5) {
+            theme_draft_select_style(ui, (PtcUiThemeStyle)(ui->model.overlay_selection - 3 + 2));
         }
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
         if (commit_theme_draft(ui)) {

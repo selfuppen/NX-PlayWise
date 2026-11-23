@@ -27,6 +27,7 @@ import {
   t,
 } from "./i18n.js";
 
+const toolRoot = document.getElementById("toolRoot");
 const form = document.getElementById("generator");
 const deviceInput = document.getElementById("device");
 const secretInput = document.getElementById("secret");
@@ -34,23 +35,33 @@ const dateInput = document.getElementById("date");
 const tierInput = document.getElementById("tierMinutes");
 const generateButton = document.getElementById("generate");
 const result = document.getElementById("result");
+const resultHeading = document.getElementById("resultHeading");
 const codeOutput = document.getElementById("code");
 const metaOutput = document.getElementById("meta");
 const errorOutput = document.getElementById("error");
 const securityError = document.getElementById("securityError");
 const selfTestError = document.getElementById("selfTestError");
 const copyButton = document.getElementById("copy");
+const regenerateButton = document.getElementById("regenerate");
 const copyMessage = document.getElementById("copyMessage");
+const headerDeviceBtn = document.getElementById("headerDeviceBtn");
+const headerDeviceName = document.getElementById("headerDeviceName");
+const openDrawerBtn = document.getElementById("openDrawerBtn");
+const introPairBtn = document.getElementById("introPairBtn");
+const demoPairCta = document.getElementById("demoPairCta");
+const pairingDrawer = document.getElementById("pairingDrawer");
+const pairingDrawerBackdrop = document.getElementById("pairingDrawerBackdrop");
+const closeDrawerBtn = document.getElementById("closeDrawerBtn");
 const pairedBar = document.getElementById("pairedBar");
 const pairedDeviceName = document.getElementById("pairedDeviceName");
 const pairedStatusBadge = document.getElementById("pairedStatusBadge");
-const togglePairingBtn = document.getElementById("togglePairingBtn");
 const devicePicker = document.getElementById("devicePicker");
 const pairingSettings = document.getElementById("pairingSettings");
 const dateShortcuts = document.querySelectorAll("#dateShortcuts button");
 const tierShortcuts = document.getElementById("tierShortcuts");
 const issuedHistory = document.getElementById("issuedHistory");
 const issuedSummary = document.getElementById("issuedSummary");
+const issuedLatest = document.getElementById("issuedLatest");
 const installButton = document.getElementById("install");
 const demoWarning = document.getElementById("demoWarning");
 const importError = document.getElementById("importError");
@@ -118,6 +129,17 @@ for (const minutes of [15, 30, 45, 60, 90, 120]) {
   tierShortcuts.append(button);
 }
 
+function setDrawerOpen(open) {
+  if (!pairingDrawer) return;
+  pairingDrawer.hidden = !open;
+  document.body.classList.toggle("drawer-open", open);
+  headerDeviceBtn?.setAttribute("aria-expanded", String(open));
+  openDrawerBtn?.setAttribute("aria-expanded", String(open));
+  if (open) {
+    closeDrawerBtn?.focus();
+  }
+}
+
 function localDateAfter(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -148,12 +170,22 @@ function refreshDevices(collapse = false) {
   devicePicker.value = activeId;
   devicePicker.closest("label").hidden = devices.size <= 1;
   pairedBar.hidden = !isPaired;
+  toolRoot?.classList.toggle("is-paired", isPaired && !demo);
+
+  if (headerDeviceName) {
+    headerDeviceName.textContent = activeId || t("unpaired_label", {}, currentLang);
+  }
+  if (headerDeviceBtn) {
+    headerDeviceBtn.classList.toggle("is-unpaired", !isPaired || demo);
+  }
   if (isPaired) {
     pairedDeviceName.textContent = activeId;
     pairedStatusBadge.textContent = t(demo ? "demo_badge" : "paired_badge", {}, currentLang);
     pairedStatusBadge.classList.toggle("is-demo", demo);
   }
-  if (collapse) pairingSettings.open = !isPaired || demo;
+  if (collapse) {
+    pairingSettings.open = !isPaired || demo;
+  }
 }
 
 function refreshHistory() {
@@ -163,6 +195,12 @@ function refreshHistory() {
   issuedHistory.hidden = records.length === 0;
   if (records.length > 0) {
     issuedSummary.textContent = t("issued_summary_count", {n: records.length}, currentLang);
+    if (issuedLatest) {
+      const latest = records[0];
+      issuedLatest.textContent = `····-${latest.suffix} (+${latest.minutes}m)`;
+    }
+  } else if (issuedLatest) {
+    issuedLatest.textContent = "";
   }
   const clock = new Intl.DateTimeFormat(currentLang === "zh" ? "zh-CN" : "en", {hour: "numeric", minute: "2-digit"});
   for (const record of records) {
@@ -188,6 +226,16 @@ function refreshIssueDate() {
   result.hidden = true;
   refreshShortcuts();
   refreshHistory();
+}
+
+function updateResultCopy() {
+  if (result.hidden || !lastResultDate || !lastResultMinutes) return;
+  if (resultHeading) {
+    resultHeading.textContent = t("result_ready_title", {minutes: lastResultMinutes}, currentLang);
+  }
+  metaOutput.textContent = t("result_meta_device", {
+    device: lastResultDevice, date: lastResultDate, minutes: lastResultMinutes,
+  }, currentLang);
 }
 
 function applyTranslations(lang) {
@@ -246,11 +294,7 @@ function applyTranslations(lang) {
   }
   tierInput.value = currentTier;
 
-  if (!result.hidden && lastResultDate && lastResultMinutes) {
-    metaOutput.textContent = t("result_meta_device", {
-      device: lastResultDevice, date: lastResultDate, minutes: lastResultMinutes,
-    }, lang);
-  }
+  updateResultCopy();
   refreshDevices();
   refreshShortcuts();
   refreshHistory();
@@ -311,6 +355,7 @@ async function confirmPairing(pairing, source) {
   syncDemoWarning();
   refreshDevices(true);
   refreshIssueDate();
+  setDrawerOpen(false);
   form.scrollIntoView({behavior: "smooth", block: "start"});
   return true;
 }
@@ -393,8 +438,7 @@ async function initialize() {
   }
 }
 
-form.addEventListener("submit", async event => {
-  event.preventDefault();
+async function handleGenerate() {
   if (generating || generateButton.disabled) return;
   generating = true;
   form.inert = true;
@@ -428,10 +472,10 @@ form.addEventListener("submit", async event => {
     lastResultDate = dateText;
     lastResultMinutes = tierMinutes;
     lastResultDevice = deviceId;
-    metaOutput.textContent = t("result_meta_device", {device: deviceId, date: dateText, minutes: tierMinutes}, currentLang);
     refreshDevices(true);
     refreshHistory();
     result.hidden = false;
+    updateResultCopy();
     result.focus();
   } catch (error) {
     showError(errorOutput, error instanceof Error ? error.message : String(error));
@@ -440,6 +484,15 @@ form.addEventListener("submit", async event => {
     form.inert = false;
     if (selfTestError.hidden && securityError.hidden) generateButton.disabled = false;
   }
+}
+
+form.addEventListener("submit", async event => {
+  event.preventDefault();
+  await handleGenerate();
+});
+
+regenerateButton?.addEventListener("click", () => {
+  form.requestSubmit();
 });
 
 document.getElementById("toggleSecret").addEventListener("click", event => {
@@ -455,15 +508,28 @@ secretInput.addEventListener("input", () => {
   refreshDevices();
   result.hidden = true;
 });
-if (togglePairingBtn) {
-  togglePairingBtn.addEventListener("click", () => {
-    pairingSettings.open = !pairingSettings.open;
-    if (pairingSettings.open) pairingSettings.scrollIntoView({behavior: "smooth", block: "nearest"});
+
+for (const trigger of [headerDeviceBtn, openDrawerBtn, introPairBtn, demoPairCta]) {
+  trigger?.addEventListener("click", () => {
+    pairingSettings.open = true;
+    setDrawerOpen(true);
   });
 }
+closeDrawerBtn?.addEventListener("click", () => setDrawerOpen(false));
+pairingDrawerBackdrop?.addEventListener("click", () => setDrawerOpen(false));
+window.addEventListener("keydown", event => {
+  if (event.key === "Escape" && pairingDrawer && !pairingDrawer.hidden) {
+    setDrawerOpen(false);
+  }
+});
+
 form.addEventListener("invalid", event => {
-  if (pairingSettings.contains(event.target)) pairingSettings.open = true;
+  if (pairingDrawer && pairingDrawer.contains(event.target)) {
+    pairingSettings.open = true;
+    setDrawerOpen(true);
+  }
 }, true);
+
 deviceInput.addEventListener("input", () => {
   refreshDevices();
   refreshIssueDate();

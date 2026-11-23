@@ -1312,9 +1312,25 @@ static void test_theme_resolution(void)
         option = ptc_ui_theme_option_rect(2);
         check_hit(hit_center(&model, option), PTC_UI_HIT_THEME_OPTION, 2,
                   "dark theme option has a matching touch target");
+        for (int i = 0; i < 3; ++i) {
+            PtcUiRect mrect = ptc_ui_theme_option_rect(i);
+            check_hit(hit_center(&model, mrect), PTC_UI_HIT_THEME_OPTION, i,
+                      "mode radio card matches touch target");
+            check_true(mrect.x + mrect.w < 680, "mode cards stay clear of right live preview window");
+            if (i > 0) check_true(!rects_overlap(ptc_ui_theme_option_rect(i - 1), mrect),
+                                  "adjacent mode radio cards do not overlap");
+        }
         for (int i = 0; i < PTC_UI_THEME_STYLE_COUNT; ++i) {
-            check_hit(hit_center(&model, ptc_ui_theme_style_rect(i)), PTC_UI_HIT_THEME_OPTION, 3 + i,
+            PtcUiRect srect = ptc_ui_theme_style_rect(i);
+            check_hit(hit_center(&model, srect), PTC_UI_HIT_THEME_OPTION, 3 + i,
                       "design style card shares the theme radio touch target");
+            check_true(srect.x + srect.w < 680, "style cards stay clear of right live preview window");
+            for (int j = 0; j < 3; ++j)
+                check_true(!rects_overlap(srect, ptc_ui_theme_option_rect(j)),
+                           "style cards do not overlap mode cards");
+            for (int j = i + 1; j < PTC_UI_THEME_STYLE_COUNT; ++j)
+                check_true(!rects_overlap(srect, ptc_ui_theme_style_rect(j)),
+                           "2x2 style cards do not overlap each other");
         }
     }
     {

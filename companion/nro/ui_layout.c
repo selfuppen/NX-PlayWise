@@ -1715,13 +1715,15 @@ PtcUiRect ptc_ui_album_refresh_rect(void)
 PtcUiRect ptc_ui_theme_option_rect(int index)
 {
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + index * 396, 178, 380, 226};
+    return (PtcUiRect){54 + index * 206, 202, 196, 96};
 }
 
 PtcUiRect ptc_ui_theme_style_rect(int index)
 {
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + index * 297, 452, 281, 174};
+    int col = index % 2;
+    int row = index / 2;
+    return (PtcUiRect){54 + col * 310, 344 + row * 152, 298, 140};
 }
 
 PtcUiRect ptc_ui_language_option_rect(int index)

@@ -64,39 +64,19 @@ static void setup_draw_stepper(uint32_t *pixels, uint32_t stride, int step)
         ptc_ui_text(PTC_UI_T_SETUP_PARENT),
         ptc_ui_text(PTC_UI_T_SETUP_CONFIRM)
     };
-    UiRect bar = {54, 116, 1172, 48};
-    setup_draw_surface_card(pixels, stride, bar, 14);
-
-    int text_w[3];
-    int item_w[3];
-    for (int i = 0; i < 3; ++i) {
-        text_w[i] = measure_text(labels[i], 15);
-        if (text_w[i] > 270) text_w[i] = 270;
-        item_w[i] = 26 + 10 + text_w[i];
-    }
-
-    int x0 = bar.x + 24;
-    int x2 = bar.x + bar.width - 24 - item_w[2];
-    int x1 = bar.x + (bar.width - item_w[1]) / 2;
-    if (x1 < x0 + item_w[0] + 44) x1 = x0 + item_w[0] + 44;
-    if (x1 + item_w[1] + 44 > x2) x1 = x2 - 44 - item_w[1];
-    int xs[3] = {x0, x1, x2};
-    int cy = bar.y + bar.height / 2;
-
-    for (int i = 0; i < 2; ++i) {
-        int line_x0 = xs[i] + item_w[i] + 16;
-        int line_x1 = xs[i + 1] - 16;
-        if (line_x1 > line_x0 + 8) {
-            fill_round_rect(pixels, stride, (UiRect){line_x0, cy - 1, line_x1 - line_x0, 3}, 1,
-                (i + 1 < step) ? UI_SUCCESS : UI_BORDER);
-        }
-    }
-
     for (int i = 0; i < 3; ++i) {
         int n = i + 1;
         bool done = n < step;
         bool active = n == step;
-        UiRect dot = {xs[i], cy - 13, 26, 26};
+        UiRect pill = {54 + i * 395, 116, 382, 48};
+        if (!active && !done) draw_card_shadow(pixels, stride, pill, 12);
+        fill_round_rect(pixels, stride, pill, 12,
+            active ? UI_ACCENT_SOFT : (done ? UI_SUCCESS_SOFT : UI_SURFACE));
+        draw_rect_outline(pixels, stride, pill, 12, active ? 2 : 1,
+            active ? UI_ACCENT : (done ? UI_SUCCESS_BORDER : UI_BORDER));
+
+        int cy = pill.y + pill.height / 2;
+        UiRect dot = {pill.x + 14, cy - 13, 26, 26};
         fill_round_rect(pixels, stride, dot, 13,
             done ? UI_SUCCESS : (active ? UI_ACCENT : UI_RAISED));
         if (done) {
@@ -107,11 +87,12 @@ static void setup_draw_stepper(uint32_t *pixels, uint32_t stride, int step)
             draw_text_center(pixels, stride, dot, num, 13,
                 active ? UI_ON_ACCENT : UI_MUTED);
         }
+
         char fitted[96];
-        fit_text(fitted, sizeof(fitted), labels[i], 15, text_w[i] + 4);
-        uint32_t col = active ? UI_ACCENT : (done ? UI_INK : UI_MUTED);
-        if (active) draw_text_bold(pixels, stride, xs[i] + 36, cy + 5, fitted, 15, col);
-        else draw_text(pixels, stride, xs[i] + 36, cy + 5, fitted, 15, col);
+        fit_text(fitted, sizeof(fitted), labels[i], 15, pill.width - 60);
+        uint32_t col = active ? UI_ACCENT : (done ? UI_SUCCESS : UI_MUTED);
+        if (active || done) draw_text_bold(pixels, stride, pill.x + 50, cy + 5, fitted, 15, col);
+        else draw_text(pixels, stride, pill.x + 50, cy + 5, fitted, 15, col);
     }
 }
 
@@ -293,7 +274,7 @@ static void draw_setup_review(uint32_t *pixels, uint32_t stride, const PtcUiMode
         int qi = pending_indices[p];
         bool cur = (qi == item);
         char chip_text[96];
-        snprintf(chip_text, sizeof(chip_text), "%s %s", setup_review_emoji(qi),
+        snprintf(chip_text, sizeof(chip_text), "%d. %s", p + 1,
             ptc_ui_text(ptc_ui_setup_option_title(qi)));
         int cw = measure_text(chip_text, 13) + 22;
         if (qx + cw > queue_right_limit) {
@@ -324,7 +305,7 @@ static void draw_setup_review(uint32_t *pixels, uint32_t stride, const PtcUiMode
     fill_round_rect(pixels, stride, left_pane, 15, tone_soft);
     /* Square off the right half of left_pane so it meets the divider cleanly */
     fill_rect(pixels, stride, (UiRect){left_pane.x + left_pane.width - 16, left_pane.y, 16, left_pane.height}, tone_soft);
-    fill_rect(pixels, stride, (UiRect){left_pane.x + left_pane.width, card.y + 1, 1, card.height - 2}, UI_BORDER);
+    fill_rect(pixels, stride, (UiRect){left_pane.x + left_pane.width, card.y + 1, 1, card.height - 2}, tone_border);
 
     UiRect icon_box = {card.x + 26, card.y + 24, 56, 56};
     fill_round_rect(pixels, stride, icon_box, 14, UI_SURFACE);
@@ -341,7 +322,7 @@ static void draw_setup_review(uint32_t *pixels, uint32_t stride, const PtcUiMode
     /* Current Value Box */
     UiRect cur_box = {card.x + 26, card.y + 186, 356, 52};
     fill_round_rect(pixels, stride, cur_box, 10, UI_SURFACE);
-    draw_rect_outline(pixels, stride, cur_box, 10, 1, UI_BORDER);
+    draw_rect_outline(pixels, stride, cur_box, 10, 1, tone_border);
     const char *cur_lbl = ptc_ui_text(PTC_UI_T_SETUP_REVIEW_CURRENT_LABEL);
     int cur_lbl_w = measure_text(cur_lbl, 13);
     draw_text(pixels, stride, cur_box.x + 14, cur_box.y + 31, cur_lbl, 13, UI_MUTED);
@@ -351,22 +332,34 @@ static void draw_setup_review(uint32_t *pixels, uint32_t stride, const PtcUiMode
     if (val_max_w < 80) val_max_w = 80;
     fit_text(cur_fitted, sizeof(cur_fitted), cur_val, 14, val_max_w);
     int val_w = measure_text(cur_fitted, 14);
-    draw_text(pixels, stride, cur_box.x + cur_box.width - 14 - val_w, cur_box.y + 31,
-        cur_fitted, 14, UI_INK);
+    uint32_t cur_val_col = UI_INK;
+    if (item == PTC_UI_SETUP_OPTION_NOTIFICATIONS) {
+        cur_val_col = model->reason_notifications_enabled ? UI_SUCCESS : UI_WARNING_TEXT;
+    } else if (item == PTC_UI_SETUP_OPTION_EYE_CARE) {
+        bool eye_on = model->eye_care_policy.enabled || model->draft_eye_care_policy.enabled;
+        cur_val_col = eye_on ? UI_SUCCESS : UI_WARNING_TEXT;
+    } else if (item == PTC_UI_SETUP_OPTION_BEDTIME) {
+        bool bed_on = model->bedtime_status_enabled || model->bedtime_policy.enabled ||
+            model->draft_bedtime_policy.enabled;
+        cur_val_col = bed_on ? UI_NIGHT : UI_WARNING_TEXT;
+    }
+    draw_text_bold(pixels, stride, cur_box.x + cur_box.width - 14 - val_w, cur_box.y + 31,
+        cur_fitted, 14, cur_val_col);
 
     /* Right Explanation Panel (X=488..1198, W=710) */
     int rx = card.x + 436;
     int rw = card.width - 464;
-    draw_text(pixels, stride, rx, card.y + 42,
-        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_PURPOSE_LABEL), 13, UI_ACCENT);
+    draw_text_bold(pixels, stride, rx, card.y + 42,
+        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_PURPOSE_LABEL), 14, UI_ACCENT);
     draw_wrapped_text(pixels, stride, rx, card.y + 78,
         ptc_ui_text(setup_review_desc(item)), 17, rw, 27, 3, UI_INK);
 
     UiRect guide_box = {rx, card.y + 174, rw, 64};
     fill_round_rect(pixels, stride, guide_box, 10, UI_RAISED);
     draw_rect_outline(pixels, stride, guide_box, 10, 1, UI_BORDER);
-    draw_wrapped_text(pixels, stride, guide_box.x + 16, guide_box.y + 24,
-        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_BODY), 13, guide_box.width - 32, 20, 2, UI_MUTED);
+    fill_round_rect(pixels, stride, (UiRect){guide_box.x + 1, guide_box.y + 8, 4, guide_box.height - 16}, 2, tone_accent);
+    draw_wrapped_text(pixels, stride, guide_box.x + 18, guide_box.y + 24,
+        ptc_ui_text(PTC_UI_T_SETUP_REVIEW_BODY), 13, guide_box.width - 34, 20, 2, UI_MUTED);
 
     /* Primary & Secondary Large Action Cards (Actions 0 and 1, Y=462..548) */
     const PtcUiTextId primary_titles[2] = {
@@ -478,16 +471,18 @@ static void draw_setup_step1(uint32_t *pixels, uint32_t stride, const PtcUiModel
 
     /* Sub-card 1: Nintendo Parental Controls (Y=384..492, H=108) */
     UiRect pctl_box = {74, 384, 644, 108};
-    fill_round_rect(pixels, stride, pctl_box, 12, UI_RAISED);
-    draw_rect_outline(pixels, stride, pctl_box, 12, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, pctl_box, 12, pctl_ok ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, pctl_box, 12, 1, pctl_ok ? UI_SUCCESS_BORDER : UI_WARNING_BORDER);
+    fill_round_rect(pixels, stride, (UiRect){pctl_box.x + 1, pctl_box.y + 10, 5, pctl_box.height - 20}, 2,
+        pctl_ok ? UI_SUCCESS : UI_WARNING);
     const char *pctl_str = ptc_ui_text(!model->restriction_enabled_available
         ? PTC_UI_T_SETUP_PCTL_UNKNOWN : model->restriction_enabled
         ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF);
-    int pctl_text_w = 482 - 90 - 16;
+    int pctl_text_w = 482 - 96 - 14;
     int pctl_lines = count_wrapped_lines(pctl_str, 15, pctl_text_w, 2);
-    draw_wrapped_text(pixels, stride, 90, 412, pctl_str, 15, pctl_text_w, 21, 2,
+    draw_wrapped_text(pixels, stride, 96, 412, pctl_str, 15, pctl_text_w, 21, 2,
         pctl_ok ? UI_SUCCESS : UI_WARNING_TEXT);
-    draw_wrapped_text(pixels, stride, 90, 412 + pctl_lines * 21 + 4,
+    draw_wrapped_text(pixels, stride, 96, 412 + pctl_lines * 21 + 4,
         ptc_ui_text(PTC_UI_T_SETUP_PAUSE_OVERLAY), 13, pctl_text_w, 18, 2, UI_MUTED);
     setup_button(pixels, stride, ptc_ui_setup_pctl_help_rect(),
         ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_BUTTON), model->setup_focus == 2, false);
@@ -498,6 +493,7 @@ static void draw_setup_step1(uint32_t *pixels, uint32_t stride, const PtcUiModel
     draw_rect_outline(pixels, stride, time_box, 12, model->setup_focus == 3 ? 2 : 1,
         model->setup_focus == 3 ? UI_ACCENT : UI_BORDER);
     if (model->setup_focus == 3) draw_focus_ring(pixels, stride, time_box, 12);
+    fill_round_rect(pixels, stride, (UiRect){time_box.x + 1, time_box.y + 10, 5, time_box.height - 20}, 2, UI_ACCENT);
 
 #ifdef PTC_UI_PREVIEW_WALL_TIME
     uint16_t year, minute = ptc_ui_render_minute_of_day(ptc_ui_render_now());
@@ -513,10 +509,10 @@ static void draw_setup_step1(uint32_t *pixels, uint32_t stride, const PtcUiModel
 #endif
     char clock_lbl[96];
     snprintf(clock_lbl, sizeof(clock_lbl), "⏰ %s", ptc_ui_text(PTC_UI_T_SETUP_TIME_HELP));
-    draw_text(pixels, stride, time_box.x + 16, time_box.y + 34, clock_lbl, 13, UI_MUTED);
+    draw_text(pixels, stride, time_box.x + 20, time_box.y + 34, clock_lbl, 13, UI_MUTED);
     char fitted_clock[64];
-    fit_text(fitted_clock, sizeof(fitted_clock), text, 21, 212);
-    draw_text_bold(pixels, stride, time_box.x + 16, time_box.y + 72, fitted_clock, 21, UI_ACCENT);
+    fit_text(fitted_clock, sizeof(fitted_clock), text, 21, 208);
+    draw_text_bold(pixels, stride, time_box.x + 20, time_box.y + 72, fitted_clock, 21, UI_ACCENT);
 
     fill_rect(pixels, stride, (UiRect){time_box.x + 238, time_box.y + 18, 1, time_box.height - 36}, UI_BORDER);
     int guide_x = time_box.x + 254;
@@ -562,10 +558,14 @@ static void draw_setup_step1(uint32_t *pixels, uint32_t stride, const PtcUiModel
         fill_round_rect(pixels, stride, tile, 10, UI_RAISED);
         draw_rect_outline(pixels, stride, tile, 10, 1, UI_BORDER);
         char fl[48], fv[48];
-        fit_text(fl, sizeof(fl), spec_labels[i], 12, tile.width - 20);
-        fit_text(fv, sizeof(fv), spec_vals[i], 16, tile.width - 20);
-        draw_text(pixels, stride, tile.x + 12, tile.y + 24, fl, 12, UI_MUTED);
-        draw_text_bold(pixels, stride, tile.x + 12, tile.y + 52, fv, 16, UI_INK);
+        fit_text(fl, sizeof(fl), spec_labels[i], 12, tile.width - 16);
+        int fl_w = measure_text(fl, 12);
+        draw_text(pixels, stride, tile.x + (tile.width - fl_w) / 2, tile.y + 23, fl, 12, UI_MUTED);
+        int val_sz = 20;
+        while (val_sz > 14 && measure_text(spec_vals[i], val_sz) > tile.width - 16) --val_sz;
+        fit_text(fv, sizeof(fv), spec_vals[i], val_sz, tile.width - 16);
+        int fv_w = measure_text(fv, val_sz);
+        draw_text_bold(pixels, stride, tile.x + (tile.width - fv_w) / 2, tile.y + 54, fv, val_sz, UI_INK);
     }
 
     /* Reference environment + complete separated advisory (Y=474..548) */
@@ -620,23 +620,28 @@ static void draw_setup_step2(uint32_t *pixels, uint32_t stride, const PtcUiModel
         draw_rect_outline(pixels, stride, pin_rect, 12, 1,
             pin_ok ? UI_SUCCESS_BORDER : UI_WARNING_BORDER);
     }
+    fill_round_rect(pixels, stride, (UiRect){pin_rect.x + 1, pin_rect.y + 10, 5, pin_rect.height - 20}, 2,
+        pin_ok ? UI_SUCCESS : UI_WARNING);
     const char *pin_btn_lbl = ptc_ui_text(PTC_UI_T_X_CLICK_CHANGE_PIN);
     int pin_btn_w = measure_text(pin_btn_lbl, 14) + 30;
     if (pin_btn_w < 130) pin_btn_w = 130;
     if (pin_btn_w > 220) pin_btn_w = 220;
     UiRect pin_chip = {pin_rect.x + pin_rect.width - 14 - pin_btn_w, pin_rect.y + 23, pin_btn_w, 40};
-    fill_round_rect(pixels, stride, pin_chip, 10, UI_SURFACE);
-    draw_rect_outline(pixels, stride, pin_chip, 10, 1, pin_focused ? UI_ACCENT : UI_BORDER);
-    draw_button_label(pixels, stride, pin_chip, pin_btn_lbl, 14, pin_focused ? UI_ACCENT : UI_INK);
+    bool pin_cta_primary = !pin_ok;
+    fill_round_rect(pixels, stride, pin_chip, 10, pin_cta_primary ? UI_ACCENT : UI_SURFACE);
+    draw_rect_outline(pixels, stride, pin_chip, 10, 1,
+        pin_cta_primary ? UI_ACCENT : (pin_focused ? UI_ACCENT : UI_BORDER));
+    draw_button_label(pixels, stride, pin_chip, pin_btn_lbl, 14,
+        pin_cta_primary ? UI_ON_ACCENT : (pin_focused ? UI_ACCENT : UI_INK));
 
-    int pin_info_w = pin_chip.x - (pin_rect.x + 16) - 12;
+    int pin_info_w = pin_chip.x - (pin_rect.x + 20) - 10;
     char fitted_pin_st[128];
     fit_text(fitted_pin_st, sizeof(fitted_pin_st),
         ptc_ui_text(pin_ok ? PTC_UI_T_SETUP_PIN_STATUS_CUSTOM : PTC_UI_T_SETUP_PIN_STATUS_DEFAULT),
         14, pin_info_w);
-    draw_text_bold(pixels, stride, pin_rect.x + 16, pin_rect.y + 34, fitted_pin_st, 14,
+    draw_text_bold(pixels, stride, pin_rect.x + 20, pin_rect.y + 34, fitted_pin_st, 14,
         pin_ok ? UI_SUCCESS : UI_WARNING_TEXT);
-    draw_wrapped_text(pixels, stride, pin_rect.x + 16, pin_rect.y + 56,
+    draw_wrapped_text(pixels, stride, pin_rect.x + 20, pin_rect.y + 56,
         ptc_ui_text(PTC_UI_T_SETUP_PIN_RULES_COMPACT), 12, pin_info_w, 16, 2, UI_MUTED);
 
     /* Divider */
@@ -646,6 +651,13 @@ static void draw_setup_step2(uint32_t *pixels, uint32_t stride, const PtcUiModel
     char theme_hdr[96];
     snprintf(theme_hdr, sizeof(theme_hdr), "🎨 %s", ptc_ui_text(PTC_UI_T_SETUP_THEME_LABEL));
     draw_text_bold(pixels, stride, 74, 404, theme_hdr, 14, UI_INK);
+    {
+        const char *st_name = ptc_ui_theme_style_label(g_theme.style);
+        int st_w = measure_text(st_name, 12);
+        int dot_x = 612 - st_w - 14;
+        fill_round_rect(pixels, stride, (UiRect){dot_x, 394, 10, 10}, 5, UI_ACCENT);
+        draw_text(pixels, stride, 612 - st_w, 404, st_name, 12, UI_ACCENT);
+    }
     for (int i = 0; i < 3; ++i) {
         bool selected = model->setup_theme_index == i;
         bool focused = model->setup_focus == 2 && selected;
@@ -712,6 +724,7 @@ static void draw_setup_step2(uint32_t *pixels, uint32_t stride, const PtcUiModel
         eye_focused ? UI_ACCENT_SOFT : (eye_on ? UI_SUCCESS_SOFT : UI_RAISED));
     if (eye_focused) draw_focus_ring(pixels, stride, eye_rect, 12);
     else draw_rect_outline(pixels, stride, eye_rect, 12, 1, eye_on ? UI_SUCCESS_BORDER : UI_BORDER);
+    if (eye_on) fill_round_rect(pixels, stride, (UiRect){eye_rect.x + 1, eye_rect.y + 10, 4, eye_rect.height - 20}, 2, UI_SUCCESS);
     UiRect eye_ico = {eye_rect.x + 14, eye_rect.y + 26, 44, 44};
     fill_round_rect(pixels, stride, eye_ico, 10, UI_SURFACE);
     draw_rect_outline(pixels, stride, eye_ico, 10, 1, eye_on ? UI_SUCCESS_BORDER : UI_BORDER);
@@ -739,6 +752,7 @@ static void draw_setup_step2(uint32_t *pixels, uint32_t stride, const PtcUiModel
         bed_focused ? UI_ACCENT_SOFT : (bed_on ? UI_NIGHT_SOFT : UI_RAISED));
     if (bed_focused) draw_focus_ring(pixels, stride, bed_rect, 12);
     else draw_rect_outline(pixels, stride, bed_rect, 12, 1, bed_on ? UI_NIGHT_BORDER : UI_BORDER);
+    if (bed_on) fill_round_rect(pixels, stride, (UiRect){bed_rect.x + 1, bed_rect.y + 10, 4, bed_rect.height - 20}, 2, UI_NIGHT);
     UiRect bed_ico = {bed_rect.x + 14, bed_rect.y + 26, 44, 44};
     fill_round_rect(pixels, stride, bed_ico, 10, UI_SURFACE);
     draw_rect_outline(pixels, stride, bed_ico, 10, 1, bed_on ? UI_NIGHT_BORDER : UI_BORDER);
@@ -765,7 +779,8 @@ static void draw_setup_step2(uint32_t *pixels, uint32_t stride, const PtcUiModel
     fill_round_rect(pixels, stride, notif_rect, 12,
         notif_focused ? UI_ACCENT_SOFT : UI_RAISED);
     if (notif_focused) draw_focus_ring(pixels, stride, notif_rect, 12);
-    else draw_rect_outline(pixels, stride, notif_rect, 12, 1, UI_BORDER);
+    else draw_rect_outline(pixels, stride, notif_rect, 12, 1, notif_on ? UI_ACCENT : UI_BORDER);
+    if (notif_on) fill_round_rect(pixels, stride, (UiRect){notif_rect.x + 1, notif_rect.y + 10, 4, notif_rect.height - 20}, 2, UI_ACCENT);
     UiRect notif_ico = {notif_rect.x + 14, notif_rect.y + 26, 44, 44};
     fill_round_rect(pixels, stride, notif_ico, 10, UI_SURFACE);
     draw_rect_outline(pixels, stride, notif_ico, 10, 1, notif_on ? UI_ACCENT : UI_BORDER);
@@ -820,25 +835,25 @@ static void draw_setup_step3(uint32_t *pixels, uint32_t stride, const PtcUiModel
 
     SetupSummaryTile tiles[6] = {
         {
-            ptc_ui_text(PTC_UI_T_SETUP_CARD_SYSTEM_ENV),
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_TILE_ENV),
             ptc_ui_text(env_ok ? PTC_UI_T_SETUP_ENV_MATCH_BADGE : PTC_UI_T_SETUP_ENV_DIFF_BADGE),
             env_ok ? UI_SUCCESS_SOFT : UI_WARNING_SOFT,
             env_ok ? UI_SUCCESS_BORDER : UI_WARNING_BORDER,
             env_ok ? UI_SUCCESS : UI_WARNING_TEXT,
             env_val, UI_INK,
-            ptc_ui_text(env_ok ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN)
+            ptc_ui_text(env_ok ? PTC_UI_T_SETUP_SUM_FROM_STEP_1 : PTC_UI_T_SETUP_REFERENCE_UNKNOWN)
         },
         {
-            ptc_ui_text(PTC_UI_T_SETUP_SUMMARY_TODAY_QUOTA),
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_TILE_QUOTA),
             ptc_ui_text(model->status_loaded ? PTC_UI_T_SETUP_SUMMARY_KEPT : PTC_UI_T_TO_BE_CONFIRMED),
             model->status_loaded ? UI_ACCENT_SOFT : UI_WARNING_SOFT,
             model->status_loaded ? UI_ACCENT : UI_WARNING_BORDER,
             model->status_loaded ? UI_ACCENT : UI_WARNING_TEXT,
             quota_val, model->status_loaded ? UI_ACCENT : UI_WARNING_TEXT,
-            ptc_ui_text(model->status_loaded ? PTC_UI_T_QUOTA_RULES : PTC_UI_T_THE_STATUS_NEEDS_TO_BE_CONFIRMED_PLEASE)
+            ptc_ui_text(model->status_loaded ? PTC_UI_T_SETUP_SUM_FROM_STEP_1 : PTC_UI_T_THE_STATUS_NEEDS_TO_BE_CONFIRMED_PLEASE)
         },
         {
-            ptc_ui_text(PTC_UI_T_SETUP_SUMMARY_PCTL),
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_TILE_PCTL),
             ptc_ui_text(pctl_ok ? PTC_UI_T_ENABLED : PTC_UI_T_SETUP_PREFLIGHT_CHECK),
             pctl_ok ? UI_SUCCESS_SOFT : UI_WARNING_SOFT,
             pctl_ok ? UI_SUCCESS_BORDER : UI_WARNING_BORDER,
@@ -846,49 +861,62 @@ static void draw_setup_step3(uint32_t *pixels, uint32_t stride, const PtcUiModel
             ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
                 model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF),
             pctl_ok ? UI_SUCCESS : UI_WARNING_TEXT,
-            ptc_ui_text(PTC_UI_T_SETUP_PCTL_PATH)
+            ptc_ui_text(pctl_ok ? PTC_UI_T_SETUP_SUM_FROM_STEP_1 : PTC_UI_T_SETUP_PCTL_PATH)
         },
         {
-            ptc_ui_text(PTC_UI_T_SETUP_SUMMARY_PIN),
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_TILE_PIN),
             ptc_ui_text(pin_ok ? PTC_UI_T_SETUP_PIN_BADGE_CUSTOM : PTC_UI_T_SETUP_PIN_BADGE_DEFAULT),
             pin_ok ? UI_SUCCESS_SOFT : UI_WARNING_SOFT,
             pin_ok ? UI_SUCCESS_BORDER : UI_WARNING_BORDER,
             pin_ok ? UI_SUCCESS : UI_WARNING_TEXT,
             ptc_ui_text(pin_ok ? PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED),
             pin_ok ? UI_SUCCESS : UI_WARNING_TEXT,
-            ptc_ui_text(PTC_UI_T_SETUP_PIN_DESC)
+            ptc_ui_text(pin_ok ? PTC_UI_T_SETUP_SUM_FROM_STEP_2 : PTC_UI_T_SETUP_PIN_DESC)
         },
         {
-            "🌿 ",
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_TILE_EYE),
             ptc_ui_text(eye_on ? PTC_UI_T_ENABLED_2 : PTC_UI_T_DISABLED),
             eye_on ? UI_SUCCESS_SOFT : UI_SURFACE,
             eye_on ? UI_SUCCESS_BORDER : UI_BORDER,
             eye_on ? UI_SUCCESS : UI_MUTED,
             ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_DEFAULT_PARAMS : PTC_UI_T_SETUP_EYE_CARE_SUMMARY_OFF),
             eye_on ? UI_SUCCESS : UI_MUTED,
-            ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_HINT)
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_FROM_STEP_2)
         },
         {
-            "🌙 ",
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_TILE_BEDTIME),
             ptc_ui_text(bed_on ? PTC_UI_T_ENABLED_2 : PTC_UI_T_DISABLED),
             bed_on ? UI_NIGHT_SOFT : UI_SURFACE,
             bed_on ? UI_NIGHT_BORDER : UI_BORDER,
             bed_on ? UI_NIGHT : UI_MUTED,
             ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_DEFAULT_PARAMS : PTC_UI_T_SETUP_BEDTIME_SUMMARY_OFF),
             bed_on ? UI_NIGHT : UI_MUTED,
-            ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_HINT)
+            ptc_ui_text(PTC_UI_T_SETUP_SUM_FROM_STEP_2)
         }
     };
-    char eye_tile_lbl[96], bed_tile_lbl[96];
-    snprintf(eye_tile_lbl, sizeof(eye_tile_lbl), "🌿 %s", ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_LABEL));
-    snprintf(bed_tile_lbl, sizeof(bed_tile_lbl), "🌙 %s", ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_LABEL));
-    tiles[4].label = eye_tile_lbl;
-    tiles[5].label = bed_tile_lbl;
+    const uint32_t tile_stripes[6] = {
+        env_ok ? UI_SUCCESS : UI_WARNING,
+        model->status_loaded ? UI_ACCENT : UI_WARNING,
+        pctl_ok ? UI_SUCCESS : UI_WARNING,
+        pin_ok ? UI_SUCCESS : UI_WARNING,
+        eye_on ? UI_SUCCESS : UI_BORDER,
+        bed_on ? UI_NIGHT : UI_BORDER
+    };
 
     /* Card 1: Configuration Summary (Y=178..452, H=274) */
     UiRect sum_card = {54, 178, 1172, 274};
     setup_draw_surface_card(pixels, stride, sum_card, 16);
-    draw_text_bold(pixels, stride, 74, 212, ptc_ui_text(PTC_UI_T_SETUP_CARD_SUMMARY), 18, UI_INK);
+    bool all_ready = env_ok && model->status_loaded && pctl_ok && pin_ok && !ptc_ui_setup_has_issues(model);
+    int sum_badge_x = setup_draw_pill_right(pixels, stride, sum_card.x + sum_card.width - 20,
+        sum_card.y + 16, 28,
+        ptc_ui_text(all_ready ? PTC_UI_T_SETUP_SUM_ALL_OK : PTC_UI_T_SETUP_SUM_CHECK_ITEMS),
+        13, all_ready ? UI_SUCCESS_SOFT : UI_WARNING_SOFT,
+        all_ready ? UI_SUCCESS_BORDER : UI_WARNING_BORDER,
+        all_ready ? UI_SUCCESS : UI_WARNING_TEXT);
+    char fitted_sum_title[128];
+    fit_text(fitted_sum_title, sizeof(fitted_sum_title), ptc_ui_text(PTC_UI_T_SETUP_CARD_SUMMARY),
+        18, sum_badge_x - 74 - 12);
+    draw_text_bold(pixels, stride, 74, 212, fitted_sum_title, 18, UI_INK);
 
     for (int i = 0; i < 6; ++i) {
         int col = i % 3;
@@ -896,15 +924,16 @@ static void draw_setup_step3(uint32_t *pixels, uint32_t stride, const PtcUiModel
         UiRect t = {74 + col * 382, 234 + row * 106, 368, 94};
         fill_round_rect(pixels, stride, t, 12, UI_RAISED);
         draw_rect_outline(pixels, stride, t, 12, 1, UI_BORDER);
+        fill_round_rect(pixels, stride, (UiRect){t.x + 1, t.y + 10, 4, t.height - 20}, 2, tile_stripes[i]);
         int bx = setup_draw_pill_right(pixels, stride, t.x + t.width - 12, t.y + 10, 22,
             tiles[i].badge, 11, tiles[i].badge_bg, tiles[i].badge_border, tiles[i].badge_fg);
         char fl[96], fv[128], fs[160];
-        fit_text(fl, sizeof(fl), tiles[i].label, 13, bx - (t.x + 14) - 8);
-        draw_text(pixels, stride, t.x + 14, t.y + 26, fl, 13, UI_MUTED);
-        fit_text(fv, sizeof(fv), tiles[i].value, 15, t.width - 28);
-        draw_text_bold(pixels, stride, t.x + 14, t.y + 54, fv, 15, tiles[i].value_color);
-        fit_text(fs, sizeof(fs), tiles[i].sub, 12, t.width - 28);
-        draw_text(pixels, stride, t.x + 14, t.y + 78, fs, 12, UI_MUTED);
+        fit_text(fl, sizeof(fl), tiles[i].label, 13, bx - (t.x + 16) - 8);
+        draw_text_bold(pixels, stride, t.x + 16, t.y + 26, fl, 13, UI_MUTED);
+        fit_text(fv, sizeof(fv), tiles[i].value, 16, t.width - 30);
+        draw_text_bold(pixels, stride, t.x + 16, t.y + 54, fv, 16, tiles[i].value_color);
+        fit_text(fs, sizeof(fs), tiles[i].sub, 12, t.width - 30);
+        draw_text(pixels, stride, t.x + 16, t.y + 78, fs, 12, UI_MUTED);
     }
 
     /* Card 2: Protection & Safety Pillars (Y=466..632, H=166) */

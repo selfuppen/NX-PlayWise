@@ -1,4 +1,4 @@
-const CACHE_NAME = "ptc-frontend-v9";
+const CACHE_NAME = "ptc-frontend-v10";
 const STATIC_PATHS = [
   "./",
   "./index.html",
