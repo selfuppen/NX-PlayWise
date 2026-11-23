@@ -6,8 +6,70 @@
     bool page_changed_ = false;
     int flow_y_ = 0;
     int promoted_parent_action_ = -1;
+    int parent_tab_ = 0;
+    bool parent_unavailable_expanded_ = false;
     OverlayNavbarScheme navbar_scheme_ = OverlayNavbarScheme::Default;
     PtcRestrictionReason child_drawn_reason_ = PTC_REASON_NONE;
+
+    int parent_action_tab(int action) const
+    {
+        const int slot = ptc_overlay_parent_action_slot(action);
+        const int group = ptc_overlay_parent_action_group(slot);
+        return (group >= 0 && group <= 2) ? group : 0;
+    }
+
+    int parent_visible_actions(int out_actions[PTC_OVERLAY_PARENT_ACTION_COUNT]) const
+    {
+        int count = 0;
+        const int tab = parent_tab_ < 0 ? 0 : parent_tab_ > 2 ? 2 : parent_tab_;
+        if (promoted_parent_action_ >= 0 && promoted_parent_action_ < PTC_OVERLAY_PARENT_ACTION_COUNT) {
+            out_actions[count++] = promoted_parent_action_;
+        }
+        const int *order = ptc_overlay_parent_action_order();
+        if (tab == 1) {
+            int unavail[PTC_OVERLAY_PARENT_ACTION_COUNT];
+            int unavail_count = 0;
+            bool focused_in_unavail = false;
+            for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+                const int idx = order[slot];
+                if (idx == promoted_parent_action_) continue;
+                if (ptc_overlay_parent_action_group(slot) != 1) continue;
+                if (parent_action_reason(static_cast<PtcOverlayParentAction>(idx)) == nullptr) {
+                    out_actions[count++] = idx;
+                } else {
+                    unavail[unavail_count++] = idx;
+                    if (parent_action_ == idx) focused_in_unavail = true;
+                }
+            }
+            if (parent_unavailable_expanded_ || focused_in_unavail) {
+                for (int i = 0; i < unavail_count; ++i) out_actions[count++] = unavail[i];
+            }
+            return count;
+        }
+        for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+            const int idx = order[slot];
+            if (idx == promoted_parent_action_) continue;
+            if (ptc_overlay_parent_action_group(slot) != tab) continue;
+            out_actions[count++] = idx;
+        }
+        return count;
+    }
+
+    int parent_first_action_for_tab(int tab) const
+    {
+        const int clamped = tab < 0 ? 0 : tab > 2 ? 2 : tab;
+        const int *order = ptc_overlay_parent_action_order();
+        int fallback = -1;
+        for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+            const int idx = order[slot];
+            if (idx == promoted_parent_action_) continue;
+            if (ptc_overlay_parent_action_group(slot) != clamped) continue;
+            if (fallback < 0) fallback = idx;
+            if (parent_action_reason(static_cast<PtcOverlayParentAction>(idx)) == nullptr) return idx;
+        }
+        if (fallback >= 0) return fallback;
+        return promoted_parent_action_ >= 0 ? promoted_parent_action_ : order[0];
+    }
 
     PtcRestrictionReason child_home_reason() const
     {
@@ -562,6 +624,9 @@
             PTC_UI_T_STATUS_CHANGED_PLEASE_CONFIRM_AGAIN : PTC_UI_T_CONFIRM_PLAYTIME_GRANT),
             PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE),
                 ptc_ui_text(PTC_UI_T_NAV_CONFIRM)}, 3});
+        draw_code_stepper(renderer, page_layout_.viewport.x + 4,
+            flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 8, 1);
+        flow_y_ += 34;
         ptc_ui_format_actual_added(preview_summary_.grant_minutes, line, sizeof(line));
         dashboard_panel(renderer, {{line, PTC_OVERLAY_FONT_DISPLAY, pal.accent},
             {ptc_ui_text(PTC_UI_T_OVERLAY_CODE_ONCE), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary}}, pal.accent);
@@ -607,6 +672,9 @@
             result_failed_ ? PTC_UI_T_GRANT_FAILED : PTC_UI_T_GRANT_SUCCESSFUL),
             PtcFlowPath{{ptc_ui_text(PTC_UI_T_NAV_HOME), ptc_ui_text(PTC_UI_T_NAV_EXTRA_TIME_CODE),
                 ptc_ui_text(PTC_UI_T_NAV_RESULT)}, 3}, false, PTC_OVERLAY_FONT_TITLE_LG);
+        draw_code_stepper(renderer, page_layout_.viewport.x + 4,
+            flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 8, 2);
+        flow_y_ += 34;
         std::snprintf(line, sizeof(line), ptc_ui_text(result_pending_ ? PTC_UI_T_ESTIMATED_D_MIN :
             result_failed_ ? PTC_UI_T_ORIGINALLY_PLANNED_D_MIN : PTC_UI_T_ADDED_D_MIN), preview_summary_.grant_minutes);
         dashboard_panel(renderer, {{line, PTC_OVERLAY_FONT_DISPLAY, accent},
@@ -703,47 +771,166 @@
         const auto state = current_state_line(stale);
         if (parent_view_ == ParentView::Actions) {
             draw_parent_state_strip(renderer, state, stale);
-        } else if (parent_view_ == ParentView::Pin) {
-            // PIN must stay one screen: fall back to 32px only when the 44px state wraps.
-            const int state_size = overlay_text_height(renderer, state.text, cw - 36, PTC_OVERLAY_FONT_DISPLAY) >
-                    (PTC_OVERLAY_FONT_DISPLAY * 6 + 4) / 5
-                ? PTC_OVERLAY_FONT_BODY_LG : PTC_OVERLAY_FONT_DISPLAY;
-            dashboard_panel(renderer, {{state.text, state_size, state.color}}, state.color, state.normal);
+        } else if (parent_view_ == ParentView::Pin && !state.normal && !pin_message_[0]) {
+            draw_parent_state_strip(renderer, state, stale);
         }
         if (parent_view_ == ParentView::Pin) {
             std::memset(page_layout_.pin_keys, 0, sizeof(page_layout_.pin_keys));
-            char masked[PTC_AUTH_PIN_MAX_LEN + 1];
-            (void)ptc_overlay_pin_mask(pin_length_, masked, sizeof(masked));
-            std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_U_DIGITS_ENTERED_S), static_cast<unsigned>(pin_length_), masked);
-            dashboard_panel(renderer, {{line, PTC_OVERLAY_FONT_BODY_LG, pal.text_primary}}, pal.accent);
-            if (pin_message_[0]) flow_text(renderer, pin_message_, PTC_OVERLAY_FONT_BODY, pal.danger);
+            const auto &vp = page_layout_.viewport;
+            const int card_x = vp.x + 4;
+            const int card_w = vp.w - 8;
+            const bool has_msg = pin_message_[0] != '\0';
+            const int msg_h = has_msg ? overlay_text_height(renderer, pin_message_, card_w - 24, PTC_OVERLAY_FONT_CAPTION) : 0;
+
+            // Compact Blind PIN status + circular masked dot well
+            {
+                const int pin_card_h = 84 + (has_msg ? (msg_h + 6) : 0);
+                const int py = flow_y_ - static_cast<int>(page_scroll_);
+                const auto card_bg = has_msg ? pal.danger_soft : pal.card_bg;
+                const auto card_bd = has_msg ? pal.danger : pal.border_control;
+                draw_round_rect_surface(renderer, card_x, py, card_w, pin_card_h, 6,
+                    card_bg, card_bd, has_msg ? 2 : 1);
+
+                char count_buf[48];
+                std::snprintf(count_buf, sizeof(count_buf), ptc_ui_text(PTC_UI_T_OVERLAY_PIN_COUNT_BADGE),
+                    static_cast<unsigned>(pin_length_));
+                const int count_w = text_width(renderer, count_buf, PTC_OVERLAY_FONT_CAPTION) + 16;
+                const int badge_x = card_x + card_w - 10 - count_w;
+                draw_pill(renderer, badge_x, py + 7, count_w, 24, pal.accent_soft, pal.accent, 1);
+                draw_localized_center(renderer, count_buf, badge_x, py + 7, count_w, 24,
+                    PTC_OVERLAY_FONT_CAPTION, pal.accent);
+
+                const char *blind_txt = ptc_ui_text(PTC_UI_T_OVERLAY_PIN_BLIND_BADGE);
+                overlay_text(renderer, blind_txt, card_x + 12, py + 7,
+                    std::max(40, badge_x - (card_x + 12) - 8), PTC_OVERLAY_FONT_CAPTION,
+                    has_msg ? pal.danger : pal.text_secondary);
+
+                // Recessed masked dot well
+                const int well_x = card_x + 10;
+                const int well_y = py + 37;
+                const int well_w = card_w - 20;
+                const int well_h = 36;
+                draw_round_rect_surface(renderer, well_x, well_y, well_w, well_h, 5,
+                    pal.panel_bg, pal.border_decorative, 1);
+
+                const size_t dot_count = std::max<size_t>(6,
+                    std::min<size_t>(static_cast<size_t>(PTC_AUTH_PIN_MAX_LEN),
+                        pin_length_ + (pin_length_ < PTC_AUTH_PIN_MAX_LEN ? 1 : 0)));
+                const int dot_d = 12;
+                const int dot_gap = dot_count > 10 ? 8 : 12;
+                const int total_dots_w = static_cast<int>(dot_count) * dot_d +
+                    static_cast<int>(dot_count - 1) * dot_gap;
+                int dx = well_x + (well_w - total_dots_w) / 2;
+                const int dy = well_y + (well_h - dot_d) / 2;
+                for (size_t i = 0; i < dot_count; ++i) {
+                    const bool filled = i < pin_length_;
+                    if (filled) {
+                        draw_round_rect_surface(renderer, dx, dy, dot_d, dot_d, dot_d / 2,
+                            pal.accent, pal.accent, 0);
+                    } else {
+                        draw_round_rect_surface(renderer, dx, dy, dot_d, dot_d, dot_d / 2,
+                            pal.card_bg, pal.border_control, 2);
+                    }
+                    dx += dot_d + dot_gap;
+                }
+
+                if (has_msg) {
+                    overlay_text(renderer, pin_message_, card_x + 12, well_y + well_h + 6,
+                        card_w - 24, PTC_OVERLAY_FONT_CAPTION, pal.danger);
+                }
+                flow_y_ += pin_card_h + 6;
+            }
 
             if (!parent_pin_standard_keypad_) {
-                flow_text(renderer, ptc_ui_text(PTC_UI_T_STICK_8_DIRECTIONS_FOR_1_8_D), PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary, 6);
-                const PtcUiTextId directions[] = {PTC_UI_T_8_UP_LEFT, PTC_UI_T_1_UP, PTC_UI_T_2_UP_RIGHT,
-                    PTC_UI_T_7_LEFT, PTC_UI_T_3_RIGHT, PTC_UI_T_6_DOWN_LEFT, PTC_UI_T_5_DOWN, PTC_UI_T_4_DOWN_RIGHT};
-                for (unsigned i = 0; i < 8; ++i) {
-                    const auto r = ptc_overlay_pin_wheel_rect(cx, flow_y_, i);
-                    page_layout_.pin_keys[i] = r;
-                    auto vr = r;
-                    vr.y -= static_cast<int>(page_scroll_);
-                    draw_button(renderer, vr, ptc_ui_text(directions[i]), pal.text_primary, false, PTC_OVERLAY_FONT_SECONDARY);
+                // Batch 5 aligned Joy-Con 8-way radial compass + independent X=0 / Y=9 keycaps.
+                // Dynamically sized to guarantee scroll_max == 0 in all languages and error states.
+                const int bottom_rows_h = 46 + 6 + 46 + 4;
+                const int compass_h = std::clamp(vp.y + vp.h - flow_y_ - bottom_rows_h - 6, 188, 266);
+                const int compass_raw_y = flow_y_;
+                const int compass_y = compass_raw_y - static_cast<int>(page_scroll_);
+
+                draw_round_rect_surface(renderer, card_x, compass_y, card_w, compass_h, 6,
+                    pal.card_bg, pal.border_decorative, 1);
+                renderer->drawRect(card_x + 8, compass_y + 1, card_w - 16, 2, renderer->a(pal.accent));
+
+                const char *hint = ptc_ui_text(PTC_UI_T_OVERLAY_PIN_COMPASS_HINT);
+                draw_localized_center(renderer, hint, card_x + 8, compass_y + 4, card_w - 16, 24,
+                    PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+
+                const int hub_cx = card_x + card_w / 2;
+                const int hub_cy = compass_y + 30 + (compass_h - 34) / 2;
+                const int node_w = 54;
+                const int node_h = 34;
+                const int rx = 142;
+                const int ry = std::max(54, (compass_h - 34 - node_h - 10) / 2);
+                const int dx_diag = 104;
+                const int dy_diag = (ry * 72) / 100;
+
+                // Order matches main.cpp touch wheel_digits[8] = {8, 1, 2, 7, 3, 6, 5, 4}
+                const int off_x[8] = {-dx_diag, 0, dx_diag, -rx, rx, -dx_diag, 0, dx_diag};
+                const int off_y[8] = {-dy_diag, -ry, -dy_diag, 0, 0, dy_diag, ry, dy_diag};
+                const char *digit_lbl[8] = {"8", "1", "2", "7", "3", "6", "5", "4"};
+                const bool is_cardinal[8] = {false, true, false, true, true, false, true, false};
+
+                // Subtle outer octagonal compass ring connecting clockwise neighbors
+                static const int ring_order[8] = {1, 2, 4, 7, 6, 5, 3, 0};
+                for (int r_i = 0; r_i < 8; ++r_i) {
+                    const int a = ring_order[r_i];
+                    const int b = ring_order[(r_i + 1) % 8];
+                    draw_line_2px(renderer, hub_cx + off_x[a], hub_cy + off_y[a],
+                        hub_cx + off_x[b], hub_cy + off_y[b], pal.border_decorative);
                 }
-                const auto r0 = ptc_overlay_pin_center_0_rect(cx, flow_y_);
+
+                // 8 radial spokes from Joy-Con left stick hub
+                for (unsigned i = 0; i < 8; ++i) {
+                    draw_line_2px(renderer, hub_cx, hub_cy,
+                        hub_cx + off_x[i], hub_cy + off_y[i],
+                        is_cardinal[i] ? pal.border_control : pal.border_decorative);
+                }
+
+                // Center Left-Stick hub badge
+                const int hub_w = 88;
+                const int hub_h = 42;
+                draw_round_rect_surface(renderer, hub_cx - hub_w / 2, hub_cy - hub_h / 2,
+                    hub_w, hub_h, 21, pal.accent_soft, pal.accent, 2);
+                draw_localized_center(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_PIN_STICK_HUB),
+                    hub_cx - hub_w / 2 + 4, hub_cy - hub_h / 2, hub_w - 8, hub_h,
+                    PTC_OVERLAY_FONT_CAPTION, pal.accent);
+
+                // 8 directional digit nodes
+                for (unsigned i = 0; i < 8; ++i) {
+                    const int nx = hub_cx + off_x[i] - node_w / 2;
+                    const int ny_screen = hub_cy + off_y[i] - node_h / 2;
+                    const int ny_raw = ny_screen + static_cast<int>(page_scroll_);
+                    page_layout_.pin_keys[i] = ptc_overlay_rect(nx, ny_raw, node_w, node_h);
+                    draw_round_rect_surface(renderer, nx, ny_screen, node_w, node_h, 10,
+                        is_cardinal[i] ? pal.accent_soft : pal.card_raised,
+                        is_cardinal[i] ? pal.accent : pal.border_control,
+                        is_cardinal[i] ? 2 : 1);
+                    draw_localized_center(renderer, digit_lbl[i], nx, ny_screen, node_w, node_h,
+                        PTC_OVERLAY_FONT_BODY, is_cardinal[i] ? pal.accent : pal.text_primary);
+                }
+
+                flow_y_ += compass_h + 6;
+
+                // Independent Joy-Con X=0 and Y=9 face-button keycap row
+                const int face_h = 46;
+                const int face_gap = 10;
+                const int face_w = (card_w - face_gap) / 2;
+                const auto r0 = ptc_overlay_rect(card_x, flow_y_, face_w, face_h);
                 page_layout_.pin_keys[8] = r0;
                 auto vr0 = r0;
                 vr0.y -= static_cast<int>(page_scroll_);
-                draw_button(renderer, vr0, "\uE0E2 0", pal.text_primary, false, PTC_OVERLAY_FONT_SECONDARY);
+                draw_button(renderer, vr0, "\uE0E2  0", pal.accent, false, PTC_OVERLAY_FONT_BODY);
 
-                const auto r9 = ptc_overlay_pin_center_9_rect(cx, flow_y_);
+                const auto r9 = ptc_overlay_rect(card_x + face_w + face_gap, flow_y_, card_w - face_w - face_gap, face_h);
                 page_layout_.pin_keys[9] = r9;
                 auto vr9 = r9;
                 vr9.y -= static_cast<int>(page_scroll_);
-                draw_button(renderer, vr9, "\uE0E3 9", pal.text_primary, false, PTC_OVERLAY_FONT_SECONDARY);
-
-                flow_y_ += 220;
+                draw_button(renderer, vr9, "\uE0E3  9", pal.accent, false, PTC_OVERLAY_FONT_BODY);
+                flow_y_ += face_h + 6;
             } else {
-                flow_text(renderer, ptc_ui_text(PTC_UI_T_TOUCH_NUMERIC_KEYPAD), PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary, 6);
+                flow_text(renderer, ptc_ui_text(PTC_UI_T_TOUCH_NUMERIC_KEYPAD), PTC_OVERLAY_FONT_CAPTION, pal.text_secondary, 4);
                 for (int d = 0; d < 10; ++d) {
                     const auto r = ptc_overlay_pin_numpad_key_rect(cx, flow_y_, d);
                     page_layout_.pin_keys[d] = r;
@@ -774,10 +961,10 @@
             // Dial pad keeps Toggle + ZL Backspace side by side. Standard numpad
             // already has X Backspace on row 4, so Toggle spans the full width.
             if (!parent_pin_standard_keypad_) {
-                const int btn_h = 48;
-                const int toggle_w = 214;
-                const int bs_w = cw - 12 - toggle_w - 10;
-                const auto toggle_rect = ptc_overlay_rect(cx + 4, flow_y_, toggle_w, btn_h);
+                const int btn_h = 46;
+                const int toggle_w = 216;
+                const int bs_w = card_w - toggle_w - 10;
+                const auto toggle_rect = ptc_overlay_rect(card_x, flow_y_, toggle_w, btn_h);
                 page_layout_.pin_keys[10] = toggle_rect;
                 auto visible_toggle = toggle_rect;
                 visible_toggle.y -= static_cast<int>(page_scroll_);
@@ -785,7 +972,7 @@
                     ptc_ui_text(PTC_UI_T_SWITCH_TO_NUMPAD),
                     pal.accent, false, PTC_OVERLAY_FONT_SECONDARY, false);
 
-                page_layout_.backspace = ptc_overlay_rect(cx + 4 + toggle_w + 10, flow_y_, bs_w, btn_h);
+                page_layout_.backspace = ptc_overlay_rect(card_x + toggle_w + 10, flow_y_, bs_w, btn_h);
                 auto visible_bs = page_layout_.backspace;
                 visible_bs.y -= static_cast<int>(page_scroll_);
                 draw_button(renderer, visible_bs, ptc_ui_text(PTC_UI_T_ZL_BACKSPACE_2),
@@ -793,7 +980,7 @@
                 flow_y_ += btn_h + 4;
             } else {
                 const int btn_h = 44;
-                const auto toggle_rect = ptc_overlay_rect(cx + 4, flow_y_, cw - 8, btn_h);
+                const auto toggle_rect = ptc_overlay_rect(card_x, flow_y_, card_w, btn_h);
                 page_layout_.pin_keys[10] = toggle_rect;
                 page_layout_.backspace = {};
                 auto visible_toggle = toggle_rect;
@@ -817,42 +1004,11 @@
             return;
         }
         if (parent_view_ == ParentView::Actions) {
-            const PtcUiTextId groups[] = {PTC_UI_T_OVERLAY_GROUP_TODAY_ALLOWANCE,
-                PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES, PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY,
-                PTC_UI_T_OVERLAY_CURRENT_RESTRICTION};
-            const PtcUiTextId hints[] = {PTC_UI_T_OVERLAY_GROUP_TODAY_ALLOWANCE_HINT,
-                PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES_HINT, PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY_HINT};
-            int last_group = -1;
-            for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
-                const int index = ptc_overlay_parent_action_at(slot, promoted_parent_action_);
-                const bool promoted = index == promoted_parent_action_;
-                const int group = promoted ? 3 : ptc_overlay_parent_action_group(ptc_overlay_parent_action_slot(index));
-                if (group != last_group) {
-                    last_group = group;
-                    const auto group_color = group >= 2 ? pal.danger : group == 1 ? pal.warning : pal.accent;
-                    if (slot != 0) {
-                        flow_y_ += 4;
-                        renderer->drawRect(page_layout_.viewport.x + 4,
-                            flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 12, 1,
-                            renderer->a(pal.border_decorative));
-                        flow_y_ += 8;
-                    }
-                    const int label_y = flow_y_ - static_cast<int>(page_scroll_);
-                    renderer->drawRect(page_layout_.viewport.x + 4, label_y + 4, 4,
-                        PTC_OVERLAY_FONT_CAPTION - 4, renderer->a(group_color));
-                    overlay_text(renderer, ptc_ui_text(groups[group]), page_layout_.viewport.x + 16,
-                        label_y, page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION, group_color);
-                    flow_y_ += overlay_text_height(renderer, ptc_ui_text(groups[group]),
-                        page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION);
-                    if (!promoted) {
-                        overlay_text(renderer, ptc_ui_text(hints[group]), page_layout_.viewport.x + 16,
-                            flow_y_ - static_cast<int>(page_scroll_), page_layout_.viewport.w - 24,
-                            PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
-                        flow_y_ += overlay_text_height(renderer, ptc_ui_text(hints[group]),
-                            page_layout_.viewport.w - 24, PTC_OVERLAY_FONT_CAPTION);
-                    }
-                    flow_y_ += 6;
-                }
+            const auto &vp = page_layout_.viewport;
+            const int active_tab = parent_tab_ < 0 ? 0 : parent_tab_ > 2 ? 2 : parent_tab_;
+            const int *order = ptc_overlay_parent_action_order();
+
+            auto render_action_card = [&](int index, bool promoted) {
                 const auto action = static_cast<PtcOverlayParentAction>(index);
                 const char *reason = parent_action_reason(action);
                 const char *value = nullptr;
@@ -876,7 +1032,8 @@
                             ptc_ui_text(PTC_UI_T_OVERLAY_ADJUST_MINUTES), reason ? "\n" : "", reason ? reason : "");
                     }
                     note = action_note;
-                } else if (index == PTC_OVERLAY_PARENT_SKIP_EYE_CARE && !reason && displayed_summary_.eye_care_rest_remaining_seconds > 0) {
+                } else if (index == PTC_OVERLAY_PARENT_SKIP_EYE_CARE && !reason &&
+                           displayed_summary_.eye_care_rest_remaining_seconds > 0) {
                     ptc_ui_format_minutes((displayed_summary_.eye_care_rest_remaining_seconds + 59) / 60, line, sizeof(line));
                     value = line;
                 }
@@ -892,10 +1049,125 @@
                     rect.y = start - static_cast<int>(page_scroll_);
                     draw_hold(renderer, rect, pal.danger);
                 }
+            };
+
+            // 1. Active restriction override stays pinned above the tab bar
+            if (promoted_parent_action_ >= 0 && promoted_parent_action_ < PTC_OVERLAY_PARENT_ACTION_COUNT) {
+                render_action_card(promoted_parent_action_, true);
             }
+
+            // 2. Enhanced Switch-native L/R 3-segment folder tab bar
+            int tab_avail[3] = {0, 0, 0};
+            for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+                const int idx = order[slot];
+                if (idx == promoted_parent_action_) continue;
+                const int g = ptc_overlay_parent_action_group(slot);
+                if (g >= 0 && g <= 2 && parent_action_reason(static_cast<PtcOverlayParentAction>(idx)) == nullptr) {
+                    tab_avail[g]++;
+                }
+            }
+            const int tab_raw_y = flow_y_;
+            draw_parent_tab_bar(renderer, vp.x + 4, tab_raw_y - static_cast<int>(page_scroll_),
+                vp.w - 8, active_tab, tab_avail, page_layout_.parent_tabs);
+            for (int t = 0; t < 3; ++t) {
+                page_layout_.parent_tabs[t].y = tab_raw_y + 2;
+            }
+            flow_y_ += 54;
+
+            // Connected subtle tab pane hint line
+            const PtcUiTextId tab_hints[3] = {
+                PTC_UI_T_OVERLAY_GROUP_TODAY_ALLOWANCE_HINT,
+                PTC_UI_T_OVERLAY_GROUP_ACTIVE_RULES_HINT,
+                PTC_UI_T_OVERLAY_GROUP_SYSTEM_RECOVERY_HINT,
+            };
+            if (active_tab < 2) {
+                const int hint_y = flow_y_ - static_cast<int>(page_scroll_);
+                const int hint_h = overlay_text(renderer, ptc_ui_text(tab_hints[active_tab]),
+                    vp.x + 12, hint_y, vp.w - 24, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
+                flow_y_ += hint_h + 6;
+            }
+
+            // 3. Render only the active tab's actions
+            if (active_tab == 0) {
+                for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+                    const int idx = order[slot];
+                    if (idx == promoted_parent_action_) continue;
+                    if (ptc_overlay_parent_action_group(slot) != 0) continue;
+                    render_action_card(idx, false);
+                }
+            } else if (active_tab == 1) {
+                int avail_list[PTC_OVERLAY_PARENT_ACTION_COUNT];
+                int unavail_list[PTC_OVERLAY_PARENT_ACTION_COUNT];
+                int avail_count = 0, unavail_count = 0;
+                bool focused_in_unavail = false;
+                for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+                    const int idx = order[slot];
+                    if (idx == promoted_parent_action_) continue;
+                    if (ptc_overlay_parent_action_group(slot) != 1) continue;
+                    if (parent_action_reason(static_cast<PtcOverlayParentAction>(idx)) == nullptr) {
+                        avail_list[avail_count++] = idx;
+                    } else {
+                        unavail_list[unavail_count++] = idx;
+                        if (parent_action_ == idx) focused_in_unavail = true;
+                    }
+                }
+                for (int i = 0; i < avail_count; ++i) {
+                    render_action_card(avail_list[i], false);
+                }
+                if (unavail_count > 0) {
+                    const bool expanded = parent_unavailable_expanded_ || focused_in_unavail;
+                    const auto drawer_raw = ptc_overlay_rect(vp.x + 4, flow_y_, vp.w - 12, 40);
+                    page_layout_.parent_drawer = drawer_raw;
+                    const int dy = drawer_raw.y - static_cast<int>(page_scroll_);
+                    if (dy + drawer_raw.h > vp.y && dy < vp.y + vp.h) {
+                        draw_round_rect_surface(renderer, drawer_raw.x, dy, drawer_raw.w, drawer_raw.h, 5,
+                            pal.card_bg, expanded ? pal.border_control : pal.border_decorative, 1);
+                        char drawer_lbl[128];
+                        std::snprintf(drawer_lbl, sizeof(drawer_lbl),
+                            ptc_ui_text(expanded ? PTC_UI_T_OVERLAY_UNAVAILABLE_OPEN : PTC_UI_T_OVERLAY_UNAVAILABLE_FOLDED),
+                            unavail_count);
+                        draw_localized_center(renderer, drawer_lbl, drawer_raw.x + 8, dy,
+                            drawer_raw.w - 16, drawer_raw.h, PTC_OVERLAY_FONT_CAPTION,
+                            expanded ? pal.accent : pal.text_secondary);
+                    }
+                    flow_y_ += drawer_raw.h + 6;
+                    if (expanded) {
+                        for (int i = 0; i < unavail_count; ++i) {
+                            render_action_card(unavail_list[i], false);
+                        }
+                    }
+                }
+            } else {
+                // Recovery tab: isolated high-risk warning banner + restore snapshot action
+                const int wx = vp.x + 4;
+                const int ww = vp.w - 12;
+                const char *wt = ptc_ui_text(PTC_UI_T_OVERLAY_RECOVERY_WARN_TITLE);
+                const char *wb = ptc_ui_text(PTC_UI_T_OVERLAY_RECOVERY_WARN_BODY);
+                const int wt_h = overlay_text_height(renderer, wt, ww - 28, PTC_OVERLAY_FONT_BODY);
+                const int wb_h = overlay_text_height(renderer, wb, ww - 28, PTC_OVERLAY_FONT_CAPTION);
+                const int wh = 16 + wt_h + 4 + wb_h;
+                const int wy = flow_y_ - static_cast<int>(page_scroll_);
+                if (wy + wh > vp.y && wy < vp.y + vp.h) {
+                    draw_round_rect_surface(renderer, wx, wy, ww, wh, 6, pal.danger_soft, pal.danger, 2);
+                    renderer->drawRect(wx, wy + 6, 4, wh - 12, renderer->a(pal.danger));
+                    overlay_text(renderer, wt, wx + 14, wy + 8, ww - 24, PTC_OVERLAY_FONT_BODY, pal.danger);
+                    overlay_text(renderer, wb, wx + 14, wy + 12 + wt_h, ww - 24, PTC_OVERLAY_FONT_CAPTION, pal.text_primary);
+                }
+                flow_y_ += wh + 8;
+
+                for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+                    const int idx = order[slot];
+                    if (idx == promoted_parent_action_) continue;
+                    if (ptc_overlay_parent_action_group(slot) != 2) continue;
+                    render_action_card(idx, false);
+                }
+            }
+
             end_page(renderer);
-            if (page_changed_ && parent_action_ >= 0) page_scroll_target_ = static_cast<float>(
-                ptc_overlay_scroll_to_parent_action(&page_layout_, parent_action_, 0));
+            if (page_changed_ && parent_action_ >= 0 && page_layout_.actions[parent_action_].h > 0) {
+                page_scroll_target_ = static_cast<float>(
+                    ptc_overlay_scroll_to_parent_action(&page_layout_, parent_action_, 0));
+            }
             // Action key hints (B Back / A Execute / Hold A 1s / Unavailable) live
             // in the Tesla host footer; the full 575px viewport stays for cards.
             page_layout_.primary = {};
@@ -1001,25 +1273,111 @@
                 flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_DISABLED_HELP),
                     PTC_OVERLAY_FONT_CAPTION, pal.warning, 6);
 
+            const auto policies = child_policy_status(summary);
+            const auto eye = child_eye_care_status(summary);
+            // Compact 4-guard health overview pills (Quota / Bedtime / Eye / Dock)
+            {
+                const auto &vp = page_layout_.viewport;
+                const int pill_gap = 6;
+                const int row_x = vp.x + 4;
+                const int row_w = vp.w - 8;
+                const int pill_w = (row_w - pill_gap * 3) / 4;
+                const int pill_h = 30;
+                const int py = flow_y_ - static_cast<int>(page_scroll_);
+                const auto quota_col = control_disabled() ? pal.warning
+                    : summary.daily_restriction_active ? pal.danger
+                    : (stale || (summary.remaining_available && summary.unrestricted_today != 1 && summary.remaining_minutes <= 10))
+                        ? pal.warning
+                    : summary.valid ? pal.success : pal.text_disabled;
+                const auto bed_col = bedtime_policy_color(policies.bedtime);
+                const auto eye_col = eye_care_restricted() ? pal.danger
+                    : eye.warning ? pal.warning
+                    : summary.eye_care_enabled ? pal.success : pal.text_secondary;
+                const auto dock_col = policy_color(policies.dock);
+                const PtcUiTextId guard_ids[4] = {
+                    PTC_UI_T_OVERLAY_GUARD_QUOTA,
+                    PTC_UI_T_OVERLAY_GUARD_BEDTIME,
+                    PTC_UI_T_OVERLAY_GUARD_EYE,
+                    PTC_UI_T_OVERLAY_GUARD_DOCK,
+                };
+                const tsl::Color guard_cols[4] = {quota_col, bed_col, eye_col, dock_col};
+                if (py + pill_h > vp.y && py < vp.y + vp.h) {
+                    for (int i = 0; i < 4; ++i) {
+                        const int px = row_x + i * (pill_w + pill_gap);
+                        const int pw = (i == 3) ? (row_w - i * (pill_w + pill_gap)) : pill_w;
+                        const bool muted = same_color(guard_cols[i], pal.text_secondary) ||
+                                           same_color(guard_cols[i], pal.text_disabled);
+                        draw_round_rect_surface(renderer, px, py, pw, pill_h, 6,
+                            muted ? pal.card_bg : dashboard_soft(guard_cols[i]),
+                            muted ? pal.border_decorative : semantic_border(guard_cols[i]), 1);
+                        renderer->drawRect(px + 8, py + (pill_h - 6) / 2, 6, 6, renderer->a(guard_cols[i]));
+                        draw_localized_center(renderer, ptc_ui_text(guard_ids[i]),
+                            px + 16, py, pw - 20, pill_h, PTC_OVERLAY_FONT_CAPTION,
+                            muted ? pal.text_secondary : pal.text_primary);
+                    }
+                }
+                flow_y_ += pill_h + 6;
+            }
+
             char label[128], value[128], note[128];
             int day, second;
             ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), value, sizeof(value), note, sizeof(note));
             const bool fresh = child_status_fresh(summary, day, second);
             child_card(renderer, label, value, note, PTC_OVERLAY_FONT_DISPLAY,
                 fresh ? pal.success : pal.warning, PTC_OVERLAY_FONT_BODY_LG, ChildCardKind::Time);
+            // Quota usage progress meter bar right under the daily quota card
+            if (summary.valid && summary.unrestricted_today != 1 &&
+                summary.daily_rule_available && summary.daily_rule_minutes > 0) {
+                int used_permille = -1;
+                if (summary.played_minutes_available && summary.played_minutes >= 0) {
+                    used_permille = std::clamp(summary.played_minutes * 1000 / summary.daily_rule_minutes, 0, 1000);
+                } else if (summary.remaining_available) {
+                    const int used = std::max(0, summary.daily_rule_minutes - summary.remaining_minutes);
+                    used_permille = std::clamp(used * 1000 / summary.daily_rule_minutes, 0, 1000);
+                }
+                if (used_permille >= 0) {
+                    const auto bar_col = (summary.daily_restriction_active || used_permille >= 1000) ? pal.danger
+                        : used_permille >= 800 ? pal.warning : pal.success;
+                    const auto &vp = page_layout_.viewport;
+                    const int py = flow_y_ - static_cast<int>(page_scroll_) - 2;
+                    if (py + 8 > vp.y && py < vp.y + vp.h) {
+                        draw_progress_bar(renderer, vp.x + 10, py, vp.w - 20, 8, used_permille, bar_col);
+                    }
+                    flow_y_ += 12;
+                }
+            }
             ptc_overlay_format_child_restriction_detail(&summary, line, sizeof(line));
             if (line[0]) flow_text(renderer, line, PTC_OVERLAY_FONT_BODY_LG, pal.warning, 6);
 
-            // 2. Why: the three rules, each with its own state.
+            // 2. Why: the three rules, promoting currently restricting rule(s) to the top.
             flow_section(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_GROUP_RULES), pal.accent);
-            const auto policies = child_policy_status(summary);
-            const auto eye = child_eye_care_status(summary);
-            child_rule(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye.compact, eye.detail,
-                eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary, ChildCardKind::Eye);
-            child_rule(renderer, ptc_ui_text(PTC_UI_T_POLICY_BED_LABEL), policies.bedtime.detail, nullptr,
-                bedtime_policy_color(policies.bedtime), ChildCardKind::Bedtime);
-            child_rule(renderer, ptc_ui_text(PTC_UI_T_POLICY_DOCK_LABEL), policies.dock.detail, nullptr,
-                policy_color(policies.dock), ChildCardKind::Dock);
+            struct DetailRuleItem {
+                const char *label;
+                const char *val;
+                const char *sub;
+                tsl::Color color;
+                ChildCardKind kind;
+                bool active;
+            };
+            const DetailRuleItem items[3] = {
+                {ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye.compact, eye.detail,
+                    eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary,
+                    ChildCardKind::Eye, eye_care_restricted()},
+                {ptc_ui_text(PTC_UI_T_POLICY_BED_LABEL), policies.bedtime.detail, nullptr,
+                    bedtime_policy_color(policies.bedtime),
+                    ChildCardKind::Bedtime, policies.bedtime.state == PTC_POLICY_ACTIVE},
+                {ptc_ui_text(PTC_UI_T_POLICY_DOCK_LABEL), policies.dock.detail, nullptr,
+                    policy_color(policies.dock),
+                    ChildCardKind::Dock, summary.dock_restriction_active},
+            };
+            for (int pass = 0; pass < 2; ++pass) {
+                for (int i = 0; i < 3; ++i) {
+                    if (items[i].active == (pass == 0)) {
+                        child_rule(renderer, items[i].label, items[i].val, items[i].sub,
+                            items[i].color, items[i].kind);
+                    }
+                }
+            }
 
             // 3. Background numbers and transport detail stay collapsed by default.
             flow_section(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_GROUP_DIAGNOSTICS), pal.text_secondary);
@@ -1082,30 +1440,50 @@
         else std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
         format_refresh_age(age, sizeof(age));
         const bool default_scheme = navbar_scheme_ == OverlayNavbarScheme::Default;
-        // The whole block is clipped to the scrolling viewport, whose top edge is
-        // cy + PTC_OVERLAY_HEADER_H + 8 (absolute Y=64). A 28px line draws its ink
-        // from baseline-16, so a baseline at cy+76 lost the glyph tops; cy+84 keeps
-        // the row whole and still leaves 19px above the code slots (absolute 116).
-        // Count and console date then fill the 180..244 band between the slots and
-        // the keypad instead of running into the slot outlines.
-        const int status_y = default_scheme ? 88 : 100;
         const int meta_y = default_scheme ? 208 : 216;
         const int date_y = default_scheme ? 236 : 244;
-        draw_localized(renderer, line, false, cx + 14, cy + status_y, PTC_OVERLAY_FONT_BODY,
-            renderer->a(control_disabled() ? pal.warning : pal.success));
-        const int left_width = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
-        if (left_width + static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_SECONDARY).first) + 40 <= cw)
-            draw_localized_right(renderer, age, cx + cw - 14, cy + status_y, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
+        if (default_scheme) {
+            // 3-step micro stepper + compact context strip above PTC_OVERLAY_SLOT_Y (112)
+            draw_code_stepper(renderer, cx + 4, cy + 49, cw - 8, 0);
+            const int strip_y = cy + 79;
+            const int strip_h = 29;
+            draw_round_rect_surface(renderer, cx + 4, strip_y, cw - 8, strip_h, 4,
+                pal.card_bg, control_disabled() ? pal.warning_border : pal.border_decorative, 1);
+            const int left_w = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
+            const int age_w = static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_CAPTION).first);
+            const bool show_age = left_w + age_w + 36 <= cw - 8;
+            const auto line_color = control_disabled() ? pal.warning : pal.success;
+            if (left_w <= cw - 28) {
+                const int base_y = strip_y + static_cast<int>((strip_h + PTC_OVERLAY_FONT_BODY * 0.72f) / 2.0f);
+                draw_localized(renderer, line, false, cx + 14, base_y, PTC_OVERLAY_FONT_BODY, renderer->a(line_color));
+            } else {
+                overlay_text(renderer, line, cx + 14, strip_y + 1, cw - 28, PTC_OVERLAY_FONT_BODY, line_color);
+            }
+            if (show_age) {
+                const int age_base_y = strip_y + static_cast<int>((strip_h + PTC_OVERLAY_FONT_CAPTION * 0.72f) / 2.0f);
+                draw_localized(renderer, age, false, cx + cw - 14 - age_w, age_base_y,
+                    PTC_OVERLAY_FONT_CAPTION, renderer->a(pal.text_secondary));
+            }
+        } else {
+            const int status_y = 100;
+            draw_localized(renderer, line, false, cx + 14, cy + status_y, PTC_OVERLAY_FONT_BODY,
+                renderer->a(control_disabled() ? pal.warning : pal.success));
+            const int left_width = static_cast<int>(measure_localized(renderer, line, PTC_OVERLAY_FONT_BODY).first);
+            if (left_width + static_cast<int>(measure_localized(renderer, age, PTC_OVERLAY_FONT_SECONDARY).first) + 40 <= cw)
+                draw_localized_right(renderer, age, cx + cw - 14, cy + status_y, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
+        }
         for (unsigned i = 0; i < PTC_OVERLAY_CODE_SYMBOLS; ++i) {
             const auto slot = ptc_overlay_code_slot_rect(cx, cy, cw, i);
             const bool cursor = input_->length < PTC_OVERLAY_CODE_SYMBOLS && i == input_->length;
             const bool entered = i < input_->length;
-            draw_dashboard_surface(renderer, slot, cursor ? pal.accent_soft : entered ? pal.success_soft : pal.card_raised,
-                cursor ? pal.accent : entered ? pal.success : pal.border_control, cursor);
+            draw_round_rect_surface(renderer, slot.x, slot.y, slot.w, slot.h, 6,
+                cursor ? pal.accent_soft : entered ? pal.success_soft : pal.card_bg,
+                cursor ? pal.accent : entered ? pal.success_border : pal.border_control,
+                (cursor || entered) ? 2 : 1);
             if (entered) {
                 const char symbol[] = {input_->symbols[i], '\0'};
                 draw_localized_center(renderer, symbol, slot.x, slot.y, slot.w, slot.h,
-                    PTC_OVERLAY_FONT_CODE, pal.text_primary);
+                    PTC_OVERLAY_FONT_CODE, pal.success);
             } else if (cursor) {
                 /* Draw cursor bar with drawRect to stay crisp and avoid extra glyph cache entries. */
                 renderer->drawRect(slot.x + (slot.w - 20) / 2, slot.y + slot.h - 14, 20, 3, renderer->a(pal.accent));
@@ -1222,7 +1600,7 @@
         int count, bool compact_inactive = false) const
     {
         const auto &vp = page_layout_.viewport;
-        const int avail = (vp.w - 8) - 44 - 12;
+        const int avail = (vp.w - 8) - 16 - 12;
         int total = 0;
         for (int i = 0; i < count; ++i) {
             const auto &row = rows[i];
@@ -1234,21 +1612,21 @@
             const bool inline_value = title_w + value_w + 12 <= avail;
             const int title_h = overlay_text_height(renderer, row.label, avail, title_size);
             const int value_h = overlay_text_height(renderer, row.value, avail, value_size);
-            const int base_h = (compact_inactive && row.level > 0) ? 40 : 54;
-            const int height = inline_value ? base_h : std::max(base_h, 14 + title_h + 2 + value_h + 6);
-            total += height + ((compact_inactive && row.level > 0) ? 3 : 4);
+            const int base_h = (compact_inactive && row.level > 0) ? 38 : 48;
+            const int height = inline_value ? base_h : std::max(base_h, 12 + title_h + 2 + value_h + 6);
+            total += height + ((compact_inactive && row.level > 0) ? 4 : 6);
         }
         return total;
     }
 
+    // Independent guard rule cards (left semantic bar + clean border, no fake timeline connector).
     void draw_child_rule_chain(tsl::gfx::Renderer *renderer, const ChildRuleRow *rows,
         int count, bool compact_inactive = false)
     {
         const auto &pal = current_palette();
         const auto &vp = page_layout_.viewport;
         const int x = vp.x + 4, w = vp.w - 8;
-        const int text_x = x + 44, avail = w - 44 - 12;
-        int previous_center = 0;
+        const int text_x = x + 16, avail = w - 16 - 12;
         for (int i = 0; i < count; ++i) {
             const auto &row = rows[i];
             const int title_size = row.level == 2 ? PTC_OVERLAY_FONT_BODY - 2 : PTC_OVERLAY_FONT_BODY;
@@ -1259,33 +1637,18 @@
             const bool inline_value = title_w + value_w + 12 <= avail;
             const int title_h = overlay_text_height(renderer, row.label, avail, title_size);
             const int value_h = overlay_text_height(renderer, row.value, avail, value_size);
-            const int base_h = (compact_inactive && row.level > 0) ? 40 : 54;
-            const int height = inline_value ? base_h : std::max(base_h, 14 + title_h + 2 + value_h + 6);
+            const int base_h = (compact_inactive && row.level > 0) ? 38 : 48;
+            const int height = inline_value ? base_h : std::max(base_h, 12 + title_h + 2 + value_h + 6);
             const int y = flow_y_ - static_cast<int>(page_scroll_);
-            flow_y_ += height + ((compact_inactive && row.level > 0) ? 3 : 4);
+            flow_y_ += height + ((compact_inactive && row.level > 0) ? 4 : 6);
+            if (y + height <= vp.y || y >= vp.y + vp.h) continue;
 
-            const auto soft = dashboard_soft(row.color);
-            if (row.level == 0) draw_round_rect_surface(renderer, x, y, w, height, 4, soft, soft, 0);
-            const int dot_x = x + 18;
-            const int dot_y = y + (inline_value ? height / 2 : 24);
-            // Chain rail runs between dots; dots never sit on top of it.
-            if (i > 0 && dot_y - 17 > previous_center + 17)
-                renderer->drawRect(dot_x - 1, previous_center + 17, 2, dot_y - 17 - (previous_center + 17),
-                    renderer->a(pal.border_control));
-            previous_center = dot_y;
-            if (row.level == 0) {
-                auto halo = row.color;
-                halo.a = 5;
-                draw_round_rect_surface(renderer, dot_x - 15, dot_y - 15, 30, 30, 15, halo, halo, 0);
-                draw_round_rect_surface(renderer, dot_x - 10, dot_y - 10, 20, 20, 10, row.color, row.color, 0);
-            } else if (row.level == 1) {
-                draw_round_rect_surface(renderer, dot_x - 8, dot_y - 8, 16, 16, 8,
-                    pal.text_secondary, pal.text_secondary, 0);
-                draw_round_rect_surface(renderer, dot_x - 5, dot_y - 5, 10, 10, 5, pal.card_bg, pal.card_bg, 0);
-            } else {
-                draw_round_rect_surface(renderer, dot_x - 5, dot_y - 5, 10, 10, 5,
-                    pal.text_disabled, pal.text_disabled, 0);
-            }
+            const auto card_bg = row.level == 0 ? dashboard_soft(row.color) : pal.card_bg;
+            const auto card_bd = row.level == 0 ? semantic_border(row.color) : pal.border_decorative;
+            const auto bar_col = row.level == 2 ? pal.text_disabled :
+                row.level == 1 ? pal.text_secondary : row.color;
+            draw_round_rect_surface(renderer, x, y, w, height, 6, card_bg, card_bd, 1);
+            renderer->drawRect(x, y + 6, 4, height - 12, renderer->a(bar_col));
 
             const auto title_color = row.level == 2 ? pal.text_disabled : pal.text_primary;
             const auto value_color = row.level == 0 ? row.color :
@@ -1296,8 +1659,8 @@
                 overlay_text(renderer, row.value, x + w - 12 - value_w, y + (height - value_h) / 2,
                     value_w + 2, value_size, value_color);
             } else {
-                overlay_text(renderer, row.label, text_x, y + 8, avail, title_size, title_color);
-                overlay_text(renderer, row.value, text_x, y + 10 + title_h, avail, value_size, value_color);
+                overlay_text(renderer, row.label, text_x, y + 7, avail, title_size, title_color);
+                overlay_text(renderer, row.value, text_x, y + 9 + title_h, avail, value_size, value_color);
             }
         }
     }
@@ -1521,6 +1884,30 @@
             note = line;
         }
 
+        // Compute 4-state hero progress bar permille (0..1000, or -1 when not applicable)
+        int hero_progress = -1;
+        if (!control_disabled()) {
+            if (eye_restricted) {
+                if (eye.rest_seconds >= 0 && summary.eye_care_rest_minutes > 0) {
+                    const int total_sec = summary.eye_care_rest_minutes * 60;
+                    hero_progress = std::clamp(eye.rest_seconds * 1000 / total_sec, 0, 1000);
+                }
+            } else if (dock_restricted) {
+                hero_progress = 1000;
+            } else if (bedtime) {
+                if (policies.bedtime.state == PTC_POLICY_ACTIVE) hero_progress = 1000;
+            } else if (confirmed && summary.unrestricted_today != 1 && summary.remaining_available) {
+                if (summary.daily_rule_available && summary.daily_rule_minutes > 0) {
+                    const int denom = std::max(summary.daily_rule_minutes, summary.remaining_minutes);
+                    hero_progress = std::clamp(summary.remaining_minutes * 1000 / denom, 0, 1000);
+                } else if (summary.played_minutes_available && summary.played_minutes >= 0 &&
+                           (summary.played_minutes + summary.remaining_minutes) > 0) {
+                    hero_progress = std::clamp(summary.remaining_minutes * 1000 /
+                        (summary.played_minutes + summary.remaining_minutes), 0, 1000);
+                }
+            }
+        }
+
         // One walk both measures and draws, so the banner always fits its text.
         const int pad_x = 14, banner_y = cy - 6, inner_w = cw - 2 * pad_x;
         auto walk = [&](bool draw) {
@@ -1545,6 +1932,10 @@
                     y += overlay_text_height(renderer, num_label, inner_w, PTC_OVERLAY_FONT_CAPTION);
                 }
             }
+            if (hero_progress >= 0) {
+                if (draw) draw_progress_bar(renderer, x, y + 3, inner_w, 7, hero_progress, tone);
+                y += 14;
+            }
             if (sub) {
                 if (draw) overlay_text(renderer, sub, x, y, inner_w, PTC_OVERLAY_FONT_BODY, pal.text_primary);
                 y += overlay_text_height(renderer, sub, inner_w, PTC_OVERLAY_FONT_BODY) + 4;
@@ -1553,12 +1944,13 @@
                 if (draw) overlay_text(renderer, note, x, y, inner_w, PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
                 y += overlay_text_height(renderer, note, inner_w, PTC_OVERLAY_FONT_CAPTION);
             }
-            return y + 12;
+            return y + 10;
         };
         const int banner_bottom = walk(false);
         const auto banner = ptc_overlay_rect(cx, banner_y, cw, banner_bottom - banner_y);
-        draw_dashboard_surface(renderer, banner, dashboard_soft(tone), pal.border_decorative);
-        renderer->drawRect(banner.x + 8, banner.y + 1, banner.w - 16, 3, renderer->a(tone));
+        draw_round_rect_surface(renderer, banner.x, banner.y, banner.w, banner.h, 6,
+            dashboard_soft(tone), semantic_border(tone), 2);
+        renderer->drawRect(banner.x + 8, banner.y + 2, banner.w - 16, 3, renderer->a(tone));
 
         // Header row: brand left; language, parent area and refresh right.
         // Every control is measured and the brand yields the space they need,

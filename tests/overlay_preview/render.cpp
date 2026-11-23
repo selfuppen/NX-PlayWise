@@ -1109,6 +1109,7 @@ int main(int argc, char **argv) {
                     view.parent_view_ = ParentView::Child;
                     if (scene <= 19) {
                         view.parent_view_ = ParentView::Actions;
+                        view.parent_tab_ = scene - 17;
                         view.parent_action_ = scene == 17 ? PTC_OVERLAY_PARENT_ADD_MINUTES :
                             scene == 18 ? PTC_OVERLAY_PARENT_SKIP_EYE_CARE : PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT;
                         view.daily_add_minutes_ = 120;
@@ -1326,7 +1327,8 @@ int main(int argc, char **argv) {
                     for (const auto label : {PTC_UI_T_OVERLAY_EYE_LABEL, PTC_UI_T_POLICY_BED_LABEL,
                         view.page_identity() == 4 || policies.mode == PTC_UI_T_STATUS_TO_CONFIRM ?
                         PTC_UI_T_POLICY_DOCK_LABEL : policies.mode}) {
-                        // Details keep 32px rule titles; the overview chain uses 28px (26px when idle).
+                        // Details keep 32px rule titles (plus 22px 4-guard overview pills);
+                        // the overview chain uses 28px (26px when idle).
                         const bool details_page = view.page_identity() == 4;
                         const auto title_lines = overlay_wrap(&renderer, ptc_ui_text(label), details_page ? 32 : 28, 380);
                         bool found = true;
@@ -1334,6 +1336,7 @@ int main(int argc, char **argv) {
                             bool line_found = false;
                             for (const auto &run : renderer.text_runs) {
                                 if (run.text == title_line) {
+                                    if (details_page && run.size == PTC_OVERLAY_FONT_CAPTION) continue;
                                     line_found = true;
                                     require(details_page ? run.size == 32 : (run.size == 28 || run.size == 26),
                                         "production child rule titles must use their page type scale");
@@ -1486,14 +1489,22 @@ int main(int argc, char **argv) {
                             "child footer must be pixel-visible");
                 }
                 if (view.parent_view_ == ParentView::Actions) {
+                    for (int t = 0; t < 3; ++t) {
+                        const auto &tab = view.page_layout_.parent_tabs[t];
+                        require(tab.w > 0 && tab.h > 0 && tab.x >= PTC_OVERLAY_CONTENT_X &&
+                            tab.x + tab.w <= PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W,
+                            "parent quick menu must publish valid L/R segmented tab rectangles");
+                        if (t > 0) {
+                            require(tab.x >= view.page_layout_.parent_tabs[t - 1].x + view.page_layout_.parent_tabs[t - 1].w,
+                                "parent tab buttons must not overlap horizontally");
+                        }
+                    }
+                    int vis_actions[PTC_OVERLAY_PARENT_ACTION_COUNT];
+                    const int vis_count = view.parent_visible_actions(vis_actions);
+                    require(vis_count > 0, "active parent tab must expose at least one action");
                     int previous_bottom = view.page_layout_.viewport.y;
-                    int previous_group = -1;
-                    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
-                        const int index = ptc_overlay_parent_action_at(slot, view.promoted_parent_action_);
-                        const bool promoted = index == view.promoted_parent_action_;
-                        const int group = promoted ? -1 : ptc_overlay_parent_action_group(ptc_overlay_parent_action_slot(index));
-                        require(group >= previous_group, "action group headers must follow the visual order");
-                        previous_group = group;
+                    for (int i = 0; i < vis_count; ++i) {
+                        const int index = vis_actions[i];
                         const auto rect = view.page_layout_.actions[index];
                         const bool compact_disabled = view.parent_action_ != index &&
                             view.parent_action_reason(static_cast<PtcOverlayParentAction>(index)) != nullptr;
@@ -1502,11 +1513,17 @@ int main(int argc, char **argv) {
                         const int offset = ptc_overlay_scroll_to_parent_action(&view.page_layout_, index, 0);
                         require(rect.y - offset >= view.page_layout_.viewport.y &&
                             rect.y + rect.h - offset <= view.page_layout_.viewport.y + view.page_layout_.viewport.h,
-                            "every parent action must be fully reachable by focus scrolling");
+                            "every visible parent action must be fully reachable by focus scrolling");
                         previous_bottom = rect.y + rect.h;
                     }
-                    view.page_scroll_ = view.page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_parent_action(
-                        &view.page_layout_, view.parent_action_, 0));
+                    if (scene == 17 || scene == 19) {
+                        require(view.page_layout_.scroll_max == 0,
+                            "quota and recovery parent tabs must fit without scrolling");
+                    }
+                    if (view.parent_action_ >= 0 && view.page_layout_.actions[view.parent_action_].h > 0) {
+                        view.page_scroll_ = view.page_scroll_target_ = static_cast<float>(ptc_overlay_scroll_to_parent_action(
+                            &view.page_layout_, view.parent_action_, 0));
+                    }
                 }
                 if (scene == 25 || scene == 26 || scene == 33 || scene == 35 || scene == 36)
                     view.page_scroll_ = view.page_scroll_target_ = static_cast<float>(view.page_layout_.scroll_max);

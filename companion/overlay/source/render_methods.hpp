@@ -151,6 +151,166 @@
         return pal.accent_soft;
     }
 
+    tsl::Color semantic_border(tsl::Color color) const
+    {
+        const auto &pal = current_palette();
+        if (same_color(color, pal.danger)) return pal.danger_border;
+        if (same_color(color, pal.warning)) return pal.warning_border;
+        if (same_color(color, pal.success)) return pal.success_border;
+        if (same_color(color, pal.night)) return pal.night_border;
+        if (same_color(color, pal.accent)) return pal.accent;
+        return pal.border_control;
+    }
+
+    void draw_progress_bar(tsl::gfx::Renderer *renderer, int x, int y, int w, int h,
+        int permille, tsl::Color fill_color) const
+    {
+        if (w <= 4 || h <= 2) return;
+        const auto &pal = current_palette();
+        const int clamped = permille < 0 ? 0 : permille > 1000 ? 1000 : permille;
+        draw_round_rect_surface(renderer, x, y, w, h, h / 2, pal.card_bg, pal.border_decorative, 1);
+        const int inner_w = w - 2;
+        const int fill_w = clamped <= 0 ? 0 : std::max(4, inner_w * clamped / 1000);
+        if (fill_w > 0) {
+            draw_round_rect_surface(renderer, x + 1, y + 1, std::min(inner_w, fill_w), h - 2,
+                std::max(1, (h - 2) / 2), fill_color, fill_color, 0);
+        }
+    }
+
+    static void draw_line_2px(tsl::gfx::Renderer *renderer, int x0, int y0, int x1, int y1,
+        tsl::Color color)
+    {
+        const auto ink = renderer->a(color);
+        int dx = std::abs(x1 - x0);
+        int sx = x0 < x1 ? 1 : -1;
+        int dy = -std::abs(y1 - y0);
+        int sy = y0 < y1 ? 1 : -1;
+        int err = dx + dy;
+        while (true) {
+            renderer->drawRect(x0, y0, 2, 2, ink);
+            if (x0 == x1 && y0 == y1) break;
+            int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    }
+
+    // Unified 3-step micro stepper shared by Code Entry -> Preview -> Result.
+    void draw_code_stepper(tsl::gfx::Renderer *renderer, int x, int y, int w, int active_step)
+    {
+        const auto &pal = current_palette();
+        const PtcUiTextId labels[3] = {
+            PTC_UI_T_OVERLAY_STEP_ENTER_CODE,
+            PTC_UI_T_OVERLAY_STEP_PREVIEW,
+            PTC_UI_T_OVERLAY_STEP_DONE,
+        };
+        const int gap = 6;
+        const int cell_w = (w - gap * 2) / 3;
+        const int cell_h = 26;
+        for (int i = 0; i < 3; ++i) {
+            const int rx = x + i * (cell_w + gap);
+            const int rw = (i == 2) ? (w - i * (cell_w + gap)) : cell_w;
+            const bool cur = i == active_step;
+            const bool done = i < active_step;
+            const auto bg = cur ? pal.accent_soft : done ? pal.success_soft : pal.card_bg;
+            const auto bd = cur ? pal.accent : done ? pal.success_border : pal.border_decorative;
+            const auto fg = cur ? pal.accent : done ? pal.success : pal.text_disabled;
+            draw_round_rect_surface(renderer, rx, y, rw, cell_h, 4, bg, bd, cur ? 2 : 1);
+            if (cur) {
+                renderer->drawRect(rx + 6, y + cell_h - 3, rw - 12, 2, renderer->a(pal.accent));
+            }
+            const char *txt = ptc_ui_text(labels[i]);
+            draw_localized_center(renderer, txt, rx + 4, y, rw - 8, cell_h, PTC_OVERLAY_FONT_CAPTION, fg);
+        }
+    }
+
+    // Switch-native L/R segmented folder-style tab bar for Parent Quick Menu.
+    // Built with strong tab affordance: recessed track, L/R shoulder keycaps,
+    // full-width bottom rule, elevated active folder tab with 4px top/bottom accent
+    // and open connection into the content pane below.
+    void draw_parent_tab_bar(tsl::gfx::Renderer *renderer, int x, int y, int w,
+        int active_tab, const int tab_available_counts[3], PtcOverlayRect out_tabs[3])
+    {
+        const auto &pal = current_palette();
+        const PtcUiTextId labels[3] = {
+            PTC_UI_T_OVERLAY_TAB_ALLOWANCE,
+            PTC_UI_T_OVERLAY_TAB_RULES,
+            PTC_UI_T_OVERLAY_TAB_RECOVERY,
+        };
+        const int bar_h = 50;
+        const int shoulder_w = 32;
+        const int shoulder_gap = 6;
+        const int tabs_x = x + shoulder_w + shoulder_gap;
+        const int tabs_w = w - 2 * (shoulder_w + shoulder_gap);
+        const int tab_gap = 4;
+        const int tab_w = (tabs_w - tab_gap * 2) / 3;
+
+        // Recessed tab rail container background
+        draw_round_rect_surface(renderer, x, y, w, bar_h - 2, 6, pal.panel_bg, pal.border_decorative, 1);
+
+        // Full-width bottom baseline separating tab header from content pane
+        renderer->drawRect(x, y + bar_h - 2, w, 2, renderer->a(pal.border_control));
+
+        // Left L and Right R shoulder keycap badges
+        const int cap_y = y + 7;
+        const int cap_h = 34;
+        draw_round_rect_surface(renderer, x + 3, cap_y, shoulder_w - 3, cap_h, 6,
+            pal.card_raised, pal.accent, 1);
+        draw_localized_center(renderer, "\uE0E4", x + 3, cap_y, shoulder_w - 3, cap_h,
+            PTC_OVERLAY_FONT_CAPTION, pal.accent);
+
+        const int r_cap_x = x + w - shoulder_w;
+        draw_round_rect_surface(renderer, r_cap_x, cap_y, shoulder_w - 3, cap_h, 6,
+            pal.card_raised, pal.accent, 1);
+        draw_localized_center(renderer, "\uE0E5", r_cap_x, cap_y, shoulder_w - 3, cap_h,
+            PTC_OVERLAY_FONT_CAPTION, pal.accent);
+
+        for (int i = 0; i < 3; ++i) {
+            const int tx = tabs_x + i * (tab_w + tab_gap);
+            const int tw = (i == 2) ? (tabs_w - i * (tab_w + tab_gap)) : tab_w;
+            const bool active = i == active_tab;
+            const auto tab_accent = (i == 2) ? pal.danger : pal.accent;
+            const auto tab_soft = (i == 2) ? pal.danger_soft : pal.accent_soft;
+
+            out_tabs[i] = ptc_overlay_rect(tx, y + 2, tw, bar_h - 2);
+
+            if (active) {
+                // Elevated folder tab flush with the bottom pane:
+                // bright top/side border, open bottom joining content, bold top cap + bottom bar.
+                draw_round_rect_surface(renderer, tx, y + 2, tw, bar_h - 4, 6,
+                    tab_soft, tab_accent, 2);
+                // Square off the bottom corners so the active tab connects seamlessly to the rule
+                renderer->drawRect(tx, y + bar_h - 8, 2, 8, renderer->a(tab_accent));
+                renderer->drawRect(tx + tw - 2, y + bar_h - 8, 2, 8, renderer->a(tab_accent));
+                renderer->drawRect(tx + 2, y + bar_h - 8, tw - 4, 8, renderer->a(tab_soft));
+                // Bold 4px active tab underline along the baseline
+                renderer->drawRect(tx + 2, y + bar_h - 4, tw - 4, 4, renderer->a(tab_accent));
+                // Crisp 3px top accent cap
+                renderer->drawRect(tx + 6, y + 2, tw - 12, 3, renderer->a(tab_accent));
+            } else {
+                // Recessed inactive tab sitting clearly behind the baseline
+                draw_round_rect_surface(renderer, tx, y + 7, tw, bar_h - 11, 5,
+                    pal.card_bg, pal.border_decorative, 1);
+            }
+
+            const char *label = ptc_ui_text(labels[i]);
+            int font_size = PTC_OVERLAY_FONT_SECONDARY;
+            if (static_cast<int>(measure_localized(renderer, label, font_size).first) > tw - 14) {
+                font_size = PTC_OVERLAY_FONT_CAPTION;
+            }
+            const int text_y = active ? (y + 3) : (y + 7);
+            const int text_h = active ? (bar_h - 9) : (bar_h - 11);
+            draw_localized_center(renderer, label, tx + 4, text_y, tw - 8, text_h,
+                font_size, active ? pal.text_primary : pal.text_secondary);
+
+            // Small status dot on inactive tab if it has active/available actions
+            if (!active && tab_available_counts && tab_available_counts[i] > 0) {
+                const auto dot_col = (i == 2) ? pal.danger : pal.accent;
+                renderer->drawRect(tx + tw - 9, y + 12, 4, 4, renderer->a(dot_col));
+            }
+        }
+    }
+
     // Smooth rounded dashboard surface using Tesla's drawRect CPU spans.
     // Decoration stays strictly inside the published rectangle and needs no textures.
     void draw_dashboard_surface(tsl::gfx::Renderer *renderer, PtcOverlayRect rect,
