@@ -6,6 +6,7 @@
 
 #include "../../common/time/ptc_time.h"
 #include "play_timer_settings_layout.h"
+#include "time_client.h"
 
 #define PTC_PCTL_FACTORY_CREATE_SERVICE 1
 #define PTC_PCTL_CMD_INITIALIZE 1
@@ -165,13 +166,11 @@ static void settings_slots(char *out, size_t out_size, const PtcSwitchPlayTimerS
 
 static bool usage_clock(uint16_t *day_index, int64_t *unix_seconds)
 {
-    u64 timestamp;
-    TimeCalendarTime calendar;
-    TimeCalendarAdditionalInfo additional;
-    if (R_FAILED(timeGetCurrentTime(TimeType_Default, &timestamp)) || timestamp == 0 || timestamp > INT64_MAX ||
-        R_FAILED(timeToCalendarTimeWithMyRule(timestamp, &calendar, &additional)) ||
-        !ptc_day_index_from_date(calendar.year, calendar.month, calendar.day, day_index)) return false;
-    *unix_seconds = (int64_t)timestamp;
+    PtcSwitchLocalTime local;
+    if (!ptc_switch_time_read_local(&local) || local.unix_seconds == 0 ||
+        local.unix_seconds > (uint64_t)INT64_MAX ||
+        !ptc_day_index_from_date(local.year, local.month, local.day, day_index)) return false;
+    *unix_seconds = (int64_t)local.unix_seconds;
     return true;
 }
 

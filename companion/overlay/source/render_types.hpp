@@ -313,6 +313,7 @@ inline OverlayFooterGeometry draw_overlay_footer_hints(
 
 #include "../display_clock.h"
 #if defined(__SWITCH__)
+#include "../../../platform/switch/time_client.h"
 static PtcOverlayDisplayClock s_display_clock{};
 #endif
 
@@ -325,12 +326,10 @@ inline void get_overlay_current_time(char *out, size_t size)
         std::snprintf(out, size, "%s", s_display_clock.text);
         return;
     }
-    u64 ts = 0;
-    TimeCalendarTime cal{};
-    TimeCalendarAdditionalInfo info{};
-    if (R_SUCCEEDED(timeGetCurrentTime(TimeType_Default, &ts)) &&
-        R_SUCCEEDED(timeToCalendarTimeWithMyRule(ts, &cal, &info))) {
-        std::snprintf(s_display_clock.text, sizeof(s_display_clock.text), "%02u:%02u", (unsigned)cal.hour, (unsigned)cal.minute);
+    PtcSwitchLocalTime local{};
+    if (ptc_switch_time_read_local_once(&local)) {
+        std::snprintf(s_display_clock.text, sizeof(s_display_clock.text), "%02u:%02u",
+                      (unsigned)local.hour, (unsigned)local.minute);
         std::snprintf(out, size, "%s", s_display_clock.text);
         return;
     }

@@ -87,6 +87,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_install_script.py",
         "tests/devkit/test_switch_ipc_lifecycle.py",
         "tests/devkit/test_auth_clock.py",
+        "tests/devkit/test_time_client.py",
         "tests/devkit/test_switch_ui_glyphs.py",
         "tests/devkit/test_ui_text_catalog.py",
         "tests/devkit/test_overlay_resources.py",

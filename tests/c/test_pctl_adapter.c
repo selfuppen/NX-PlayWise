@@ -3,6 +3,7 @@
 #include <string.h>
 #include "../../platform/switch/pctl_adapter.h"
 #include "../../platform/switch/play_timer_settings_layout.h"
+#include "../../platform/switch/time_client.h"
 
 static int handles, peak_handles, spent_reads, failure, date_day = 14;
 static bool midnight_during_read, clock_error, timer_enabled = true;
@@ -27,12 +28,15 @@ Result serviceConvertToDomain(Service *s) { return s->handle == 3 && failure == 
 void serviceClose(Service *s) { if (s->handle) { --handles; s->handle = 0; } assert(handles >= 0); }
 u64 armGetSystemTick(void) { return tick; }
 u64 armTicksToNs(u64 value) { return value; }
-Result timeGetCurrentTime(int type, u64 *out) { (void)type; *out = unix_s; return clock_error ? 777 : 0; }
-Result timeToCalendarTimeWithMyRule(u64 value, TimeCalendarTime *out, TimeCalendarAdditionalInfo *info)
+bool ptc_switch_time_read_local(PtcSwitchLocalTime *out)
 {
-    (void)value; (void)info;
-    out->year = 2026; out->month = 10; out->day = date_day;
-    return 0;
+    if (clock_error || !out) return false;
+    memset(out, 0, sizeof(*out));
+    out->unix_seconds = unix_s;
+    out->year = 2026;
+    out->month = 10;
+    out->day = (uint8_t)date_day;
+    return true;
 }
 Result serviceDispatchImpl(Service *s, u32 id, const void *in, u32 in_size, void *out, u32 size, SfDispatchParams p)
 {

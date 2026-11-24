@@ -16,6 +16,7 @@ HOST_HOT_RELOAD_TEST := $(HOST_BUILD_DIR)/test_hot_reload
 HOST_UI_STATUS_TRACE_TEST := $(HOST_BUILD_DIR)/test_ui_status_trace
 HOST_INPUT_OWNER_TEST := $(HOST_BUILD_DIR)/test_input_owner
 HOST_AUTH_CLOCK_TEST := $(HOST_BUILD_DIR)/test_auth_clock
+HOST_TIME_CLIENT_TEST := $(HOST_BUILD_DIR)/test_time_client
 HOST_ONLINE_UPDATE_TEST := $(HOST_BUILD_DIR)/test_online_update
 HOST_ONLINE_PACKAGE_TEST := $(HOST_BUILD_DIR)/test_online_package
 HOST_ONLINE_NETWORK_TEST := $(HOST_BUILD_DIR)/test_online_network
@@ -186,7 +187,7 @@ $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/
 $(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp companion/overlay/vendor/libtesla/include/playwise_poll_policy.hpp | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -Wformat -Wformat-security -fno-exceptions -fno-rtti -I. -o $@ $<
 
-$(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c | $(HOST_BUILD_DIR)
+$(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/switch/time_client.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -Itests/pctl_adapter -o $@ tests/c/test_pctl_adapter.c platform/switch/pctl_adapter.c platform/switch/play_timer_settings_layout.c common/time/ptc_time.c
 
 $(HOST_USAGE_EVIDENCE_TEST): tests/c/test_usage_evidence.c sysmodule/usage_evidence.c sysmodule/usage_evidence.h platform/usage_evidence.h third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
@@ -213,8 +214,11 @@ $(HOST_INPUT_OWNER_TEST): companion/input_owner.c third_party/cjson/cJSON.c plat
 $(HOST_AUTH_CLOCK_TEST): tests/c/test_auth_clock.c tests/auth_clock/switch.h companion/auth_clock.c companion/auth_clock.h companion/auth.c platform/host/mem_storage.c common/crypto/sha256.c third_party/cjson/cJSON.c | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/auth_clock -o $@ $(filter %.c,$^)
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_ONLINE_UPDATE_TEST)
-	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST) && $(HOST_INPUT_OWNER_TEST) && $(HOST_AUTH_CLOCK_TEST) && $(HOST_ONLINE_UPDATE_TEST)'
+$(HOST_TIME_CLIENT_TEST): tests/c/test_time_client.c tests/time_client/switch.h platform/switch/time_client.c platform/switch/time_client.h | $(HOST_BUILD_DIR)
+	$(STAGE_TIMER) global test-compile -- $(HOST_CC) $(HOST_CFLAGS) -D__SWITCH__ -Itests/time_client -o $@ $(filter %.c,$^)
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_TIME_CLIENT_TEST) $(HOST_ONLINE_UPDATE_TEST)
+	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_FS_APPEND_TEST) && $(HOST_OVERLAY_MEMORY_TEST) && $(HOST_HOT_RELOAD_TEST) && $(HOST_UI_STATUS_TRACE_TEST) && $(HOST_INPUT_OWNER_TEST) && $(HOST_AUTH_CLOCK_TEST) && $(HOST_TIME_CLIENT_TEST) && $(HOST_ONLINE_UPDATE_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) | $(HOST_BUILD_DIR)
@@ -263,7 +267,7 @@ test-notice-layout: $(HOST_BUILD_DIR)/notice_preview
 
 test-host: test-notice-layout
 
-HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_ONLINE_UPDATE_TEST) $(HOST_ONLINE_PACKAGE_TEST) $(HOST_ONLINE_NETWORK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
+HOST_CACHED_TARGETS := $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_FS_APPEND_TEST) $(HOST_OVERLAY_MEMORY_TEST) $(HOST_HOT_RELOAD_TEST) $(HOST_UI_STATUS_TRACE_TEST) $(HOST_INPUT_OWNER_TEST) $(HOST_AUTH_CLOCK_TEST) $(HOST_TIME_CLIENT_TEST) $(HOST_ONLINE_UPDATE_TEST) $(HOST_ONLINE_PACKAGE_TEST) $(HOST_ONLINE_NETWORK_TEST) $(HOST_BUILD_DIR)/fs_storage_retry_test.o $(HOST_BUILD_DIR)/hot_reload_test.o $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview_core.o $(HOST_BUILD_DIR)/overlay_preview $(HOST_BUILD_DIR)/overlay_preview_save_test
 HOST_CACHED_TARGETS += $(HOST_BUILD_DIR)/notice_preview_core.o $(HOST_BUILD_DIR)/notice_preview
 $(HOST_CACHED_TARGETS): $(HOST_CONFIG) $(HOST_HEADERS) Makefile
 $(HOST_ENVIRONMENT_TEST): $(HOST_CONFIG) $(HOST_HEADERS) Makefile

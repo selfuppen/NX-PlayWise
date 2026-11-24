@@ -1732,9 +1732,6 @@ public:
 
     void initServices() override
     {
-#if defined(__SWITCH__)
-        timeInitialize();
-#endif
         fsdevMountSdmc();
         ptc_fs_storage_init(&storage_);
         ptc_overlay_hidden_timing_init(&hidden_timing_);
@@ -1756,9 +1753,6 @@ public:
         ptc_overlay_bridge_exit(&bridge_);
         ptc_overlay_resource_snapshot("exit", armTicksToNs(armGetSystemTick()), bridge_.ipc.initialized, bridge_.waiting);
         fsdevUnmountDevice("sdmc");
-#if defined(__SWITCH__)
-        timeExit();
-#endif
     }
 
     std::unique_ptr<tsl::Gui> loadInitialGui() override

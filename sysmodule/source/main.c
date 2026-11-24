@@ -7,6 +7,7 @@
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/switch/pctl_adapter.h"
 #include "../../platform/switch/time_provider.h"
+#include "../../platform/switch/time_client.h"
 #include "../../platform/switch/operation_mode.h"
 #include "../../platform/switch/usage_stats_adapter.h"
 #include "../../platform/install_defaults.h"
@@ -68,7 +69,7 @@ void __appInit(void)
     }
     (void)fsdevMountSdmc();
 
-    rc = timeInitialize();
+    rc = ptc_switch_time_init();
     if (R_FAILED(rc)) {
         diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_Time));
     }
@@ -77,7 +78,7 @@ void __appInit(void)
 void __appExit(void)
 {
     ptc_switch_operation_mode_exit();
-    timeExit();
+    ptc_switch_time_exit();
     fsdevUnmountAll();
     fsExit();
     smExit();
