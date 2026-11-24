@@ -9,7 +9,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 - Installation and daily use: read the [User Guide](使用/USER_GUIDE.md), then the [calendar format](使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) when creating a region calendar.
 - Upgrading an existing installation: follow the [manual hot-update steps](使用/USER_GUIDE.md#manual-hot-update-steps) and [version/build ID checks](使用/USER_GUIDE.md#version-and-build-information-after-updating).
 - Uninstalling or wiping an installation: see [Complete Removal and Reinstallation](使用/USER_GUIDE.md#complete-removal-and-reinstallation) for a four-step fresh reinstall, or expand the full workflow for restoring original settings and keeping backups.
-- Development and validation: start with the [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md), followed by the [Developer Guide](开发/DEVELOPER_GUIDE.md) and [Testing Guide](开发/TESTING_GUIDE.md).
+- Development and validation: see the [Development Index](开发/README.md) (Chinese) for all sub-guides; start with the [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md), followed by the [Developer Guide](开发/DEVELOPER_GUIDE.md) and [Testing Guide](开发/TESTING_GUIDE.md).
 - Protocol and control behavior: consult the [Protocol Specification](设计/PROTOCOL.md) and [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md). UI styling and palettes follow the [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md). Built-in calendar sources are in [Holiday Calendar Data](设计/节假日日历.md) (Chinese).
 - Exploring capabilities: research records below summarize technical investigations and historical findings; released behavior is maintained in the Usage and Design docs.
 
@@ -23,35 +23,34 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 ## Development — `开发/`
 
+See the [Development Index](开发/README.md) (Chinese) for the full list of testing, Eden, hardware probing, and diagnostic guides; core entry points are listed below:
+
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
+| [Development Index (Chinese)](开发/README.md) | Complete index of development, testing, Eden, hardware probing and performance guides | [开发文档入口](开发/README.md) |
 | [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md) | Host, devkitPro, unified builds and dependencies | [开发环境指南](开发/开发环境指南.md) |
 | [Developer Guide](开发/DEVELOPER_GUIDE.md) | Module responsibilities, safety boundaries, upstream research and merge requirements | [开发指南](开发/开发指南.md) |
 | [Testing Guide](开发/TESTING_GUIDE.md) | Local regression, CI gate, packaging gates, Eden, UI, hardware acceptance and evidence round-trip | [测试指南](开发/测试指南.md) |
-| [Unattended Updates and Tests (Chinese)](开发/无人值守更新与测试指南.md) | Bounded deployment, PIN authorization, recovery, evidence and test readiness | [无人值守更新与测试指南](开发/无人值守更新与测试指南.md) |
-| [PCTL1952 Candidate Acceptance (Chinese)](开发/PCTL1952候选验收.md) | Direct v2 and legacy proxy v1 contracts, raw pairing and qualification gates | [PCTL1952候选验收](开发/PCTL1952候选验收.md) |
 | [Reusable Test Procedure (Chinese)](开发/测试操作手册.md) | Bounded batches, one-time requests, recovery, offline reruns and grouped observations | [测试操作手册](开发/测试操作手册.md) |
-| [Stage and Acceptance Records (Chinese)](开发/验收记录/README.md) | Monthly archives preserving historical candidate and failure boundaries | [验收记录](开发/验收记录/README.md) |
-| [Tool Categories (Chinese)](../tools/README.md) | Daily entry points, dependencies, specialized and historical tools, and disposable caches | [目录整理说明](开发/目录整理说明.md) |
-
-## Stage-specific material
-
-Read as needed: the [October 2026 progress summary](开发/当前进度与后续指导.md) covers the 1952 migration, removal of the 1440-minute proxy, and associated hardware validation. [Acceptance records](开发/验收记录/README.md) retain each batch's facts and scope.
+| [Stable Device Probing Workflow (Chinese)](开发/真机与专题/真机稳定探测方法.md) | Bounded same-process capture, transaction recovery, unattended evidence and qualified human observations | [真机稳定探测方法](开发/真机与专题/真机稳定探测方法.md) |
+| [Unattended Updates and Tests (Chinese)](开发/真机与专题/无人值守更新与测试指南.md) | Bounded deployment, PIN authorization, recovery, evidence and test readiness | [无人值守更新与测试指南](开发/真机与专题/无人值守更新与测试指南.md) |
+| [PCTL1952 Candidate Acceptance (Chinese)](开发/真机与专题/PCTL1952候选验收.md) | Direct v2 and legacy proxy v1 contracts, raw pairing and qualification gates | [PCTL1952候选验收](开发/真机与专题/PCTL1952候选验收.md) |
+| [Stage and Acceptance Records (Chinese)](开发/验收记录/README.md) | Monthly archives preserving historical summaries, candidates, plans, failures and recovery boundaries | [验收记录](开发/验收记录/README.md) |
+| [Tool Categories (Chinese)](../tools/README.md) | Daily entry points, dependencies, specialized and historical tools, and disposable caches | [工具分类](../tools/README.md) |
 
 ## Design — `设计/`
 
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
 | [Protocol Specification](设计/PROTOCOL.md) | Threat model and trust boundaries, files, requests, results, errors and recovery contracts | [协议](设计/协议.md) |
-| In-app Online Update (Chinese only) | Store source, channels, independent backups, installation journal and recovery boundaries | [在线更新](设计/在线更新.md) |
+| [In-app Online Update (Chinese)](设计/在线更新.md) | Store source, channels, independent backups, installation journal and recovery boundaries | [在线更新](设计/在线更新.md) |
+| [Automatic Reason Notifications (Chinese, experimental)](设计/自动原因通知.md) | Opt-in preferences, reliable events, Ultrahand adaptation, expiry and display receipt boundaries | [自动原因通知](设计/自动原因通知.md) |
 | [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md) | Handover, write transactions, private-command evidence and Device Lab boundaries | [PCTL集成架构](设计/PCTL集成架构.md) |
 | [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md) | Palette, semantic colors, edge-to-edge layout and software rendering rules | [视觉风格与设计指南](设计/视觉风格与设计指南.md) |
-| [UI layout optimization archive](设计/页面优化/README.md) (Chinese) | Subdirectory archiving all batch review notes, interactive HTML mockups (batches 1–6 implemented + batch 7 NRO child home refinement) | [页面优化设计过程存档](设计/页面优化/README.md) |
-| Holiday Calendar Data (Chinese only) | Built-in data versions, dates, official sources and fallback behavior | [节假日日历数据](设计/节假日日历.md) |
+| [UI Layout Optimization Archive (Chinese)](设计/页面优化/README.md) | Archive of batches 1–11 UI review notes, interactive HTML mockups and early explorations | [页面优化设计过程存档](设计/页面优化/README.md) |
+| [Holiday Calendar Data (Chinese)](设计/节假日日历.md) | Built-in data versions, dates, official sources and fallback behavior | [节假日日历数据](设计/节假日日历.md) |
 
 ## Research — `调研/`
-
-For device experiments, see [Stable device probing workflow (Chinese)](开发/真机稳定探测方法.md): bounded same-process capture, transaction recovery, unattended evidence and qualified human observations.
 
 Use the [research index](调研/README.md) (Chinese) to separate reusable references, topic analysis and historical investigations. Current operations belong in the development guides.
 
@@ -64,12 +63,12 @@ Use the [research index](调研/README.md) (Chinese) to separate reusable refere
 | [Minimum HOS and Atmosphère version dependencies](调研/系统与大气层最低版本依赖调研.md) | Core parental-control feature dependencies and minimum HOS (`21.0.0+`) / Atmosphère (`1.10.0+`) requirements | 2026-11-24 |
 | [PCTL1952 feature impact analysis](调研/专题分析/PCTL1952功能影响分析.md) | Cross-feature analysis bound to its original source baseline (historical reference) | 2026-10-14 |
 | [In-app online update proposal](调研/专题分析/应用内在线更新方案.md) | Store source inspection, version checks, signed installation, configuration backup and recovery gaps | 2026-10-28 |
-| [Historical investigations](调研/历史调查/README.md) | Five diagnostic, capability-probe and handoff records with original version and evidence boundaries | 2026-10 |
+| [Historical investigations](调研/历史调查/README.md) | Six diagnostic, capability-probe and handoff records (2026-10 / 2026-11) with original version and evidence boundaries | 2026-10 / 2026-11 |
 
 ## Maintenance
 
-Place new documents in the appropriate category and update both indexes. Keep translations together, link between them, and use relative paths across categories. Commands and source paths measured from the repository root retain their original meaning.
+Place new documents in the appropriate category and update both the category index and [Chinese index](README.md). Keep translations together, link between them, and use relative paths across categories. Commands and source paths measured from the repository root retain their original meaning.
 
-Research records retain dates and source versions. Maintain released behavior and stable contracts in the usage, development, and design documents. Hardware acceptance records belong under `开发/验收记录/` and are linked from the Testing Guide.
+Research records retain dates and source versions. Maintain released behavior and stable contracts in the usage, development, and design documents. Hardware acceptance records and stage progress summaries belong under `开发/验收记录/` grouped by month rather than accumulating in root directories or at the top of stable guides.
 
 Keep `images/usage/` and `images/usage-en/` at their existing paths. See [Documentation & Screenshot Maintenance](使用/USER_GUIDE.md#documentation--screenshot-maintenance) for preview synchronization. The two legacy calendar-format paths in this directory provide navigation for help URLs in released applications; maintain their content only under `使用/`.

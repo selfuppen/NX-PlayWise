@@ -57,7 +57,7 @@ In the Switch Parent Portal, navigate to **Offline Grant → Generate on Phone/P
 <details open>
 <summary>View Mobile Pairing & Web App Preview</summary>
 
-| ![Mobile/PC QR pairing page, displaying public demo configuration](docs/images/usage/parent/pairing-qr-demo.png) | ![Historical preview of the web code generator](docs/images/usage/parent/web-code-demo.jpg) |
+| ![Mobile/PC QR pairing page, displaying public demo configuration](docs/images/usage-en/parent/pairing-qr-demo-light.png) | ![Historical preview of the web code generator](docs/images/usage/parent/web-code-demo.jpg) |
 | :---: | :---: |
 
 </details>

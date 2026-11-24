@@ -722,7 +722,7 @@ Successful handover requires no console reboot. Reopening the app, restarting th
 | Current backend | The reliably identified running backend build ID. It can remain old after copying until handover succeeds, then should match the app. |
 | Loading status | Different IDs with valid installed components allow pending load; matching IDs show loaded. File transfer alone does not update the running backend. |
 
-Changed source rebuilt under the same version can have a different build ID. Reinstalling a package with the same identity normally does not offer another load. Maintainers update `common/version.h` and `common/version.mk` together when releasing a version; hot-update does not modify them. Do not edit `build.json`, forge IDs or delete backend files to force a reload. Same-build capture restart is a separate bounded maintainer workflow in the [Unattended Update and Testing Guide (Chinese)](../开发/无人值守更新与测试指南.md).
+Changed source rebuilt under the same version can have a different build ID. Reinstalling a package with the same identity normally does not offer another load. Maintainers update `common/version.h` and `common/version.mk` together when releasing a version; hot-update does not modify them. Do not edit `build.json`, forge IDs or delete backend files to force a reload. Same-build capture restart is a separate bounded maintainer workflow in the [Unattended Update and Testing Guide (Chinese)](../开发/真机与专题/无人值守更新与测试指南.md).
 
 ### Missing Load Button or Failed Update
 

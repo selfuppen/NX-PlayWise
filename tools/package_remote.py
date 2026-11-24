@@ -2,7 +2,7 @@
 """Test, incrementally build and verify through one devkitPro SSH session.
 
 Daily: standard package + Eden NRO. Optional delivery, Device Lab and full UI
-previews are explicit additions; see docs/开发/构建与测试分层.md.
+previews are explicit additions; see docs/开发/测试与模拟器/构建与测试分层.md.
 """
 from __future__ import annotations
 

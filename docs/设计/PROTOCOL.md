@@ -1,6 +1,6 @@
 [Documentation index](../README_en.md)
 
-The reboot-free update contract defines source-generation release identities, bounded journal I/O retries, suspended IPC/SD submissions during handover, and append-only transaction events. See the [Chinese protocol section](协议.md) and the [unattended update operating guide (Chinese)](../开发/无人值守更新与测试指南.md) for fields, recovery, and qualification details.
+The reboot-free update contract defines source-generation release identities, bounded journal I/O retries, suspended IPC/SD submissions during handover, and append-only transaction events. See the [Chinese protocol section](协议.md) and the [unattended update operating guide (Chinese)](../开发/真机与专题/无人值守更新与测试指南.md) for fields, recovery, and qualification details.
 
 <div align="center">
 

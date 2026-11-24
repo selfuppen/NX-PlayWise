@@ -18,7 +18,7 @@ Eden 当前**不能**运行 PlayWise 浮窗，也没有可安装的 Tesla／Ultr
 6. **Eden 只完整支持 applet 的默认窗口路径**。生产 NRO 在 Eden 里能显示，是因为它作为 applet 运行：libnx `__nx_win_init()` → `viCreateLayer` 检测到 aruid≠0 → `appletCreateManagedDisplayLayer`（AM 内部用**进程自己的 PID** 作 owner 建层）→ `viSetLayerScalingMode` → `nwindowCreateFromLayer`，全部命中 Eden 已实现的命令。libtesla 不走这条路径。
 7. 设置项 `LibraryApplet.enable_overlay` 与 `.ovl` 加载无关：它在 `am/applet_manager.cpp` 里创建的是任天堂自己的 `AppletProgramId::OverlayDisplay` 小程序，不是 overlay 加载器。
 
-因此 Eden 的 L4 分层结论保持不变：只验证 NRO 业务与 UI，不承担 Tesla／CFW 生命周期（见[分层测试策略](../开发/分层测试策略.md)）。
+因此 Eden 的 L4 分层结论保持不变：只验证 NRO 业务与 UI，不承担 Tesla／CFW 生命周期（见[分层测试策略](../开发/测试与模拟器/分层测试策略.md)）。
 
 ## 调研对象与基线
 

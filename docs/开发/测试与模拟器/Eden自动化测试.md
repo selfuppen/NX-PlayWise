@@ -1,6 +1,6 @@
 # Eden 自动化测试（发版前）
 
-此入口在隔离 profile 中执行真实 NRO 输入，配合进程内模拟后台、回执和持久化断言。它不证明真实 PCTL、IPC/SD 队列、Tesla、休眠、底座或生产候选资格。Eden 当前没有 CFW/sysmodule 层，`.ovl` 不能作为浮窗加载（实测与其 VI/HID 缺口见[Eden与Tesla浮窗加载能力调研](../调研/Eden与Tesla浮窗加载能力调研.md)）。
+此入口在隔离 profile 中执行真实 NRO 输入，配合进程内模拟后台、回执和持久化断言。它不证明真实 PCTL、IPC/SD 队列、Tesla、休眠、底座或生产候选资格。Eden 当前没有 CFW/sysmodule 层，`.ovl` 不能作为浮窗加载（实测与其 VI/HID 缺口见[Eden与Tesla浮窗加载能力调研](../../调研/Eden与Tesla浮窗加载能力调研.md)）。
 
 分层与覆盖责任见[分层测试策略](分层测试策略.md)；逐项操作、断言和扩展场景见[Eden主流程场景](Eden主流程场景.md)。`--suite smoke`（默认）只执行原7项入口烟测；发版前核心最小集合使用`--suite main --timeout 1200`，复用7项前置后执行10项主流程旅程，共17项，不重复前置认证测试。
 
@@ -16,7 +16,7 @@
 
 M09等明确的语言切换场景仍按规格从中文切到英文并核对重开；这是被测功能，不是处理字体空白的替代方案。
 
-具体批次成绩和待测矩阵放在[验收记录](验收记录/README.md)，本指南只维护方法。真实PCTL、Tesla、睡眠、底座、系统阻断、二维码光学扫码及真实触控短按不由Eden补签。
+具体批次成绩和待测矩阵放在[验收记录](../验收记录/README.md)，本指南只维护方法。真实PCTL、Tesla、睡眠、底座、系统阻断、二维码光学扫码及真实触控短按不由Eden补签。
 
 ## 执行时机
 
@@ -75,7 +75,7 @@ MCP 进程首次导入和 `initialize` 共用 60 秒握手期限。握手失败�
 
 `--runtime-root`选择私有profile数据盘，建议容量充足的D盘；报告仍由`--out`指定。`--application-root`必须与源exe同卷，用NTFS文件硬链接创建本批程序入口，应用物理复制为0；入口旁user目录联接到私有profile。省略时使用源exe卷的`PlayWise-Eden-AppLinks/managed`。`--firmware-cache`是独立共享Contents目录：不存在时只复制一次并核验，已存在时必须逐文件匹配来源，否则拒绝而不覆盖；省略时为runtime-root相邻`shared-resources/firmware/Contents`。不同固件版本使用不同缓存路径。languages只读复用，密钥／可变NAND／SD／日志／缓存仍按批隔离。
 
-开始输入前同时核对MCP的effective_profile_root与原生日志ConfigDir／SDMCDir，路径不符则停止。本机原生版优先使用相邻user，不能靠EDEN_USER_DIR或切换cwd实现隔离，也没有通用的独立ini启动参数。原型依据见[轻量profile能力验证](验收记录/2026-10/自动化与交互/Eden临时文件清理与轻量Profile验证-20261025.md)；正式执行器批次见[共享资源与X02记录](验收记录/2026-10/自动化与交互/Eden共享资源执行器与X02网页闭环-20261025.md)。每批保存runtime-ownership.json和runtime-prepared.json，分别绑定所有权／来源资源哈希，以及实际复制量／准备时间；同时持有application-root下独占租约，已有租约或已有Eden进程则拒绝准备，不接管或自动杀进程。
+开始输入前同时核对MCP的effective_profile_root与原生日志ConfigDir／SDMCDir，路径不符则停止。本机原生版优先使用相邻user，不能靠EDEN_USER_DIR或切换cwd实现隔离，也没有通用的独立ini启动参数。原型依据见[轻量profile能力验证](../验收记录/2026-10/自动化与交互/Eden临时文件清理与轻量Profile验证-20261025.md)；正式执行器批次见[共享资源与X02记录](../验收记录/2026-10/自动化与交互/Eden共享资源执行器与X02网页闭环-20261025.md)。每批保存runtime-ownership.json和runtime-prepared.json，分别绑定所有权／来源资源哈希，以及实际复制量／准备时间；同时持有application-root下独占租约，已有租约或已有Eden进程则拒绝准备，不接管或自动杀进程。
 
 ## 临时文件与共享资源收尾
 
@@ -121,9 +121,9 @@ X01／X04使用独立`--suite plans --timeout 1200`，共7项：设置、日历�
 
 语言／地区／渲染器默认完整沿用来源profile，NRO保留“跟随系统”，不强制切到英文。`--time-zone-index 34` 可只在私有配置中显式固定本build的PRC时区；fixtures/profile-settings.json 记录来源值、实际值和覆盖项，profile-settings-final.json 记录退出后持久化值。启动及重开均留截图，验证中文起点时须结合日志和画面，不只看配置数值。
 
-默认沿用 profile 的渲染器。可用 `--renderer-backend 0` 在当批私有配置中选择 OpenGL，`1` 为 Vulkan；同时取消该配置的默认值标记，原 profile 不变。fixtures/renderer.json 记录请求值、实际配置值及配置哈希，eden-log.txt 留存实际渲染器日志。2026-10-23 的本机对照见[首次执行记录](验收记录/2026-10/自动化与交互/Eden最小自动回归落地与首轮执行-20261023.md)。
+默认沿用 profile 的渲染器。可用 `--renderer-backend 0` 在当批私有配置中选择 OpenGL，`1` 为 Vulkan；同时取消该配置的默认值标记，原 profile 不变。fixtures/renderer.json 记录请求值、实际配置值及配置哈希，eden-log.txt 留存实际渲染器日志。2026-10-23 的本机对照见[首次执行记录](../验收记录/2026-10/自动化与交互/Eden最小自动回归落地与首轮执行-20261023.md)。
 
-所选定制build的`backend=3`日志为`OpenGL_GLASM`，与上一轮`0`不同；要沿用该模式时省略覆盖参数，不凭“都是OpenGL”改写枚举。中文可写副本复测见[中文回归与稳定性记录](验收记录/2026-10/自动化与交互/Eden中文可写副本最小回归与稳定性复测-20261023.md)。
+所选定制build的`backend=3`日志为`OpenGL_GLASM`，与上一轮`0`不同；要沿用该模式时省略覆盖参数，不凭“都是OpenGL”改写枚举。中文可写副本复测见[中文回归与稳定性记录](../验收记录/2026-10/自动化与交互/Eden中文可写副本最小回归与稳定性复测-20261023.md)。
 
 smoke默认总期限300秒、最多180次输入；main使用1200秒预算、最多500次输入，无自动重试。smoke的首次设置 → 重开应用 → PIN取消/错误/正确 → 30分钟码成功/重复拒绝依次执行。main继续串行执行预览取消、计划保存/丢弃、四级优先级、加时/缓冲、护眼、就寝、并发限制/电视恢复、备份、偏好和业务重开。每次输入先验证运行状态与新鲜页面快照；失败阻止依赖输入。业务回执必须为新出现的同ID/type文件，超时保持未知、不换ID重发。重复码测试是有意的新预览请求，与网络重试分开。
 

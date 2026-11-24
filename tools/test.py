@@ -82,6 +82,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_pctl_standard_evidence.py",
         "tests/devkit/test_package_remote.py",
         "tests/devkit/test_tools_layout.py",
+        "tests/devkit/test_docs_integrity.py",
         "tests/devkit/test_delivery_package.py",
         "tests/devkit/test_install_script.py",
         "tests/devkit/test_switch_ipc_lifecycle.py",

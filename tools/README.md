@@ -8,7 +8,7 @@ Python／PowerShell脚本的当前数量与分类清单保存在[catalog.json](c
 
 - Host回归：`python tools/test.py`。
 - C／NRO／Overlay／产物门禁：`python tools/package_remote.py`，保留默认Eden；不要用若干内部打包脚本拼接旁路。
-- 日常最小步骤、专项参数和缓存边界见[构建与测试分层](../docs/开发/构建与测试分层.md)；统一构建已运行完整 Python 回归，无需固定在其之前重复执行一遍。
+- 日常最小步骤、专项参数和缓存边界见[构建与测试分层](../docs/开发/测试与模拟器/构建与测试分层.md)；统一构建已运行完整 Python 回归，无需固定在其之前重复执行一遍。
 - 运行资源优化对比：[runtime_resource_report.py](build/runtime_resource_report.py) 保存固定预览基线、封存 Host 指标与像素等价报告，并从 JSON 重复离线核验；不操作真机。
 - 标准真机取证：先读开发手册和`device/pctl_standard_evidence.py`的prepare／audit边界，实际更新或同候选重启使用`device/auto_update.py`，需原候选、前像、正常PIN和有限租期。
 - 自然午夜离线核验：`device/pctl_production_midnight.py`；`legacy/pctl_midnight_evidence.py`是兼容旧报告的不同接口。
@@ -188,7 +188,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | [automation/eden_plan_flow.py](automation/eden_plan_flow.py) | X01地区日历导入／长按应用与X04就寝分区草稿、保存及重开持久化 |
 | [automation/eden_input_flow.py](automation/eden_input_flow.py) | X05三语×四种配色×浅暗模式：触摸打开、手柄编辑、触摸返回、取消／长按及重开 |
 
-准备、命令、只读UI快照与证明边界见[开发说明](../docs/开发/Eden自动化测试.md)。日常基础测试不启动此执行器；Host单元测试和默认Eden NRO构建／产物校验继续保留，均不启动模拟器。这些工具不连接真实Switch。
+准备、命令、只读UI快照与证明边界见[开发说明](../docs/开发/测试与模拟器/Eden自动化测试.md)。日常基础测试不启动此执行器；Host单元测试和默认Eden NRO构建／产物校验继续保留，均不启动模拟器。这些工具不连接真实Switch。
 
 ## 产品源码和临时产物
 
