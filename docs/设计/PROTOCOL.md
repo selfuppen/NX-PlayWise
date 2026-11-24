@@ -54,7 +54,7 @@ Selected files join the existing persistent recovery transaction, PCTL applicati
 
 The Time Plan independent column contains bedtime, eye care, TV rules and buffer, each 90px. Public modes are TV/non-TV (handheld and tabletop); wire values remain `docked/undocked/unknown`. Only Eden exposes simulation buttons, atomically writes its isolated `operation-mode.txt`, notifies the existing mode provider, and preserves usage and mode across restart. Production has no simulation handler or buttons.
 
-## TV mode policy (candidate: pending)
+## TV mode policy
 
 Optional rules v2 fields are `force_docked=false`, `undocked_limit_enabled=false`, and `undocked_daily_minutes=30` (0–1440). Missing fields keep old installations disabled. A disabled allowance is different from an enabled zero-minute allowance. `PtcRules.dock_policy` contains these three fields.
 
@@ -78,7 +78,7 @@ First enable reuses environment-bound Nintendo parental-control and recovery-ove
 Hardware dock/undock, HOME/game/sleep, simultaneous restrictions and recovery validation remain pending. The local libnx reference was commit `dbcc1beafc6b47b5ffbeb8ba82463a7d45da40bb`; its public OMM wrapper does not establish private PCTL layout or units. For installed libnx 4.12 without that wrapper, the adapter supplies the same read-only command 0 / byte response contract; no dependency upgrade or mode-policy writes are introduced.
 
 
-## Eye care breaks (candidate: pending)
+## Eye care breaks
 
 Eye-care results project the current reliable PCTL read without waiting for a later Enforce tick. Matching configured quota (1440 minutes for unlimited rules), available remaining time, an enabled timer and no pending confirmation allow an initial playing preview; a known same-day baseline adds the latest usage delta. Across midnight, the accumulated cycle is retained and new-day usage is added. Missing, mismatched or disabled readings remain unknown. Projection does not persist a baseline, write PCTL or start timers. Usage minutes do not decrease with wall time; rest instances and deadlines still come from persisted state.
 

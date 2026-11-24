@@ -13,7 +13,9 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 - Protocol and control behavior: consult the [Protocol Specification](设计/PROTOCOL.md) and [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md). UI styling and palettes follow the [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md). Built-in calendar sources are in [Holiday Calendar Data](设计/节假日日历.md) (Chinese).
 - Exploring capabilities: research records below summarize technical investigations and historical findings; released behavior is maintained in the Usage and Design docs.
 
-## Usage — `使用/`
+## Usage
+
+Directory: `使用/`
 
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
@@ -21,9 +23,9 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | [Custom Holiday Calendar Format](使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) | Import fields, complete JSON and invalid examples | [自制节假日日历格式](使用/自制节假日日历格式.md) |
 | [Documentation Preview Scene Catalog (Chinese)](images/README.md) | Features, typical states, image sources and synchronization paths | [文档预览场景清单](images/README.md) |
 
-## Development — `开发/`
+## Development
 
-See the [Development Index](开发/README.md) (Chinese) for the full list of testing, Eden, hardware probing, and diagnostic guides; core entry points are listed below:
+Directory: `开发/`. See the [Development Index](开发/README.md) (Chinese) for the full list of testing, Eden, hardware probing, and diagnostic guides; core entry points are listed below:
 
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
@@ -38,7 +40,9 @@ See the [Development Index](开发/README.md) (Chinese) for the full list of tes
 | [Stage and Acceptance Records (Chinese)](开发/验收记录/README.md) | Monthly archives preserving historical summaries, candidates, plans, failures and recovery boundaries | [验收记录](开发/验收记录/README.md) |
 | [Tool Categories (Chinese)](../tools/README.md) | Daily entry points, dependencies, specialized and historical tools, and disposable caches | [工具分类](../tools/README.md) |
 
-## Design — `设计/`
+## Design
+
+Directory: `设计/`
 
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
@@ -50,9 +54,9 @@ See the [Development Index](开发/README.md) (Chinese) for the full list of tes
 | [UI Layout Optimization Archive (Chinese)](设计/页面优化/README.md) | Archive of batches 1–11 UI review notes, interactive HTML mockups and early explorations | [页面优化设计过程存档](设计/页面优化/README.md) |
 | [Holiday Calendar Data (Chinese)](设计/节假日日历.md) | Built-in data versions, dates, official sources and fallback behavior | [节假日日历数据](设计/节假日日历.md) |
 
-## Research — `调研/`
+## Research
 
-Use the [research index](调研/README.md) (Chinese) to separate reusable references, topic analysis and historical investigations. Current operations belong in the development guides.
+Directory: `调研/`. Use the [research index](调研/README.md) (Chinese) to separate reusable references, topic analysis and historical investigations. Current operations belong in the development guides.
 
 | Record (Chinese only) | Scope | Date |
 | --- | --- | --- |

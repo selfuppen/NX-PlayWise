@@ -1,20 +1,10 @@
 # Visual Style and Design Guide
 
-All-page stale-refresh guidance: whenever status readings are stale (>120s), unloaded, date-mismatched, or failed while not `waiting`, the header status bar switches to a semantic warning/danger outline with a compact freshness pill, and every refresh action across Child Home, Parent tabs, Plan subpages, Today/Rules/Day-decision details, Config Backup, and Today-quota dialogs upgrades to an amber soft-filled capsule with breathing glow (or danger red on refresh error), demoting detail-view Back buttons so users refresh first. The Software Update page uses a 3-tier layout: a split top card (left semantic status banner + 3 version metric chips; right release-notes summary or live download progress bar with `Y` details), a middle 4-step pipeline (Check -> Download -> Reopen -> Load) linked by vector arrows, a 3-column preference and backup row, and a footer-docked cancel/recover action. Both the Time Limit Rules Explanation and TV Mode Rules Explanation 4-card modals use a 44px tinted header band with built-in vector icons and right-aligned `01`..`04` badges, keeping body lines strictly clear of the header divider in all three languages. First-time Setup (Steps 1–3) uses shadow-elevated `UI_SURFACE` card decks directly on `UI_PAGE` with a numbered 3-step progress bar, separating Pre-flight Checks from System Environment in Step 1, grouping Parent PIN & Access on the left and Protection & Alerts (Eye Care, Bedtime, Restriction Alerts) on the right in Step 2, and presenting a 3×2 summary grid plus 3-pillar takeover reassurance in Step 3. Upgrade Setup Review (`setup_review_active`) presents a top pending-item queue bar, a split feature spotlight card (left tinted identity pane with built-in color emoji including `🔔`, category pill, title, and live Current Setting value; right option description and guidance), and 2+2 tiered independent buttons (Configure / Keep Current above; B Skip / X Skip Remaining docked in the footer) with non-blocking save warnings strictly outside buttons.
-
-Disabled rules on the Overlay child home page use concise text to state that the corresponding rule is off. During eye rest, the complete rest advice, timer, other rules and status entry must fit on one screen in all three languages, verified by the production preview content-height check.
-
-The configuration backup create page has a separate Restore pre-installation settings button. X, controller focus and touch open the same held confirmation. Theme danger colors and measured text apply. Missing installation snapshots, read-only support, active recovery or hot reload disable the action. Cancelling returns to the backup page.
-
-The PIN Inspector in all three languages follows the authentication constants: 1–64 digits, with cooldown starting on consecutive failure 5. Settings and plan card titles use the measured status badge bounds; a title that would collide moves below the badge. Fixed Overlay buttons measure both width and height, keep readable type, and bound oversized translations to the final line and button clip. Current buffer and grant-code labels remain complete in all three languages, above the Tesla footer.
-
-A hold is a confirmation gate. Restoring only preferences, PIN, or pairing data explains that rules and consumed time stay unchanged while retaining current PIN, source PIN where applicable, and hold confirmation. Policy imports and dangerous quota or bedtime actions keep their actual impact warnings without inferring zero remaining time or immediate restriction from the generic hold flag.
-
 [English](VISUAL_STYLE_GUIDE.md) | [简体中文](视觉风格与设计指南.md) | [Interactive Preview (HTML)](theme_preview.html) | [Design Index](../README_en.md#design)
 
 This guide defines the visual design system, color palette, and layout principles for PlayWise on Nintendo Switch. It provides clear standards for Companion NRO pages, settings menus, overlays, and detail panels to ensure consistent aesthetics, high readability, and reliable rendering across handheld and docked modes. Open [`theme_preview.html`](theme_preview.html) in your browser for an interactive preview of the full light/dark palette and UI components.
 
-When the parent Support & Recovery tab has an attention or incomplete status, stack the title and status badge within the tab. Measure the translated status text to size the badge within the tab padding; a fixed corner badge must not cover the title. Plan editor subpages that hide the root tabs must also hide this badge.
+> Maintenance rule: place new page layout or interaction contracts in the matching domain section (Sections 6–8) rather than stacking loose paragraphs before Section 1; process review mockups are archived under [UI Layout Optimization Archive](页面优化/README.md).
 
 ---
 
@@ -325,7 +315,34 @@ A quiet `New app version` hint sits independently below the upper-left page head
 The Tesla host footer (`Y=648..719`) renders `24px` context-aware key hints (falling back to `22px`/`20px` via measured width when needed): the left `B` hint (`Close` / `Back` / `Cancel`) stays strictly inside libtesla's native `x < 150` touch-back hitbox, while the action hint starts at `x >= 152` and clears the right-aligned `HH:MM` clock, reflecting the exact key and semantic color of the focused control (e.g., `A Execute`, `A Continue`, `Hold A 1s`, `Unavailable`, `+ Verify`). Parent Actions and Status Details drop their redundant bottom rails to use the full `575px` viewport (down to `Y=639`), and Parent Actions compacts its top status banner into a measured single-line strip (`28px` status + right-aligned `22px` freshness, wrapping when needed) to surface more action cards above the fold. Parent PIN and Extra-Time Code Entry delegate `B Back`/`B Cancel` to the host footer while keeping their unified `52px` primary rail (full-width `+ Verify PIN` with no duplicate backspace on standard PIN numpad; single-row `R Parent` + `+ Redeem code` on code entry for roomier `64px` keys).
 
 
-## Today details A: two timelines and a separate balance
+
+## 7. Runtime Refresh, Interaction & Specialized UI Contracts
+
+### 7.1 Stale-Refresh Guidance, Software Update & Setup Review
+
+All-page stale-refresh guidance: whenever status readings are stale (>120s), unloaded, date-mismatched, or failed while not `waiting`, the header status bar switches to a semantic warning/danger outline with a compact freshness pill, and every refresh action across Child Home, Parent tabs, Plan subpages, Today/Rules/Day-decision details, Config Backup, and Today-quota dialogs upgrades to an amber soft-filled capsule with breathing glow (or danger red on refresh error), demoting detail-view Back buttons so users refresh first. The Software Update page uses a 3-tier layout: a split top card (left semantic status banner + 3 version metric chips; right release-notes summary or live download progress bar with `Y` details), a middle 4-step pipeline (Check -> Download -> Reopen -> Load) linked by vector arrows, a 3-column preference and backup row, and a footer-docked cancel/recover action. Both the Time Limit Rules Explanation and TV Mode Rules Explanation 4-card modals use a 44px tinted header band with built-in vector icons and right-aligned `01`..`04` badges, keeping body lines strictly clear of the header divider in all three languages. First-time Setup (Steps 1–3) uses shadow-elevated `UI_SURFACE` card decks directly on `UI_PAGE` with a numbered 3-step progress bar, separating Pre-flight Checks from System Environment in Step 1, grouping Parent PIN & Access on the left and Protection & Alerts (Eye Care, Bedtime, Restriction Alerts) on the right in Step 2, and presenting a 3×2 summary grid plus 3-pillar takeover reassurance in Step 3. Upgrade Setup Review (`setup_review_active`) presents a top pending-item queue bar, a split feature spotlight card (left tinted identity pane with built-in color emoji including `🔔`, category pill, title, and live Current Setting value; right option description and guidance), and 2+2 tiered independent buttons (Configure / Keep Current above; B Skip / X Skip Remaining docked in the footer) with non-blocking save warnings strictly outside buttons.
+
+### 7.2 Overlay Concise Labels & Pre-Install Restore Entry
+
+Disabled rules on the Overlay child home page use concise text to state that the corresponding rule is off. During eye rest, the complete rest advice, timer, other rules and status entry must fit on one screen in all three languages, verified by the production preview content-height check.
+
+The configuration backup create page has a separate Restore pre-installation settings button. X, controller focus and touch open the same held confirmation. Theme danger colors and measured text apply. Missing installation snapshots, read-only support, active recovery or hot reload disable the action. Cancelling returns to the backup page.
+
+### 7.3 PIN Inspector, Measured Badges & Hold Confirmation Gates
+
+The PIN Inspector in all three languages follows the authentication constants: 1–64 digits, with cooldown starting on consecutive failure 5. Settings and plan card titles use the measured status badge bounds; a title that would collide moves below the badge. Fixed Overlay buttons measure both width and height, keep readable type, and bound oversized translations to the final line and button clip. Current buffer and grant-code labels remain complete in all three languages, above the Tesla footer.
+
+A hold is a confirmation gate. Restoring only preferences, PIN, or pairing data explains that rules and consumed time stay unchanged while retaining current PIN, source PIN where applicable, and hold confirmation. Policy imports and dangerous quota or bedtime actions keep their actual impact warnings without inferring zero remaining time or immediate restriction from the generic hold flag.
+
+### 7.4 Parent Support Tab Status Badge
+
+When the parent Support & Recovery tab has an attention or incomplete status, stack the title and status badge within the tab. Measure the translated status text to size the badge within the tab padding; a fixed corner badge must not cover the title. Plan editor subpages that hide the root tabs must also hide this badge.
+
+## 8. Finalized Page Layout Specifications
+
+The subsections below summarize the merged layout contracts across core Companion NRO pages; historical review iterations live in the [UI Layout Optimization Archive](页面优化/README.md).
+
+### Today details A: two timelines and a separate balance
 
 The left column contains the current verdict, the 24-hour bedtime schedule, and the continuous-use estimate for the current screen mode. The right column contains the daily balance, three independent guardians, and the existing rules entry. The child reading guide remains; both variants end at y=616 above the unchanged footer and source-separated history.
 
@@ -333,24 +350,24 @@ The continuous rail retains every play/rest segment. First rest, first resume an
 
 Balance, usage, source and guardian state reuse existing projections and freshness rules. Titles and right-aligned badges are measured; text wraps or fits within each panel in all three languages and both themes. The rules page retains its current implementation.
 
-## Weekly plan A: seven-day overview and selected-day editor
+### Weekly plan A: seven-day overview and selected-day editor
 
 Seven horizontal summary cards show draft mode and quota. Touching a card only selects its date; the editor below contains mode and quota fields and the saved value for that day. Batch setup sits above the overview; save impact and discard/save controls occupy the right column. Draft values, today's actual source and projected save impact remain distinct.
 
 Left/right selects a day; down enters mode, then quota. Right moves from the editor to discard/save; up returns to the previous field or selected day. Up from dates reaches batch setup; down from the bottom controls reaches the existing footer, which restores the prior field on return. Existing A/X/+ and ZL operations, retained minutes when switching unlimited mode, input limits, PIN/hold confirmation, waiting/read-only guards, failure receipts and unsaved-leave flow remain intact. Touch keeps the corresponding field focused. Shared draw/hit rectangles end at 628; measured text and semantic colors support three languages and both themes.
 
-## Child overview layout B
+### Child overview layout B
 
 The home page separates current play status and confirmed continuous-use projection from the daily balance. The 320px status/balance row and 190px seven-day forecast retain a 14px gap and the shared bottom at 644. Three guardian rows fill the balance panel down to its 16px inset. Unknown, stale, cross-day, recovery and unconfirmed results never imply permission or expose old current balances; concurrent limits and countdown confirmation remain independent.
 
 The four actions are code, buffer, details, and PIN-protected parent entry; a restricted snapshot promotes parent entry while preserving all four paths. Refresh keeps the existing map stable. Right enters the action column, up/down selects, left leaves, and A activates its shared touch rectangle. Existing shortcuts remain. Status warnings and operation feedback are preserved in the main status card. Host regressions cover the first eye boundary, remaining balance during rest, concurrent limits, expiry and PIN/waiting hit targets.
 
 
-## Parent schedule combined layout
+### Parent schedule combined layout
 
 Today's Schedule combines the B status-first summary on the left with the A action layout on the right. Quick add spans the first row; set allowance, unlimited today and clear adjustment share the next three-column row. Eye/bedtime skips and buffer/TV waiver occupy two further rows. All eight protocol identities, unavailable reasons, PIN and hold confirmations remain intact. Guardian targets and action cards share their draw/touch geometry; directional navigation follows the visible rows and enters the existing footer from the bottom. Host checks cover containment, non-overlap, operation identities, disabled paths and navigation.
 
-## Batch 3 schedule and bedtime layouts (2026-11-22)
+### Batch 3 schedule and bedtime layouts (2026-11-22)
 
 Batch 3 implements the selected layouts for **Regional Holidays (Option B)**, **Scheduled Allowance (Option B)**, and **Bedtime (Option A)** using shared draw/hit rectangles in `ui_layout.c`, measured text fitting across three languages, four styles, and light/dark themes, and all existing PIN, hold-confirm, and unsaved-draft guards.
 
@@ -358,7 +375,7 @@ Batch 3 implements the selected layouts for **Regional Holidays (Option B)**, **
 - **Scheduled Allowance B**: Promoted to the standard full-page console shell (`draw_subpage_shell`) with breadcrumb header, `Y Refresh`, and `B Back` footer. Left column organizes editing into two step cards: (1) Active Dates with master toggle, visual range bar, Start Date `-1 / A Date / +1` controls, and `3d / 7d / 14d / Custom` duration chips; (2) Daily Quota with Limit/Unlimited toggle, prominent readout, and `60 / 90 / 120 / 180 / Custom` quick chips. Right column displays range summary, Today Impact, and `ZL Discard / + Save Draft`.
 - **Bedtime A**: Single-row top bar pairs the left Master Switch with right-aligned three-way section tabs (`Weekly / Holidays / Scheduled`). Right column anchors Tonight's Status & Impact with `Y Skip Once / X Restore Once` buttons above `ZL Discard / + Save Page`. Weekly uses seven compact day cards paired with an inline Selected-Day Editor (24h overnight timeline, direct Start/End time editing, Day On/Off toggle, Copy to Weekdays/Weekends, and five family preset chips). Holidays uses two equal-height side-by-side cards with three-state mode bars and mini timelines; Scheduled pairs a compact active-range card with a unified three-state rule card and mini timeline.
 
-## Batch 5 input, pairing, issuance and confirmation layouts (2026-11-22)
+### Batch 5 input, pairing, issuance and confirmation layouts (2026-11-22)
 
 Batch 5 implements the finalized Option A / A2 layouts across the four high-frequency input, pairing, issuance and confirmation workflows, preserving all existing PIN security constants, single-use token boundaries, pure `#000000` on `#FFFFFF` QR polarity, and measured multilingual light/dark fitting:
 
@@ -367,7 +384,7 @@ Batch 5 implements the finalized Option A / A2 layouts across the four high-freq
 - **Unified 3-in-1 Grant & Pairing Hub (Option A2)**: Both `PTC_UI_OVERLAY_QR` and `PTC_UI_OVERLAY_GRANT_LOCAL` are promoted to the standard `1280×720` three-section full-page shell (`draw_subpage_shell`) with no sub-tab bar. The left column presents three radio mode cards with Switch vector illustrations (`Phone pairing · Scan QR`, `PC / Phone file · Offline`, `On this console · 8-digit code`), while the right workbench focuses exclusively on the selected mode (pure-white QR + 3 steps + URL + warning / 3-step offline export with SD path chip / 5 quick duration presets `15/30/45/60/120 min` + custom input + high-contrast notched voucher ticket + draft-diff warning).
 - **Today's Quota Editor & Plain-Language Confirmation (Option A)**: `960×630` editor pairs the `Limited / No Limit Today` top switch, 5 quick total presets (`30/60/90/120/180 min`), labeled Hours/Minutes fields, and 3×4 keypad on the left with a proportional Used vs. Estimated Left bar, before/after projection cards, and dedicated `R3` refresh strip on the right. `860×476` confirmation dialogs remove technical jargon in favor of plain parent-facing pills (`Review & save`, `Will pause play now | Hold 1s`, `Needs refresh | Hold 1s`, `No change today`), semantic impact boxes, and a cleanly separated `Y` refresh bar.
 
-## Batch 6 settings, backup, support and history layouts (2026-11-22)
+### Batch 6 settings, backup, support and history layouts (2026-11-22)
 
 Batch 6 completes the full Companion NRO layout polish with Option A across the remaining four settings, backup, support, and ledger workflows, sharing standard full-page shells (`draw_subpage_shell`), dynamic edge-to-edge measurement, and all existing security gates:
 
