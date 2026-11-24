@@ -530,6 +530,81 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
     }
 }
 
+static void test_child_restriction_refresh(tsl::gfx::Renderer &renderer)
+{
+    PtcOverlayBridge bridge{};
+    PtcOverlayInput input{};
+    ptc_overlay_input_init(&input);
+    PreviewView view;
+    view.bridge_ = &bridge;
+    view.input_ = &input;
+    view.preview_clock_ = false;
+    auto &s = view.displayed_summary_;
+    s.valid = s.ok = s.temporary_unlocked_available = s.local_clock_available = true;
+    s.day_index = 2498;
+    s.local_second_of_day = 23 * 3600;
+    s.completed_at = 1793718000;
+    s.restricted_now = 1;
+    s.daily_restriction_active = true;
+
+    const auto draw = [&](u64 age) {
+        view.last_refresh_tick_ = view.usage_snapshot_tick_ = armGetSystemTick() - age * 1000000000ULL;
+        renderer.text_runs.clear();
+        view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+            PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+    };
+    const auto shows = [&](PtcUiTextId id) {
+        for (const auto &run : renderer.text_runs)
+            if (run.text == ptc_ui_text(id)) return true;
+        return false;
+    };
+    const auto check_restricted = [&](PtcUiTextId reason) {
+        require(shows(reason) && !shows(PTC_UI_T_PLAYTIME_TODAY) && !shows(PTC_UI_T_OVERLAY_NOW_CAN_PLAY),
+            "a restricted overview must keep its reason and never advertise playtime");
+    };
+
+    draw(29);
+    check_restricted(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE);
+    draw(30);
+    check_restricted(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE);
+    require(shows(PTC_UI_T_STATUS_PENDING_REFRESH), "expired daily quota shows refresh guidance");
+    view.error_ = true;
+    view.last_request_kind_ = OverlayRequestKind::Status;
+    draw(0);
+    check_restricted(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE);
+    require(shows(PTC_UI_T_STATUS_PENDING_REFRESH), "failed status fetch preserves the daily restriction");
+    view.error_ = false;
+    bridge.waiting = true;
+    view.active_request_kind_ = OverlayRequestKind::Status;
+    draw(0);
+    check_restricted(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE);
+    require(shows(PTC_UI_T_REFRESHING), "a pending status fetch preserves the daily restriction");
+
+    bridge.waiting = false;
+    s.bedtime_available = s.bedtime_enabled = s.bedtime_active = true;
+    s.bedtime_start_day_index = s.day_index;
+    s.bedtime_start_minute = 21 * 60;
+    s.bedtime_end_minute = 7 * 60;
+    s.bedtime_window_instance_id = (static_cast<uint64_t>(s.day_index) << 16) | s.bedtime_start_minute;
+    draw(30);
+    check_restricted(PTC_UI_T_OVERLAY_BEDTIME_CHILD_TITLE);
+    require(!shows(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE), "bedtime takes precedence over a concurrent daily restriction");
+    s.local_second_of_day = 23 * 3600 + 59 * 60 + 30;
+    draw(30);
+    require(shows(PTC_UI_T_STATUS_PENDING_REFRESH) && !shows(PTC_UI_T_PLAYTIME_TODAY) &&
+        !shows(PTC_UI_T_OVERLAY_BEDTIME_CHILD_TITLE), "crossing midnight requires a fresh status");
+
+    s.local_second_of_day = 23 * 3600;
+    s.restricted_now = 0;
+    s.unrestricted_today = 1;
+    draw(0);
+    require(shows(PTC_UI_T_OVERLAY_NOW_CAN_PLAY), "the next confirmed release restores the playable overview");
+    view.has_status_snapshot_ = false;
+    draw(0);
+    require(shows(PTC_UI_T_STATUS_PENDING_REFRESH) && !shows(PTC_UI_T_PLAYTIME_TODAY),
+        "no snapshot requires confirmation before displaying playtime");
+}
+
 static void test_detail_countdown_refresh(tsl::gfx::Renderer &renderer)
 {
     const auto setup = [](PreviewView &view, PtcOverlayBridge &bridge, PtcOverlayInput &input) {
@@ -952,6 +1027,7 @@ int main(int argc, char **argv) {
         tsl::gfx::Renderer renderer(argv[1]);
         test_child_policy_freshness();
         test_disabled_status(argv[1]);
+        test_child_restriction_refresh(renderer);
         test_detail_countdown_refresh(renderer);
         test_child_reminder_home(renderer);
         test_child_cards(renderer);

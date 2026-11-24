@@ -172,6 +172,14 @@ def main() -> None:
             "child_drawn_reason_ == offer.reason" in child_open and
             "ptc_overlay_detail_matches(&offer, &displayed_summary_)" in child_open,
             "automatic entry must open home and confirm its drawn cause against the original offer")
+    frame_draw = overlay[overlay.index("void draw(tsl::gfx::Renderer *renderer) override"):
+                         overlay.index("void layout(u16 parent_x")]
+    require(frame_draw.index("!should_draw_()") < frame_draw.index("renderer->clearScreen();") <
+            frame_draw.index("renderer->fillScreen(") and
+            "!automatic_frame_offer_ || automatic_detail_ready(*automatic_frame_offer_)" in overlay and
+            "status_for_open_ && last_request_kind_ == OverlayRequestKind::Status" in child_open and
+            "child_status_fresh(displayed_summary_, day, second)" in child_open,
+            "automatic opening must keep the entire frame transparent until its fresh status matches the offer")
     require("request_started_tick_ < child_open_tick_ || !child_detail_page_available()" in overlay and
             "begin_status_refresh(PTC_UI_STATUS_OVERLAY_READY, true)" in overlay and
             "manual_open_status" not in overlay,
@@ -225,6 +233,12 @@ def main() -> None:
             brief_render.index("renderer.startFrame();"),
             "unchanged hidden pixels must not acquire or submit another framebuffer")
     show = overlay[overlay.index("void onShow() override"):overlay.index("void onHide() override")]
+    hide = overlay[overlay.index("void onHide() override"):overlay.index("void initServices() override")]
+    ack = overlay[overlay.index("void onFrameRendered() override"):overlay.index("void onShow() override")]
+    require("prepare_automatic_frame(s_automatic_detail ? &automatic_offer_ : nullptr," in show and
+            "prepare_automatic_frame" not in hide and "s_owner_visible = false;" in hide and
+            ack.index('ptc_reason_detail_write(s, APP_ROOT, "ack"') < ack.index("prepare_automatic_frame(nullptr)"),
+            "the frame gate must stay closed on a cancelled opening and clear after a drawn ACK or manual show")
     require("bool read_due = allowed &&" in brief and
             "ptc_overlay_brief_poll(&brief_notice_, nullptr," in show,
             "hidden suppression and visible entry must skip journal probes")

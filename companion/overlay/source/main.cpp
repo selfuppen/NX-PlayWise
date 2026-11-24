@@ -184,8 +184,17 @@ public:
         footer_spec_provider_ = std::move(provider);
     }
 
+    void set_draw_predicate(std::function<bool()> should_draw)
+    {
+        should_draw_ = std::move(should_draw);
+    }
+
     void draw(tsl::gfx::Renderer *renderer) override
     {
+        if (should_draw_ && !should_draw_()) {
+            renderer->clearScreen();
+            return;
+        }
         // PlayWise renders its own compact brand & status bar directly inside draw_overlay.
         // We bypass drawing the default 90px title/subtitle banner in all views to maximize vertical space.
         // Fill with the palette panel color (~93% opaque) instead of libtesla's 0xD frame
@@ -228,6 +237,7 @@ public:
 private:
     std::function<bool()> is_parent_view_;
     std::function<OverlayFooterSpec()> footer_spec_provider_;
+    std::function<bool()> should_draw_;
 };
 
 class PctcGui final : public tsl::Gui {
@@ -247,6 +257,9 @@ public:
         frame_ = frame;
         frame->set_parent_view_predicate([this] { return access_recovery_visible(); });
         frame->set_footer_spec_provider([this] { return current_footer_spec(); });
+        frame->set_draw_predicate([this] {
+            return !automatic_frame_offer_ || automatic_detail_ready(*automatic_frame_offer_);
+        });
         content_parent_layout_ = access_recovery_visible();
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             renderer->setPreferTraditionalChinese(
@@ -276,6 +289,12 @@ public:
     bool automatic_detail_allowed() const
     {
         return child_detail_page_available() && has_status_snapshot_ && !error_ && !bridge_->waiting;
+    }
+
+    void prepare_automatic_frame(const PtcReasonDetail *offer, uint64_t deadline_ms = 0)
+    {
+        automatic_frame_offer_ = offer;
+        automatic_frame_deadline_ms_ = deadline_ms;
     }
 
     void start_child_open()
@@ -319,14 +338,25 @@ public:
         }
     }
 
-    bool automatic_detail_drawn(const PtcReasonDetail &offer) const
+    bool automatic_detail_ready(const PtcReasonDetail &offer) const
     {
+        int day, second;
+        // A registration reply can carry a different restriction. Wait for this
+        // opening's status reply and keep cancelled openings transparent while hiding.
         return s_owner_visible && !status_expanded_ && child_detail_page_available() &&
-            !bridge_->waiting && !error_ && child_drawn_reason_ == offer.reason &&
+            !bridge_->waiting && !error_ && status_for_open_ && last_request_kind_ == OverlayRequestKind::Status &&
+            request_started_tick_ >= child_open_tick_ &&
             has_status_snapshot_ && last_refresh_tick_ >= request_started_tick_ &&
             armTicksToNs(request_started_tick_) / 1000000 >= offer.issued_ms &&
+            armTicksToNs(armGetSystemTick()) / 1000000 < automatic_frame_deadline_ms_ &&
             std::strcmp(offer.boot, s_input_owner.context.boot) == 0 &&
+            child_status_fresh(displayed_summary_, day, second) &&
             ptc_overlay_detail_matches(&offer, &displayed_summary_);
+    }
+
+    bool automatic_detail_drawn(const PtcReasonDetail &offer) const
+    {
+        return child_drawn_reason_ == offer.reason && automatic_detail_ready(offer);
     }
 
     void update() override
@@ -1339,6 +1369,8 @@ private:
     PtcCompanionResultSummary displayed_summary_{};
     PtcCompanionResultSummary preview_summary_{};
     PtcCompanionResultSummary redemption_before_{};
+    const PtcReasonDetail *automatic_frame_offer_ = nullptr;
+    uint64_t automatic_frame_deadline_ms_ = 0;
     OverlayRequestKind active_request_kind_ = OverlayRequestKind::None;
     OverlayRequestKind last_request_kind_ = OverlayRequestKind::None;
     unsigned int request_nonce_ = 0;
@@ -1661,6 +1693,7 @@ public:
         if (ptc_reason_detail_write(s, APP_ROOT, "ack", &ack)) {
             automatic_ack_written_ = true;
             s_automatic_detail_confirmed = true;
+            gui_->prepare_automatic_frame(nullptr);
         } else {
             ++automatic_failures_;
             hide();
@@ -1673,6 +1706,8 @@ public:
             armTicksToNs(armGetSystemTick()) / 1000000, false, false, false);
         next_config_ms_ = 0;
         s_display_clock.sampled = false;
+        if (gui_) gui_->prepare_automatic_frame(s_automatic_detail ? &automatic_offer_ : nullptr,
+            automatic_draw_deadline_ms_);
         s_owner_visible = true;
         if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) {
             hide();

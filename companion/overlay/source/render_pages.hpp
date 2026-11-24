@@ -1833,13 +1833,12 @@
             const bool stale = status_is_stale();
             const bool playable = confirmed && summary.ok &&
                 (summary.restricted_now == 0 || (summary.temporary_unlocked_available && summary.temporary_unlocked));
-            if (confirming) {
-                head = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY); tone = pal.warning;
-                std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_CONFIRMING));
-                num = number; num_color = pal.warning;
-            } else if (reason == PTC_REASON_DAILY && confirmed) {
+            if (reason == PTC_REASON_DAILY) {
                 head = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_TITLE); tone = pal.danger;
-                sub = ptc_ui_text(PTC_UI_T_OVERLAY_QUOTA_DONE_VALUE);
+                sub = ptc_ui_text(confirmed ? PTC_UI_T_OVERLAY_QUOTA_DONE_VALUE :
+                    bridge_->waiting ? PTC_UI_T_REFRESHING : PTC_UI_T_STATUS_PENDING_REFRESH);
+            } else if (confirming) {
+                head = ptc_ui_text(PTC_UI_T_CONFIRMING); tone = pal.warning;
             } else if (playable && summary.unrestricted_today == 1) {
                 head = ptc_ui_text(PTC_UI_T_OVERLAY_NOW_CAN_PLAY); tone = stale ? pal.warning : pal.success;
                 std::snprintf(number, sizeof(number), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
@@ -1852,10 +1851,8 @@
                 ptc_ui_format_minutes(summary.remaining_minutes, number, sizeof(number));
                 num = number; num_label = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY);
             } else {
-                head = ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY); tone = pal.text_secondary;
-                std::snprintf(number, sizeof(number), "%s", ptc_ui_text(summary.valid && !playable ?
-                    PTC_UI_T_STATUS_PENDING_REFRESH : PTC_UI_T_UNAVAILABLE));
-                num = number; num_size = PTC_OVERLAY_FONT_BODY; num_color = pal.text_disabled;
+                head = ptc_ui_text(bridge_->waiting ? PTC_UI_T_REFRESHING : PTC_UI_T_STATUS_PENDING_REFRESH);
+                tone = pal.warning;
             }
             // Keep the quota and usage together; proxy-timer detail stays in the status page.
             char label[128], value[128], quota_note[128];
@@ -1881,7 +1878,7 @@
             }
             else ptc_ui_text_format(used ? PTC_UI_T_OVERLAY_QUOTA_USAGE :
                 PTC_UI_T_OVERLAY_QUOTA, line, sizeof(line), args, used ? 2 : 1);
-            note = line;
+            if (confirmed) note = line;
         }
 
         // Compute 4-state hero progress bar permille (0..1000, or -1 when not applicable)
@@ -1987,7 +1984,7 @@
             overlay_text(renderer, brand, brand_x, brand_top, brand_w,
                 PTC_OVERLAY_FONT_CAPTION, pal.text_secondary);
         }
-        const bool highlight = needs_refresh() && !refresh_busy;
+        const bool highlight = !refresh_busy && (!confirmed || needs_refresh());
         draw_button(renderer, page_layout_.language, language_text, pal.text_secondary, false,
             PTC_OVERLAY_FONT_SECONDARY, child_overview_focus_ == 5);
         draw_button(renderer, page_layout_.parent, parent_text, pal.accent, restricted,
