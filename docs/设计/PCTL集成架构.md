@@ -79,6 +79,9 @@ Enforce、跨日、启动恢复、未来规则修改和今日规则未变化都�
 
 当前本机 libnx 源码不提供 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSpentTimeForTest (1952)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装。不得用“libnx 没有定义”推断参数单位或 0x44 raw 布局。
 
+> [!NOTE]
+> **固件与大气层最低版本边界**：`platform/switch/pctl_adapter.c` 固定使用 `145601` / `195101` 与 `0x44`（68 字节）布局，无旧版 `1456`/`1951` 或 `0x36` 字节回退路径；该 `0x44` 结构对应 **HOS `21.0.0+`**（匹配 **Atmosphère `1.10.0+`**，同时也是热加载 `pm:shell` cmd `12` 的最低版本）。低于 HOS `21.0.0` 的固件无法通过 `snapshot_settings` 与布局预检并会停留在只读 `protection` 态。详细逐层核查见[系统与大气层最低版本依赖调研](../调研/系统与大气层最低版本依赖调研.md)；该源码分析不替代非参考固件的真机资格验证。
+
 2026-08-30 对本地 Atmosphère checkout `8e96a489033b8597ec76c0055373642848d93af0`（`1.11.2-1-g8e96a4890`）的已跟踪源码复核显示：boot2 在普通和维护模式启动列表中把 `SystemProgramId::Pctl`（`0x010000000000002E`）作为常规系统程序启动；`stratosphere/` 没有 PCTL sysmodule 重实现，`ams_mitm` 的模块注册表没有 PCTL MITM，`libstratosphere` 也没有 PCTL IPC 接口目录。用于复核的直接入口是 `libraries/libstratosphere/source/boot2/boot2_api.board.nintendo_nx.cpp`、`stratosphere/ams_mitm/source/amsmitm_module_management.cpp` 和 `libraries/libstratosphere/include/stratosphere/ncm/ncm_system_content_meta_id.hpp`。
 
 该源码复核表明上述 Atmosphère commit 未在 CFW 层替换或拦截 PCTL；PCTL 私有命令签名、参数单位、0x44 布局与计时语义仍以仓库协议、确定性测试和绑定环境的真机 A/B 证据为准。

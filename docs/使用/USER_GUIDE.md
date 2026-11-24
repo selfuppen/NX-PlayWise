@@ -20,7 +20,15 @@ This guide is intended for parents and children using **PlayWise** (Repository: 
 
 ### Prerequisites & Clean Installation
 
-You will need a Nintendo Switch running Atmosphère and Homebrew Menu, a computer-readable SD card, and an independently installed overlay manager such as Ultrahand Overlay or Tesla Menu. The PlayWise package includes the PlayWise overlay binary (`playwise.ovl`), but does not bundle an overlay manager/loader.
+You will need a Nintendo Switch running **official HOS `21.0.0+`**, a matching **Atmosphère `1.10.0+`** release, and Homebrew Menu, a computer-readable SD card, and an independently installed overlay manager such as Ultrahand Overlay or Tesla Menu. The PlayWise package includes the PlayWise overlay binary (`playwise.ovl`), but does not bundle an overlay manager/loader.
+
+| Component | Minimum requirement | Tested reference | Notes |
+| --- | --- | --- | --- |
+| Official Firmware (HOS) | **`21.0.0+`** | `22.5.0` (newer releases such as `23.0.1` also work) | Versions below `21.0.0` use a different native PCTL play-timer layout and fail boot preflight |
+| Atmosphère | **`1.10.0+`** (matching your HOS) | `1.11.2` (`1.12.1` for `23.0.1`) | `1.10.0` is the first release supporting HOS `21.0.0`, the 21.0.0 TLS ABI, and the `pm:shell` query used by hot reload |
+| Overlay manager (external) | Tesla / Ultrahand + `nx-ovlloader` | `Ultrahand 2.5.3` + `nx-ovlloader 2.0.2` | Manual overlay works on standard Tesla; experimental brief restriction notices require Ultrahand `v2.3.0+` |
+
+See the [minimum HOS and Atmosphère version dependency analysis (Chinese)](../调研/系统与大气层最低版本依赖调研.md) for the full component-by-component breakdown.
 
 1. Complete the Nintendo official Parental Controls verification described above, and back up any existing PlayWise data on your SD card.
 2. For first-time setup, extract `playwise-complete-<version>.zip`. It contains the standard Switch package `playwise-<version>.zip` and the parent offline tool `playwise-offline.html`.
@@ -791,6 +799,26 @@ When a new restriction starts, PlayWise triggers an automatic reminder; during o
 Brief notices use child-friendly lines such as “Play time is up today”, “Time for bed”, “Let your eyes rest”, or “Please connect a TV”. Displayed times are a snapshot from when the notice was sent; open PlayWise and refresh to see live countdowns or other active limits.
 
 The shortcut hint in a brief notice comes from PlayWise's saved overlay config (e.g., `L+DDOWN` shows “L + Down Info”), or defaults to opening PlayWise from the overlay manager. An automatically opened details view stays open until you press `B` to hide it; rest and bedtime countdowns update locally and recheck status once when time expires. Brief notices request about 10 seconds of display time (actual duration is controlled by the overlay manager). See the [notification contract (Chinese)](../设计/自动原因通知.md) for technical details.
+
+#### Overlay manager compatibility and version requirements
+
+**Original Tesla (Tesla-Menu + nx-ovlloader) compatibility:**
+
+- **Manual overlay use**: works normally. Opening `playwise.ovl` manually to check status, redeem offline codes, or unlock with the parent PIN is unaffected.
+- **Automatic detailed view**: does not depend on Ultrahand's notification settings in code. As long as `playwise.ovl` is already loaded and **hidden with your overlay combo** (not exited with `B` back to the menu, and not paused by `HOME` / `POWER`), the backend can open it directly. However, this path has **not been hardware-verified on original Tesla-Menu**.
+- **Upper-left brief notices (fallback notices, per-minute eye-rest/bedtime countdown repeats, and Test brief notice)**: **not compatible**. Original Tesla-Menu has no external `.notify` receiver and no `[ultrahand] notifications` entry in `sdmc:/config/ultrahand/config.ini`. The settings page reports “Notice setting: unknown”, and PlayWise skips publishing `.notify` files when that toggle is not `true`—so neither the PlayWise resident brief-notice renderer nor **2 Test brief notice** will fire, and shortcut hints fall back to the generic open-PlayWise prompt.
+
+**Ultrahand version requirements** (based on [Ultrahand-Overlay Releases](https://github.com/ppkantorski/Ultrahand-Overlay/releases) checked on 2026-11-24 and the `title`, `text`, `font_size`, `duration`, `show_time`, and `priority` JSON fields emitted by PlayWise):
+
+| Ultrahand version | Brief-notice compatibility | Notes |
+| --- | --- | --- |
+| Below `v2.1.0` | **Unsupported** | Predates `/config/ultrahand/notifications/*.notify` external notifications. |
+| `v2.1.0` – `v2.2.x` | **Incomplete** | Early builds only handled `text`, `font_size`, and `priority`, lacking `title`, `duration`, `show_time`, 4-line titled layout, and `MINUS`/touch dismissal (builds before `v2.1.7` also had transparent hidden-text rendering issues). |
+| `v2.3.0` and later | **Meets protocol baseline** | Introduces the full API Notifications JSON fields (`title`, `duration`, `show_time`, `priority`, `font_size`), 4-line titled layout, the Notifications menu, and `MINUS`/touch dismissal; `v2.5.2` fixes notification alignment/translation issues. |
+| `v2.5.3` + `nx-ovlloader 2.0.2` | **Tested & recommended** | Currently the only hardware-verified and source-audited combination. Newer releases should remain compatible as long as the INI and `.notify` contract is unchanged, though they have not been separately hardware-verified. |
+
+> [!TIP]
+> When enabling **Show restriction reasons automatically**, PlayWise attempts to switch an existing Ultrahand `[ultrahand] notifications` key from `false` to `true`. Reopen Ultrahand once afterward so it reloads the setting—no console reboot is required.
 
 #### Hint previews and setup
 
