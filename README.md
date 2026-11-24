@@ -1,7 +1,7 @@
 <div align="Left">
   <img src="tools/ptc_frontend/playwise_logo.svg" alt="任我玩 PlayWise" width="180">
 
-任我玩（项目仓库名 NX-PlayWise）是面向已安装自定义固件（推荐 Atmosphère）的 Nintendo Switch 本地游玩时间管理工具。家长可设置每周、节假日等额度计划，也可生成当天有效的 8 位加时码供孩子在 Switch 上兑换。生成和兑换无需 Switch 联网，也不需要 Nintendo Account 或 PlayWise 服务器。
+任我玩（项目仓库名 NX-PlayWise：[GitHub](https://github.com/selfuppen/NX-PlayWise) · [Gitee 国内镜像](https://gitee.com/selfuppen/nx-playwise)）是面向已安装自定义固件（推荐 Atmosphère）的 Nintendo Switch 本地游玩时间管理工具。家长可设置每周、节假日等额度计划，也可生成当天有效的 8 位加时码供孩子在 Switch 上兑换。生成和兑换无需 Switch 联网，也不需要 Nintendo Account 或 PlayWise 服务器。
 
 ## 设计理念
 
@@ -163,3 +163,5 @@
 [![Latest Release Downloads](https://img.shields.io/github/downloads/selfuppen/NX-PlayWise/latest/total?style=flat-square&color=blue)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
 [![playwise-complete.zip Downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&color=green&label=playwise-complete.zip&query=$.assets[1].download_count&url=https://api.github.com/repos/selfuppen/NX-PlayWise/releases/latest)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
 [![playwise.zip Downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&color=orange&label=playwise.zip&query=$.assets[0].download_count&url=https://api.github.com/repos/selfuppen/NX-PlayWise/releases/latest)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
+
+国内用户也可通过 [Gitee 仓库](https://gitee.com/selfuppen/nx-playwise) 与 [Gitee Releases](https://gitee.com/selfuppen/nx-playwise/releases) 访问文档及下载安装包。

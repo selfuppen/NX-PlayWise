@@ -123,7 +123,8 @@ export const TRANSLATIONS = {
     footer_p_standalone: "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",
     footer_nav_aria: "项目链接",
     footer_author: "作者 GitHub",
-    footer_source: "项目源码",
+    footer_source: "项目源码 (GitHub)",
+    footer_source_gitee: "Gitee 镜像",
   },
   en: {
     brand_eyebrow: "PlayWise",
@@ -246,7 +247,8 @@ export const TRANSLATIONS = {
     footer_p_standalone: "This is a standalone offline file. If mobile browsers restrict local HTML execution, please use a trusted HTTPS parent web page.",
     footer_nav_aria: "Project Links",
     footer_author: "Author GitHub",
-    footer_source: "Source Code",
+    footer_source: "Source Code (GitHub)",
+    footer_source_gitee: "Gitee Mirror",
   },
 };
 

@@ -104,7 +104,8 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         PtcPolicyDisplayState state = i == 0 ? !overview.fresh ? PTC_POLICY_UNKNOWN : !model->eye_care_policy.enabled ? PTC_POLICY_OFF :
             strcmp(model->eye_care_phase, "resting") == 0 ? PTC_POLICY_WAITING : PTC_POLICY_AVAILABLE : policy->state;
         draw_home_policy_row(pixels, stride, row, label, detail, badge, state);
-        if (model->selected_index == 8 + i && !model->parent_footer_focused) draw_focus_ring(pixels, stride, row, 10);
+        if (model->selected_index == 8 + i && !model->parent_footer_focused && !model->header_language_focused)
+            draw_focus_ring(pixels, stride, row, 10);
         if (i == 2) {
             fit_text(fitted, sizeof(fitted), policies.dock_rule, 11, row.width - 24);
             draw_text(pixels, stride, row.x + 12, row.y + 61, fitted, 11, UI_MUTED);
@@ -400,7 +401,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_text(pixels, stride, 1218 - hint2_w, 435, group_hint2, 13, UI_MUTED);
     for (int index = 0; index < 8; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
-        bool focused = !model->parent_footer_focused && model->selected_index == index;
+        bool focused = !model->parent_footer_focused && !model->header_language_focused && model->selected_index == index;
         bool clear_unavailable = index == 3 && fresh &&
                                  !model->today_override_present;
         const char *unavailable = ptc_ui_today_action_unavailable_reason(model, index, now);
@@ -728,7 +729,7 @@ static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcU
     draw_text(pixels, stride, rect.x + 24, rect.y + 66,
               ptc_ui_text(PTC_UI_T_IF_YOU_ENCOUNTER_PROBLEMS_PLEASE_ATTACH_THIS), 17, UI_INK);
     draw_text(pixels, stride, rect.x + 24, rect.y + 100,
-              ptc_ui_text(PTC_UI_T_GITHUB_ADDRESS_HTTPS_GITHUB_COM_SELFUPPEN_NX), 17, accent);
+              ptc_ui_text(PTC_UI_T_GITHUB_ADDRESS_HTTPS_GITHUB_COM_SELFUPPEN_NX), 15, accent);
 }
 
 static void draw_parent_header(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -764,11 +765,16 @@ static void draw_parent_header(uint32_t *pixels, uint32_t stride, const PtcUiMod
         subtitle = subtitle_buf;
     }
 
-    draw_header(pixels, stride, title, subtitle);
+    if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        draw_header_limited(pixels, stride, title, subtitle, ptc_ui_header_language_rect().x - 124 - 16);
+    } else {
+        draw_header(pixels, stride, title, subtitle);
+    }
     draw_time_status_bar(pixels, stride, model);
     draw_tabs(pixels, stride, model);
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
-        draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()), false);
+        draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()),
+                                     model->header_language_focused);
     }
 }
 
@@ -1204,18 +1210,25 @@ static void draw_settings_grouped_card(uint32_t *pixels, uint32_t stride, const 
 
 static void draw_parent_settings_quick_strip(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect strip = {54, 568, 768, 60};
+    UiRect strip = to_uirect(ptc_ui_settings_language_rect());
+    bool selected = (model->selected_index == 6 && !model->parent_footer_focused);
     char lang_buf[64], ver_buf[80], fitted[96];
-    draw_card_shadow(pixels, stride, strip, 14);
-    fill_round_rect(pixels, stride, strip, 14, UI_SURFACE);
-    draw_rect_outline(pixels, stride, strip, 14, 1, UI_BORDER);
+    if (!selected) draw_card_shadow(pixels, stride, strip, 14);
+    fill_round_rect(pixels, stride, strip, 14, selected ? UI_ACCENT_SOFT : UI_SURFACE);
+    if (selected) draw_focus_ring(pixels, stride, strip, 14);
+    else draw_rect_outline(pixels, stride, strip, 14, 1, UI_BORDER);
 
-    draw_globe_icon(pixels, stride, strip.x + 26, strip.y + 30, 9, UI_ACCENT);
-    const char *prefix = ptc_ui_text(PTC_UI_T_SETTINGS_QUICK_PREFIX);
-    draw_text_bold(pixels, stride, strip.x + 44, strip.y + 35, prefix, 14, UI_MUTED);
-    int cur_x = strip.x + 44 + measure_text(prefix, 14) + 12;
+    UiRect icon_box = {strip.x + 12, strip.y + 12, 36, 36};
+    fill_round_rect(pixels, stride, icon_box, 10, selected ? UI_ACCENT : UI_ACCENT_SOFT);
+    draw_globe_icon(pixels, stride, icon_box.x + 18, icon_box.y + 18, 9,
+                    selected ? UI_ON_ACCENT : UI_ACCENT);
 
-    const char *hint = ptc_ui_text(PTC_UI_T_SETTINGS_QUICK_HINT);
+    const char *title = ptc_ui_text(PTC_UI_T_UI_LANGUAGE);
+    draw_text_bold(pixels, stride, strip.x + 58, strip.y + 36, title, 16,
+                   selected ? UI_ACCENT : UI_INK);
+    int cur_x = strip.x + 58 + measure_text(title, 16) + 14;
+
+    const char *hint = ptc_ui_text(PTC_UI_T_SETTINGS_LANG_STRIP_HINT);
     int hint_w = measure_text(hint, 13);
     int hint_x = strip.x + strip.width - 16 - hint_w;
     draw_text_bold(pixels, stride, hint_x, strip.y + 35, hint, 13, UI_ACCENT);
@@ -1227,9 +1240,9 @@ static void draw_parent_settings_quick_strip(uint32_t *pixels, uint32_t stride, 
     int lw = measure_text(fitted, 12) + 20;
     if (cur_x + lw + 8 < hint_x) {
         UiRect lpill = {cur_x, strip.y + 17, lw, 26};
-        fill_round_rect(pixels, stride, lpill, 13, UI_PAGE);
-        draw_rect_outline(pixels, stride, lpill, 13, 1, UI_BORDER);
-        draw_text_center(pixels, stride, lpill, fitted, 12, UI_INK);
+        fill_round_rect(pixels, stride, lpill, 13, selected ? UI_SURFACE : UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, lpill, 13, 1, UI_ACCENT);
+        draw_text_center(pixels, stride, lpill, fitted, 12, UI_ACCENT);
         cur_x += lw + 10;
     }
 
@@ -1494,6 +1507,34 @@ static void draw_settings_dynamic_preview(uint32_t *pixels, uint32_t stride,
             draw_text_center(pixels, stride, (UiRect){tile.x, tile.y + 38, tile.width, 24},
                              fitted, 11, is_on ? UI_ACCENT : UI_INK);
         }
+    } else if (sel == 6) {
+        /* 4 UI language options overview */
+        static const char *CODES[4] = {"AUTO", "ZH-CN", "ZH-TW", "EN"};
+        const char *SHORT_NAMES[4] = {
+            ptc_ui_text(PTC_UI_T_SYSTEM),
+            ptc_ui_text_in_language(PTC_UI_T_SIMPLIFIED_CHINESE, PTC_UI_LANGUAGE_SIMPLIFIED),
+            ptc_ui_text_in_language(PTC_UI_T_TRADITIONAL_CHINESE, PTC_UI_LANGUAGE_TRADITIONAL),
+            "English"
+        };
+        draw_text_bold(pixels, stride, box.x + 14, box.y + 24,
+                       ptc_ui_text(PTC_UI_T_SETTINGS_PREVIEW_LANG_TITLE), 12, UI_MUTED);
+        const char *shortcut = "ZL / ZR";
+        draw_text_bold(pixels, stride, box.x + box.width - 14 - measure_text(shortcut, 12),
+                       box.y + 24, shortcut, 12, UI_ACCENT);
+        int gap = 8;
+        int sw = (box.width - 28 - gap * 3) / 4;
+        for (int l = 0; l < 4; ++l) {
+            UiRect tile = {box.x + 14 + l * (sw + gap), box.y + 36, sw, 68};
+            bool is_on = ((int)model->language_preference == l);
+            fill_round_rect(pixels, stride, tile, 8, is_on ? UI_ACCENT_SOFT : UI_SURFACE);
+            draw_rect_outline(pixels, stride, tile, 8, is_on ? 2 : 1, is_on ? UI_ACCENT : UI_BORDER);
+            UiRect chip = {tile.x + 6, tile.y + 10, tile.width - 12, 22};
+            fill_round_rect(pixels, stride, chip, 6, is_on ? UI_ACCENT : UI_PAGE);
+            draw_text_center(pixels, stride, chip, CODES[l], 10, is_on ? UI_ON_ACCENT : UI_MUTED);
+            fit_text(fitted, sizeof(fitted), SHORT_NAMES[l], 11, tile.width - 10);
+            draw_text_center(pixels, stride, (UiRect){tile.x, tile.y + 38, tile.width, 24},
+                             fitted, 11, is_on ? UI_ACCENT : UI_INK);
+        }
     }
 }
 
@@ -1513,6 +1554,7 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
     const char *desc1 = "";
     const char *desc2 = "";
     const char *action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_MODIFY_SETTINGS);
+    char lang_status[64];
 
     switch (sel) {
     case 0:
@@ -1597,6 +1639,19 @@ static void draw_parent_settings_help(uint32_t *pixels, uint32_t stride, const P
         desc1 = ptc_ui_text(PTC_UI_T_REDIRECT_PHOTO_ALBUM_ENTRY_TO_HOMEBREW_MENU);
         desc2 = ptc_ui_text(PTC_UI_T_ONCE_ENABLED_HOLD_X_THEN_PRESS_A);
         action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
+        break;
+    case 6:
+        tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+        title = ptc_ui_text(PTC_UI_T_UI_LANGUAGE);
+        status_text = ptc_ui_localize(ptc_ui_language_preference_label(model->language_preference),
+                                      lang_status, sizeof(lang_status));
+        status_color = UI_ACCENT;
+        status_bg = UI_ACCENT_SOFT;
+        status_bd = UI_ACCENT;
+        icon = UI_ACTION_ICON_LANGUAGE;
+        desc1 = ptc_ui_text(PTC_UI_T_SETTINGS_LANG_DESC1);
+        desc2 = ptc_ui_text(PTC_UI_T_SETTINGS_LANG_DESC2);
+        action_hint = ptc_ui_text(PTC_UI_T_SETTINGS_LANG_CTA);
         break;
     case 5:
     default:

@@ -57,10 +57,11 @@ def test_static_assets_and_copy() -> None:
     runtime = app + token + storage + pairing + i18n + worker
     assert_true("https://" not in runtime, "no external HTTPS runtime dependency")
     assert_true("http://" not in index + runtime, "no external HTTP dependency")
-    assert_equal(index.count("https://"), 2, "only the two approved HTTPS links")
+    assert_equal(index.count("https://"), 3, "only the three approved HTTPS links")
     assert_true('href="https://github.com/selfuppen"' in index, "author GitHub link")
     assert_true('href="https://github.com/selfuppen/NX-PlayWise"' in index, "project source link")
-    assert_equal(index.count('target="_blank" rel="noopener noreferrer"'), 2, "external link isolation")
+    assert_true('href="https://gitee.com/selfuppen/nx-playwise"' in index, "project Gitee mirror link")
+    assert_equal(index.count('target="_blank" rel="noopener noreferrer"'), 3, "external link isolation")
     assert_true("playwise-public-demo-secret-0001" in index, "public demo secret is explicit")
     assert_true("device_id" in app + pairing and "grant_secret" in app + pairing, "fragment pairing fields")
     assert_true("history.replaceState" in app, "fragment is cleared after parsing")

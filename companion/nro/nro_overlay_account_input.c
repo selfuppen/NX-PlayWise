@@ -213,7 +213,7 @@ static void handle_language_overlay_input(UiState *ui, u64 down)
     } else if (down & HidNpadButton_Right) {
         ptc_audio_play(PTC_SE_FOCUS);
         ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
-    } else if (down & HidNpadButton_A) {
+    } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
         PtcUiLanguagePreference preference = (PtcUiLanguagePreference)ui->model.overlay_selection;
         if (apply_language_preference(ui, preference)) {
             ptc_ui_cancel_overlay(&ui->model);
@@ -274,6 +274,11 @@ static void handle_software_info_overlay_input(UiState *ui, u64 down)
     if (down & (HidNpadButton_R | HidNpadButton_Right)) {
         ptc_audio_play(PTC_SE_TAB);
         ui->model.software_info_qr_tab = 1;
+        return;
+    }
+    if ((down & HidNpadButton_Y) && ui->model.software_info_qr_tab == 1) {
+        ptc_audio_play(PTC_SE_TAB);
+        ui->model.software_info_repo_source = ui->model.software_info_repo_source ? 0 : 1;
         return;
     }
     if (down & HidNpadButton_X) {

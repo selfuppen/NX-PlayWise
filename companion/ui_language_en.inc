@@ -140,7 +140,7 @@
     {"B 取消", "B Cancel"},
     {"B 返回", "B Back"},
     {"B 返回加时码页", "B Back to Grant Code"},
-    {"GitHub 地址：https://github.com/selfuppen/NX-PlayWise/issues", "GitHub address: https://github.com/selfuppen/NX-PlayWise/issues"},
+    {"GitHub: https://github.com/selfuppen/NX-PlayWise/issues  |  Gitee: https://gitee.com/selfuppen/nx-playwise/issues", "GitHub: https://github.com/selfuppen/NX-PlayWise/issues  |  Gitee: https://gitee.com/selfuppen/nx-playwise/issues"},
     {"Joy-Con 输入", "Joy-Con input"},
     {"L  上一页", "L Previous page"},
     {"L + R + 上", "L + R + up"},

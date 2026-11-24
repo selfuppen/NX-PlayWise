@@ -148,6 +148,7 @@ typedef enum {
     PTC_UI_HIT_ACTIVITY_FILTER,
     PTC_UI_HIT_SHORTCUT_PREFIX,
     PTC_UI_HIT_SOFTWARE_INFO_QR_TAB,
+    PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE,
     PTC_UI_HIT_SETUP_PCTL_STEP
 } PtcUiHitKind;
 
@@ -205,6 +206,7 @@ PtcUiRect ptc_ui_parent_shoulder_key_rect(int key);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_settings_card_rect(int index);
+PtcUiRect ptc_ui_settings_language_rect(void);
 PtcUiRect ptc_ui_notification_option_rect(int index);
 PtcUiRect ptc_ui_notification_preview_group_rect(void);
 PtcUiRect ptc_ui_notification_preview_rect(void);
@@ -214,6 +216,7 @@ PtcUiRect ptc_ui_notification_preview_tab_rect(int index);
 PtcUiRect ptc_ui_notification_info_rect(int index); /* 0 detail desc, 1 brief desc, 2 receipt */
 PtcUiRect ptc_ui_notification_verification_rect(void);
 PtcUiRect ptc_ui_software_info_qr_tab_rect(int index);
+PtcUiRect ptc_ui_software_info_repo_source_rect(int index);
 PtcUiRect ptc_ui_software_info_update_banner_rect(void);
 PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_qr_panel_rect(int index);

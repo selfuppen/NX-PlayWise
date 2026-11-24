@@ -235,6 +235,21 @@ static void test_release_navigation(void)
     check_int(model.selected_index, 1, "settings selection moves left to first Preferences card");
     ptc_ui_move_parent_selection(&model, 0, -1);
     check_int(model.selected_index, 0, "settings selection moves back up to Security row");
+    model.selected_index = 3;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "settings row 1 moves down to UI Language quick bar");
+    check_true(!model.parent_footer_focused, "UI Language quick bar sits above footer");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 3, "up from UI Language quick bar restores previous settings card");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "down returns to UI Language quick bar");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused, "down from UI Language quick bar enters footer");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(!model.parent_footer_focused && model.selected_index == 6,
+               "up from footer restores UI Language quick bar");
+    model.parent_footer_focused = false;
+    model.selected_index = 0;
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     ptc_ui_change_parent_page(&model, -1);
@@ -261,6 +276,15 @@ static void test_release_navigation(void)
     check_int(model.selected_index, 2, "selection moves right along the quota lifecycle row");
     ptc_ui_move_parent_selection(&model, 0, -1);
     check_int(model.selected_index, 1, "up from the quota lifecycle row reaches full-width quick add");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(model.header_language_focused, "up from top today card focuses header language switcher");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(!model.header_language_focused && model.selected_index == 1,
+               "down from header language switcher restores previous today card");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(model.header_language_focused, "re-entering header language switcher from top card");
+    ptc_ui_change_parent_page(&model, 1);
+    check_true(!model.header_language_focused, "switching parent page clears header language focus");
 
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
@@ -4135,11 +4159,19 @@ static void test_language_and_short_weekly_limits(void)
     {
         PtcUiRect qr0 = ptc_ui_software_info_qr_tab_rect(0);
         PtcUiRect qr1 = ptc_ui_software_info_qr_tab_rect(1);
+        PtcUiRect repo0 = ptc_ui_software_info_repo_source_rect(0);
+        PtcUiRect repo1 = ptc_ui_software_info_repo_source_rect(1);
         PtcUiRect banner = ptc_ui_software_info_update_banner_rect();
         check_true(qr0.w > 0 && qr1.w > 0 && !rects_overlap(qr0, qr1), "software info QR tabs do not overlap");
+        check_true(repo0.w > 0 && repo1.w > 0 && !rects_overlap(repo0, repo1), "software info repo source tabs do not overlap");
         check_true(!rects_overlap(banner, qr0) && !rects_overlap(banner, qr1), "update banner and QR tabs do not overlap");
+        check_true(!rects_overlap(banner, repo0) && !rects_overlap(banner, repo1), "update banner and repo source tabs do not overlap");
         check_hit(hit_center(&model, qr0), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 0, "hit software info QR tab 0");
         check_hit(hit_center(&model, qr1), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 1, "hit software info QR tab 1");
+        check_hit(hit_center(&model, repo0), PTC_UI_HIT_NONE, 0, "repo source inactive on PWA tab");
+        model.software_info_qr_tab = 1;
+        check_hit(hit_center(&model, repo0), PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, 0, "hit software info repo source GitHub");
+        check_hit(hit_center(&model, repo1), PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, 1, "hit software info repo source Gitee");
         check_hit(hit_center(&model, banner), PTC_UI_HIT_UPDATE_ACTION, 8, "hit software info update banner");
         check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
             "software info top back button cancels overlay");
@@ -4617,6 +4649,13 @@ static void test_config_backup_layout(void)
     }
     model.overlay = PTC_UI_OVERLAY_NONE; model.parent_page = PTC_UI_PARENT_SETTINGS;
     check_hit(hit_center(&model, ptc_ui_settings_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "sixth settings card has matching hit area");
+    check_hit(hit_center(&model, ptc_ui_settings_language_rect()), PTC_UI_HIT_PARENT_CARD, 6, "settings UI language bar has matching hit area");
+    for (int i = 0; i < 6; ++i) {
+        check_true(!rects_overlap(ptc_ui_settings_card_rect(i), ptc_ui_settings_language_rect()),
+                   "settings UI language bar does not overlap action cards");
+    }
+    check_true(!rects_overlap(ptc_ui_settings_language_rect(), ptc_ui_parent_footer_rect(0)),
+               "settings UI language bar stays above footer");
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     check_hit(hit_center(&model, ptc_ui_support_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "support backup card has matching hit area");
 }
@@ -5172,6 +5211,18 @@ static void test_child_forecast_focus(void)
         PTC_UI_HIT_NONE, 0, "stale forecasts have no touch target");
     ptc_ui_move_child_forecast_focus(&model, 1, 1121);
     check_int(model.child_forecast_focus, 0, "stale forecasts release navigation focus");
+    check_true(ptc_ui_move_child_focus(&model, 0, -1, 1000) && model.header_language_focused,
+               "up on child home focuses header language switcher");
+    check_true(!ptc_ui_move_child_focus(&model, 1, 0, 1000) && model.header_language_focused,
+               "horizontal input keeps focus on header language switcher");
+    check_true(ptc_ui_move_child_focus(&model, 0, 1, 1000) && !model.header_language_focused,
+               "down from header language switcher returns to default child home state");
+    check_true(ptc_ui_move_child_focus(&model, 0, 1, 1000) && model.child_forecast_focus == 1,
+               "down from default child home enters forecast row");
+    check_true(ptc_ui_move_child_focus(&model, 0, -1, 1000) && model.child_forecast_focus == 0,
+               "up from forecast row returns to default child home state");
+    check_true(ptc_ui_move_child_focus(&model, 0, -1, 1000) && model.header_language_focused,
+               "second up reaches header language switcher from forecast");
 }
 
 static void test_online_update_layout(void)

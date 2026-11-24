@@ -397,8 +397,10 @@ typedef enum {
 
 typedef struct {
     PtcUiView view;
+    bool header_language_focused;
     bool child_actions_focused;
     int child_action_focus;
+    int settings_last_card_index;
     PtcUiParentPage parent_page;
     PtcUiPlanPage plan_page;
     bool today_settings_origin;
@@ -782,8 +784,10 @@ typedef struct {
     int hot_reload_status;
     bool hot_reload_capture_restart;
     char repository_url[128];
+    char gitee_repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     int software_info_qr_tab;
+    int software_info_repo_source; /* 0 = GitHub, 1 = Gitee */
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
     PtcUiDiagnosticStatus diagnostic_status;
     char diagnostic_path[192];

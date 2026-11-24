@@ -1019,11 +1019,37 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
         draw_text_center(pixels, stride, tab, fitted, 14, active ? UI_ON_ACCENT : UI_MUTED);
     }
 
-    const char *active_url = (qr_tab == 0) ? model->pwa_url : model->repository_url;
-    UiRect qr_canvas = {qr_card.x + (qr_card.width - 216) / 2, 276, 216, 216};
-    draw_software_info_qr(pixels, stride, qr_canvas, active_url);
+    int repo_source = model->software_info_repo_source ? 1 : 0;
+    const char *repo_url = repo_source
+        ? (model->gitee_repository_url[0] ? model->gitee_repository_url : "https://gitee.com/selfuppen/nx-playwise")
+        : (model->repository_url[0] ? model->repository_url : "https://github.com/selfuppen/NX-PlayWise");
+    const char *active_url = (qr_tab == 0) ? model->pwa_url : repo_url;
+    if (qr_tab == 0) {
+        UiRect qr_canvas = {qr_card.x + (qr_card.width - 216) / 2, 276, 216, 216};
+        draw_software_info_qr(pixels, stride, qr_canvas, active_url);
+    } else {
+        UiRect qr_canvas = {qr_card.x + (qr_card.width - 188) / 2, 268, 188, 188};
+        draw_software_info_qr(pixels, stride, qr_canvas, active_url);
 
-    draw_wrapped_text_centered(pixels, stride, qr_card.x + qr_card.width / 2, 514,
+        UiRect src_track = {826, 466, 250, 30};
+        fill_round_rect(pixels, stride, src_track, 8, UI_PAGE);
+        draw_rect_outline(pixels, stride, src_track, 8, 1, UI_BORDER);
+        static const char *SRC_LABELS[2] = {"GitHub", "Gitee"};
+        for (int s = 0; s < 2; ++s) {
+            UiRect btn = to_uirect(ptc_ui_software_info_repo_source_rect(s));
+            bool active = (repo_source == s);
+            if (active) {
+                fill_round_rect(pixels, stride, (UiRect){btn.x + 2, btn.y + 2, btn.width - 4, btn.height - 4},
+                                6, UI_ACCENT);
+            }
+            draw_text_center(pixels, stride, btn, SRC_LABELS[s], 13, active ? UI_ON_ACCENT : UI_MUTED);
+        }
+        const char *repo_hint = ptc_ui_text(PTC_UI_T_SW_INFO_REPO_SWITCH_HINT);
+        int repo_hint_w = measure_text(repo_hint, 12);
+        draw_text(pixels, stride, qr_card.x + qr_card.width - 24 - repo_hint_w, 486, repo_hint, 12, UI_MUTED);
+    }
+
+    draw_wrapped_text_centered(pixels, stride, qr_card.x + qr_card.width / 2, qr_tab == 0 ? 514 : 518,
                                ptc_ui_text(qr_tab == 0 ? PTC_UI_T_SW_INFO_QR_PWA_DESC : PTC_UI_T_SW_INFO_QR_REPO_DESC),
                                14, qr_card.width - 40, 19, 2, UI_INK);
 

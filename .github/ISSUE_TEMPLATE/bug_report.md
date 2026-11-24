@@ -9,8 +9,8 @@ assignees: ''
 
 > [!IMPORTANT]
 > **提交前请先确认：**
-> 1. 系统设置中的 [Nintendo 官方家长控制](https://github.com/selfuppen/NX-PlayWise/blob/main/docs/使用/使用指南.md#开启官方家长控制) 已开启（且未被官方密码临时解除）。
-> 2. Switch 时间与时区已同步（可通过 DBI 或 QuickNTP [校准时间](https://github.com/selfuppen/NX-PlayWise/blob/main/docs/使用/使用指南.md#同步-switch-时间)），并在 PlayWise 中按 `Y` 刷新重试。
+> 1. 系统设置中的 [Nintendo 官方家长控制](https://github.com/selfuppen/NX-PlayWise/blob/main/docs/使用/使用指南.md#开启官方家长控制)（[Gitee 镜像](https://gitee.com/selfuppen/nx-playwise/blob/main/docs/使用/使用指南.md#开启官方家长控制)）已开启（且未被官方密码临时解除）。
+> 2. Switch 时间与时区已同步（可通过 DBI 或 QuickNTP [校准时间](https://github.com/selfuppen/NX-PlayWise/blob/main/docs/使用/使用指南.md#同步-switch-时间) / [Gitee 镜像](https://gitee.com/selfuppen/nx-playwise/blob/main/docs/使用/使用指南.md#同步-switch-时间)），并在 PlayWise 中按 `Y` 刷新重试。
 
 **排障记录（无法确认时填“未知”）**
 - 官方家长控制状态：（已开启 / 未开启 / 未知；是否临时解除：是 / 否）

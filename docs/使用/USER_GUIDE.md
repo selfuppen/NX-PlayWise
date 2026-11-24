@@ -669,7 +669,7 @@ Parent Zone "Support & Recovery" displays active issues and recommended remedies
 
 </details>
 
-When reporting issues, export diagnostics from this page. **Start your troubleshooting record with whether system Parental Controls is enabled or temporarily unlocked, and whether the clock has been synchronized (method, success, and results after refreshing and retrying); mark anything you cannot confirm as unknown.** Then note reproduction steps, firmware and Atmosphère versions, PlayWise version and error codes, and submit to [Project Issues](https://github.com/selfuppen/NX-PlayWise/issues) with diagnostics attached. Never publish `credentials.json`, `auth.json`, full ledgers, real grant codes, or parental export files.
+When reporting issues, export diagnostics from this page. **Start your troubleshooting record with whether system Parental Controls is enabled or temporarily unlocked, and whether the clock has been synchronized (method, success, and results after refreshing and retrying); mark anything you cannot confirm as unknown.** Then note reproduction steps, firmware and Atmosphère versions, PlayWise version and error codes, and submit to [Project Issues (GitHub)](https://github.com/selfuppen/NX-PlayWise/issues) or [Gitee Issues](https://gitee.com/selfuppen/nx-playwise/issues) with diagnostics attached. Never publish `credentials.json`, `auth.json`, full ledgers, real grant codes, or parental export files.
 
 ## Upgrades
 

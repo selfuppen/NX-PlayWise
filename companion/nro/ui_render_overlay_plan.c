@@ -1333,8 +1333,10 @@ static void draw_calendar_sources_tab(uint32_t *pixels, uint32_t stride, const P
                           ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_GUIDE), 14, right_card.width - 40, 20, 3, UI_INK);
         draw_wrapped_text(pixels, stride, right_card.x + 20, right_card.y + 180,
                           ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FIELDS), 13, right_card.width - 40, 19, 3, UI_MUTED);
-        draw_wrapped_text(pixels, stride, right_card.x + 20, right_card.y + 260,
-                          ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 12, right_card.width - 40, 17, 3, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, right_card.x + 20, right_card.y + 252,
+                          ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 12, right_card.width - 40, 17, 2, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, right_card.x + 20, right_card.y + 296,
+                          ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT_GITEE), 12, right_card.width - 40, 17, 2, UI_ACCENT);
     } else {
         int show_count = model->calendar_manager_count < 4 ? model->calendar_manager_count : 4;
         for (int i = 0; i < show_count; ++i) {
@@ -1587,8 +1589,10 @@ static void draw_calendar_format_overlay(uint32_t *pixels, uint32_t stride, cons
     for (int i = 0; i < 5; ++i)
         draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 104 + i * 62,
             ptc_ui_text(lines[i]), 18, dialog.width - 68, 24, 2, UI_INK);
-    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 434,
-        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 15, dialog.width - 68, 20, 2, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 422,
+        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 14, dialog.width - 68, 18, 2, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 448,
+        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT_GITEE), 14, dialog.width - 68, 18, 2, UI_ACCENT);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
         ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, true);
 }

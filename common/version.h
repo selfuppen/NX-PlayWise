@@ -3,6 +3,7 @@
 
 #define PLAYWISE_VERSION "3.3.0"
 #define PLAYWISE_REPOSITORY_URL "https://github.com/selfuppen/NX-PlayWise"
+#define PLAYWISE_GITEE_REPOSITORY_URL "https://gitee.com/selfuppen/nx-playwise"
 #define PLAYWISE_RELEASE_TITLE_ID "4200000000BD2300"
 #define PLAYWISE_RELEASE_IPC_SERVICE "pctc:u"
 #define PLAYWISE_RELEASE_SD_ROOT "sdmc:/switch/playwise"

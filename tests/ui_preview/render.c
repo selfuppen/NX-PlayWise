@@ -1849,6 +1849,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             snprintf(settings_dlg.app_release_id, sizeof(settings_dlg.app_release_id), "playwise-nro-release");
             snprintf(settings_dlg.backend_release_id, sizeof(settings_dlg.backend_release_id), "playwise-sysmodule-release");
             snprintf(settings_dlg.repository_url, sizeof(settings_dlg.repository_url), "https://github.com/selfuppen/NX-PlayWise");
+            snprintf(settings_dlg.gitee_repository_url, sizeof(settings_dlg.gitee_repository_url), "https://gitee.com/selfuppen/nx-playwise");
+            settings_dlg.software_info_repo_source = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH) ? 0 : 1;
             snprintf(settings_dlg.pwa_url, sizeof(settings_dlg.pwa_url), "https://selfuppen.github.io/NX-PlayWise/");
             settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
@@ -2713,8 +2715,8 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
     PtcUiThemeView theme = ptc_ui_theme_make_styled_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT,
         (PtcUiThemeStyle)style, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
 
-    /* 1. Safety & Preferences root (Scheme A: grouped console + right dynamic preview for all 6 cards) */
-    for (int sel = 0; sel < 6; ++sel) {
+    /* 1. Safety & Preferences root (Scheme A: grouped console + UI Language bar + right dynamic preview for all 7 items) */
+    for (int sel = 0; sel < 7; ++sel) {
         PtcUiModel model = *baseline;
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_SETTINGS;
@@ -2731,7 +2733,23 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
         action_trace.enabled = false;
         for (int c = 0; c < 6; ++c)
             failed += check_action_text(to_uirect(ptc_ui_settings_card_rect(c)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_settings_language_rect()), NULL);
         failed += check_action_text((UiRect){840, 174, 386, 454}, NULL);
+    }
+
+    /* 1b. Header language switcher badge on Child Home & Parent Today (focused and unfocused) */
+    for (int is_parent = 0; is_parent < 2; ++is_parent) {
+        for (int focused = 0; focused < 2; ++focused) {
+            PtcUiModel model = *baseline;
+            model.view = is_parent ? PTC_UI_PARENT : PTC_UI_CHILD;
+            model.parent_page = PTC_UI_PARENT_TODAY;
+            model.overlay = PTC_UI_OVERLAY_NONE;
+            model.header_language_focused = focused != 0;
+            memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+            ptc_ui_graphics_draw(&model, &theme);
+            action_trace.enabled = false;
+            failed += check_action_text(to_uirect(ptc_ui_header_language_rect()), NULL);
+        }
     }
 
     /* 2. Interface Language (Scheme B: 4 full-width vertical cards side-by-side) */
@@ -2753,22 +2771,29 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
 
     /* 3. Software Info & Check Updates (Scheme A: version/update workbench + switchable QR card) */
     for (int qr_tab = 0; qr_tab < 2; ++qr_tab) {
-        for (int has_upd = 0; has_upd < 2; ++has_upd) {
-            PtcUiModel model = *baseline;
-            model.view = PTC_UI_PARENT;
-            model.parent_page = PTC_UI_PARENT_SETTINGS;
-            model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
-            model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
-            model.software_info_qr_tab = qr_tab;
-            model.update_status = has_upd ? PTC_UPDATE_AVAILABLE : PTC_UPDATE_CURRENT;
-            if (has_upd) snprintf(model.update_version, sizeof(model.update_version), "0.3.0");
-            else model.update_version[0] = '\0';
-            ptc_ui_graphics_draw(&model, &theme);
-            memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
-            draw_support_overlay_surface(preview_pixels, 1280, &model);
-            action_trace.enabled = false;
-            failed += check_action_text((UiRect){54, 168, 730, 472}, NULL);
-            failed += check_action_text((UiRect){802, 168, 424, 472}, NULL);
+        int repo_sources = qr_tab == 1 ? 2 : 1;
+        for (int repo_src = 0; repo_src < repo_sources; ++repo_src) {
+            for (int has_upd = 0; has_upd < 2; ++has_upd) {
+                PtcUiModel model = *baseline;
+                model.view = PTC_UI_PARENT;
+                model.parent_page = PTC_UI_PARENT_SETTINGS;
+                model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+                model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+                model.software_info_qr_tab = qr_tab;
+                model.software_info_repo_source = repo_src;
+                snprintf(model.repository_url, sizeof(model.repository_url), "https://github.com/selfuppen/NX-PlayWise");
+                snprintf(model.gitee_repository_url, sizeof(model.gitee_repository_url), "https://gitee.com/selfuppen/nx-playwise");
+                snprintf(model.pwa_url, sizeof(model.pwa_url), "https://selfuppen.github.io/NX-PlayWise/");
+                model.update_status = has_upd ? PTC_UPDATE_AVAILABLE : PTC_UPDATE_CURRENT;
+                if (has_upd) snprintf(model.update_version, sizeof(model.update_version), "0.3.0");
+                else model.update_version[0] = '\0';
+                ptc_ui_graphics_draw(&model, &theme);
+                memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+                draw_support_overlay_surface(preview_pixels, 1280, &model);
+                action_trace.enabled = false;
+                failed += check_action_text((UiRect){54, 168, 730, 472}, NULL);
+                failed += check_action_text((UiRect){802, 168, 424, 472}, NULL);
+            }
         }
     }
     return failed;

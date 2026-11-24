@@ -37,6 +37,10 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_TAB);
         ui->model.software_info_qr_tab = hit.index ? 1 : 0;
         break;
+    case PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE:
+        ptc_audio_play(PTC_SE_TAB);
+        ui->model.software_info_repo_source = hit.index ? 1 : 0;
+        break;
     case PTC_UI_HIT_UPDATE_BADGE:
         ptc_audio_play(PTC_SE_CONFIRM);
         open_online_update_badge(ui);
@@ -88,6 +92,7 @@ void handle_touch(UiState *ui, int x, int y)
         submit_status(ui);
         break;
     case PTC_UI_HIT_CHILD_FORECAST:
+        ui->model.header_language_focused = false;
         ui->model.child_forecast_focus = hit.index + 1;
         ptc_audio_play(PTC_SE_FOCUS);
         break;
@@ -175,6 +180,8 @@ void handle_touch(UiState *ui, int x, int y)
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
         } else {
             ptc_audio_play(PTC_SE_CONFIRM);
+            ui->model.header_language_focused = false;
+            ui->model.parent_footer_focused = false;
             ui->model.selected_index = hit.index;
             if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&
                 ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY &&

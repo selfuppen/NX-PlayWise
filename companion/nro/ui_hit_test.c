@@ -180,6 +180,11 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         for (i = 0; i < 2; ++i)
             if (ptc_ui_rect_contains(ptc_ui_software_info_qr_tab_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, i);
+        if (model->software_info_qr_tab == 1) {
+            for (i = 0; i < 2; ++i)
+                if (ptc_ui_rect_contains(ptc_ui_software_info_repo_source_rect(i), x, y))
+                    return make_hit(PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, i);
+        }
         if (ptc_ui_rect_contains(ptc_ui_software_info_update_banner_rect(), x, y) ||
             ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y))
             return make_hit(PTC_UI_HIT_UPDATE_ACTION, 8);
@@ -866,6 +871,10 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
                 return make_hit(PTC_UI_HIT_SUPPORT_EVENT, model->recent_event_count - 1 - i);
             }
         }
+    }
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
+        ptc_ui_rect_contains(ptc_ui_settings_language_rect(), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_CARD, 6);
     }
     count = ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {

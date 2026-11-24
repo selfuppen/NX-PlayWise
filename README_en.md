@@ -8,7 +8,7 @@
   [English](README_en.md) | [简体中文](README.md)
 </div>
 
-**PlayWise** (Repository: `NX-PlayWise`, Chinese name: 任我玩) is a local playtime management tool for Nintendo Switch consoles running Custom Firmware (Atmosphère recommended). Parents can configure weekly schedules, holiday allowances, and bedtime rules, or generate daily 8-character grant codes for children to redeem on the Switch. Generating and redeeming grant codes requires no internet connection on the Switch, nor any Nintendo Account or PlayWise backend servers.
+**PlayWise** (Repository: [GitHub](https://github.com/selfuppen/NX-PlayWise) · [Gitee Mirror](https://gitee.com/selfuppen/nx-playwise), Chinese name: 任我玩) is a local playtime management tool for Nintendo Switch consoles running Custom Firmware (Atmosphère recommended). Parents can configure weekly schedules, holiday allowances, and bedtime rules, or generate daily 8-character grant codes for children to redeem on the Switch. Generating and redeeming grant codes requires no internet connection on the Switch, nor any Nintendo Account or PlayWise backend servers.
 
 ## Design Philosophy
 
@@ -166,3 +166,5 @@ Implementation concepts referenced [gmaitxqqq/switch-pctltcp-remoteandlocal](htt
 [![Latest Release Downloads](https://img.shields.io/github/downloads/selfuppen/NX-PlayWise/latest/total?style=flat-square&color=blue)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
 [![playwise-complete.zip Downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&color=green&label=playwise-complete.zip&query=$.assets[1].download_count&url=https://api.github.com/repos/selfuppen/NX-PlayWise/releases/latest)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
 [![playwise.zip Downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&color=orange&label=playwise.zip&query=$.assets[0].download_count&url=https://api.github.com/repos/selfuppen/NX-PlayWise/releases/latest)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
+
+Users in mainland China can also access the repository and downloads via the [Gitee Mirror](https://gitee.com/selfuppen/nx-playwise) and [Gitee Releases](https://gitee.com/selfuppen/nx-playwise/releases).

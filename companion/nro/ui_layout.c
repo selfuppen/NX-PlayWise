@@ -227,7 +227,7 @@ PtcUiRect ptc_ui_time_status_bar_rect(void)
 
 PtcUiRect ptc_ui_header_language_rect(void)
 {
-    return (PtcUiRect){632, 28, 110, 36};
+    return (PtcUiRect){596, 28, 146, 36};
 }
 
 PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
@@ -321,6 +321,11 @@ PtcUiRect ptc_ui_settings_card_rect(int index)
     return (PtcUiRect){54 + col * 260, row == 0 ? 204 : 400, 248, 152};
 }
 
+PtcUiRect ptc_ui_settings_language_rect(void)
+{
+    return (PtcUiRect){54, 568, 768, 60};
+}
+
 PtcUiRect ptc_ui_notification_option_rect(int index)
 {
     if (index < 0 || index >= PTC_UI_NOTIFICATION_OPTION_COUNT) return (PtcUiRect){0, 0, 0, 0};
@@ -375,6 +380,12 @@ PtcUiRect ptc_ui_software_info_qr_tab_rect(int index)
 {
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
     return (PtcUiRect){826 + index * 188, 224, 188, 36};
+}
+
+PtcUiRect ptc_ui_software_info_repo_source_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){826 + index * 125, 466, 125, 30};
 }
 
 PtcUiRect ptc_ui_software_info_update_banner_rect(void)
