@@ -525,8 +525,44 @@ class MainFlow:
         self.action(button="B")
         self.wait_ui(overlay=0)
         require(read(config)["theme"] == "dark", "discarded theme draft reached config")
-        self.select_language("en")
+        # TV-mode / controller navigation to UI Language from Security & Preferences bottom bar.
+        self.action(button="Down")
+        self.wait_ui(parent_page=3, selected_index=6, overlay=0)
+        self.capture("settings-language-focused")
+        self.action(button="A")
+        self.wait_ui(overlay=37)
+        self.action(button="B")
+        self.wait_ui(overlay=0, parent_page=3, selected_index=6)
+        self.action(button="Up")
+        self.wait_ui(parent_page=3, selected_index=5)
+        # TV-mode / controller navigation to header language pill on Parent Today.
+        self.page(0)
+        self.action(button="Up")
+        self.wait_ui(parent_page=0, selected_index=1)
+        self.action(button="Up")
+        self.capture("today-header-language-focused")
+        self.action(button="A")
+        self.wait_ui(overlay=37)
+        self.action(button="B")
+        self.wait_ui(overlay=0, parent_page=0)
+        self.action(button="Down")
+        self.wait_ui(parent_page=0, selected_index=1)
+        # TV-mode / controller navigation to header language pill on Child Home + switch to English.
+        self.action(button="B")
+        self.wait_ui(view=0, overlay=0)
+        self.action(button="Up")
+        self.capture("child-header-language-focused")
+        self.action(button="A")
+        selection = self.wait_ui(overlay=37)["ui"]["overlay_selection"]
+        desired = ("system", "zh-Hans", "zh-Hant", "en").index("en")
+        for offset in range(1, (desired - selection) % 4 + 1):
+            self.action(button="Right")
+            self.wait_ui(overlay=37, overlay_selection=(selection + offset) % 4)
+        self.action(button="Plus")
+        self.wait_ui(overlay=0)
+        require(read(config)["ui_language"] == "en", "language preference did not persist")
         self.capture("preference-english")
         self.checked("preferences_journey", ["theme mode and style preview without writing config",
                                             "A saves both radio groups together and B discards the draft",
-                                            "language switch keeps navigation usable"])
+                                            "controller navigation opens UI language from settings bar, today header, and child header",
+                                            "language switch persists and keeps navigation usable"])

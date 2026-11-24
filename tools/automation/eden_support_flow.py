@@ -169,8 +169,17 @@ class SupportFlow(MainFlow):
         self.capture("support-guide")
         self.action(button="B")
         self.wait_ui(parent_page=4, overlay=0)
+        # Verify Software Info repo QR GitHub / Gitee switch (commit 56c7ffad).
+        self.action(target="card_5")
+        self.wait_ui(overlay=14)
+        self.action(button="R")
+        self.capture("software-info-repo-gitee")
+        self.action(button="Y")
+        self.capture("software-info-repo-github")
+        self.action(button="B")
+        self.wait_ui(parent_page=4, overlay=0)
         self.checked("support_diagnostics", ["normal support UI exports readable redacted JSON",
-                                             "latest event detail and official guide return to support"],
+                                             "latest event detail, official guide, and software info GitHub/Gitee QR return to support"],
                      navigation_status_id=status["request_id"])
 
     def support_disable(self) -> None:
