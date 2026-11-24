@@ -174,7 +174,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 
 | 文件 | 用途 |
 | --- | --- |
-| [automation/eden_runner.py](automation/eden_runner.py) | 发版前隔离首次设置、PIN、加时码业务烟测，关联Windows事件并离线核验证据 |
+| [automation/eden_runner.py](automation/eden_runner.py) | 发版前隔离首次设置、PIN、加时码业务烟测，关联Windows事件、离线核验证据及过期共享运行态安全回收（`gc`） |
 | [automation/eden_main_flow.py](automation/eden_main_flow.py) | 发版前中文业务旅程串行编排与离线断言复核 |
 | [automation/eden_refresh_flow.py](automation/eden_refresh_flow.py) | 导航快照、手动／过期刷新与重开专项，按原始UI流、回执和业务文件离线核验 |
 | [automation/eden_notification_flow.py](automation/eden_notification_flow.py) | 通知设置的setup／家长区、示意切换、浅暗主题与重开专项及离线断言，不证明真实通知显示 |
@@ -182,7 +182,7 @@ python -X utf8 tools/compat/run_archived.py device-reports/<批次>/verify.py
 | [automation/eden_dock_flow.py](automation/eden_dock_flow.py) | 非电视额度预览、旧数据迁移、取消保存及重开专项 |
 | [automation/eden_support_flow.py](automation/eden_support_flow.py) | 支持恢复专项：诊断、停用、安装恢复与重开，保留正常业务痕迹 |
 | [automation/eden_mcp_bridge.py](automation/eden_mcp_bridge.py) | 在显式指定的外部Python/MCP环境启动定制Eden，记录自建PID |
-| [automation/eden_runtime.py](automation/eden_runtime.py) | 共用程序硬链接与固件缓存，每批独立profile、容量和所有权门禁 |
+| [automation/eden_runtime.py](automation/eden_runtime.py) | 共用程序硬链接与固件缓存，每批独立profile、容量、所有权门禁及过期运行态安全回收 |
 | [automation/eden_runtime_cleanup.ps1](automation/eden_runtime_cleanup.ps1) | 封存核验后解除本批链接并清理临时目录，失败保留有界现场 |
 | [automation/eden_web_flow.py](automation/eden_web_flow.py) | X02网页导入／发码→NRO兑换与重开持久化；浏览器驱动为同目录eden_web_browser.js |
 | [automation/eden_plan_flow.py](automation/eden_plan_flow.py) | X01地区日历导入／长按应用与X04就寝分区草稿、保存及重开持久化 |

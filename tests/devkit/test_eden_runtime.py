@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -181,12 +182,127 @@ def test_prepare_failure_retains_without_blocking_next_batch() -> None:
         assert retained['review_by_utc'] and retained['reason']
 
 
+def test_prune_expired_dry_run_age_and_gates() -> None:
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        data = root / 'profiles'
+        aliases = root / 'aliases'
+        cache = root / 'cache/Contents'
+        (cache / 'registered').mkdir(parents=True)
+        (cache / 'registered/fw.nca').write_text('fw', encoding='utf-8')
+        data.mkdir()
+        aliases.mkdir()
+
+        old_id = 'a' * 32
+        fresh_id = 'b' * 32
+        other = data / 'not-a-uuid'
+        other.mkdir()
+        (other / 'keep.txt').write_text('keep', encoding='utf-8')
+        for rid in (old_id, fresh_id):
+            (data / rid / 'user').mkdir(parents=True)
+            (data / rid / 'user/state.bin').write_bytes(b'x')
+            (aliases / rid).mkdir(parents=True)
+            (aliases / rid / 'dummy.txt').write_text('d', encoding='utf-8')
+
+        now = datetime(2026, 11, 24, 12, 0, 0, tzinfo=timezone.utc)
+        old_ts = (now - timedelta(hours=30)).timestamp()
+        fresh_ts = (now - timedelta(hours=4)).timestamp()
+        for p in (data / old_id, data / old_id / 'user', aliases / old_id):
+            os.utime(p, (old_ts, old_ts))
+        for p in (data / fresh_id, data / fresh_id / 'user', aliases / fresh_id):
+            os.utime(p, (fresh_ts, fresh_ts))
+
+        # Dry-run lists expired run without mutating anything.
+        dry = runtime.prune_expired(data, aliases, cache, min_age_hours=24.0, apply=False, now_utc=now)
+        assert dry['mode'] == 'dry_run'
+        assert dry['eligible'] == [old_id] and dry['removed'] == []
+        assert [r['run_id'] for r in dry['skipped_recent']] == [fresh_id]
+        assert str(other) in dry['skipped_unexpected']
+        assert dry['rejected'] == []
+        assert (data / old_id).exists() and (aliases / old_id).exists()
+
+        # Active lease blocks both dry-run and apply.
+        lease = aliases / '.playwise-eden-lease.json'
+        runtime.write(lease, {'run_id': fresh_id})
+        rejected(lambda: runtime.prune_expired(data, aliases, cache, apply=False, now_utc=now))
+        rejected(lambda: runtime.prune_expired(data, aliases, cache, apply=True, now_utc=now))
+        lease.unlink()
+
+        # Overlapping protected/managed roots are rejected.
+        rejected(lambda: runtime.prune_expired(data, data / 'sub', cache, apply=False, now_utc=now))
+        rejected(lambda: runtime.prune_expired(data, aliases, data / 'fw', apply=False, now_utc=now))
+        rejected(lambda: runtime.prune_expired(data, aliases, cache, min_age_hours=-1.0, now_utc=now))
+
+        # Apply removes only the expired UUID run, preserving recent and non-UUID entries.
+        with patch.object(runtime, 'no_emulator'):
+            applied = runtime.prune_expired(data, aliases, cache, min_age_hours=24.0, apply=True, now_utc=now)
+        assert applied['mode'] == 'apply' and applied['removed'] == [old_id]
+        assert not (data / old_id).exists() and not (aliases / old_id).exists()
+        assert (data / fresh_id).exists() and (aliases / fresh_id).exists()
+        assert (other / 'keep.txt').read_text(encoding='utf-8') == 'keep'
+        assert (cache / 'registered/fw.nca').read_text(encoding='utf-8') == 'fw'
+
+
+def test_prune_expired_windows_junctions_and_rejection() -> None:
+    if not has_powershell():
+        return
+    with tempfile.TemporaryDirectory() as folder, isolated_process_snapshot():
+        eden, source, data, aliases, cache = fixture(Path(folder))
+        out1 = Path(folder) / 'report-expired'
+        out1.mkdir()
+        entry1, profile1, owner1 = runtime.prepare(eden, source, data, aliases, cache, out1)
+        assert runtime.finish(out1, False)['status'] == 'retained_for_review'
+        run1 = owner1['run_id']
+
+        # Retained run with tampered junction target must be rejected without touching targets.
+        out2 = Path(folder) / 'report-tampered'
+        out2.mkdir()
+        entry2, profile2, owner2 = runtime.prepare(eden, source, data, aliases, cache, out2)
+        assert runtime.finish(out2, False)['status'] == 'retained_for_review'
+        run2 = owner2['run_id']
+        os.rmdir(entry2 / 'user')
+        runtime.link(entry2 / 'user', source, 'Junction')
+
+        future_12h = datetime.now(timezone.utc) + timedelta(hours=12)
+        early = runtime.prune_expired(
+            data, aliases, cache, eden.parent / 'languages',
+            min_age_hours=24.0, apply=True, now_utc=future_12h,
+        )
+        assert early['removed'] == [] and {r['run_id'] for r in early['skipped_recent']} == {run1, run2}
+
+        future_30h = datetime.now(timezone.utc) + timedelta(hours=30)
+        res = runtime.prune_expired(
+            data, aliases, cache, eden.parent / 'languages',
+            min_age_hours=24.0, apply=True, now_utc=future_30h,
+        )
+        assert res['removed'] == [run1]
+        assert [r['run_id'] for r in res['rejected']] == [run2]
+        assert not entry1.exists() and not profile1.parent.exists()
+        # Tampered run was not deleted, and all protected sources/cache stayed untouched.
+        assert entry2.exists() and profile2.exists()
+        assert (source / 'config/qt-config.ini').read_text(encoding='utf-8') == 'private-config'
+        assert (cache / 'registered/firmware.nca').read_text(encoding='utf-8') == 'fixed-firmware'
+        assert (eden.parent / 'languages/zh.qm').read_bytes() == b'read-only-language'
+
+        # Clean up run2 safely after fixing its junction so TemporaryDirectory exits cleanly.
+        os.rmdir(entry2 / 'user')
+        runtime.link(entry2 / 'user', profile2, 'Junction')
+        res2 = runtime.prune_expired(
+            data, aliases, cache, eden.parent / 'languages',
+            min_age_hours=24.0, apply=True, now_utc=future_30h,
+        )
+        assert res2['removed'] == [run2] and res2['rejected'] == []
+        assert os.lstat(eden).st_nlink == 1
+
+
 def main() -> None:
     test_source_selection_and_capacity()
     test_firmware_access_without_content_writes()
     test_cache_tamper_and_lease_conflict()
     test_hardlink_isolation_cleanup_and_protection()
     test_prepare_failure_retains_without_blocking_next_batch()
+    test_prune_expired_dry_run_age_and_gates()
+    test_prune_expired_windows_junctions_and_rejection()
     if has_powershell():
         print('PASS: shared Eden resources, isolation, cache/lease/capacity gates and owned cleanup')
     else:

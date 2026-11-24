@@ -1396,6 +1396,16 @@ def main() -> int:
                       help="Enable isolated bounded numeric stage diagnostics; not a business assertion")
     offline = commands.add_parser("verify")
     offline.add_argument("--run", type=Path, required=True)
+    gc = commands.add_parser("gc", help="safely prune expired retained Eden shared runtimes (dry-run by default)")
+    gc.add_argument("--runtime-root", type=Path, required=True)
+    gc.add_argument("--application-root", type=Path, required=True)
+    gc.add_argument("--firmware-cache", type=Path, required=True)
+    gc.add_argument("--source-languages", type=Path,
+                    help="optional source Eden languages directory when runtime entries link languages")
+    gc.add_argument("--min-age-hours", type=float, default=24.0,
+                    help="minimum retention age in hours before a retained run may be pruned (default: 24)")
+    gc.add_argument("--apply", action="store_true",
+                    help="perform verified junction unlink and removal; omit for dry-run")
     args = parser.parse_args()
     if args.command == 'run' and args.plans_language != 'system' and args.suite != 'plans':
         parser.error('--plans-language en requires --suite plans')
@@ -1410,6 +1420,18 @@ def main() -> int:
                 verify_cleanup(args.run.resolve())
             print(f"PASS: evidence verification; recorded overall={value['overall']}")
             return 0
+        if args.command == "gc":
+            from tools.automation.eden_runtime import prune_expired
+            report = prune_expired(
+                args.runtime_root,
+                args.application_root,
+                args.firmware_cache,
+                args.source_languages,
+                min_age_hours=args.min_age_hours,
+                apply=args.apply,
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 1 if report["rejected"] else 0
         return run(args)
     except (RuntimeError, OSError, ValueError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)

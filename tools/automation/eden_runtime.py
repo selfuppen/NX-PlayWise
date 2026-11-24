@@ -290,3 +290,178 @@ def verify_cleanup(output: Path) -> dict:
     expected_manifest = digest(output / 'evidence-manifest.json') if (output / 'evidence-manifest.json').exists() else None
     require(value['evidence_manifest_sha256'] == expected_manifest, 'cleanup report binding changed')
     return value
+
+
+def _is_reparse(path: Path) -> bool:
+    try:
+        st = path.lstat()
+    except OSError:
+        return False
+    return bool(getattr(st, 'st_file_attributes', 0) & 1024) or stat.S_ISLNK(st.st_mode)
+
+
+def _norm_path(path: Path | str) -> str:
+    text = str(path)
+    if text.startswith('\\\\?\\'):
+        text = text[4:]
+    return os.path.normcase(os.path.abspath(text)).rstrip('\\/')
+
+
+def _rmtree(path: Path) -> None:
+    def _clear_ro(func, target: str, _exc) -> None:
+        os.chmod(target, stat.S_IWRITE)
+        func(target)
+
+    shutil.rmtree(path, onerror=_clear_ro)
+
+
+def _collect_reparse_points(root: Path) -> list[Path]:
+    found: list[Path] = []
+    if not root.exists():
+        return found
+    for base, dirs, names in os.walk(root, followlinks=False):
+        for name in list(dirs):
+            child = Path(base) / name
+            if _is_reparse(child):
+                found.append(child)
+                dirs.remove(name)
+        for name in names:
+            child = Path(base) / name
+            if _is_reparse(child):
+                found.append(child)
+    return sorted(found)
+
+
+def _unlink_reparse(path: Path) -> None:
+    require(_is_reparse(path), f'refusing to unlink non-reparse path: {path}')
+    if os.name == 'nt' and path.is_dir():
+        os.rmdir(path)
+    else:
+        os.unlink(path)
+
+
+def prune_expired(
+    runtime_root: Path,
+    application_root: Path,
+    firmware_cache: Path,
+    source_languages: Path | None = None,
+    *,
+    min_age_hours: float = 24.0,
+    apply: bool = False,
+    now_utc: datetime | None = None,
+) -> dict:
+    """Safely prune expired retained Eden shared runtimes after the review window.
+
+    Never traverses junctions/symlinks, rejects active leases or unexpected reparse
+    targets, and defaults to dry-run unless apply=True.
+    """
+    require(min_age_hours >= 0, 'min_age_hours must be non-negative')
+    runtime_root = Path(os.path.abspath(runtime_root))
+    application_root = Path(os.path.abspath(application_root))
+    firmware_cache = Path(os.path.abspath(firmware_cache))
+    source_languages = Path(os.path.abspath(source_languages)) if source_languages is not None else None
+
+    roots = [runtime_root, application_root, firmware_cache]
+    if source_languages is not None:
+        roots.append(source_languages)
+    for p in roots:
+        ordinary(p)
+    for i, a in enumerate(roots):
+        for b in roots[i + 1:]:
+            require(not (a == b or a.is_relative_to(b) or b.is_relative_to(a)),
+                    f'managed/protected roots overlap: {a} vs {b}')
+
+    lease = application_root / '.playwise-eden-lease.json'
+    require(not lease.exists(), f'active Eden lease exists; no gc: {lease}')
+    if apply and os.name == 'nt':
+        no_emulator()
+
+    now_ts = (now_utc or datetime.now(timezone.utc)).timestamp()
+    run_ids: set[str] = set()
+    skipped_unexpected: list[str] = []
+
+    for root in (runtime_root, application_root):
+        if not root.exists():
+            continue
+        require(root.is_dir(), f'managed root is not a directory: {root}')
+        for entry in sorted(os.scandir(root), key=lambda e: e.name):
+            if entry.is_dir(follow_symlinks=False) and re.fullmatch('[0-9a-f]{32}', entry.name):
+                run_ids.add(entry.name)
+            else:
+                skipped_unexpected.append(str(Path(entry.path)))
+
+    eligible: list[str] = []
+    removed: list[str] = []
+    skipped_recent: list[dict] = []
+    rejected: list[dict] = []
+
+    for run_id in sorted(run_ids):
+        storage = runtime_root / run_id
+        runtime_dir = application_root / run_id
+        mtimes: list[float] = []
+        for probe in (storage, storage / 'user', runtime_dir):
+            if probe.exists() and not _is_reparse(probe):
+                mtimes.append(probe.lstat().st_mtime)
+        newest = max(mtimes) if mtimes else now_ts
+        age_hours = (now_ts - newest) / 3600.0
+        if age_hours < min_age_hours:
+            skipped_recent.append({'run_id': run_id, 'age_hours': round(age_hours, 2)})
+            continue
+
+        expected_links: dict[str, str] = {
+            _norm_path(runtime_dir / 'user'): _norm_path(storage / 'user'),
+            _norm_path(storage / 'user' / 'nand' / 'system' / 'Contents'): _norm_path(firmware_cache),
+        }
+        if source_languages is not None:
+            expected_links[_norm_path(runtime_dir / 'languages')] = _norm_path(source_languages)
+
+        found_links = _collect_reparse_points(runtime_dir) + _collect_reparse_points(storage)
+        bad_reason: str | None = None
+        for link_path in found_links:
+            key = _norm_path(link_path)
+            if key not in expected_links:
+                bad_reason = f'unexpected reparse point: {link_path}'
+                break
+            try:
+                actual_target = _norm_path(os.readlink(link_path))
+            except OSError as exc:
+                bad_reason = f'unreadable reparse target {link_path}: {exc}'
+                break
+            if actual_target != expected_links[key]:
+                bad_reason = f'reparse target mismatch for {link_path}: {actual_target} != {expected_links[key]}'
+                break
+
+        if bad_reason is not None:
+            rejected.append({'run_id': run_id, 'reason': bad_reason})
+            continue
+
+        eligible.append(run_id)
+        if not apply:
+            continue
+
+        require(not lease.exists(), f'active Eden lease appeared during gc: {lease}')
+        if os.name == 'nt':
+            no_emulator()
+        for link_path in found_links:
+            _unlink_reparse(link_path)
+        for target_dir in (runtime_dir, storage):
+            if not target_dir.exists():
+                continue
+            ordinary(target_dir)
+            require(not _collect_reparse_points(target_dir), f'reparse child remained before delete: {target_dir}')
+            _rmtree(target_dir)
+        removed.append(run_id)
+
+    return {
+        'schema_version': 1,
+        'mode': 'apply' if apply else 'dry_run',
+        'min_age_hours': float(min_age_hours),
+        'runtime_root': str(runtime_root),
+        'application_root': str(application_root),
+        'firmware_cache': str(firmware_cache),
+        'eligible': eligible,
+        'removed': removed,
+        'skipped_recent': skipped_recent,
+        'skipped_unexpected': skipped_unexpected,
+        'rejected': rejected,
+    }

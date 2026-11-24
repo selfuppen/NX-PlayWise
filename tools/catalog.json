@@ -276,7 +276,7 @@
     {
       "path": "automation/eden_runner.py",
       "category": "automation",
-      "purpose": "隔离Eden业务烟测、运行健康门禁与离线证据核验"
+      "purpose": "隔离Eden业务烟测、运行健康门禁、离线证据核验与过期运行态安全回收"
     },
     {
       "path": "automation/eden_main_flow.py",
@@ -311,7 +311,7 @@
     {
       "path": "automation/eden_runtime.py",
       "category": "automation",
-      "purpose": "共享Eden程序与固件、隔离profile、容量和所有权门禁"
+      "purpose": "共享Eden程序与固件、隔离profile、容量、所有权门禁与过期运行态安全回收"
     },
     {
       "path": "automation/eden_runtime_cleanup.ps1",

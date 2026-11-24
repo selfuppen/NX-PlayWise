@@ -87,6 +87,14 @@ shared模式在业务和健康收尾成功后验证来源／共享缓存未变�
 
 硬链接共享文件内容，执行器在私有配置中禁用更新，固定程序哈希并检查来源完整性；测试期间不得外部更新或原地修改来源exe。跨卷不能建文件硬链接，不会静默退回全复制；容量统计不把硬链接逻辑大小算成重复物理复制。缓存仅核验和读用，不在每批结束时删除；旧缓存和历史失败现场按独立清单复核后清理。copy兼容模式仍需独立收尾，不能据shared实现声明所有旧批次会自动清理。
 
+超过 24 小时复查期的历史失败／未知运行目录，使用统一回收子命令先预演再执行，避免在 `shared-runs` 与 `PlayWise-Eden-AppLinks/managed` 中无限累积残留：
+
+```powershell
+python -X utf8 tools/automation/eden_runner.py gc --runtime-root "<数据盘>/PlayWise-Eden/shared-runs" --application-root "<Eden同卷>/PlayWise-Eden-AppLinks/managed" --firmware-cache "<数据盘>/PlayWise-Eden/shared-resources/firmware/Contents" --source-languages "<Eden目录>/languages"
+```
+
+默认只输出 JSON 预演清单（`mode=dry_run`），不修改任何文件；核对无误后追加 `--apply` 执行。回收门禁拒绝存在活跃 `.playwise-eden-lease.json` 或运行中模拟器进程，忽略非 32 位十六进制 UUID 的目录，跳过未满 `--min-age-hours`（默认 24 小时）的现场，并对每个待删目录先逐项校验目录联接目标再单独解链，确认无残留重解析点后才删除 UUID 目录；若发现异常联接或目标错配则拒绝删除该项并返回非零退出码。来源安装、共享固件缓存、`--mcp-site` 外部 Python 依赖目录（含托管在 `build/eden-probes/` 下的依赖）、便携版 `pwsh` 与已封存 `device-reports/` 永不纳入回收范围。
+
 ## X02网页配对与发码扩展
 
 选择`--suite web --timeout 600`，使用全新profile和报告目录，执行5项：首次设置、NRO正常PIN配对／导出、真实浏览器导入／发码、NRO兑换、重开持久化。使用固定Eden测试资料，不接触真实家庭配置。网页源码和浏览器驱动封存在本批artifacts，环回HTTP只服务该冻结网页与测试导出；不把Python或CLI生成的码作为网页结果。
