@@ -69,7 +69,8 @@ bool is_docked_mode(void)
 #endif
 }
 
-void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const char *subtitle)
+void draw_header_limited(uint32_t *pixels, uint32_t stride, const char *title,
+                         const char *subtitle, int max_subtitle_width)
 {
     fill_round_rect(pixels, stride, (UiRect){54, 25, 48, 48}, 16, UI_ACCENT);
     fill_round_rect(pixels, stride, (UiRect){87, 24, 12, 12}, 6, UI_CORAL);
@@ -79,8 +80,14 @@ void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const cha
     draw_circle_outline(pixels, stride, 86, 55, 3, 3, UI_ON_ACCENT);
     draw_text(pixels, stride, 124, 49, title, 30, UI_INK);
     char fitted_sub[256];
-    fit_text(fitted_sub, sizeof(fitted_sub), subtitle, 18, 615);
+    fit_text(fitted_sub, sizeof(fitted_sub), subtitle, 18,
+             max_subtitle_width > 0 ? max_subtitle_width : 615);
     draw_text(pixels, stride, 124, 77, fitted_sub, 18, UI_MUTED);
+}
+
+void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const char *subtitle)
+{
+    draw_header_limited(pixels, stride, title, subtitle, 615);
 }
 
 void draw_update_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

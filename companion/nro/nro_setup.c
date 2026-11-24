@@ -28,6 +28,7 @@ static void enter_parent_area_unlocked(UiState *ui)
     ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
         ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
     ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+    ui->model.header_language_focused = false;
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PARENTAL_AREA_UNLOCKED_TO_ENTER_THE_KIDS));
 #ifndef PLAYWISE_EDEN

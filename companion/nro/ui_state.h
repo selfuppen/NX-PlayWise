@@ -132,6 +132,7 @@ typedef enum {
 } PtcUiChildForecastSource;
 PtcUiChildForecastSource ptc_ui_child_forecast_source(const PtcUiModel *model, int offset, int64_t now);
 void ptc_ui_move_child_forecast_focus(PtcUiModel *model, int direction, int64_t now);
+bool ptc_ui_move_child_focus(PtcUiModel *model, int horizontal, int vertical, int64_t now);
 int ptc_ui_preview_effective_add_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);

@@ -124,6 +124,7 @@ void ptc_ui_return_from_parent(PtcUiModel *model)
     if (!model) return;
     /* Wizard completion and backend activation are independent.  Reuse the
        same routing as startup instead of displaying an inert step zero. */
+    model->header_language_focused = false;
     model->view = PTC_UI_CHILD;
     ptc_ui_setup_sync(model);
 }

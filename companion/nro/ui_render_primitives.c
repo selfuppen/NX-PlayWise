@@ -954,16 +954,38 @@ void draw_language_switcher_badge(uint32_t *pixels, uint32_t stride, UiRect rect
 {
     int corner_r = rect.height / 2;
     fill_round_rect(pixels, stride, rect, corner_r, focused ? UI_ACCENT_SOFT : UI_SURFACE);
-    draw_rect_outline(pixels, stride, rect, corner_r, focused ? 2 : 1, focused ? UI_ACCENT : UI_BORDER);
+    if (focused) {
+        draw_focus_ring(pixels, stride, rect, corner_r);
+    } else {
+        draw_rect_outline(pixels, stride, rect, corner_r, 1, UI_BORDER);
+    }
 
     int icon_r = (rect.height <= 26) ? 5 : 7;
     int font_sz = (rect.height <= 26) ? 11 : 13;
-    int icon_cx = rect.x + (rect.height <= 26 ? 12 : 16);
     int icon_cy = rect.y + rect.height / 2;
+    int icon_cx = rect.x + (rect.height <= 26 ? 12 : 16);
+
+    if (rect.height > 26 && rect.width >= 116) {
+        int key_w = measure_text("ZL", 11) + 10;
+        if (key_w < 24) key_w = 24;
+        UiRect key_pill = {rect.x + 8, rect.y + (rect.height - 20) / 2, key_w, 20};
+        fill_round_rect(pixels, stride, key_pill, 6, focused ? UI_ACCENT : UI_RAISED);
+        draw_rect_outline(pixels, stride, key_pill, 6, 1, focused ? UI_ACCENT : UI_BORDER);
+        draw_text_center(pixels, stride, key_pill, "ZL", 11, focused ? UI_ON_ACCENT : UI_MUTED);
+        icon_cx = key_pill.x + key_pill.width + 6 + icon_r;
+    }
+
     draw_globe_icon(pixels, stride, icon_cx, icon_cy, icon_r, UI_ACCENT);
 
     const char *label = ptc_ui_text(PTC_UI_T_LANG_BADGE);
-    int text_x = icon_cx + icon_r + (rect.height <= 26 ? 5 : 7);
+    int text_x = icon_cx + icon_r + (rect.height <= 26 ? 5 : 6);
     int text_y = rect.y + rect.height / 2 + (rect.height <= 26 ? 4 : 5);
-    draw_text(pixels, stride, text_x, text_y, label, font_sz, focused ? UI_ACCENT : UI_INK);
+    int max_text_w = rect.x + rect.width - 10 - text_x;
+    char fitted[64];
+    fit_text(fitted, sizeof(fitted), label, font_sz, max_text_w > 10 ? max_text_w : 10);
+    if (focused) {
+        draw_text_bold(pixels, stride, text_x, text_y, fitted, font_sz, UI_ACCENT);
+    } else {
+        draw_text(pixels, stride, text_x, text_y, fitted, font_sz, UI_INK);
+    }
 }

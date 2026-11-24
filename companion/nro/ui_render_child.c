@@ -1208,10 +1208,12 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         (model->unrestricted_today == 1 || model->eye_care_unlimited_capped || model->dock_unlimited_capped);
 
     /* Header */
-    draw_header(pixels, stride, ptc_ui_text(PTC_UI_T_SELF_DISCIPLINE_IS_FREEDOM),
-                ptc_ui_text(PTC_UI_T_ARRANGE_TIME_REASONABLY_AND_BE_THE_MASTER));
+    draw_header_limited(pixels, stride, ptc_ui_text(PTC_UI_T_SELF_DISCIPLINE_IS_FREEDOM),
+                        ptc_ui_text(PTC_UI_T_ARRANGE_TIME_REASONABLY_AND_BE_THE_MASTER),
+                        ptc_ui_header_language_rect().x - 124 - 16);
     draw_time_status_bar(pixels, stride, model);
-    draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()), false);
+    draw_language_switcher_badge(pixels, stride, to_uirect(ptc_ui_header_language_rect()),
+                                 model->header_language_focused);
 
     /* Tier 1: Full-width Today Planning Hero (Left Status/Balance + Right Continuous Projection) */
     draw_child_today_hero(pixels, stride, model, &overview, &projection);
@@ -1273,8 +1275,9 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
     /* Footer */
     draw_button_label(pixels, stride, to_uirect(ptc_ui_child_footer_rect(0)),
-                      ptc_ui_text(model->child_actions_focused ? PTC_UI_T_OVERVIEW_FOCUS : PTC_UI_T_A_ENTER_CODE),
-                      18, disabled ? UI_DISABLED : UI_MUTED);
+                      ptc_ui_text((model->child_actions_focused || model->header_language_focused)
+                          ? PTC_UI_T_OVERVIEW_FOCUS : PTC_UI_T_A_ENTER_CODE),
+                      18, disabled && !model->header_language_focused ? UI_DISABLED : UI_MUTED);
     if (model->show_parent_shortcut_hint && model->custom_shortcut_enabled)
         ptc_ui_format_custom_shortcut_hint(model->custom_shortcut_label, hint, sizeof(hint));
     else snprintf(hint, sizeof(hint), "%s", ptc_ui_text(PTC_UI_T_STATUS_AUTO_SYNCS_IN_BACKGROUND));

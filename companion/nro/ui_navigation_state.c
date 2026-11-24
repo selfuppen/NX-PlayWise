@@ -16,6 +16,7 @@ void ptc_ui_open_support_guide(PtcUiModel *model)
 {
     if (!model) return;
     model->selected_index = 6 + model->recent_event_count;
+    model->header_language_focused = false;
     model->parent_footer_focused = false;
     model->overlay = PTC_UI_OVERLAY_SUPPORT_GUIDE;
     model->support_guide_page = 0;
@@ -111,9 +112,72 @@ void ptc_ui_change_parent_page(PtcUiModel *model, int direction)
         page = 0;
     }
     model->parent_page = (PtcUiParentPage)page;
+    model->header_language_focused = false;
     model->today_settings_origin = false;
     if (model->parent_page == PTC_UI_PARENT_PLAN) model->plan_page = PTC_UI_PLAN_PAGE_ROOT;
     if (!model->parent_footer_focused) model->selected_index = 0;
+}
+
+bool ptc_ui_move_child_focus(PtcUiModel *model, int horizontal, int vertical, int64_t now)
+{
+    if (!model || (horizontal == 0 && vertical == 0)) return false;
+    if (model->header_language_focused) {
+        if (vertical > 0) {
+            model->header_language_focused = false;
+            return true;
+        }
+        return false;
+    }
+    if (model->child_actions_focused) {
+        if (horizontal != 0) {
+            int next = model->child_action_focus + (horizontal > 0 ? 1 : -1);
+            if (next >= 0 && next < 4) {
+                model->child_action_focus = next;
+                return true;
+            }
+            return false;
+        }
+        if (vertical < 0) {
+            model->child_actions_focused = false;
+            ptc_ui_move_child_forecast_focus(model, 1, now);
+            return true;
+        }
+        return false;
+    }
+    if (model->child_forecast_focus > 0) {
+        if (vertical < 0) {
+            model->child_forecast_focus = 0;
+            return true;
+        }
+        if (vertical > 0) {
+            model->child_forecast_focus = 0;
+            model->child_actions_focused = true;
+            return true;
+        }
+        if (horizontal != 0) {
+            int old = model->child_forecast_focus;
+            ptc_ui_move_child_forecast_focus(model, horizontal < 0 ? -1 : 1, now);
+            return model->child_forecast_focus != old;
+        }
+        return false;
+    }
+    if (vertical < 0) {
+        model->header_language_focused = true;
+        return true;
+    }
+    if (horizontal > 0) {
+        model->child_actions_focused = true;
+        return true;
+    }
+    if (vertical > 0) {
+        int old = model->child_forecast_focus;
+        ptc_ui_move_child_forecast_focus(model, 1, now);
+        if (model->child_forecast_focus == old) {
+            model->child_actions_focused = true;
+        }
+        return true;
+    }
+    return false;
 }
 
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical)
@@ -126,6 +190,19 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     int target;
     if (!model) {
         return;
+    }
+    if (model->header_language_focused) {
+        if (model->parent_page != PTC_UI_PARENT_TODAY) {
+            model->header_language_focused = false;
+        } else {
+            if (vertical > 0) {
+                int ret = model->parent_content_selection;
+                if (ret < 0 || ret > 10) ret = 1;
+                model->header_language_focused = false;
+                model->selected_index = ret;
+            }
+            return;
+        }
     }
     if (model->parent_footer_focused) {
         bool alert = ptc_ui_parent_footer_status_visible(model);
@@ -158,7 +235,8 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT && model->forecast_available
                 ? index > 13
                 : (model->parent_page == PTC_UI_PARENT_TODAY ? index > 10 :
-                   (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index >= 7 : index >= count))))) {
+                   (model->parent_page == PTC_UI_PARENT_SETTINGS ? index > 6 :
+                    (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index >= 7 : index >= count)))))) {
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
@@ -213,7 +291,11 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         static const int down[]  = {6, 0, 4, 4, 7, 5, 5, 7, 9, 10, 10};
         if (horizontal < 0) index = left[index];
         else if (horizontal > 0) index = right[index];
-        else if (vertical < 0) index = up[index];
+        else if (vertical < 0 && index == 1) {
+            model->parent_content_selection = index;
+            model->header_language_focused = true;
+            return;
+        } else if (vertical < 0) index = up[index];
         else if (vertical > 0 && down[index] == index) {
             model->parent_content_selection = index;
             model->parent_footer_focused = true;
@@ -247,7 +329,21 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
-        /* Scheme A: 2 grouped rows x 3 cards (row 0 = {0,2,4}, row 1 = {1,3,5}). */
+        /* Scheme A: 2 grouped rows x 3 cards (row 0 = {0,2,4}, row 1 = {1,3,5})
+         * plus row 2 = index 6 (UI Language quick bar). */
+        if (index == 6) {
+            if (vertical < 0) {
+                int ret = model->settings_last_card_index;
+                if (ret != 1 && ret != 3 && ret != 5) ret = 1;
+                model->selected_index = ret;
+            } else if (vertical > 0) {
+                model->parent_content_selection = 6;
+                model->parent_footer_focused = true;
+                model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
+                    PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
+            }
+            return;
+        }
         int r = index % 2;
         int c = index / 2;
         if (horizontal < 0 && c > 0) --c;
@@ -255,10 +351,8 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         else if (vertical < 0 && r > 0) --r;
         else if (vertical > 0 && r == 0) ++r;
         else if (vertical > 0 && r == 1) {
-            model->parent_content_selection = index;
-            model->parent_footer_focused = true;
-            model->parent_footer_selection = ptc_ui_parent_footer_status_visible(model) ?
-                PTC_UI_PARENT_FOOTER_STATUS : PTC_UI_PARENT_FOOTER_REFRESH;
+            model->settings_last_card_index = index;
+            model->selected_index = 6;
             return;
         }
         model->selected_index = c * 2 + r;
@@ -300,6 +394,7 @@ bool ptc_ui_open_today_settings(PtcUiModel *model, int index)
     model->today_settings_origin = true;
     model->today_settings_selection = index;
     model->parent_page = PTC_UI_PARENT_PLAN;
+    model->header_language_focused = false;
     model->parent_footer_focused = false;
     model->selected_index = 0;
     if (index == 8) {
@@ -329,6 +424,7 @@ bool ptc_ui_return_today_settings(PtcUiModel *model)
     model->parent_page = PTC_UI_PARENT_TODAY;
     model->plan_page = PTC_UI_PLAN_PAGE_ROOT;
     model->selected_index = model->today_settings_selection;
+    model->header_language_focused = false;
     model->parent_footer_focused = false;
     return true;
 }

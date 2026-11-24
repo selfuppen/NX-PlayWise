@@ -249,6 +249,7 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
     if (!ptc_eden_target(out, size, &used, "setup_primary", ptc_ui_setup_primary_rect()) ||
         !ptc_eden_target(out, size, &used, "setup_notifications", ptc_ui_setup_notifications_rect()) ||
         !ptc_eden_target(out, size, &used, "header_language", ptc_ui_header_language_rect()) ||
+        !ptc_eden_target(out, size, &used, "settings_language", ptc_ui_settings_language_rect()) ||
         !ptc_eden_target(out, size, &used, "child_code", ptc_ui_child_submit_rect()) ||
         !ptc_eden_target(out, size, &used, "pin_confirm", ptc_ui_pin_confirm_rect())) goto fail;
     if (m->overlay == PTC_UI_OVERLAY_NOTIFICATIONS) {

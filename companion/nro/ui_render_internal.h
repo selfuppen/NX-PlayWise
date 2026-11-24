@@ -183,6 +183,8 @@ void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, cons
 void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char *text, int size, uint32_t color);
 void fit_text(char *out, size_t out_size, const char *text, int size, int max_width);
 void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const char *subtitle);
+void draw_header_limited(uint32_t *pixels, uint32_t stride, const char *title,
+                         const char *subtitle, int max_subtitle_width);
 void draw_globe_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color);
 void draw_language_switcher_badge(uint32_t *pixels, uint32_t stride, UiRect rect, bool focused);
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);

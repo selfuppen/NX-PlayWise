@@ -519,7 +519,9 @@ static void handle_parent_page_input(UiState *ui, u64 down)
                ptc_ui_parent_footer_shortcuts(&ui->model)) {
         ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_home_details_page(&ui->model, 1);
-    } else if ((down & (HidNpadButton_ZL | HidNpadButton_ZR)) && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+    } else if ((down & (HidNpadButton_ZL | HidNpadButton_ZR)) &&
+               (ui->model.parent_page == PTC_UI_PARENT_TODAY ||
+                ui->model.parent_page == PTC_UI_PARENT_SETTINGS)) {
         ptc_audio_play(PTC_SE_POPUP);
         open_language_overlay(ui);
     } else if (ui->model.parent_footer_focused) {
@@ -639,7 +641,10 @@ static void handle_parent_page_input(UiState *ui, u64 down)
         ui->model.selected_index = 4;
         discard_holiday_draft(ui);
     } else if (down & HidNpadButton_A) {
-        if (ui->waiting && !ptc_ui_parent_read_only_action(&ui->model, ui->model.selected_index)) {
+        if (ui->model.header_language_focused && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+            ptc_audio_play(PTC_SE_POPUP);
+            open_language_overlay(ui);
+        } else if (ui->waiting && !ptc_ui_parent_read_only_action(&ui->model, ui->model.selected_index)) {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
         } else if (ui->model.parent_footer_focused) {
@@ -677,18 +682,17 @@ bool handle_page_input(UiState *ui, u64 down, u64 held,
         } else if (parent_minus_released) {
             ptc_audio_play(PTC_SE_CONFIRM);
             enter_parent_area(ui);
-        } else if ((down & (HidNpadButton_Left | HidNpadButton_Right)) && ui->model.child_actions_focused) {
-            int next = ui->model.child_action_focus + ((down & HidNpadButton_Right) ? 1 : -1);
-            if (next >= 0 && next < 4) { ui->model.child_action_focus = next; ptc_audio_play(PTC_SE_FOCUS); }
-        } else if ((down & HidNpadButton_Up) && ui->model.child_actions_focused) {
-            ui->model.child_actions_focused = false;
-            ptc_ui_move_child_forecast_focus(&ui->model, 1, time(NULL));
-            ptc_audio_play(PTC_SE_FOCUS);
-        } else if ((down & HidNpadButton_Right) && !ui->model.child_forecast_focus && !ui->model.child_actions_focused) {
-            ui->model.child_actions_focused = true;
-            ptc_audio_play(PTC_SE_FOCUS);
+        } else if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_Up | HidNpadButton_Down)) {
+            int dx = (down & HidNpadButton_Right) ? 1 : ((down & HidNpadButton_Left) ? -1 : 0);
+            int dy = (down & HidNpadButton_Down) ? 1 : ((down & HidNpadButton_Up) ? -1 : 0);
+            if (ptc_ui_move_child_focus(&ui->model, dx, dy, time(NULL))) {
+                ptc_audio_play(PTC_SE_FOCUS);
+            }
         } else if (down & HidNpadButton_A) {
-            if (ui->model.child_actions_focused) {
+            if (ui->model.header_language_focused) {
+                ptc_audio_play(PTC_SE_POPUP);
+                open_language_overlay(ui);
+            } else if (ui->model.child_actions_focused) {
                 PtcUiRect rect = ptc_ui_child_action_rect(ui->model.child_action_focus);
                 handle_touch(ui, rect.x + rect.w / 2, rect.y + rect.h / 2);
             } else if (ui->waiting) {
@@ -700,28 +704,6 @@ bool handle_page_input(UiState *ui, u64 down, u64 held,
         } else if (down & HidNpadButton_Plus) {
             ptc_audio_play(PTC_SE_POPUP);
             ptc_ui_open_home_details(&ui->model);
-        } else if (down & HidNpadButton_Down) {
-            if (ui->model.child_forecast_focus) {
-                ui->model.child_forecast_focus = 0;
-                ui->model.child_actions_focused = true;
-                ptc_audio_play(PTC_SE_FOCUS);
-            } else if (!ui->model.child_actions_focused) {
-                int old = ui->model.child_forecast_focus;
-                ptc_ui_move_child_forecast_focus(&ui->model, 1, time(NULL));
-                if (ui->model.child_forecast_focus != old) {
-                    ptc_audio_play(PTC_SE_FOCUS);
-                } else {
-                    ui->model.child_actions_focused = true;
-                    ptc_audio_play(PTC_SE_FOCUS);
-                }
-            }
-        } else if (ui->model.child_forecast_focus && (down & HidNpadButton_Up)) {
-            ui->model.child_forecast_focus = 0;
-            ptc_audio_play(PTC_SE_FOCUS);
-        } else if (ui->model.child_forecast_focus && (down & (HidNpadButton_Left | HidNpadButton_Right))) {
-            int old = ui->model.child_forecast_focus;
-            ptc_ui_move_child_forecast_focus(&ui->model, down & HidNpadButton_Left ? -1 : 1, time(NULL));
-            if (ui->model.child_forecast_focus != old) ptc_audio_play(PTC_SE_FOCUS);
         } else if (down & (HidNpadButton_ZL | HidNpadButton_ZR)) {
             ptc_audio_play(PTC_SE_POPUP);
             open_language_overlay(ui);

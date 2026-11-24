@@ -105,6 +105,7 @@ void enter_child_area(UiState *ui)
     if (!ui) {
         return;
     }
+    ui->model.header_language_focused = false;
     ui->model.view = PTC_UI_CHILD;
     refresh_status_on_navigation(ui);
 }
