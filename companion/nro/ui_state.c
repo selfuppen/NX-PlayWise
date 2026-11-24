@@ -292,6 +292,15 @@ bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model)
         strcmp(model->disable_reason, "runtime_fingerprint_changed") == 0;
 }
 
+bool ptc_ui_error_is_grant_code(const PtcUiModel *model)
+{
+    if (!model) return false;
+    return strcmp(model->result_type, "offline_code") == 0 ||
+        strcmp(model->result_type, "preview_offline_code") == 0 ||
+        strcmp(model->command_name, ptc_ui_text(PTC_UI_T_SUBMIT_TODAY_S_GRANT)) == 0 ||
+        strcmp(model->command_name, ptc_ui_text(PTC_UI_T_PREVIEW_TODAY_S_GRANT)) == 0;
+}
+
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
 {
     if (!model || strcmp(model->setup_phase, "released") != 0 || model->setup_activate_after <= 0) {
@@ -423,7 +432,7 @@ const char *ptc_ui_support_problem(const PtcUiModel *model)
     if (model->parent_support_only) return ptc_ui_text(PTC_UI_T_SETUP_READ_ONLY_SUPPORT);
     if (model->waiting || model->apply_pending_confirmation) return ptc_ui_text(PTC_UI_T_CONFIRMING_CURRENT_OPERATION);
     if (model->recovery_active) return ptc_ui_text(PTC_UI_T_THERE_ARE_UNFINISHED_RESTORES_THAT_NEED_TO);
-    if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) return ptc_ui_text(PTC_UI_T_THE_SYSTEM_ENVIRONMENT_HAS_CHANGED_AND_NEEDS);
+    if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) return ptc_ui_text(PTC_UI_T_RECONFIRM_SUPPORT_PROBLEM);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)
         return ptc_ui_text(PTC_UI_T_SECURITY_CHECK_FAILED_CONTROL_NEEDS_TO_BE);
     if (model->disable_flag_present) return ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED);

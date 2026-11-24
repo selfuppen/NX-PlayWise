@@ -203,6 +203,7 @@ void ptc_ui_project_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
                                 bool dirty, int64_t now, PtcUiPlanImpactProjection *out);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model);
+bool ptc_ui_error_is_grant_code(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical);
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend);

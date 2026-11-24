@@ -438,14 +438,22 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
             return;
         }
         if (strcmp(identity.release_id, journal.target_release_id) == 0 &&
-            strcmp(journal.target_release_id, PLAYWISE_BUILD_RELEASE_ID) == 0 &&
             (!journal.target_pid || pid == journal.target_pid) &&
             strcmp(identity.boot_id, controller->source_boot_id) != 0) {
-            controller->journal.target_pid = pid;
-            controller->phase = PTC_HOT_RELOAD_PHASE_WAIT_TARGET_READY;
-            controller->status = PTC_HOT_RELOAD_RUNNING;
-            controller->deadline_tick = armGetSystemTick();
-            return;
+            if (strcmp(journal.target_release_id, PLAYWISE_BUILD_RELEASE_ID) == 0) {
+                controller->journal.target_pid = pid;
+                controller->phase = PTC_HOT_RELOAD_PHASE_WAIT_TARGET_READY;
+                controller->status = PTC_HOT_RELOAD_RUNNING;
+                controller->deadline_tick = armGetSystemTick();
+                return;
+            }
+            /* A newer NRO opened after a previous handover already landed its
+               target process cleanly; retire the completed stale journal so
+               normal inspection can offer loading the newly installed version. */
+            if (ptc_hot_reload_finish_journal(&PATHS)) {
+                close_pm(controller);
+                return;
+            }
         }
     }
     close_pm(controller);

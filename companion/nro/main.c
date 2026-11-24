@@ -16,7 +16,7 @@ void retry_error(UiState *ui)
     if (!ui) {
         return;
     }
-    if (ui->model.error_code == 306) {
+    if (ui->model.error_code == 306 || !ptc_ui_error_is_grant_code(&ui->model)) {
         ui->model.view = PTC_UI_CHILD;
         submit_status(ui);
     } else {

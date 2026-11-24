@@ -1845,6 +1845,39 @@ static void test_release_hit_targets(void)
     snprintf(model.disable_reason, sizeof(model.disable_reason), "runtime_fingerprint_changed");
     check_true(ptc_ui_runtime_fingerprint_reconfirmation_needed(&model),
                "runtime fingerprint protection offers parent reconfirmation");
+    {
+        PtcUiNoticeProjection reconfirm_notice;
+        PtcUiTimeProjection reconfirm_time;
+        PtcUiOverview reconfirm_overview;
+        PtcUiModel reconfirm_model = {0};
+        reconfirm_model.view = PTC_UI_PARENT;
+        reconfirm_model.status_loaded = true;
+        reconfirm_model.status_updated_at = 1000;
+        reconfirm_model.day_index = 2500;
+        reconfirm_model.disable_flag_present = true;
+        snprintf(reconfirm_model.setup_phase, sizeof(reconfirm_model.setup_phase), "protection");
+        snprintf(reconfirm_model.disable_reason, sizeof(reconfirm_model.disable_reason), "runtime_fingerprint_changed");
+        check_true(strcmp(ptc_ui_settings_status_label(&reconfirm_model), ptc_ui_text(PTC_UI_T_TO_BE_COMPLETED)) == 0,
+                   "normal post-upgrade reconfirmation shows pending completion badge instead of fault");
+        ptc_ui_project_notice(&reconfirm_model, &reconfirm_notice);
+        check_true(reconfirm_notice.visible && reconfirm_notice.level == PTC_UI_NOTICE_WARNING &&
+                   strcmp(reconfirm_notice.summary, ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_SUMMARY)) == 0,
+                   "post-upgrade reconfirmation uses warning notice with actionable recheck guidance");
+        ptc_ui_project_time_status(&reconfirm_model, 1000, &reconfirm_time);
+        check_true(reconfirm_time.state == PTC_UI_TIME_WAITING &&
+                   strcmp(reconfirm_time.freshness_text, ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE)) == 0,
+                   "post-upgrade reconfirmation status pill shows pending confirmation instead of disabled fault");
+        ptc_ui_project_overview(&reconfirm_model, 1000, reconfirm_model.day_index, 16 * 3600, &reconfirm_overview);
+        check_true(strcmp(reconfirm_overview.title, ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE)) == 0,
+                   "post-upgrade reconfirmation overview avoids alarming control-disabled title");
+        snprintf(reconfirm_model.result_type, sizeof(reconfirm_model.result_type), "offline_code");
+        check_true(ptc_ui_error_is_grant_code(&reconfirm_model),
+                   "offline_code error is classified as grant code failure");
+        snprintf(reconfirm_model.result_type, sizeof(reconfirm_model.result_type), "complete_setup");
+        snprintf(reconfirm_model.command_name, sizeof(reconfirm_model.command_name), "%s", ptc_ui_text(PTC_UI_T_ENABLE_AUTOMATIC_CONTROL));
+        check_true(!ptc_ui_error_is_grant_code(&reconfirm_model),
+                   "complete_setup error is not mislabeled as grant code failure");
+    }
     snprintf(model.disable_reason, sizeof(model.disable_reason), "transaction_restore_failed");
     check_true(!ptc_ui_runtime_fingerprint_reconfirmation_needed(&model),
                "unrelated protection reason does not use runtime reconfirmation copy");

@@ -1062,7 +1062,10 @@ void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     fill_round_rect(pixels, stride, (UiRect){254, 194, 64, 64}, 16, UI_DANGER);
     draw_text_center(pixels, stride, (UiRect){254, 194, 64, 64}, "!", 34, UI_ON_ACCENT);
-    draw_text(pixels, stride, 342, 214, ptc_ui_text(PTC_UI_T_GRANT_CODE_PROCESSING_FAILED), 28, UI_INK);
+    bool is_grant_error = ptc_ui_error_is_grant_code(model);
+    draw_text(pixels, stride, 342, 214,
+              ptc_ui_text(is_grant_error ? PTC_UI_T_GRANT_CODE_PROCESSING_FAILED : PTC_UI_T_OPERATION_INCOMPLETE),
+              28, UI_INK);
     snprintf(
         execution,
         sizeof(execution),
@@ -1081,7 +1084,7 @@ void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), 12, UI_ACCENT);
     draw_text_center(pixels, stride, to_uirect(ptc_ui_error_retry_rect()),
-                    model->error_code == 306 ? ptc_ui_text(PTC_UI_T_A_RETEST) : ptc_ui_text(PTC_UI_T_A_RE_ENTER), 25, UI_ON_ACCENT);
+                    (model->error_code == 306 || !is_grant_error) ? ptc_ui_text(PTC_UI_T_A_RETEST) : ptc_ui_text(PTC_UI_T_A_RE_ENTER), 25, UI_ON_ACCENT);
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 12, UI_RAISED);
     draw_rect_outline(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 12, 1, UI_CONTROL);
     draw_text_center(pixels, stride, to_uirect(ptc_ui_error_back_rect()), ptc_ui_text(PTC_UI_T_B_RETURN_TO_HOMEPAGE), 25, UI_INK);

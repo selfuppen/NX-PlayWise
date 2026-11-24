@@ -25,7 +25,8 @@ static void enter_parent_area_unlocked(UiState *ui)
     refresh_disable_flag(ui);
     refresh_security_state(ui);
     ui->model.view = PTC_UI_PARENT;
-    ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
+    ui->model.parent_page = ui->model.disable_flag_present ||
+        (ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0)
         ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
     ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
     ui->model.header_language_focused = false;
@@ -35,6 +36,12 @@ static void enter_parent_area_unlocked(UiState *ui)
     if (ui->updater.status == PTC_UPDATE_RECOVERY_REQUIRED) { ui->update_open_after_parent_auth = false; open_online_update(ui); return; }
     ptc_hot_reload_inspect(&ui->hot_reload);
     sync_hot_reload_model(ui);
+    if (ui->hot_reload.status == PTC_HOT_RELOAD_RECOVERY_REQUIRED) {
+        ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
+        if (ui->hot_reload.detail[0]) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
+        }
+    }
 #endif
     if (ui->update_open_after_parent_auth) {
         ui->update_open_after_parent_auth = false;

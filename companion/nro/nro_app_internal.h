@@ -184,6 +184,7 @@ typedef struct {
     bool hot_reload_ipc_closed;
     bool hot_reload_terminal_handled;
     bool hot_reload_child_notice_shown;
+    bool hot_reload_reconfirm_redirect_pending;
 #endif
 } UiState;
 

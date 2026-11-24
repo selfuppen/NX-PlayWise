@@ -771,18 +771,47 @@ static void draw_child_projection_stage(uint32_t *pixels, uint32_t stride, const
     } else {
         /* Unavailable / Blocked / Pending Honest Explanation Card */
         UiRect card = {rx, box.y + 52, rw, footer_y - (box.y + 52) - 12};
+        bool hot_reload_pending = model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING &&
+            !model->hot_reload_capture_restart;
+        bool hot_reload_recovery = model->hot_reload_status == PTC_UI_HOT_RELOAD_RECOVERY_REQUIRED;
+        bool reconfirm = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
+        bool protection_or_failed = !reconfirm &&
+            (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0);
+        bool manual_disabled = !reconfirm && model->disable_flag_present;
         bool is_pending = !p->fresh || !overview->blocked;
         bool is_night = overview->blocked && overview->reasons == PTC_UI_STOP_BEDTIME;
         bool is_dock = overview->blocked && (overview->reasons & PTC_UI_STOP_DOCK);
-        uint32_t cbg = is_pending ? UI_WARNING_SOFT : (is_night ? UI_NIGHT_SOFT : (is_dock ? UI_ACCENT_SOFT : UI_DANGER_SOFT));
-        uint32_t cbd = is_pending ? UI_WARNING_BORDER : (is_night ? UI_NIGHT_BORDER : (is_dock ? UI_ACCENT : UI_DANGER_BORDER));
-        uint32_t cfg = is_pending ? UI_WARNING_TEXT : (is_night ? UI_NIGHT : (is_dock ? UI_ACCENT : UI_DANGER));
+        bool is_urgent_recovery = hot_reload_recovery || (!is_pending && !is_night && !is_dock);
+        uint32_t cbg = is_urgent_recovery ? UI_DANGER_SOFT :
+            (is_pending ? UI_WARNING_SOFT : (is_night ? UI_NIGHT_SOFT : (is_dock ? UI_ACCENT_SOFT : UI_DANGER_SOFT)));
+        uint32_t cbd = is_urgent_recovery ? UI_DANGER_BORDER :
+            (is_pending ? UI_WARNING_BORDER : (is_night ? UI_NIGHT_BORDER : (is_dock ? UI_ACCENT : UI_DANGER_BORDER)));
+        uint32_t cfg = is_urgent_recovery ? UI_DANGER :
+            (is_pending ? UI_WARNING_TEXT : (is_night ? UI_NIGHT : (is_dock ? UI_ACCENT : UI_DANGER)));
         fill_round_rect(pixels, stride, card, 14, cbg);
         draw_rect_outline(pixels, stride, card, 14, 1, cbd);
 
         const char *headline = overview->title;
         const char *subtext = overview->hint;
-        if (!p->fresh) {
+        if (hot_reload_recovery) {
+            headline = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_HOT_RELOAD_RECOVERY_TITLE);
+            subtext = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_HOT_RELOAD_RECOVERY_SUB);
+        } else if (hot_reload_pending) {
+            headline = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_HOT_RELOAD_TITLE);
+            subtext = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_HOT_RELOAD_SUB);
+        } else if (reconfirm) {
+            headline = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_RECONFIRM_TITLE);
+            subtext = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_RECONFIRM_SUB);
+        } else if (model->recovery_active) {
+            headline = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_RECOVERY_TITLE);
+            subtext = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_RECOVERY_SUB);
+        } else if (manual_disabled) {
+            headline = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_DISABLED_TITLE);
+            subtext = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_DISABLED_SUB);
+        } else if (protection_or_failed) {
+            headline = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_PROTECTION_TITLE);
+            subtext = ptc_ui_text(PTC_UI_T_CHILD_GUIDE_PROTECTION_SUB);
+        } else if (!p->fresh) {
             subtext = ptc_ui_text(PTC_UI_T_CHILD_UNAVAIL_PENDING_SUB);
         } else if (overview->blocked) {
             if (overview->reasons == PTC_UI_STOP_DAILY) subtext = ptc_ui_text(PTC_UI_T_CHILD_UNAVAIL_DAILY_SUB);
@@ -848,8 +877,22 @@ static void draw_child_today_hero(uint32_t *pixels, uint32_t stride, const PtcUi
     fill_rect(pixels, stride, (UiRect){left.x + left.width - 16, left.y, 16, left.height}, hero_bg);
 
     /* Left Top: Status Pill */
+    bool hot_reload_pending = model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING &&
+        !model->hot_reload_capture_restart;
+    bool hot_reload_recovery = model->hot_reload_status == PTC_UI_HOT_RELOAD_RECOVERY_REQUIRED;
+    bool reconfirm = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
+    bool parent_step_needed = hot_reload_pending || hot_reload_recovery || reconfirm ||
+        model->disable_flag_present ||
+        strcmp(model->setup_phase, "protection") == 0 ||
+        strcmp(model->setup_phase, "failed") == 0;
+    const char *pill_title = overview->title;
+    if (!overview->available) {
+        if (hot_reload_recovery) pill_title = ptc_ui_text(PTC_UI_T_REQUIRES_RECOVERY);
+        else if (hot_reload_pending) pill_title = ptc_ui_text(PTC_UI_T_TO_BE_LOADED);
+        else if (reconfirm) pill_title = ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE);
+    }
     char fitted_pill[96];
-    fit_text(fitted_pill, sizeof(fitted_pill), overview->title, 13, left.width - 68);
+    fit_text(fitted_pill, sizeof(fitted_pill), pill_title, 13, left.width - 68);
     int pill_w = measure_text(fitted_pill, 13) + 34;
     UiRect spill = {left.x + 20, left.y + 18, pill_w, 26};
     fill_round_rect(pixels, stride, spill, 13, pill_bg);
@@ -858,10 +901,11 @@ static void draw_child_today_hero(uint32_t *pixels, uint32_t stride, const PtcUi
 
     /* Left Mid: Hero Label + Big Value */
     const char *hero_lbl = overview->available ? ptc_ui_text(PTC_UI_T_CHILD_HERO_PLAYABLE) :
+        (parent_step_needed ? ptc_ui_text(PTC_UI_T_CHILD_HERO_NEXT_STEP) :
         (overview->reasons == PTC_UI_STOP_EYE ? ptc_ui_text(PTC_UI_T_CHILD_HERO_REST_LEFT) :
         (!overview->fresh ? ptc_ui_text(PTC_UI_T_CHILD_HERO_PENDING) :
         (overview->reasons == PTC_UI_STOP_DAILY ? ptc_ui_text(PTC_UI_T_CHILD_HERO_ENDED) :
-        ptc_ui_text(PTC_UI_T_CHILD_HERO_BLOCKED))));
+        ptc_ui_text(PTC_UI_T_CHILD_HERO_BLOCKED)))));
     char fitted_lbl[96];
     fit_text(fitted_lbl, sizeof(fitted_lbl), hero_lbl, 14, left.width - 40);
     draw_text(pixels, stride, left.x + 22, left.y + 72, fitted_lbl, 14, UI_HERO_SECONDARY);
@@ -875,20 +919,25 @@ static void draw_child_today_hero(uint32_t *pixels, uint32_t stride, const PtcUi
         draw_text_bold(pixels, stride, left.x + 22, left.y + 126, num, num_sz, UI_ON_HERO);
         draw_text_bold(pixels, stride, left.x + 22 + nw + 8, left.y + 124, unit, 20, UI_HERO_SECONDARY);
     } else {
+        const char *hero_val = overview->value;
+        if (hot_reload_recovery) hero_val = ptc_ui_text(PTC_UI_T_CHILD_HERO_REBOOT_HOST);
+        else if (parent_step_needed) hero_val = ptc_ui_text(PTC_UI_T_CHILD_HERO_GO_PARENT);
         char fitted_val[64];
         int val_sz = 40;
-        while (val_sz > 24 && measure_text(overview->value, val_sz) > left.width - 44) val_sz -= 4;
-        fit_text(fitted_val, sizeof(fitted_val), overview->value, val_sz, left.width - 44);
+        while (val_sz > 24 && measure_text(hero_val, val_sz) > left.width - 44) val_sz -= 4;
+        fit_text(fitted_val, sizeof(fitted_val), hero_val, val_sz, left.width - 44);
         draw_text_bold(pixels, stride, left.x + 22, left.y + 124, fitted_val, val_sz, UI_ON_HERO);
     }
 
     const char *notice = ptc_ui_runtime_notice_summary(model);
-    const char *feedback = notice[0] ? notice :
-        (ptc_ui_operation_feedback_visible(model) && model->message[0] ? model->message : "");
+    const char *feedback = hot_reload_pending ? ptc_ui_text(PTC_UI_T_A_NEW_VERSION_HAS_BEEN_INSTALLED_PLEASE) :
+        (notice[0] ? notice :
+        (ptc_ui_operation_feedback_visible(model) && model->message[0] ? model->message : ""));
     if (feedback[0]) {
         char fitted_fb[128];
         fit_text(fitted_fb, sizeof(fitted_fb), feedback, 12, left.width - 44);
-        draw_text(pixels, stride, left.x + 22, left.y + 154, fitted_fb, 12, UI_HERO_SECONDARY);
+        draw_text(pixels, stride, left.x + 22, left.y + 154, fitted_fb, 12,
+                  hot_reload_pending ? UI_ON_HERO : UI_HERO_SECONDARY);
     }
 
     /* Left Bottom: Integrated Daily Balance + Progress Bar + Played/Source */
@@ -1222,6 +1271,14 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     draw_child_forecast_columns(pixels, stride, model, &overview, to_uirect(ptc_ui_child_forecast_rect()));
 
     /* Tier 3: Subtle Single-Row Action Bar */
+    bool hot_reload_pending = model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING &&
+        !model->hot_reload_capture_restart;
+    bool reconfirm_needed = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
+    bool parent_action_needed = hot_reload_pending ||
+        model->hot_reload_status == PTC_UI_HOT_RELOAD_RECOVERY_REQUIRED ||
+        reconfirm_needed || model->disable_flag_present ||
+        strcmp(model->setup_phase, "protection") == 0 ||
+        strcmp(model->setup_phase, "failed") == 0;
     for (int i = 0; i < 4; ++i) {
         PtcUiHitKind kind = ptc_ui_child_action_kind(model, i);
         const char *key = "+";
@@ -1255,7 +1312,7 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             label = ptc_ui_text(PTC_UI_T_OVERVIEW_PARENT);
             icon = 4;
             unavailable = model->waiting;
-            highlighted = overview.blocked && (i == 0);
+            highlighted = (overview.blocked && (i == 0)) || parent_action_needed;
             ghost = !highlighted;
         }
 
@@ -1265,12 +1322,22 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                                unavailable);
     }
 
-    if (overview.blocked && ptc_ui_child_action_kind(model, 3) == PTC_UI_HIT_CHILD_PARENT) {
+    if ((overview.blocked || parent_action_needed) &&
+        ptc_ui_child_action_kind(model, 3) == PTC_UI_HIT_CHILD_PARENT) {
+        PtcUiRect prev_rect = ptc_ui_child_action_rect(2);
         PtcUiRect p_rect = ptc_ui_child_action_rect(3);
-        char need_lbl[96];
-        fit_text(need_lbl, sizeof(need_lbl), ptc_ui_text(PTC_UI_T_CHILD_ACT_NEED_PARENT), 13, 210);
-        int nw = measure_text(need_lbl, 13);
-        draw_text(pixels, stride, p_rect.x - nw - 12, p_rect.y + p_rect.h / 2 + 5, need_lbl, 13, UI_MUTED);
+        int avail_w = p_rect.x - (prev_rect.x + prev_rect.w) - 24;
+        if (avail_w > 48) {
+            const char *callout = hot_reload_pending ? ptc_ui_text(PTC_UI_T_CHILD_ACT_LOAD_NEW_VERSION) :
+                (reconfirm_needed ? ptc_ui_text(PTC_UI_T_CHILD_ACT_RECONFIRM_PARENT) :
+                (parent_action_needed ? ptc_ui_text(PTC_UI_T_CHILD_ACT_PARENT_HANDLE) :
+                 ptc_ui_text(PTC_UI_T_CHILD_ACT_NEED_PARENT)));
+            char need_lbl[96];
+            fit_text(need_lbl, sizeof(need_lbl), callout, 13, avail_w);
+            int nw = measure_text(need_lbl, 13);
+            draw_text(pixels, stride, p_rect.x - nw - 12, p_rect.y + p_rect.h / 2 + 5, need_lbl, 13,
+                      parent_action_needed ? UI_WARNING_TEXT : UI_MUTED);
+        }
     }
 
     /* Footer */

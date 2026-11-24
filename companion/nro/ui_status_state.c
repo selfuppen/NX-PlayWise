@@ -409,6 +409,11 @@ void ptc_ui_project_overview(const PtcUiModel *model, int64_t now,
     out->blocked = p.active_reasons != 0;
     out->available = runtime && known && !out->blocked && model->restricted_now != 1 && model->blocked_today != 1;
     if (!runtime) {
+        if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) {
+            snprintf(out->title, sizeof(out->title), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE));
+            snprintf(out->hint, sizeof(out->hint), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_SUMMARY));
+            return;
+        }
         PtcUiTextId title = model->disable_flag_present ? PTC_UI_T_CONTROL_IS_DISABLED :
             model->recovery_active ? PTC_UI_T_RECOVERING :
             model->apply_pending_confirmation ? PTC_UI_T_WAITING_FOR_EFFECT : PTC_UI_T_OVERVIEW_PENDING;
@@ -649,6 +654,8 @@ bool ptc_ui_operation_feedback_visible(const PtcUiModel *model)
 const char *ptc_ui_runtime_notice_summary(const PtcUiModel *model)
 {
     if (!model) return "";
+    if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model))
+        return ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_SUMMARY);
     if (model->disable_flag_present) return ptc_ui_text(PTC_UI_T_CONTROL_HAS_BEEN_DEACTIVATED_PLEASE_CONTACT_SUPPORT);
     if (model->recovery_active) return ptc_ui_text(PTC_UI_T_SETTINGS_ARE_BEING_RESTORED_PLEASE_WAIT_FOR);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)
@@ -688,9 +695,11 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
     else if (model->waiting) snprintf(out->summary, sizeof(out->summary), "%s", ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT));
     else snprintf(out->summary, sizeof(out->summary), "%s", ptc_ui_text(PTC_UI_T_STATUS_UPDATED));
 
-    if (error || model->disable_flag_present || model->restricted_now == 1 ||
-        (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1) ||
-        strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
+    bool reconfirm = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
+    if (error || (!reconfirm && (model->disable_flag_present ||
+        strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)) ||
+        model->restricted_now == 1 ||
+        (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)) {
         out->level = PTC_UI_NOTICE_DANGER;
     } else if (model->waiting || runtime[0]) {
         out->level = PTC_UI_NOTICE_WARNING;
@@ -701,6 +710,9 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
     } else if (error) {
         snprintf(out->details, sizeof(out->details),
                  "%s", ptc_ui_text(PTC_UI_T_Y));
+    } else if (reconfirm) {
+        snprintf(out->details, sizeof(out->details),
+                 "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_DETAILS));
     } else if (model->disable_flag_present) {
         snprintf(out->details, sizeof(out->details),
                  "%s", ptc_ui_text(PTC_UI_T_STOPPED_UPDATING_THE_QUOTA_SETTING_PLEASE_GO));
@@ -871,6 +883,9 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
     if (model->recovery_active) {
         out->state = PTC_UI_TIME_RECOVERY;
         snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_RECOVERING));
+    } else if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) {
+        out->state = PTC_UI_TIME_WAITING;
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE));
     } else if (strcmp(model->setup_phase, "protection") == 0 ||
                strcmp(model->setup_phase, "failed") == 0) {
         out->state = PTC_UI_TIME_PROTECTION;

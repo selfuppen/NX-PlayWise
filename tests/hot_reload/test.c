@@ -235,6 +235,50 @@ static void test_event_append(void)
     assert(chdir("../..") == 0);
 }
 
+static void test_stale_completed_handover_recovery(void)
+{
+    PtcHotReloadController recovered;
+    const char *stale_journal =
+        "{\"version\":1,\"transaction_id\":\"11111111111111112222222222222222\","
+        "\"phase\":\"target_launched\",\"source_pid\":130,"
+        "\"source_release_id\":\"playwise-3.3.1-alpha+oldest\","
+        "\"source_boot_id\":\"cccccccccccccccc\","
+        "\"target_release_id\":\"playwise-3.3.1-alpha+older\","
+        "\"target_pid\":141}\n";
+    const char *older_runtime_ok =
+        "{\"profile\":\"release\",\"pid\":141,\"boot_id\":\"dddddddddddddddd\","
+        "\"release_id\":\"playwise-3.3.1-alpha+older\",\"ipc_version\":2,\"ipc_available\":true}";
+    const char *older_runtime_same_boot =
+        "{\"profile\":\"release\",\"pid\":141,\"boot_id\":\"cccccccccccccccc\","
+        "\"release_id\":\"playwise-3.3.1-alpha+older\",\"ipc_version\":2,\"ipc_available\":true}";
+
+    fixture(15);
+    (void)remove(REQUEST);
+    running = 141;
+    put(ROOT "/handover/reload.json", stale_journal);
+    put(ROOT "/handover/runtime-ready.json", older_runtime_ok);
+    ptc_hot_reload_init(&recovered);
+    ptc_hot_reload_recover_startup(&recovered);
+    assert(recovered.phase == PTC_HOT_RELOAD_PHASE_IDLE &&
+           recovered.status == PTC_HOT_RELOAD_UNKNOWN &&
+           !pm_sessions && exists(FLAG) && !exists(ROOT "/handover/reload.json"));
+    ptc_hot_reload_inspect(&recovered);
+    assert(recovered.status == PTC_HOT_RELOAD_PENDING && !pm_sessions);
+    assert(chdir("../..") == 0);
+
+    fixture(16);
+    (void)remove(REQUEST);
+    running = 141;
+    put(ROOT "/handover/reload.json", stale_journal);
+    put(ROOT "/handover/runtime-ready.json", older_runtime_same_boot);
+    ptc_hot_reload_init(&recovered);
+    ptc_hot_reload_recover_startup(&recovered);
+    assert(recovered.phase == PTC_HOT_RELOAD_PHASE_FAILED &&
+           recovered.status == PTC_HOT_RELOAD_RECOVERY_REQUIRED &&
+           !pm_sessions && exists(FLAG) && exists(ROOT "/handover/reload.json"));
+    assert(chdir("../..") == 0);
+}
+
 int main(void)
 {
     PtcHotReloadController c, recovered;
@@ -300,6 +344,7 @@ int main(void)
     assert(c.phase == PTC_HOT_RELOAD_PHASE_FAILED && exists(FLAG) && !launches && !pm_sessions);
     assert(chdir("../..") == 0);
     test_event_append();
+    test_stale_completed_handover_recovery();
     puts("PASS actual NRO capture restart, single claim, bounded exit/recovery and event append retry/no replay");
     return 0;
 }

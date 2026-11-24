@@ -83,6 +83,9 @@ const char *ptc_ui_eye_care_plan_badge_label(const PtcUiModel *model)
 const char *ptc_ui_settings_status_label(const PtcUiModel *model)
 {
     if (!model) return NULL;
+    if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) {
+        return ptc_ui_text(PTC_UI_T_TO_BE_COMPLETED);
+    }
     if (model->disable_flag_present || model->recovery_active ||
         strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
         return ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED);

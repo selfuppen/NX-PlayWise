@@ -86,6 +86,7 @@ void poll_hot_reload(UiState *ui)
         ui->model.waiting = false;
         if (ptc_switch_ipc_client_probe(&ui->ipc)) {
             ptc_companion_transport_set_suspended(&ui->transport, false);
+            ui->hot_reload_reconfirm_redirect_pending = !ui->model.hot_reload_capture_restart;
             snprintf(ui->model.message, sizeof(ui->model.message),
                 "%s", ptc_ui_text(ui->model.hot_reload_capture_restart ? PTC_UI_T_CAPTURE_RESTART_DONE :
                     PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
@@ -397,6 +398,7 @@ bool custom_parent_combo_held(const UiState *ui, u64 buttons)
 void refresh_disable_flag(UiState *ui)
 {
     char path[160];
+    char reason[sizeof(ui->model.disable_reason)];
     bool was_disabled;
     if (!ui || !ui->client.storage) {
         return;
@@ -404,6 +406,12 @@ void refresh_disable_flag(UiState *ui)
     was_disabled = ui->model.disable_flag_present;
     snprintf(path, sizeof(path), "%s/flags/disable.flag", APP_ROOT);
     ui->model.disable_flag_present = ui->client.storage->vtable->exists(ui->client.storage, path);
+    if (!ui->model.disable_flag_present) {
+        ui->model.disable_reason[0] = '\0';
+    } else if (ui->client.storage->vtable->read_text(ui->client.storage, path, reason, sizeof(reason))) {
+        reason[strcspn(reason, "\r\n")] = '\0';
+        snprintf(ui->model.disable_reason, sizeof(ui->model.disable_reason), "%s", reason);
+    }
     if (ui->model.disable_flag_present &&
         (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
          ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) &&

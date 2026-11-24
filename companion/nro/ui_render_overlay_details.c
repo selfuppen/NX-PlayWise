@@ -99,6 +99,7 @@ static void detail_current(const PtcUiModel *model, const PtcUiTodayProjection *
 {
     if (p->active_reasons) detail_reasons(p->active_reasons, out, size);
     else if (detail_available(model, p)) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_DETAIL_AVAILABLE));
+    else if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE));
     else if (model->disable_flag_present) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED));
     else if (model->recovery_active) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_RECOVERING));
     else if (model->apply_pending_confirmation) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_WAITING_FOR_EFFECT));

@@ -240,9 +240,10 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     draw_plan_card(pixels, stride, panel, false);
 
     int recommended = ptc_ui_support_recommended_action(model);
-    bool is_fault = model->disable_flag_present || model->recovery_active ||
-        strcmp(model->setup_phase, "failed") == 0 || strcmp(model->setup_phase, "protection") == 0;
-    bool is_warn = !is_fault && (recommended >= 0 || model->waiting || model->apply_pending_confirmation ||
+    bool reconfirm = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
+    bool is_fault = !reconfirm && (model->disable_flag_present || model->recovery_active ||
+        strcmp(model->setup_phase, "failed") == 0 || strcmp(model->setup_phase, "protection") == 0);
+    bool is_warn = !is_fault && (reconfirm || recommended >= 0 || model->waiting || model->apply_pending_confirmation ||
         (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0));
 
     /* 1. Structured System Health Banner */
@@ -272,7 +273,9 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
         draw_wrapped_text(pixels, stride, banner.x + 12, banner.y + 52, ptc_ui_support_problem(model),
                           14, banner.width - 24, 18, 2, UI_INK);
-        const char *next = recommended == 0 ? (model->disable_flag_present ? ptc_ui_text(PTC_UI_T_RECOMMENDATION_UNDEACTIVATE_AND_RE_ENABLE) : ptc_ui_text(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE)) :
+        const char *next = recommended == 0 ? (reconfirm ? ptc_ui_text(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE)
+                                               : (model->disable_flag_present ? ptc_ui_text(PTC_UI_T_RECOMMENDATION_UNDEACTIVATE_AND_RE_ENABLE)
+                                                                              : ptc_ui_text(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE))) :
                            recommended == 1 ? ptc_ui_text(PTC_UI_T_SUGGESTION_SELECT_RETRY_REPAIR) :
                            recommended == 4 ? ptc_ui_text(PTC_UI_T_SUGGESTION_EXPORT_DIAGNOSTIC_PACKAGE_AND_KEEP_PROBLEM) :
                            (model->waiting || model->apply_pending_confirmation ? ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN) : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU));

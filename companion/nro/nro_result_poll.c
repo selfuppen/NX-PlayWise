@@ -257,6 +257,24 @@ void poll_result(UiState *ui, bool force)
         config_backup_result(ui);
         refresh_disable_flag(ui);
         online_update_status_result(ui);
+#ifndef PLAYWISE_EDEN
+        if (ui->hot_reload_reconfirm_redirect_pending &&
+            strcmp(ui->model.result_type, "status") == 0) {
+            ui->hot_reload_reconfirm_redirect_pending = false;
+            if (strcmp(ui->model.result_status, "ok") == 0 &&
+                ui->model.view == PTC_UI_PARENT &&
+                !ui->model.parent_support_only &&
+                ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
+                ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
+                ui->model.selected_index = 0;
+                ui->model.parent_footer_focused = false;
+                ui->model.header_language_focused = false;
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                         "%s", ptc_ui_text(PTC_UI_T_HOT_RELOAD_RECONFIRM_NEXT));
+            }
+        }
+#endif
         if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER)
             calendar_manager_refresh(ui);
         if (strcmp(ui->model.result_type, "clear_redemption_history") == 0) {
