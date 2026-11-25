@@ -30,6 +30,7 @@ extern "C" {
 #include "common/crypto/sha256.h"
 #include "common/time/ptc_time.h"
 #include "platform/switch/fs_storage.h"
+#include "platform/ultrahand_config.h"
 }
 
 namespace {
@@ -288,7 +289,12 @@ public:
 
     bool automatic_detail_allowed() const
     {
-        return child_detail_page_available() && has_status_snapshot_ && !error_ && !bridge_->waiting;
+        return child_detail_page_available() && (has_status_snapshot_ || preloaded_hidden_) && !error_ && !bridge_->waiting;
+    }
+
+    void set_preloaded_hidden(bool preloaded)
+    {
+        preloaded_hidden_ = preloaded;
     }
 
     void prepare_automatic_frame(const PtcReasonDetail *offer, uint64_t deadline_ms = 0)
@@ -299,6 +305,7 @@ public:
 
     void start_child_open()
     {
+        preloaded_hidden_ = false;
         finish_refresh_while_hidden_ = false;
         if (!child_detail_page_available() || (error_ && last_request_kind_ != OverlayRequestKind::Status)) return;
         child_open_tick_ = armGetSystemTick();
@@ -1431,6 +1438,7 @@ private:
     int language_confirm_focus_ = 0;
     PtcOverlayCountdownWatch countdown_watch_{};
     bool countdown_recheck_pending_ = false;
+    bool preloaded_hidden_ = false;
 
     void open_language_confirm()
     {
@@ -1480,6 +1488,15 @@ private:
 
 class PctcOverlay final : public tsl::Overlay {
 public:
+    void onPreloadArgs(bool preloaded) override
+    {
+        preloaded_hidden_ = preloaded;
+        if (preloaded) {
+            if (gui_) gui_->set_preloaded_hidden(true);
+            (void)ptc_ultrahand_clear_preload_state(ptc_fs_storage_as_storage(&storage_));
+        }
+    }
+
     Event* hiddenWakeEvent() override
     {
         return automatic_enabled_ && runtime_known_ && gui_ && gui_->automatic_detail_allowed() &&
@@ -1824,6 +1841,7 @@ private:
     unsigned automatic_failures_ = 0;
     bool automatic_ack_written_ = false;
     bool automatic_enabled_ = false;
+    bool preloaded_hidden_ = false;
     uint64_t next_config_ms_ = 0;
     uint64_t next_runtime_ms_ = 0;
     bool runtime_known_ = false;

@@ -30,6 +30,9 @@ void handle_touch(UiState *ui, int x, int y)
         if (ui->model.notification_preview != hit.index) ptc_audio_play(PTC_SE_TAB);
         ui->model.notification_preview = hit.index;
         break;
+    case PTC_UI_HIT_NOTIFICATION_PRELOAD:
+        handle_overlay_input(ui, HidNpadButton_X);
+        break;
     case PTC_UI_HIT_NOTIFICATION_OPTION:
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);

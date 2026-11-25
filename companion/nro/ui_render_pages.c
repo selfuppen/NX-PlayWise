@@ -1400,8 +1400,9 @@ static void draw_settings_dynamic_preview(uint32_t *pixels, uint32_t stride,
         /* Notifications: Dual-channel live readiness */
         draw_text_bold(pixels, stride, box.x + 14, box.y + 26,
                        ptc_ui_text(PTC_UI_T_SETTINGS_PREVIEW_NOTICE_TITLE), 13, UI_INK);
-        bool ext_on = (model->reason_external_notifications == 1);
+        bool ext_on = (model->reason_external_notifications == 1 && !model->reason_app_muted);
         const char *ext_state = ptc_ui_text(
+            model->reason_app_muted ? PTC_UI_T_NOTICE_STATE_MUTED :
             model->reason_external_notifications == 1 ? PTC_UI_T_NOTICE_STATE_READY :
             model->reason_external_notifications == 0 ? PTC_UI_T_NOTICE_STATE_OFF : PTC_UI_T_NOTICE_STATE_UNKNOWN);
         const char *det_state = ptc_ui_text(

@@ -3000,6 +3000,7 @@ namespace tsl {
         virtual void onHide() {}
 
         // PlayWise cooperation stays on the UI thread, outside the HID mutex.
+        virtual void onPreloadArgs(bool preloaded) { (void)preloaded; }
         virtual u64 hiddenPollInterval() { return UINT64_MAX; }
         virtual bool onHiddenPoll(bool neutral) { return false; }
         virtual Event* hiddenWakeEvent() { return nullptr; }
@@ -3455,6 +3456,7 @@ namespace tsl {
             std::atomic<bool> overlayOpen{false};
             std::atomic<bool> hideRequested{false};
             std::atomic<bool> automaticOpenBlocked{false};
+            std::atomic<uint64_t> homeCooldownUntilNs{0};
 
             std::mutex dataMutex;
             u64 keysDown = 0;
@@ -3562,6 +3564,7 @@ namespace tsl {
                         else
                         {
                             shData->automaticOpenBlocked = false;
+                            shData->homeCooldownUntilNs = 0;
                             eventFire(&shData->comboEvent);
                         }
                     }
@@ -3574,7 +3577,13 @@ namespace tsl {
                 Result rc = waitObjects(&idx, objects, WaiterObject_Count,
                     detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0));
                 if (R_SUCCEEDED(rc)) {
-                    shData->automaticOpenBlocked = true;
+                    if (idx == WaiterObject_PowerButton) {
+                        shData->automaticOpenBlocked = true;
+                    } else if (idx == WaiterObject_HomeButton) {
+                        uint64_t nowNs = armTicksToNs(armGetSystemTick());
+                        shData->homeCooldownUntilNs = nowNs > UINT64_MAX - detail::HOME_COOLDOWN_NS
+                            ? UINT64_MAX : nowNs + detail::HOME_COOLDOWN_NS;
+                    }
                     eventFire(&shData->comboEvent);
                     if (shData->overlayOpen) {
                         shData->hideRequested = true;
@@ -3662,19 +3671,32 @@ namespace tsl {
         ASSERT_FATAL(threadCreate(&backgroundThread, impl::backgroundEventPoller, &shData, nullptr, 0x1000, 0x2c, -2));
         ASSERT_FATAL(threadStart(&backgroundThread));
 
-        // Argument parsing
+        // Argument parsing: --pw-preload keeps the overlay silently resident on boot
+        // even when Ultrahand's "open" command appends --skipCombo.
+        bool preloadHidden = false;
+        bool skipComboRequested = false;
         for (u8 arg = 0; arg < argc; arg++) {
-            if (strcasecmp(argv[arg], "--skipCombo") == 0) {
-                eventFire(&shData.comboEvent);
-                overlay->disableNextAnimation();
+            if (strcasecmp(argv[arg], "--pw-preload") == 0) {
+                preloadHidden = true;
+            } else if (strcasecmp(argv[arg], "--skipCombo") == 0) {
+                skipComboRequested = true;
             }
+        }
+        overlay->onPreloadArgs(preloadHidden);
+        if (skipComboRequested && !preloadHidden) {
+            eventFire(&shData.comboEvent);
+            overlay->disableNextAnimation();
         }
 
 
         while (shData.running) {
 
-            const bool autoBlocked = shData.automaticOpenBlocked.load();
-            const u64 timeout = detail::hiddenPollNs(autoBlocked && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval());
+            const uint64_t waitNowNs = armTicksToNs(armGetSystemTick());
+            const bool powerBlocked = shData.automaticOpenBlocked.load();
+            const uint64_t homeUntilNs = shData.homeCooldownUntilNs.load();
+            const bool autoBlocked = powerBlocked || detail::homeCooldownActive(waitNowNs, homeUntilNs);
+            const u64 timeout = detail::hiddenWaitNs(powerBlocked && !overlay->hasHiddenFrame(),
+                waitNowNs, homeUntilNs, overlay->hiddenPollInterval());
             Event* notification = autoBlocked ? nullptr : overlay->hiddenWakeEvent();
             int index = 0;
             Result wake;
@@ -3700,17 +3722,23 @@ namespace tsl {
                         std::abs(shData.joyStickPosRight.x) < 16000 && std::abs(shData.joyStickPosRight.y) < 16000;
                     shData.keysDownPending = 0;
                 }
-                bool blocked = shData.automaticOpenBlocked.load();
+                const uint64_t pollNowNs = armTicksToNs(armGetSystemTick());
+                bool blocked = shData.automaticOpenBlocked.load() ||
+                    detail::homeCooldownActive(pollNowNs, shData.homeCooldownUntilNs.load());
                 bool open = !blocked && overlay->onHiddenPoll(neutral);
                 overlay->loopHiddenFrame(blocked, hiddenKeysDown);
                 if (!open) continue;
             } else if (R_FAILED(wake) && !notificationError) {
                 ASSERT_FATAL(wake);
             }
-            if (shData.automaticOpenBlocked.load()) {
-                eventClear(&shData.comboEvent);
-                overlay->loopHiddenFrame(true, 0);
-                continue;
+            {
+                const uint64_t wakeNowNs = armTicksToNs(armGetSystemTick());
+                if (shData.automaticOpenBlocked.load() ||
+                    detail::homeCooldownActive(wakeNowNs, shData.homeCooldownUntilNs.load())) {
+                    eventClear(&shData.comboEvent);
+                    overlay->loopHiddenFrame(true, 0);
+                    continue;
+                }
             }
             eventClear(&shData.comboEvent);
             shData.hideRequested = false;

@@ -437,7 +437,7 @@ static void test_notification_preferences(void)
           !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_TEST_SENT)),
           "successful standalone test aligns the brief example without enabling automatic reminders");
 
-    /* Stage A mute detection and verified Ultrahand manager label */
+    /* Stage A mute detection & Stage B opt-in preload toggle */
     mem.storage.vtable->write_text_atomic(&mem.storage, "sdmc:/config/ultrahand/flags/notifications/playwise.flag", "");
     ui.notification_test.pending = false;
     test_notification(&ui);
@@ -446,9 +446,18 @@ static void test_notification_preferences(void)
           "playwise.flag mute blocks standalone test and reports muted state");
     mem.storage.vtable->remove_path(&mem.storage, "sdmc:/config/ultrahand/flags/notifications/playwise.flag");
 
+    check(!toggle_notification_preload(&ui) &&
+          !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_PRELOAD_NEEDS_ENABLE)),
+          "boot preload refuses to enable while master reminder switch is off");
+    check(toggle_notification_preference(&ui, PTC_UI_NOTIFICATION_TOGGLE) && ui.model.reason_notifications_enabled,
+          "re-enable master reminder switch for preload test");
+    check(!toggle_notification_preload(&ui) &&
+          !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_PRELOAD_UNAVAILABLE)),
+          "boot preload refuses when Ultrahand/loader/playwise.ovl are not verified");
+
     {
         uint8_t *ovl = calloc(1, 0x40B8);
-        check(ovl != NULL, "setup fake ovlmenu allocation");
+        check(ovl != NULL, "setup preload fake ovlmenu allocation");
         memcpy(ovl + 0x10, "NRO0", 4);
         ovl[0x18] = 0x80;
         memcpy(ovl + 0x80, "ASET", 4);
@@ -460,9 +469,23 @@ static void test_notification_preferences(void)
         ptc_mem_storage_write_bytes(&mem, "sdmc:/switch/.overlays/ovlmenu.ovl", ovl, 0x40B8);
         free(ovl);
     }
-    probe_notification_environment(&ui);
-    check(!ui.model.reason_app_muted && !strcmp(ui.model.reason_manager_label, "Ultrahand 2.5.3"),
-          "environment probe reads Ultrahand version from ovlmenu.ovl NACP");
+    mem.storage.vtable->write_text_atomic(&mem.storage, "sdmc:/atmosphere/contents/420000000007E51A/exefs.nsp", "nsp");
+    mem.storage.vtable->write_text_atomic(&mem.storage, "sdmc:/atmosphere/contents/420000000007E51A/flags/boot2.flag", "");
+    mem.storage.vtable->write_text_atomic(&mem.storage, "sdmc:/switch/.overlays/playwise.ovl", "ovl");
+    check(toggle_notification_preload(&ui) && ui.model.reason_overlay_preload_enabled &&
+          ui.model.reason_preload_state == 1 &&
+          !strcmp(ui.model.reason_manager_label, "Ultrahand 2.5.3"),
+          "boot preload enables on verified Ultrahand 2.5.3 and writes boot_package.ini");
+    reopened = ui;
+    load_ui_preferences(&reopened);
+    check(reopened.model.reason_overlay_preload_enabled, "boot preload preference round trips");
+    ui.model.overlay = PTC_UI_OVERLAY_NOTIFICATIONS;
+    PtcUiRect preload_rect = ptc_ui_notification_preload_rect();
+    check(ptc_ui_hit_test(&ui.model, preload_rect.x + preload_rect.w / 2, preload_rect.y + preload_rect.h / 2).kind ==
+          PTC_UI_HIT_NOTIFICATION_PRELOAD, "preload pill touch hit-test resolves to PTC_UI_HIT_NOTIFICATION_PRELOAD");
+    check(toggle_notification_preference(&ui, PTC_UI_NOTIFICATION_TOGGLE) && !ui.model.reason_notifications_enabled &&
+          ptc_ultrahand_preload_inspect(&mem.storage) == 0,
+          "disabling master reminder switch cleans PlayWise boot preload entry");
 }
 
 static void test_incremental_setup_options(void)

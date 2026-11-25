@@ -42,6 +42,7 @@ typedef enum {
     PTC_UI_HIT_OVERLAY_CONFIRM,
     PTC_UI_HIT_NOTIFICATION_OPTION,
     PTC_UI_HIT_NOTIFICATION_PREVIEW,
+    PTC_UI_HIT_NOTIFICATION_PRELOAD,
     PTC_UI_HIT_OVERLAY_CANCEL,
     PTC_UI_HIT_MINUTES_DEC,
     PTC_UI_HIT_MINUTES_INC,
@@ -213,6 +214,7 @@ PtcUiRect ptc_ui_notification_preview_rect(void);
 PtcUiRect ptc_ui_notification_preview_card_rect(int index);
 PtcUiRect ptc_ui_notification_preview_screen_rect(int index);
 PtcUiRect ptc_ui_notification_preview_tab_rect(int index);
+PtcUiRect ptc_ui_notification_preload_rect(void);
 PtcUiRect ptc_ui_notification_info_rect(int index); /* 0 detail desc, 1 brief desc, 2 receipt */
 PtcUiRect ptc_ui_notification_verification_rect(void);
 PtcUiRect ptc_ui_software_info_qr_tab_rect(int index);

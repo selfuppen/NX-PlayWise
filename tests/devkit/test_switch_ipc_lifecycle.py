@@ -107,9 +107,10 @@ def main() -> None:
     loop = libtesla[libtesla.index("static inline int loop(int argc, char** argv)"):]
     require("detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0)" in poller,
             "idle input throttling must preserve visible and held-button sampling")
-    require("detail::hiddenPollNs(autoBlocked && !overlay->hasHiddenFrame(), overlay->hiddenPollInterval())" in loop and
-            "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop,
-            "HOME/POWER must clear a hidden frame before waiting for the manual combo event")
+    require("detail::hiddenWaitNs(powerBlocked && !overlay->hasHiddenFrame()," in loop and
+            "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop and
+            "--pw-preload" in loop,
+            "POWER hard-block and HOME cooldown must clear hidden frames cleanly and preserve --pw-preload")
     require("autoBlocked ? nullptr : overlay->hiddenWakeEvent()" in loop and
             "eventWait(&shData.comboEvent, 0)" in loop and "overlay->onHiddenWake(!notificationError)" in loop,
             "IPC wait must preserve HOME/POWER, manual combo priority and timeout fallback")

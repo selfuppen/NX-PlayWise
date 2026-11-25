@@ -288,12 +288,13 @@ int main(int argc, char **argv)
         PLAYWISE_BUILD_RELEASE_ID, boot_id);
     {
         bool boot_notify_enabled = false;
+        bool boot_preload_enabled = false;
         bool cfg_ok = storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json",
             reason_config, sizeof(reason_config));
-        (void)ptc_reason_notification_preferences(cfg_ok ? reason_config : NULL,
-            &boot_notify_enabled, NULL);
+        (void)ptc_reason_notification_preferences_ex(cfg_ok ? reason_config : NULL,
+            &boot_notify_enabled, &boot_preload_enabled, NULL);
         ptc_overlay_env_boot_reconcile(storage, PTC_APP_ROOT,
-            boot_notify_enabled, NULL);
+            boot_notify_enabled, boot_preload_enabled, NULL);
     }
     ptc_input_owner_reader_init(&reason_owner, storage, PTC_APP_ROOT, PLAYWISE_BUILD_RELEASE_ID);
     (void)ptc_usage_evidence_init(&usage_evidence, storage, PTC_APP_ROOT, boot_id,

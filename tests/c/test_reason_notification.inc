@@ -73,10 +73,10 @@ static void test_overlay_env_and_boot_reconcile(void)
     s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nfoo=bar\n");
     ptc_overlay_env_probe(s, &env);
     check_true(env.manager == PTC_OVERLAY_MANAGER_ULTRAHAND && env.ultrahand_notify_supported &&
-        env.loader_installed && env.loader_boot2 &&
+        env.ultrahand_boot_preload_supported && env.loader_installed && env.loader_boot2 &&
         env.loader_version.valid && env.loader_version.major == 2 && env.loader_version.patch == 3 &&
         env.playwise_overlay_installed && env.notifications == 1 && env.notifications_implicit_default &&
-        !env.app_muted,
+        !env.app_muted && env.preload_state == 0,
         "verified Ultrahand 2.5.3 detects manager, loader, and implicit default notifications");
     PtcUltrahandConfig cfg;
     ptc_ultrahand_config_read(s, &cfg);
@@ -101,15 +101,16 @@ static void test_overlay_env_and_boot_reconcile(void)
     const char *off_ini = "[ultrahand]\r\nnotifications=false\r\nother=1\r\n";
     s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/config.ini", off_ini);
     write_fake_ovlmenu(mem, "Ultrahand", "ppkantorski", "2.2.8");
-    ptc_overlay_env_boot_reconcile(s, "app", true, &report);
+    ptc_overlay_env_boot_reconcile(s, "app", true, true, &report);
     check_true(report.env.manager == PTC_OVERLAY_MANAGER_ULTRAHAND && !report.env.ultrahand_notify_supported &&
         !strcmp(report.notify_action, "skipped_incompatible") &&
+        !strcmp(report.preload_action, "skipped_incompatible") &&
         s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
-        !strcmp(text, off_ini),
-        "Ultrahand < 2.3.0 refuses boot config modifications");
+        !strcmp(text, off_ini) && !s->vtable->exists(s, "sdmc:/switch/.packages/boot_package.ini"),
+        "Ultrahand < 2.3.0 refuses boot config and preload modifications");
 
     write_fake_ovlmenu(mem, "Tesla Menu", "WerWolv", "v1.1.2");
-    ptc_overlay_env_boot_reconcile(s, "app", true, &report);
+    ptc_overlay_env_boot_reconcile(s, "app", true, true, &report);
     check_true(report.env.manager == PTC_OVERLAY_MANAGER_TESLA && !report.env.ultrahand_notify_supported &&
         ptc_ultrahand_prepare_notifications(s) == PTC_ULTRAHAND_PREPARE_UNAVAILABLE &&
         s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
@@ -118,22 +119,72 @@ static void test_overlay_env_and_boot_reconcile(void)
 
     /* 4. Disabled master switch never touches third-party INI on Ultrahand 2.5.3 */
     write_fake_ovlmenu(mem, "Ultrahand", "ppkantorski", "2.5.3");
-    ptc_overlay_env_boot_reconcile(s, "app", false, &report);
+    ptc_overlay_env_boot_reconcile(s, "app", false, true, &report);
     check_true(!strcmp(report.notify_action, "skipped_disabled") &&
         s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
-        !strcmp(text, off_ini),
+        !strcmp(text, off_ini) && !s->vtable->exists(s, "sdmc:/switch/.packages/boot_package.ini"),
         "disabled preference leaves Ultrahand untouched at boot");
 
     /* 5. Enabled master switch (Stage A) reconciles notifications=false -> true & writes overlay-env.json */
-    ptc_overlay_env_boot_reconcile(s, "app", true, &report);
+    ptc_overlay_env_boot_reconcile(s, "app", true, false, &report);
     check_true(!strcmp(report.notify_action, "saved") &&
         s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
-        !strcmp(text, "[ultrahand]\r\nnotifications=true\r\nother=1\r\n"),
-        "Stage A boot reconcile flips only notifications=false->true");
+        !strcmp(text, "[ultrahand]\r\nnotifications=true\r\nother=1\r\n") &&
+        !s->vtable->exists(s, "sdmc:/switch/.packages/boot_package.ini"),
+        "Stage A boot reconcile flips only notifications=false->true without touching boot_package.ini");
     check_true(s->vtable->read_text(s, "app/support/overlay-env.json", text, sizeof(text)) &&
         strstr(text, "\"manager\":\"ultrahand\"") && strstr(text, "\"manager_version\":\"2.5.3\"") &&
         strstr(text, "\"boot_notify_action\":\"saved\""),
         "boot reconcile writes bounded overlay-env.json diagnostic");
+
+    /* 6. Stage B boot_package.ini managed block: preserve user lines, CRLF, reject malformed, clean remove */
+    const char *user_boot = "[on-boot]\r\n; user comment\r\nnotify 'hi'\r\n[other]\r\nfoo=bar\r\n";
+    s->vtable->write_text_atomic(s, "sdmc:/switch/.packages/boot_package.ini", user_boot);
+    ptc_overlay_env_boot_reconcile(s, "app", true, true, &report);
+    check_true(!strcmp(report.preload_action, "saved") && report.env.preload_state == 1 &&
+        s->vtable->read_text(s, "sdmc:/switch/.packages/boot_package.ini", text, sizeof(text)) &&
+        strstr(text, "; user comment\r\nnotify 'hi'\r\n; playwise-preload-begin\r\nopen /switch/.overlays/playwise.ovl --pw-preload\r\n; playwise-preload-end\r\n[other]\r\nfoo=bar\r\n"),
+        "Stage B inserts managed preload block into [on-boot] preserving user lines and CRLF");
+    check_true(ptc_ultrahand_preload_prepare(s) == PTC_ULTRAHAND_PREPARE_ALREADY_ON,
+        "repeat preload prepare is idempotent");
+    ptc_overlay_env_boot_reconcile(s, "app", true, false, &report);
+    check_true(!strcmp(report.preload_action, "removed") && report.env.preload_state == 0 &&
+        s->vtable->read_text(s, "sdmc:/switch/.packages/boot_package.ini", text, sizeof(text)) &&
+        !strcmp(text, user_boot),
+        "disabling preload restores user boot_package.ini byte-for-byte");
+
+    /* File with only PlayWise preload block is removed cleanly on disable */
+    s->vtable->remove_path(s, "sdmc:/switch/.packages/boot_package.ini");
+    check_true(ptc_ultrahand_preload_prepare(s) == PTC_ULTRAHAND_PREPARE_SAVED &&
+        ptc_ultrahand_preload_inspect(s) == 1 && ptc_ultrahand_preload_remove(s) &&
+        !s->vtable->exists(s, "sdmc:/switch/.packages/boot_package.ini"),
+        "PlayWise-only boot_package.ini is deleted cleanly on removal");
+
+    /* Ambiguous/malformed boot_package.ini is preserved untouched */
+    const char *bad_boot = "[on-boot]\n[on-boot]\n";
+    s->vtable->write_text_atomic(s, "sdmc:/switch/.packages/boot_package.ini", bad_boot);
+    check_true(ptc_ultrahand_preload_inspect(s) == -1 &&
+        ptc_ultrahand_preload_prepare(s) == PTC_ULTRAHAND_PREPARE_UNAVAILABLE &&
+        s->vtable->read_text(s, "sdmc:/switch/.packages/boot_package.ini", text, sizeof(text)) &&
+        !strcmp(text, bad_boot),
+        "duplicate [on-boot] is rejected without modifying boot_package.ini");
+
+    /* 7. Clearing Ultrahand transient in_overlay/to_packages flags on --pw-preload */
+    s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/config.ini",
+        "[ultrahand]\r\nnotifications=true\r\nin_overlay=true\r\nto_packages=true\r\n");
+    check_true(ptc_ultrahand_clear_preload_state(s) &&
+        s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
+        !strcmp(text, "[ultrahand]\r\nnotifications=true\r\nin_overlay=false\r\nto_packages=false\r\n"),
+        "clear_preload_state resets in_overlay and to_packages while preserving notifications");
+
+    /* 8. Extended preference parser requires master switch for preload */
+    bool en = false, pre = false;
+    check_true(ptc_reason_notification_preferences_ex(
+        "{\"reason_notifications_enabled\":false,\"reason_overlay_preload_enabled\":true}", &en, &pre, NULL) &&
+        !en && !pre, "preload preference stays false when master switch is off");
+    check_true(ptc_reason_notification_preferences_ex(
+        "{\"reason_notifications_enabled\":true,\"reason_overlay_preload_enabled\":true}", &en, &pre, NULL) &&
+        en && pre, "preload preference parses true when both switches are enabled");
 
     free(mem);
 }

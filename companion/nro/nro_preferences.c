@@ -21,6 +21,9 @@ void probe_notification_environment(UiState *ui)
     ui->model.reason_app_muted = env.app_muted;
     snprintf(ui->model.reason_overlay_shortcut, sizeof(ui->model.reason_overlay_shortcut), "%s", env.shortcut);
     ui->model.reason_overlay_installed = env.playwise_overlay_installed;
+    ui->model.reason_preload_supported = env.ultrahand_boot_preload_supported &&
+        env.loader_installed && env.loader_boot2 && env.playwise_overlay_installed;
+    ui->model.reason_preload_state = env.preload_state;
     ptc_overlay_env_format_manager(&env, ui->model.reason_manager_label, sizeof(ui->model.reason_manager_label));
     ui->model.reason_detail_ready = ptc_reason_detail_runtime(ui->client.storage, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot) &&
         ptc_reason_detail_read(ui->client.storage, APP_ROOT, "ready", &ready) &&
@@ -73,6 +76,11 @@ bool toggle_notification_preference(UiState *ui, int index)
                 prepared == PTC_ULTRAHAND_PREPARE_SAVED ? PTC_UI_T_REASON_NOTICE_PREPARED :
                 prepared == PTC_ULTRAHAND_PREPARE_ALREADY_ON ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
                 PTC_UI_T_REASON_NOTICE_PREPARE_FAILED));
+        } else {
+            /* Disabling own hints keeps Ultrahand's global switch, but cleans PlayWise's own boot preload block. */
+            if (ptc_ultrahand_preload_inspect(ui->client.storage) == 1)
+                (void)ptc_ultrahand_preload_remove(ui->client.storage);
+            probe_notification_environment(ui);
         }
         complete_setup_option(ui, PTC_UI_SETUP_OPTION_NOTIFICATIONS);
         return true;
@@ -81,12 +89,64 @@ bool toggle_notification_preference(UiState *ui, int index)
     return false;
 }
 
+bool toggle_notification_preload(UiState *ui)
+{
+    if (!ui) return false;
+    if (!ui->model.reason_notifications_enabled) {
+        snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s",
+                 ptc_ui_text(PTC_UI_T_NOTICE_PRELOAD_NEEDS_ENABLE));
+        return false;
+    }
+    bool prev = ui->model.reason_overlay_preload_enabled;
+    if (!prev) {
+        PtcUltrahandPrepare prepared = ptc_ultrahand_preload_prepare(ui->client.storage);
+        if (prepared != PTC_ULTRAHAND_PREPARE_SAVED && prepared != PTC_ULTRAHAND_PREPARE_ALREADY_ON) {
+            probe_notification_environment(ui);
+            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s",
+                     ptc_ui_text(prepared == PTC_ULTRAHAND_PREPARE_UNAVAILABLE
+                                 ? PTC_UI_T_NOTICE_PRELOAD_UNAVAILABLE
+                                 : PTC_UI_T_REASON_NOTICE_SAVE_FAILED));
+            return false;
+        }
+        ui->model.reason_overlay_preload_enabled = true;
+        if (!save_ui_preferences(ui)) {
+            ui->model.reason_overlay_preload_enabled = false;
+            if (prepared == PTC_ULTRAHAND_PREPARE_SAVED)
+                (void)ptc_ultrahand_preload_remove(ui->client.storage);
+            probe_notification_environment(ui);
+            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s",
+                     ptc_ui_text(PTC_UI_T_REASON_NOTICE_SAVE_FAILED));
+            return false;
+        }
+        probe_notification_environment(ui);
+        snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s",
+                 ptc_ui_text(PTC_UI_T_NOTICE_PRELOAD_SAVED));
+        return true;
+    } else {
+        ui->model.reason_overlay_preload_enabled = false;
+        if (!save_ui_preferences(ui)) {
+            ui->model.reason_overlay_preload_enabled = true;
+            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s",
+                     ptc_ui_text(PTC_UI_T_REASON_NOTICE_SAVE_FAILED));
+            return false;
+        }
+        (void)ptc_ultrahand_preload_remove(ui->client.storage);
+        probe_notification_environment(ui);
+        snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s",
+                 ptc_ui_text(PTC_UI_T_NOTICE_PRELOAD_REMOVED));
+        return true;
+    }
+}
+
 void handle_notification_preferences_input(UiState *ui, u64 down)
 {
     if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
     else if (down & HidNpadButton_L) ui->model.notification_preview = 0;
     else if (down & HidNpadButton_R) ui->model.notification_preview = 1;
-    else if (down & HidNpadButton_Up) ui->model.overlay_selection = PTC_UI_NOTIFICATION_TOGGLE;
+    else if (down & HidNpadButton_X) {
+        if (toggle_notification_preload(ui)) ptc_audio_play(PTC_SE_TOGGLE);
+        else ptc_audio_play(PTC_SE_ERROR);
+    } else if (down & HidNpadButton_Up) ui->model.overlay_selection = PTC_UI_NOTIFICATION_TOGGLE;
     else if (down & HidNpadButton_Down) {
         if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_TOGGLE)
             ui->model.overlay_selection = PTC_UI_NOTIFICATION_PROBE;
@@ -234,6 +294,7 @@ void load_ui_preferences(UiState *ui)
 #endif
     ui->model.update_stable_only = false;
     ui->model.reason_notifications_enabled = false;
+    ui->model.reason_overlay_preload_enabled = false;
     char text[RESULT_TEXT_SIZE];
     u64 mask;
     cJSON *root;
@@ -322,6 +383,8 @@ void load_ui_preferences(UiState *ui)
     item = cJSON_GetObjectItemCaseSensitive(root, "sound_effects_enabled");
     ui->model.reason_notifications_enabled = cJSON_IsTrue(
         cJSON_GetObjectItemCaseSensitive(root, "reason_notifications_enabled"));
+    ui->model.reason_overlay_preload_enabled = cJSON_IsTrue(
+        cJSON_GetObjectItemCaseSensitive(root, "reason_overlay_preload_enabled"));
     if (cJSON_IsBool(item)) {
         ptc_audio_set_enabled(cJSON_IsTrue(item));
     } else {
@@ -407,6 +470,8 @@ bool save_ui_preferences(UiState *ui)
     cJSON_AddBoolToObject(root, "sound_effects_enabled", ptc_audio_is_enabled());
     cJSON_DeleteItemFromObject(root, "reason_notifications_enabled");
     cJSON_AddBoolToObject(root, "reason_notifications_enabled", ui->model.reason_notifications_enabled);
+    cJSON_DeleteItemFromObject(root, "reason_overlay_preload_enabled");
+    cJSON_AddBoolToObject(root, "reason_overlay_preload_enabled", ui->model.reason_overlay_preload_enabled);
     cJSON_DeleteItemFromObject(root, "reason_notification_language");
     cJSON_AddStringToObject(root, "reason_notification_language", ptc_ui_language_preference_name(
         ptc_ui_language_resolve(ui->language_preference, ui->system_language)));

@@ -248,6 +248,7 @@ void probe_notification_environment(UiState *ui);
 void test_notification(UiState *ui);
 void poll_notification_test(UiState *ui);
 bool toggle_notification_preference(UiState *ui, int index);
+bool toggle_notification_preload(UiState *ui);
 void handle_notification_preferences_input(UiState *ui, u64 down);
 bool save_setup_step(UiState *ui, int step);
 void edit_overlay_minutes(UiState *ui);

@@ -10,6 +10,8 @@ extern "C" {
 /* The language projection is optional. Invalid or missing JSON disables reminders. */
 bool ptc_reason_notification_preferences(const char *config, bool *enabled,
     PtcUiLanguagePreference *language);
+bool ptc_reason_notification_preferences_ex(const char *config, bool *enabled,
+    bool *preload_enabled, PtcUiLanguagePreference *language);
 
 #ifdef __cplusplus
 }

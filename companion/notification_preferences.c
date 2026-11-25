@@ -2,8 +2,8 @@
 #include "../third_party/cjson/cJSON.h"
 #include <string.h>
 
-bool ptc_reason_notification_preferences(const char *config, bool *enabled,
-    PtcUiLanguagePreference *language)
+bool ptc_reason_notification_preferences_ex(const char *config, bool *enabled,
+    bool *preload_enabled, PtcUiLanguagePreference *language)
 {
     cJSON *root = config ? cJSON_ParseWithOpts(config, NULL, true) : NULL;
     bool valid = cJSON_IsObject(root);
@@ -11,6 +11,10 @@ bool ptc_reason_notification_preferences(const char *config, bool *enabled,
         for (const cJSON *b = a->next; b; b = b->next)
             if (!strcmp(a->string, b->string)) valid = false;
     *enabled = valid && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "reason_notifications_enabled"));
+    if (preload_enabled) {
+        *preload_enabled = *enabled &&
+            cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "reason_overlay_preload_enabled"));
+    }
     if (language) {
         const char *lang = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root, "ui_language"));
         if (!lang || !lang[0] || !strcmp(lang, "system"))
@@ -20,4 +24,10 @@ bool ptc_reason_notification_preferences(const char *config, bool *enabled,
     }
     cJSON_Delete(root);
     return valid;
+}
+
+bool ptc_reason_notification_preferences(const char *config, bool *enabled,
+    PtcUiLanguagePreference *language)
+{
+    return ptc_reason_notification_preferences_ex(config, enabled, NULL, language);
 }

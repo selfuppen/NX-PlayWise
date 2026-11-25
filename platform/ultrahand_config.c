@@ -13,6 +13,11 @@
 #define ULTRAHAND_CONFIG_PATH "sdmc:/config/ultrahand/config.ini"
 #define ULTRAHAND_OVERLAYS_PATH "sdmc:/config/ultrahand/overlays.ini"
 #define ULTRAHAND_PLAYWISE_MUTE_FLAG "sdmc:/config/ultrahand/flags/notifications/playwise.flag"
+#define ULTRAHAND_BOOT_PACKAGE_PATH "sdmc:/switch/.packages/boot_package.ini"
+
+#define PW_PRELOAD_BEGIN "; playwise-preload-begin"
+#define PW_PRELOAD_CMD   "open /switch/.overlays/playwise.ovl --pw-preload"
+#define PW_PRELOAD_END   "; playwise-preload-end"
 
 static uint32_t read_le32(const uint8_t *p)
 {
@@ -265,6 +270,7 @@ static void probe_ovlmenu_nacp(PtcStorage *s, PtcOverlayEnv *out)
     if (str_contains_ci(out->manager_title, "Ultrahand") || str_ieq(out->manager_author, "ppkantorski")) {
         out->manager = PTC_OVERLAY_MANAGER_ULTRAHAND;
         out->ultrahand_notify_supported = ptc_overlay_version_at_least(&out->manager_version, 2, 3, 0);
+        out->ultrahand_boot_preload_supported = ptc_overlay_version_at_least(&out->manager_version, 2, 3, 0);
     } else if (str_contains_ci(out->manager_title, "Tesla")) {
         out->manager = PTC_OVERLAY_MANAGER_TESLA;
     } else {
@@ -360,6 +366,231 @@ PtcUltrahandPrepare ptc_ultrahand_prepare_notifications(PtcStorage *s)
                             true, text, check, current, sizeof(text));
 }
 
+bool ptc_ultrahand_clear_preload_state(PtcStorage *s)
+{
+    if (!s) return false;
+    char a[8192], b[8192], c[8192];
+    PtcUltrahandPrepare r1 = replace_ini_bool(s, ULTRAHAND_CONFIG_PATH, "ultrahand", "in_overlay",
+                                              false, a, b, c, sizeof(a));
+    PtcUltrahandPrepare r2 = replace_ini_bool(s, ULTRAHAND_CONFIG_PATH, "ultrahand", "to_packages",
+                                              false, a, b, c, sizeof(a));
+    return r1 != PTC_ULTRAHAND_PREPARE_FAILED && r2 != PTC_ULTRAHAND_PREPARE_FAILED;
+}
+
+/* Locate our delimited managed block inside [on-boot].
+   Returns:
+     -1 : ambiguous / malformed (duplicate [on-boot], unbalanced or duplicate markers)
+      0 : clean, managed block absent
+      1 : clean, managed block present and exact */
+typedef struct {
+    int state;
+    bool has_on_boot;
+    size_t on_boot_end_off; /* byte offset at end of [on-boot] section */
+    size_t block_start_off;
+    size_t block_end_off;
+    bool has_other_content;
+    bool use_crlf;
+} BootPackageScan;
+
+static bool line_equals_trimmed(const char *start, const char *end, const char *literal)
+{
+    size_t len = strlen(literal);
+    return (size_t)(end - start) == len && !strncmp(start, literal, len);
+}
+
+static void scan_boot_package(const char *text, BootPackageScan *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (!text || !text[0]) {
+        out->state = 0;
+        return;
+    }
+    const char *p = text;
+    unsigned on_boot_sections = 0;
+    unsigned begin_count = 0;
+    unsigned end_count = 0;
+    bool inside_on_boot = false;
+    bool inside_block = false;
+    bool cmd_matched = false;
+    unsigned block_inner_lines = 0;
+
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        const char *next = nl ? nl + 1 : p + strlen(p);
+        const char *line_end = nl ? nl : next;
+        if (line_end > p && line_end[-1] == '\r') out->use_crlf = true;
+        const char *s = p, *e = line_end;
+        while (s < e && (*s == ' ' || *s == '\t')) ++s;
+        while (e > s && (e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) --e;
+
+        if (s < e && *s == '[' && e[-1] == ']') {
+            if (inside_block) { out->state = -1; return; }
+            if (inside_on_boot) {
+                out->on_boot_end_off = (size_t)(p - text);
+                inside_on_boot = false;
+            }
+            if (line_equals_trimmed(s, e, "[on-boot]")) {
+                if (++on_boot_sections > 1) { out->state = -1; return; }
+                inside_on_boot = true;
+                out->has_on_boot = true;
+            } else {
+                out->has_other_content = true;
+            }
+        } else if (line_equals_trimmed(s, e, PW_PRELOAD_BEGIN)) {
+            if (!inside_on_boot || inside_block || ++begin_count > 1) { out->state = -1; return; }
+            inside_block = true;
+            out->block_start_off = (size_t)(p - text);
+        } else if (line_equals_trimmed(s, e, PW_PRELOAD_END)) {
+            if (!inside_block || ++end_count > 1) { out->state = -1; return; }
+            inside_block = false;
+            out->block_end_off = (size_t)(next - text);
+        } else if (inside_block) {
+            ++block_inner_lines;
+            if (line_equals_trimmed(s, e, PW_PRELOAD_CMD)) cmd_matched = true;
+            else { out->state = -1; return; }
+        } else if (s < e) {
+            out->has_other_content = true;
+        }
+        p = next;
+    }
+    if (inside_block || begin_count != end_count) { out->state = -1; return; }
+    if (inside_on_boot) out->on_boot_end_off = strlen(text);
+    if (begin_count == 1) {
+        if (block_inner_lines != 1 || !cmd_matched) { out->state = -1; return; }
+        out->state = 1;
+    } else {
+        out->state = 0;
+    }
+}
+
+int ptc_ultrahand_preload_inspect(PtcStorage *s)
+{
+    PtcStorageMetadata meta;
+    char text[16384];
+    if (!s || !s->vtable->metadata || !s->vtable->metadata(s, ULTRAHAND_BOOT_PACKAGE_PATH, &meta))
+        return -1;
+    if (meta.type == PTC_STORAGE_ENTRY_MISSING) return 0;
+    if (meta.type != PTC_STORAGE_ENTRY_FILE ||
+        !s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, text, sizeof(text)))
+        return -1;
+    BootPackageScan scan;
+    scan_boot_package(text, &scan);
+    return scan.state;
+}
+
+PtcUltrahandPrepare ptc_ultrahand_preload_prepare(PtcStorage *s)
+{
+    if (!s) return PTC_ULTRAHAND_PREPARE_UNAVAILABLE;
+    PtcOverlayEnv env;
+    ptc_overlay_env_probe(s, &env);
+    if (!env.ultrahand_boot_preload_supported || !env.loader_installed ||
+        !env.loader_boot2 || !env.playwise_overlay_installed)
+        return PTC_ULTRAHAND_PREPARE_UNAVAILABLE;
+
+    PtcStorageMetadata meta;
+    if (!s->vtable->metadata || !s->vtable->metadata(s, ULTRAHAND_BOOT_PACKAGE_PATH, &meta))
+        return PTC_ULTRAHAND_PREPARE_FAILED;
+
+    char before[16384], after[16384], current[16384];
+    before[0] = '\0';
+    bool existed = (meta.type == PTC_STORAGE_ENTRY_FILE);
+    if (meta.type != PTC_STORAGE_ENTRY_MISSING && !existed)
+        return PTC_ULTRAHAND_PREPARE_UNAVAILABLE;
+    if (existed && !s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, before, sizeof(before)))
+        return PTC_ULTRAHAND_PREPARE_FAILED;
+
+    BootPackageScan scan;
+    scan_boot_package(before, &scan);
+    if (scan.state < 0) return PTC_ULTRAHAND_PREPARE_UNAVAILABLE;
+    if (scan.state == 1) return PTC_ULTRAHAND_PREPARE_ALREADY_ON;
+
+    const char *nl = scan.use_crlf ? "\r\n" : "\n";
+    char block[256];
+    int blen;
+    if (scan.has_on_boot) {
+        size_t pos = scan.on_boot_end_off;
+        bool need_leading_nl = (pos > 0 && before[pos - 1] != '\n');
+        blen = snprintf(block, sizeof(block), "%s%s%s%s%s%s%s",
+                        need_leading_nl ? nl : "",
+                        PW_PRELOAD_BEGIN, nl,
+                        PW_PRELOAD_CMD, nl,
+                        PW_PRELOAD_END, nl);
+        if (blen < 0 || (size_t)blen >= sizeof(block)) return PTC_ULTRAHAND_PREPARE_FAILED;
+        size_t tail_len = strlen(before + pos);
+        if (pos + (size_t)blen + tail_len + 1u > sizeof(after)) return PTC_ULTRAHAND_PREPARE_FAILED;
+        memcpy(after, before, pos);
+        memcpy(after + pos, block, (size_t)blen);
+        memcpy(after + pos + (size_t)blen, before + pos, tail_len + 1u);
+    } else {
+        size_t cur_len = strlen(before);
+        bool need_leading_nl = (cur_len > 0 && before[cur_len - 1] != '\n');
+        blen = snprintf(block, sizeof(block), "%s[on-boot]%s%s%s%s%s%s%s",
+                        need_leading_nl ? nl : "", nl,
+                        PW_PRELOAD_BEGIN, nl,
+                        PW_PRELOAD_CMD, nl,
+                        PW_PRELOAD_END, nl);
+        if (blen < 0 || (size_t)blen >= sizeof(block) || cur_len + (size_t)blen + 1u > sizeof(after))
+            return PTC_ULTRAHAND_PREPARE_FAILED;
+        memcpy(after, before, cur_len);
+        memcpy(after + cur_len, block, (size_t)blen + 1u);
+    }
+
+    /* Preimage re-check before atomic replace, then readback verify. */
+    if (existed) {
+        if (!s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, current, sizeof(current)) ||
+            strcmp(current, before) != 0)
+            return PTC_ULTRAHAND_PREPARE_FAILED;
+    } else {
+        if (!s->vtable->metadata(s, ULTRAHAND_BOOT_PACKAGE_PATH, &meta) ||
+            meta.type != PTC_STORAGE_ENTRY_MISSING)
+            return PTC_ULTRAHAND_PREPARE_FAILED;
+    }
+    if (!s->vtable->write_text_atomic(s, ULTRAHAND_BOOT_PACKAGE_PATH, after) ||
+        !s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, current, sizeof(current)) ||
+        strcmp(current, after) != 0)
+        return PTC_ULTRAHAND_PREPARE_FAILED;
+    return PTC_ULTRAHAND_PREPARE_SAVED;
+}
+
+bool ptc_ultrahand_preload_remove(PtcStorage *s)
+{
+    PtcStorageMetadata meta;
+    char before[16384], after[16384], current[16384];
+    if (!s || !s->vtable->metadata || !s->vtable->metadata(s, ULTRAHAND_BOOT_PACKAGE_PATH, &meta))
+        return false;
+    if (meta.type == PTC_STORAGE_ENTRY_MISSING) return true;
+    if (meta.type != PTC_STORAGE_ENTRY_FILE ||
+        !s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, before, sizeof(before)))
+        return false;
+
+    BootPackageScan scan;
+    scan_boot_package(before, &scan);
+    if (scan.state == 0) return true;
+    if (scan.state != 1) return false;
+
+    if (!scan.has_other_content) {
+        /* Entire file contained only [on-boot] + our managed block: verify unchanged then remove. */
+        if (!s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, current, sizeof(current)) ||
+            strcmp(current, before) != 0)
+            return false;
+        return s->vtable->remove_path(s, ULTRAHAND_BOOT_PACKAGE_PATH);
+    }
+
+    size_t tail_len = strlen(before + scan.block_end_off);
+    if (scan.block_start_off + tail_len + 1u > sizeof(after)) return false;
+    memcpy(after, before, scan.block_start_off);
+    memcpy(after + scan.block_start_off, before + scan.block_end_off, tail_len + 1u);
+
+    if (!s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, current, sizeof(current)) ||
+        strcmp(current, before) != 0)
+        return false;
+    if (!s->vtable->write_text_atomic(s, ULTRAHAND_BOOT_PACKAGE_PATH, after) ||
+        !s->vtable->read_text(s, ULTRAHAND_BOOT_PACKAGE_PATH, current, sizeof(current)) ||
+        strcmp(current, after) != 0)
+        return false;
+    return true;
+}
+
 void ptc_overlay_env_probe(PtcStorage *s, PtcOverlayEnv *out)
 {
     PtcUltrahandConfig cfg;
@@ -367,6 +598,7 @@ void ptc_overlay_env_probe(PtcStorage *s, PtcOverlayEnv *out)
     if (!out) return;
     memset(out, 0, sizeof(*out));
     out->notifications = -1;
+    out->preload_state = -1;
     if (!s) return;
 
     probe_ovlmenu_nacp(s, out);
@@ -385,6 +617,8 @@ void ptc_overlay_env_probe(PtcStorage *s, PtcOverlayEnv *out)
         out->notifications_implicit_default = true;
         out->notifications = 1;
     }
+
+    out->preload_state = ptc_ultrahand_preload_inspect(s);
 }
 
 void ptc_overlay_env_format_manager(const PtcOverlayEnv *env, char *out, size_t size)
@@ -430,7 +664,7 @@ static const char *prepare_name(PtcUltrahandPrepare p)
 }
 
 void ptc_overlay_env_boot_reconcile(PtcStorage *s, const char *root,
-                                    bool notifications_enabled,
+                                    bool notifications_enabled, bool preload_enabled,
                                     PtcOverlayBootReport *out)
 {
     PtcOverlayBootReport local;
@@ -440,6 +674,7 @@ void ptc_overlay_env_boot_reconcile(PtcStorage *s, const char *root,
 
     ptc_overlay_env_probe(s, &rep->env);
     snprintf(rep->notify_action, sizeof(rep->notify_action), "skipped_disabled");
+    snprintf(rep->preload_action, sizeof(rep->preload_action), "skipped_disabled");
 
     bool strict_env_ok = rep->env.ultrahand_notify_supported &&
         rep->env.loader_installed && rep->env.loader_boot2;
@@ -455,6 +690,21 @@ void ptc_overlay_env_boot_reconcile(PtcStorage *s, const char *root,
             rep->notify_prepare = ptc_ultrahand_prepare_notifications(s);
             snprintf(rep->notify_action, sizeof(rep->notify_action), "%s", prepare_name(rep->notify_prepare));
         }
+    }
+
+    if (notifications_enabled && preload_enabled) {
+        if (!strict_env_ok || !rep->env.ultrahand_boot_preload_supported ||
+            !rep->env.playwise_overlay_installed) {
+            rep->preload_prepare = PTC_ULTRAHAND_PREPARE_UNAVAILABLE;
+            snprintf(rep->preload_action, sizeof(rep->preload_action), "skipped_incompatible");
+        } else {
+            rep->preload_prepare = ptc_ultrahand_preload_prepare(s);
+            snprintf(rep->preload_action, sizeof(rep->preload_action), "%s", prepare_name(rep->preload_prepare));
+        }
+    } else if (rep->env.preload_state == 1) {
+        rep->preload_removed = ptc_ultrahand_preload_remove(s);
+        snprintf(rep->preload_action, sizeof(rep->preload_action),
+                 rep->preload_removed ? "removed" : "remove_failed");
     }
 
     /* Refresh probe snapshot after any mutation so the diagnostic reflects final on-SD state. */
@@ -478,19 +728,22 @@ void ptc_overlay_env_boot_reconcile(PtcStorage *s, const char *root,
             "{\"version\":1,\"manager\":\"%s\",\"manager_version\":%s,"
             "\"loader_installed\":%s,\"loader_boot2\":%s,\"loader_version\":%s,"
             "\"playwise_overlay_installed\":%s,"
-            "\"ultrahand_notify_supported\":%s,"
+            "\"ultrahand_notify_supported\":%s,\"ultrahand_boot_preload_supported\":%s,"
             "\"notifications\":%d,\"notifications_implicit_default\":%s,\"app_muted\":%s,"
-            "\"boot_notify_action\":\"%s\"}\n",
+            "\"preload_state\":%d,\"boot_notify_action\":\"%s\",\"boot_preload_action\":\"%s\"}\n",
             manager_kind_name(rep->env.manager), mgr_ver,
             rep->env.loader_installed ? "true" : "false",
             rep->env.loader_boot2 ? "true" : "false",
             ldr_ver,
             rep->env.playwise_overlay_installed ? "true" : "false",
             rep->env.ultrahand_notify_supported ? "true" : "false",
+            rep->env.ultrahand_boot_preload_supported ? "true" : "false",
             rep->env.notifications,
             rep->env.notifications_implicit_default ? "true" : "false",
             rep->env.app_muted ? "true" : "false",
-            rep->notify_action);
+            rep->env.preload_state,
+            rep->notify_action,
+            rep->preload_action);
         if (len > 0 && (size_t)len < sizeof(json)) {
             (void)s->vtable->write_text_atomic(s, path, json);
         }

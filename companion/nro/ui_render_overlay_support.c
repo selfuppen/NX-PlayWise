@@ -2280,14 +2280,33 @@ static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, con
             draw_rect_outline(pixels, stride, card, 14, 2, is_detail ? UI_ACCENT : UI_WARNING_BORDER);
         }
 
-        const char *pill_txt = ptc_ui_text(is_detail ? PTC_UI_T_NOTICE_CARD1_PILL : PTC_UI_T_NOTICE_CARD2_PILL);
-        int pw = measure_text(pill_txt, 12) + 20;
-        if (pw > 210) pw = 210;
-        UiRect pill = {card.x + card.width - 16 - pw, card.y + 10, pw, 24};
-        fill_round_rect(pixels, stride, pill, 12, is_detail ? UI_ACCENT_SOFT : UI_WARNING_SOFT);
-        draw_rect_outline(pixels, stride, pill, 12, 1, is_detail ? UI_ACCENT : UI_WARNING_BORDER);
+        UiRect pill;
+        const char *pill_txt;
+        uint32_t pill_bg, pill_bd, pill_fg;
+        if (is_detail) {
+            bool preload_active = m->reason_notifications_enabled &&
+                m->reason_overlay_preload_enabled && m->reason_preload_state == 1;
+            pill = to_uirect(ptc_ui_notification_preload_rect());
+            pill_txt = ptc_ui_text(preload_active ? PTC_UI_T_NOTICE_PRELOAD_ON : PTC_UI_T_NOTICE_PRELOAD_OFF);
+            pill_bg = preload_active ? UI_SUCCESS_SOFT :
+                      (m->reason_preload_supported ? UI_ACCENT_SOFT : UI_PAGE);
+            pill_bd = preload_active ? UI_SUCCESS_BORDER :
+                      (m->reason_preload_supported ? UI_ACCENT : UI_BORDER);
+            pill_fg = preload_active ? UI_SUCCESS :
+                      (m->reason_preload_supported ? UI_ACCENT : UI_MUTED);
+        } else {
+            pill_txt = ptc_ui_text(PTC_UI_T_NOTICE_CARD2_PILL);
+            int pw = measure_text(pill_txt, 12) + 20;
+            if (pw > 210) pw = 210;
+            pill = (UiRect){card.x + card.width - 16 - pw, card.y + 10, pw, 24};
+            pill_bg = UI_WARNING_SOFT;
+            pill_bd = UI_WARNING_BORDER;
+            pill_fg = UI_WARNING_TEXT;
+        }
+        fill_round_rect(pixels, stride, pill, 12, pill_bg);
+        draw_rect_outline(pixels, stride, pill, 12, 1, pill_bd);
         fit_text(fitted, sizeof(fitted), pill_txt, 12, pill.width - 10);
-        draw_text_center(pixels, stride, pill, fitted, 12, is_detail ? UI_ACCENT : UI_WARNING_TEXT);
+        draw_text_center(pixels, stride, pill, fitted, 12, pill_fg);
 
         const char *card_title = ptc_ui_text(is_detail ? PTC_UI_T_NOTICE_CARD1_TITLE : PTC_UI_T_NOTICE_CARD2_TITLE);
         fit_text(fitted, sizeof(fitted), card_title, 16, pill.x - (card.x + 16) - 10);

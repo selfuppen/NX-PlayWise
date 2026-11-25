@@ -546,6 +546,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_NOTIFICATIONS:
         if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_notification_preload_rect(), x, y))
+            return make_hit(PTC_UI_HIT_NOTIFICATION_PRELOAD, 0);
         for (i = 0; i < 2; ++i)
             if (ptc_ui_rect_contains(ptc_ui_notification_preview_tab_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_NOTIFICATION_PREVIEW, i);

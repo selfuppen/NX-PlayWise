@@ -363,6 +363,13 @@ PtcUiRect ptc_ui_notification_preview_tab_rect(int index)
     return (PtcUiRect){54 + index * 594, 252, 578, 38};
 }
 
+PtcUiRect ptc_ui_notification_preload_rect(void)
+{
+    /* Interactive Stage-B opt-in pill in top-right of Card 1 (Detail overlay). */
+    PtcUiRect card = ptc_ui_notification_preview_card_rect(0);
+    return (PtcUiRect){card.x + card.w - 16 - 210, card.y + 10, 210, 24};
+}
+
 PtcUiRect ptc_ui_notification_info_rect(int index)
 {
     if (index == 0) return (PtcUiRect){70, 512, 546, 44};

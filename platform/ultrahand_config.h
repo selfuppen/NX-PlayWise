@@ -39,9 +39,11 @@ typedef struct {
     PtcOverlayVersion loader_version;
     bool playwise_overlay_installed;
     bool ultrahand_notify_supported;       /* Ultrahand >= 2.3.0 */
+    bool ultrahand_boot_preload_supported; /* Ultrahand >= 2.3.0 (on-boot >= 2.2.8) */
     int notifications;                     /* -1 unknown, 0 off, 1 on */
     bool notifications_implicit_default;   /* [ultrahand] present without key on Ultrahand >= 2.3.0 */
     bool app_muted;                        /* flags/notifications/playwise.flag present */
+    int preload_state;                     /* -1 ambiguous/error, 0 absent, 1 configured */
     char shortcut[96];
 } PtcOverlayEnv;
 
@@ -55,7 +57,10 @@ typedef enum {
 typedef struct {
     PtcOverlayEnv env;
     PtcUltrahandPrepare notify_prepare;
+    PtcUltrahandPrepare preload_prepare;
+    bool preload_removed;
     char notify_action[32];
+    char preload_action[32];
 } PtcOverlayBootReport;
 
 bool ptc_overlay_version_parse(const char *raw, PtcOverlayVersion *out);
@@ -71,12 +76,22 @@ bool ptc_ultrahand_combo(const char *text, char *out, size_t size);
    and reads back. SAVED/ALREADY_ON prove SD configuration, never a resident receiver ACK. */
 PtcUltrahandPrepare ptc_ultrahand_prepare_notifications(PtcStorage *storage);
 
+/* Stage B (opt-in experimental): manage a delimited PlayWise preload block inside
+   sdmc:/switch/.packages/boot_package.ini [on-boot]. */
+int ptc_ultrahand_preload_inspect(PtcStorage *storage);
+PtcUltrahandPrepare ptc_ultrahand_preload_prepare(PtcStorage *storage);
+bool ptc_ultrahand_preload_remove(PtcStorage *storage);
+
+/* Called by playwise.ovl when launched via --pw-preload to clear Ultrahand's transient
+   in_overlay/to_packages flags written by the "open" launcher command. */
+bool ptc_ultrahand_clear_preload_state(PtcStorage *storage);
+
 /* Sysmodule boot-time dependency check and conservative auto-reconcile.
    Never modifies third-party files when notifications_enabled is false or when
    ovlmenu.ovl/nx-ovlloader do not strictly satisfy the verified Ultrahand >= 2.3.0 baseline.
    Writes bounded diagnostic snapshot to <root>/support/overlay-env.json. */
 void ptc_overlay_env_boot_reconcile(PtcStorage *storage, const char *root,
-                                    bool notifications_enabled,
+                                    bool notifications_enabled, bool preload_enabled,
                                     PtcOverlayBootReport *out);
 
 #ifdef __cplusplus
