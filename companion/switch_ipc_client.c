@@ -269,6 +269,71 @@ bool ptc_switch_ipc_subscribe_reason(PtcSwitchIpcClient *client, const char *rel
     eventLoadRemote(event, handle, true);
     return true;
 }
+
+bool ptc_switch_ipc_update_reason_ready(PtcSwitchIpcClient *client, const PtcReasonDetail *ready)
+{
+    PtcIpcReasonReadyLease lease;
+    Result rc;
+    if (!client || !client->initialized || !ready || ready->ui_instance == 0 ||
+        strlen(ready->release) >= sizeof(lease.release) ||
+        strlen(ready->boot) != sizeof(lease.boot) - 1) return false;
+    memset(&lease, 0, sizeof(lease));
+    strcpy(lease.release, ready->release);
+    strcpy(lease.boot, ready->boot);
+    lease.ui_instance = ready->ui_instance;
+    lease.issued_ms = ready->issued_ms;
+    lease.expires_ms = ready->expires_ms;
+    rc = serviceDispatchIn(&client->service, PTC_IPC_CMD_UPDATE_REASON_READY, lease);
+    if (R_FAILED(rc)) {
+        if (R_MODULE(rc) != Module_Libnx) {
+            serviceClose(&client->service);
+            client->initialized = false;
+        }
+        return false;
+    }
+    return true;
+}
+
+void ptc_switch_ipc_clear_reason_ready(PtcSwitchIpcClient *client)
+{
+    PtcIpcReasonReadyLease lease;
+    if (!client || !client->initialized) return;
+    memset(&lease, 0, sizeof(lease));
+    (void)serviceDispatchIn(&client->service, PTC_IPC_CMD_UPDATE_REASON_READY, lease);
+}
 #endif
+
+bool ptc_switch_ipc_query_reason_ready(PtcSwitchIpcClient *client, const char *release, const char *boot,
+    PtcReasonDetail *out)
+{
+    PtcIpcReasonSubscription request;
+    PtcIpcReasonReadyLease lease;
+    Result rc;
+    if (!client || !release || !boot || !out ||
+        strlen(release) >= sizeof(request.release) ||
+        strlen(boot) != sizeof(request.boot) - 1) return false;
+    memset(out, 0, sizeof(*out));
+    if (!client->initialized && !backend_connect(client)) return false;
+    memset(&request, 0, sizeof(request));
+    memset(&lease, 0, sizeof(lease));
+    strcpy(request.release, release);
+    strcpy(request.boot, boot);
+    rc = serviceDispatchInOut(&client->service, PTC_IPC_CMD_QUERY_REASON_READY, request, lease);
+    if (R_FAILED(rc)) {
+        if (R_MODULE(rc) != Module_Libnx) {
+            serviceClose(&client->service);
+            client->initialized = false;
+        }
+        return false;
+    }
+    if (lease.ui_instance == 0 || !memchr(lease.release, 0, sizeof(lease.release)) ||
+        !memchr(lease.boot, 0, sizeof(lease.boot))) return false;
+    snprintf(out->release, sizeof(out->release), "%s", lease.release);
+    snprintf(out->boot, sizeof(out->boot), "%s", lease.boot);
+    out->ui_instance = lease.ui_instance;
+    out->issued_ms = lease.issued_ms;
+    out->expires_ms = lease.expires_ms;
+    return true;
+}
 const PtcCompanionIpcBackend *ptc_switch_ipc_backend(void) { return &BACKEND; }
 #endif

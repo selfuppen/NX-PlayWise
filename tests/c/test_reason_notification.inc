@@ -1187,6 +1187,111 @@ static void test_reason_transport(void)
     free(mem);
 }
 
+typedef struct {
+    bool valid;
+    PtcReasonDetail detail;
+    unsigned calls;
+} TestMemReadyProvider;
+
+static bool test_mem_ready_read(void *ctx, PtcReasonDetail *out)
+{
+    TestMemReadyProvider *p = (TestMemReadyProvider *)ctx;
+    ++p->calls;
+    if (!p->valid) return false;
+    *out = p->detail;
+    return true;
+}
+
+static void test_reason_ipc_memory_ready_lease(void)
+{
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcStorage *storage;
+    PtcReasonNotification n;
+    PtcReasonObservation s;
+    TestMemReadyProvider provider;
+    PtcReasonDetail req;
+    check_true(mem != NULL, "allocate memory ready lease fixture");
+    if (!mem) return;
+    ptc_mem_storage_init(mem);
+    storage = ptc_mem_storage_as_storage(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+
+    /* 1. Fresh in-memory IPC lease succeeds with zero SD ready file. */
+    memset(&provider, 0, sizeof(provider));
+    provider.valid = true;
+    snprintf(provider.detail.release, sizeof(provider.detail.release), "release1");
+    snprintf(provider.detail.boot, sizeof(provider.detail.boot), "0123456789abcdef");
+    provider.detail.ui_instance = 7777;
+    provider.detail.issued_ms = 5000;
+    provider.detail.expires_ms = 6500;
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    n.read_ready = test_mem_ready_read;
+    n.read_ready_ctx = &provider;
+    s = reason_sample(1, PTC_REASON_DAILY, 1, 100);
+    notify_tick(&n, &s, 5500, 100, true);
+    check_true(provider.calls == 1 && n.detail_pending && !n.pending &&
+        n.detail_decision.ready_read_ok && n.detail_decision.ready_fresh &&
+        n.detail_decision.ready_ui_instance == 7777 &&
+        ptc_reason_detail_read(storage, "app", "request", &req) && req.ui_instance == 7777 &&
+        !storage->vtable->exists(storage, "app/support/reason-detail-ready.json"),
+        "in-memory IPC readiness lease triggers detail offer without SD ready file");
+
+    /* 2. Expired matching in-memory lease waits boundedly then falls back if unrenewed. */
+    ptc_mem_storage_init(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    provider.calls = 0;
+    provider.valid = true;
+    provider.detail.issued_ms = 5000;
+    provider.detail.expires_ms = 6500;
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    n.read_ready = test_mem_ready_read;
+    n.read_ready_ctx = &provider;
+    s = reason_sample(1, PTC_REASON_DAILY, 1, 100);
+    notify_tick(&n, &s, 7000, 100, true);
+    check_true(!n.detail_pending && !n.pending && n.ready_wait_deadline_ms == 7500,
+        "expired matching RAM lease uses 500ms renewal wait");
+    notify_tick(&n, &s, 7500, 100, true);
+    check_true(!n.detail_pending && n.pending,
+        "unrenewed expired RAM lease falls back to brief notice after 500ms");
+
+    /* 3. Absent RAM lease falls back cleanly to SD ready file. */
+    ptc_mem_storage_init(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    provider.calls = 0;
+    provider.valid = false;
+    PtcReasonDetail sd_ready = {0};
+    snprintf(sd_ready.release, sizeof(sd_ready.release), "release1");
+    snprintf(sd_ready.boot, sizeof(sd_ready.boot), "0123456789abcdef");
+    sd_ready.ui_instance = 8888;
+    sd_ready.issued_ms = 9000;
+    sd_ready.expires_ms = 10500;
+    check_true(ptc_reason_detail_write(storage, "app", "ready", &sd_ready), "seed SD fallback ready");
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    n.read_ready = test_mem_ready_read;
+    n.read_ready_ctx = &provider;
+    s = reason_sample(1, PTC_REASON_DAILY, 1, 100);
+    notify_tick(&n, &s, 9500, 100, true);
+    check_true(provider.calls == 1 && n.detail_pending && n.detail_decision.ready_ui_instance == 8888,
+        "absent RAM lease falls back cleanly to SD ready file");
+
+    /* 4. Wrong-boot RAM lease is rejected and falls back to brief notice. */
+    ptc_mem_storage_init(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    provider.calls = 0;
+    provider.valid = true;
+    snprintf(provider.detail.boot, sizeof(provider.detail.boot), "fedcba9876543210");
+    provider.detail.issued_ms = 9000;
+    provider.detail.expires_ms = 10500;
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    n.read_ready = test_mem_ready_read;
+    n.read_ready_ctx = &provider;
+    s = reason_sample(1, PTC_REASON_DAILY, 1, 100);
+    notify_tick(&n, &s, 9500, 100, true);
+    check_true(!n.detail_pending && !n.detail_decision.ready_boot_match && n.pending,
+        "wrong-boot RAM lease is rejected and falls back to brief notice");
+    free(mem);
+}
+
 static void test_reason_policy_observation(void)
 {
     PtcMemStorage *mem = malloc(sizeof(*mem));

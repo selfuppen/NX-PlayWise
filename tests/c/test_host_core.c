@@ -4675,6 +4675,7 @@ int main(void)
     test_reason_idle_cost();
     test_power_ledger();
     test_reason_transport();
+    test_reason_ipc_memory_ready_lease();
     test_reason_policy_observation();
     test_reason_snapshot_text();
     test_result_capacity_and_complete_recent_events();

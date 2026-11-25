@@ -25,9 +25,16 @@ void probe_notification_environment(UiState *ui)
         env.loader_installed && env.loader_boot2 && env.playwise_overlay_installed;
     ui->model.reason_preload_state = env.preload_state;
     ptc_overlay_env_format_manager(&env, ui->model.reason_manager_label, sizeof(ui->model.reason_manager_label));
-    ui->model.reason_detail_ready = ptc_reason_detail_runtime(ui->client.storage, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot) &&
-        ptc_reason_detail_read(ui->client.storage, APP_ROOT, "ready", &ready) &&
-        ptc_reason_detail_fresh(&ready, PLAYWISE_BUILD_RELEASE_ID, boot, notification_now_ms());
+    bool ready_ok = false;
+    if (ptc_reason_detail_runtime(ui->client.storage, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot)) {
+#if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
+        ready_ok = ptc_switch_ipc_query_reason_ready(&ui->ipc, PLAYWISE_BUILD_RELEASE_ID, boot, &ready);
+#endif
+        if (!ready_ok)
+            ready_ok = ptc_reason_detail_read(ui->client.storage, APP_ROOT, "ready", &ready);
+        ready_ok = ready_ok && ptc_reason_detail_fresh(&ready, PLAYWISE_BUILD_RELEASE_ID, boot, notification_now_ms());
+    }
+    ui->model.reason_detail_ready = ready_ok;
 }
 
 void poll_notification_test(UiState *ui)

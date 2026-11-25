@@ -16,12 +16,17 @@ static inline void ptc_overlay_reason_wake(PtcOverlayReasonWake *wake, uint64_t 
     wake->signaled = true;
 }
 
+static inline bool ptc_overlay_reason_wake_active(const PtcOverlayReasonWake *wake, uint64_t ms)
+{
+    return wake->signaled && ms >= wake->signal_ms && ms - wake->signal_ms < PTC_OVERLAY_REASON_SCAN_MS;
+}
+
 /* The normal poll gates run first. Audit even when an event handle looks
    healthy: a lost wake or disconnected peer must still allow an SD read. */
 static inline bool ptc_overlay_reason_scan(const PtcOverlayReasonWake *wake, bool subscribed,
     uint64_t ms, uint64_t *next_audit_ms)
 {
-    bool signaled = wake->signaled && ms >= wake->signal_ms && ms - wake->signal_ms < PTC_OVERLAY_REASON_SCAN_MS;
+    bool signaled = ptc_overlay_reason_wake_active(wake, ms);
     if (subscribed && !signaled && ms < *next_audit_ms && *next_audit_ms - ms <= PTC_OVERLAY_REASON_AUDIT_MS)
         return false;
     *next_audit_ms = ms <= UINT64_MAX - PTC_OVERLAY_REASON_AUDIT_MS ? ms + PTC_OVERLAY_REASON_AUDIT_MS : UINT64_MAX;

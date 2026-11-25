@@ -169,10 +169,22 @@ def main() -> None:
     require("PTC_POWER_LEDGER_GAP_NS UINT64_C(15000000000)" in power_ledger and
             "PTC_POWER_LEDGER_SETTLE_NS UINT64_C(120000000000)" in power_ledger,
             "freeze ledger thresholds are part of the documented diagnostic contract")
-    require("ptc_overlay_hidden_poll_ns(automatic_enabled_, 0)" in overlay and
+    require("ptc_overlay_hidden_poll_idle_ns(automatic_enabled_, eventActive(&reason_event_), wake_active, 0)" in overlay and
             "ms + PTC_OVERLAY_HIDDEN_CONFIG_MS" in overlay and
             "ptc_overlay_hidden_runtime_next_ms(ms, runtime_known_)" in overlay,
-            "hidden Overlay must use the shared cadence and cache the backend identity")
+            "hidden Overlay must use the shared IPC-aware cadence and cache the backend identity")
+    require("ptc_switch_ipc_client_probe(&bridge_.ipc)" in overlay and
+            "ptc_switch_ipc_update_reason_ready(&bridge_.ipc, &ready)" in overlay and
+            "ptc_switch_ipc_clear_reason_ready(&bridge_.ipc)" in overlay,
+            "hidden Overlay must probe pctc:u, prefer zero-SD-write IPC readiness lease, and clear on show/disable")
+    ipc_server = (ROOT / "sysmodule/ipc_server.c").read_text(encoding="utf-8")
+    nro_prefs = (ROOT / "companion/nro/nro_preferences.c").read_text(encoding="utf-8")
+    require("PTC_IPC_CMD_UPDATE_REASON_READY" in ipc_server and
+            "PTC_IPC_CMD_QUERY_REASON_READY" in ipc_server and
+            "ptc_ipc_server_read_reason_ready" in ipc_server and
+            "reason_notification.read_ready = ptc_ipc_server_read_reason_ready;" in sysmodule and
+            "ptc_switch_ipc_query_reason_ready(" in nro_prefs,
+            "sysmodule IPC server and NRO probe must wire zero-SD-write RAM readiness lease and query")
     # An unanswered detail offer is dropped once its observation ages, so the
     # presence lease must stay short and be renewed only from neutral input.
     hidden = overlay[overlay.index("bool onHiddenPoll(bool neutral) override"):overlay.index("void onFrameRendered() override")]

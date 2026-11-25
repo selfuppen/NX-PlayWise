@@ -10,6 +10,7 @@
    以 250ms 反复读取同一个文件。连续五次写入失败后停止自动协作，手动入口保留。 */
 #define PTC_OVERLAY_HIDDEN_FAILURE_LIMIT 5u
 #define PTC_OVERLAY_HIDDEN_DETAIL_MS 250u
+#define PTC_OVERLAY_HIDDEN_SUBSCRIBED_NS UINT64_C(1000000000)
 #define PTC_OVERLAY_HIDDEN_CONFIG_MS 5000u
 #define PTC_OVERLAY_HIDDEN_RUNTIME_MS 10000u
 #define PTC_OVERLAY_HIDDEN_RUNTIME_RETRY_MS 1000u
@@ -18,6 +19,18 @@ static inline uint64_t ptc_overlay_hidden_poll_ns(bool automatic_enabled, unsign
 {
     if (failures >= PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) return UINT64_MAX;
     return automatic_enabled ? UINT64_C(250000000) : UINT64_C(5000000000);
+}
+
+/* When subscribed to the backend IPC wake event and outside a wake scan window,
+   waitObjects wakes immediately on restriction signals, so 1s idle cadence is
+   sufficient to refresh the in-memory IPC readiness lease (4x fewer wakeups). */
+static inline uint64_t ptc_overlay_hidden_poll_idle_ns(bool automatic_enabled,
+    bool event_subscribed, bool wake_window_active, unsigned failures)
+{
+    if (failures >= PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) return UINT64_MAX;
+    if (!automatic_enabled) return UINT64_C(5000000000);
+    if (event_subscribed && !wake_window_active) return PTC_OVERLAY_HIDDEN_SUBSCRIBED_NS;
+    return UINT64_C(250000000);
 }
 
 static inline uint64_t ptc_overlay_hidden_runtime_next_ms(uint64_t now_ms, bool known)

@@ -31,6 +31,8 @@ typedef struct {
     PtcStorage *storage;
     void (*wake)(void *ctx);
     void *wake_ctx;
+    bool (*read_ready)(void *ctx, PtcReasonDetail *out);
+    void *read_ready_ctx;
     char root[128];
     char journal[256];
     char path[256];

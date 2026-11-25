@@ -20,6 +20,11 @@ int main(void)
     assert(ptc_overlay_hidden_poll_ns(true, PTC_OVERLAY_HIDDEN_FAILURE_LIMIT - 1) == UINT64_C(250000000));
     assert(ptc_overlay_hidden_poll_ns(true, PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) == UINT64_MAX);
     assert(ptc_overlay_hidden_poll_ns(false, PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) == UINT64_MAX);
+    assert(ptc_overlay_hidden_poll_idle_ns(false, true, false, 0) == UINT64_C(5000000000));
+    assert(ptc_overlay_hidden_poll_idle_ns(true, true, false, 0) == UINT64_C(1000000000));
+    assert(ptc_overlay_hidden_poll_idle_ns(true, true, true, 0) == UINT64_C(250000000));
+    assert(ptc_overlay_hidden_poll_idle_ns(true, false, false, 0) == UINT64_C(250000000));
+    assert(ptc_overlay_hidden_poll_idle_ns(true, true, false, PTC_OVERLAY_HIDDEN_FAILURE_LIMIT) == UINT64_MAX);
     assert(PTC_OVERLAY_HIDDEN_CONFIG_MS == 5000);
     assert(ptc_overlay_hidden_runtime_next_ms(1000, true) == 11000);
     assert(ptc_overlay_hidden_runtime_next_ms(1000, false) == 2000);

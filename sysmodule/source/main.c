@@ -328,6 +328,8 @@ int main(int argc, char **argv)
     if (ipc_available) {
         reason_notification.wake = ptc_ipc_server_signal_reason;
         reason_notification.wake_ctx = &ipc_server;
+        reason_notification.read_ready = ptc_ipc_server_read_reason_ready;
+        reason_notification.read_ready_ctx = &ipc_server;
     }
 #endif
     if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");

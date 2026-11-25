@@ -5,6 +5,9 @@
 #include <switch.h>
 
 #include "sysmodule_core.h"
+#ifndef PLAYWISE_DEVICE_LAB
+#include "../platform/reason_detail.h"
+#endif
 
 typedef struct {
     char request_id[80];
@@ -36,6 +39,9 @@ typedef struct {
 #ifndef PLAYWISE_DEVICE_LAB
     Mutex reason_mutex;
     PtcIpcReasonSubscriber reason_subscribers[8];
+    Handle reason_ready_session;
+    PtcReasonDetail reason_ready;
+    bool reason_ready_valid;
     bool reason_stopping;
 #endif
     Event wake_event;
@@ -56,6 +62,7 @@ bool ptc_ipc_server_wait(PtcIpcServer *server, uint32_t timeout_ms);
 void ptc_ipc_server_signal_completed(PtcIpcServer *server);
 #ifndef PLAYWISE_DEVICE_LAB
 void ptc_ipc_server_signal_reason(void *ctx);
+bool ptc_ipc_server_read_reason_ready(void *ctx, PtcReasonDetail *out);
 #endif
 void ptc_ipc_server_lock_storage(PtcIpcServer *server);
 void ptc_ipc_server_unlock_storage(PtcIpcServer *server);

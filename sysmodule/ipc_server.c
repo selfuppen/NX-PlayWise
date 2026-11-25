@@ -296,6 +296,93 @@ void ptc_ipc_server_signal_reason(void *ctx)
     }
     mutexUnlock(&server->reason_mutex);
 }
+
+static void handle_reason_ready_update(PtcIpcServer *server, Handle session, const void *data, size_t size)
+{
+    PtcIpcReasonReadyLease lease;
+    if (size < sizeof(lease)) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    memcpy(&lease, data, sizeof(lease));
+    if (lease.ui_instance == 0) {
+        mutexLock(&server->reason_mutex);
+        if (server->reason_ready_valid && server->reason_ready_session == session) {
+            server->reason_ready_valid = false;
+            server->reason_ready_session = INVALID_HANDLE;
+            memset(&server->reason_ready, 0, sizeof(server->reason_ready));
+        }
+        mutexUnlock(&server->reason_mutex);
+        make_response(0, NULL, 0);
+        return;
+    }
+    if (!memchr(lease.release, 0, sizeof(lease.release)) || !memchr(lease.boot, 0, sizeof(lease.boot)) ||
+        strcmp(lease.release, PLAYWISE_BUILD_RELEASE_ID) != 0 ||
+        strcmp(lease.boot, server->sysmodule->boot_id) != 0 ||
+        lease.expires_ms <= lease.issued_ms ||
+        lease.expires_ms - lease.issued_ms > PTC_REASON_DETAIL_PICKUP_MS) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    mutexLock(&server->reason_mutex);
+    if (!server->reason_stopping) {
+        PtcReasonDetail detail;
+        memset(&detail, 0, sizeof(detail));
+        snprintf(detail.release, sizeof(detail.release), "%s", lease.release);
+        snprintf(detail.boot, sizeof(detail.boot), "%s", lease.boot);
+        detail.ui_instance = lease.ui_instance;
+        detail.issued_ms = lease.issued_ms;
+        detail.expires_ms = lease.expires_ms;
+        server->reason_ready = detail;
+        server->reason_ready_session = session;
+        server->reason_ready_valid = true;
+    }
+    mutexUnlock(&server->reason_mutex);
+    make_response(0, NULL, 0);
+}
+
+static void handle_reason_ready_query(PtcIpcServer *server, const void *data, size_t size)
+{
+    PtcIpcReasonSubscription request;
+    PtcIpcReasonReadyLease out;
+    memset(&out, 0, sizeof(out));
+    if (size < sizeof(request)) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    memcpy(&request, data, sizeof(request));
+    if (!memchr(request.release, 0, sizeof(request.release)) || !memchr(request.boot, 0, sizeof(request.boot))) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    mutexLock(&server->reason_mutex);
+    if (!server->reason_stopping && server->reason_ready_valid &&
+        strcmp(server->reason_ready.release, request.release) == 0 &&
+        strcmp(server->reason_ready.boot, request.boot) == 0) {
+        snprintf(out.release, sizeof(out.release), "%s", server->reason_ready.release);
+        snprintf(out.boot, sizeof(out.boot), "%s", server->reason_ready.boot);
+        out.ui_instance = server->reason_ready.ui_instance;
+        out.issued_ms = server->reason_ready.issued_ms;
+        out.expires_ms = server->reason_ready.expires_ms;
+    }
+    mutexUnlock(&server->reason_mutex);
+    make_response(0, &out, sizeof(out));
+}
+
+bool ptc_ipc_server_read_reason_ready(void *ctx, PtcReasonDetail *out)
+{
+    PtcIpcServer *server = ctx;
+    bool ok = false;
+    if (!server || !out) return false;
+    memset(out, 0, sizeof(*out));
+    mutexLock(&server->reason_mutex);
+    if (!server->reason_stopping && server->reason_ready_valid) {
+        *out = server->reason_ready;
+        ok = true;
+    }
+    mutexUnlock(&server->reason_mutex);
+    return ok;
+}
 #endif
 
 static void close_session(PtcIpcServer *server, unsigned index)
@@ -309,6 +396,11 @@ static void close_session(PtcIpcServer *server, unsigned index)
         eventClose(&subscriber->event);
         subscriber->session = INVALID_HANDLE;
         break;
+    }
+    if (server->reason_ready_valid && server->reason_ready_session == session) {
+        server->reason_ready_valid = false;
+        server->reason_ready_session = INVALID_HANDLE;
+        memset(&server->reason_ready, 0, sizeof(server->reason_ready));
     }
     mutexUnlock(&server->reason_mutex);
 #endif
@@ -331,6 +423,12 @@ static bool dispatch(PtcIpcServer *server, unsigned index)
 #ifndef PLAYWISE_DEVICE_LAB
     case PTC_IPC_CMD_SUBSCRIBE_REASON_WAKE:
         handle_reason_subscribe(server, server->sessions[index], data, data_size);
+        break;
+    case PTC_IPC_CMD_UPDATE_REASON_READY:
+        handle_reason_ready_update(server, server->sessions[index], data, data_size);
+        break;
+    case PTC_IPC_CMD_QUERY_REASON_READY:
+        handle_reason_ready_query(server, data, data_size);
         break;
 #else
     (void)index;
@@ -419,6 +517,9 @@ void ptc_ipc_server_stop(PtcIpcServer *server)
         if (subscriber->session != INVALID_HANDLE) eventClose(&subscriber->event);
         subscriber->session = INVALID_HANDLE;
     }
+    server->reason_ready_valid = false;
+    server->reason_ready_session = INVALID_HANDLE;
+    memset(&server->reason_ready, 0, sizeof(server->reason_ready));
     mutexUnlock(&server->reason_mutex);
 #endif
     for (i = 0; i < server->session_count; ++i) svcCloseHandle(server->sessions[i]);

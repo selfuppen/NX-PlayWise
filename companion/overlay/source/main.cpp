@@ -1516,8 +1516,10 @@ public:
     u64 hiddenPollInterval() override
     {
         if (brief_notice_.active) return UINT64_C(50000000);
+        uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
+        bool wake_active = ptc_overlay_reason_wake_active(&reason_wake_, ms);
         /* Failed detail writes stop that writer. Brief reception remains read-only. */
-        return ptc_overlay_hidden_poll_ns(automatic_enabled_, 0);
+        return ptc_overlay_hidden_poll_idle_ns(automatic_enabled_, eventActive(&reason_event_), wake_active, 0);
     }
 
     bool hasHiddenFrame() override { return brief_notice_.active; }
@@ -1588,6 +1590,7 @@ public:
         }
         if (!automatic_enabled_) {
             eventClose(&reason_event_);
+            ptc_switch_ipc_clear_reason_ready(&bridge_.ipc);
             return false;
         }
         /* The backend identity changes only on boot or handoff: cache it instead
@@ -1612,9 +1615,11 @@ public:
         if (!runtime_known_ || !bridge_.ipc.initialized || reason_session_ != bridge_.ipc.service.session)
             eventClose(&reason_event_);
         if (!runtime_known_) return false;
-        if (bridge_.ipc.initialized && !eventActive(&reason_event_) && ms >= next_reason_subscribe_ms_) {
+        if (!eventActive(&reason_event_) && ms >= next_reason_subscribe_ms_) {
             next_reason_subscribe_ms_ = ms + PTC_OVERLAY_HIDDEN_RUNTIME_MS;
-            if (ptc_switch_ipc_subscribe_reason(&bridge_.ipc, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, &reason_event_)) {
+            if (!bridge_.ipc.initialized) (void)ptc_switch_ipc_client_probe(&bridge_.ipc);
+            if (bridge_.ipc.initialized &&
+                ptc_switch_ipc_subscribe_reason(&bridge_.ipc, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, &reason_event_)) {
                 reason_session_ = bridge_.ipc.service.session;
                 ptc_overlay_reason_wake(&reason_wake_, armTicksToNs(armGetSystemTick()) / 1000000);
             }
@@ -1628,12 +1633,16 @@ public:
             ready.ui_instance = ui_instance_ms_;
             /* The lease stays short on purpose: an offer nobody answers is dropped
                once its observation ages, so the backend must only see a lease from
-               a UI that was neutral within the last second and a half. */
+               a UI that was neutral within the last second and a half. Prefer the
+               in-memory pctc:u IPC lease (zero SD writes); fall back to SD only
+               when IPC is unavailable. */
             ready.issued_ms = ms; ready.expires_ms = ms + 1500;
             next_ready_ms_ = ms + 1000;
             ptc_overlay_hidden_timing_ready_begin(&hidden_timing_, ready.issued_ms, ready.expires_ms,
                 armTicksToNs(armGetSystemTick()) / 1000000);
-            bool written = ptc_reason_detail_write(s, APP_ROOT, "ready", &ready);
+            bool written = (bridge_.ipc.initialized &&
+                ptc_switch_ipc_update_reason_ready(&bridge_.ipc, &ready)) ||
+                ptc_reason_detail_write(s, APP_ROOT, "ready", &ready);
             ptc_overlay_hidden_timing_ready_end(&hidden_timing_, armTicksToNs(armGetSystemTick()) / 1000000, written);
             if (!written) { ++automatic_failures_; return false; }
         }
@@ -1719,6 +1728,7 @@ public:
 
     void onShow() override
     {
+        ptc_switch_ipc_clear_reason_ready(&bridge_.ipc);
         ptc_overlay_brief_poll(&brief_notice_, nullptr, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_,
             armTicksToNs(armGetSystemTick()) / 1000000, false, false, false);
         next_config_ms_ = 0;

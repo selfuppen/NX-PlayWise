@@ -18,12 +18,22 @@ typedef enum {
     PTC_IPC_CMD_GET_RESULT = 2,
     PTC_IPC_CMD_NOTIFY_STORAGE_CHANGED = 3,
     PTC_IPC_CMD_SUBSCRIBE_REASON_WAKE = 4,
+    PTC_IPC_CMD_UPDATE_REASON_READY = 5,
+    PTC_IPC_CMD_QUERY_REASON_READY = 6,
 } PtcIpcCommand;
 
 typedef struct {
     char release[128];
     char boot[17];
 } PtcIpcReasonSubscription;
+
+typedef struct {
+    char release[128];
+    char boot[17];
+    uint64_t ui_instance;
+    uint64_t issued_ms;
+    uint64_t expires_ms;
+} PtcIpcReasonReadyLease;
 
 typedef enum {
     PTC_IPC_SUBMIT_ACCEPTED = 0,

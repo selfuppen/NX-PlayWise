@@ -299,7 +299,8 @@ static bool try_detail(PtcReasonNotification *n, const PtcReasonObservation *s, 
     /* A continuing countdown gets only a brief notice, never another focus grab. */
     if (!d->repeat && d->failures < 5) {
         d->ready_read_attempted = true;
-        d->ready_read_ok = ptc_reason_detail_read(n->storage, n->root, "ready", &detail);
+        d->ready_read_ok = (n->read_ready && n->read_ready(n->read_ready_ctx, &detail)) ||
+            ptc_reason_detail_read(n->storage, n->root, "ready", &detail);
         if (d->ready_read_ok) {
             /* Retain the actual read before replacing its lease with an offer. */
             d->ready_release_match = !strcmp(detail.release, n->event.release);
