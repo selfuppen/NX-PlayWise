@@ -3455,8 +3455,9 @@ namespace tsl {
 
             std::atomic<bool> overlayOpen{false};
             std::atomic<bool> hideRequested{false};
-            std::atomic<bool> automaticOpenBlocked{false};
+            std::atomic<bool> manualComboRequested{false};
             std::atomic<uint64_t> homeCooldownUntilNs{0};
+            std::atomic<uint64_t> powerCooldownUntilNs{0};
 
             std::mutex dataMutex;
             u64 keysDown = 0;
@@ -3491,6 +3492,11 @@ namespace tsl {
                     { "key_combo", tsl::hlp::keysToComboString(keys) }
                 }}
             });
+        }
+
+        static void extendAtomicDeadline(std::atomic<uint64_t> &target, uint64_t candidate) {
+            uint64_t current = target.load();
+            while (candidate > current && !target.compare_exchange_weak(current, candidate)) {}
         }
 
         /**
@@ -3563,8 +3569,9 @@ namespace tsl {
                         }
                         else
                         {
-                            shData->automaticOpenBlocked = false;
                             shData->homeCooldownUntilNs = 0;
+                            shData->powerCooldownUntilNs = 0;
+                            shData->manualComboRequested = true;
                             eventFire(&shData->comboEvent);
                         }
                     }
@@ -3577,13 +3584,15 @@ namespace tsl {
                 Result rc = waitObjects(&idx, objects, WaiterObject_Count,
                     detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0));
                 if (R_SUCCEEDED(rc)) {
+                    uint64_t nowNs = armTicksToNs(armGetSystemTick());
                     if (idx == WaiterObject_PowerButton) {
-                        shData->automaticOpenBlocked = true;
+                        extendAtomicDeadline(shData->powerCooldownUntilNs,
+                            detail::saturatingAddNs(nowNs, detail::POWER_COOLDOWN_NS));
                     } else if (idx == WaiterObject_HomeButton) {
-                        uint64_t nowNs = armTicksToNs(armGetSystemTick());
-                        shData->homeCooldownUntilNs = nowNs > UINT64_MAX - detail::HOME_COOLDOWN_NS
-                            ? UINT64_MAX : nowNs + detail::HOME_COOLDOWN_NS;
+                        extendAtomicDeadline(shData->homeCooldownUntilNs,
+                            detail::saturatingAddNs(nowNs, detail::HOME_COOLDOWN_NS));
                     }
+                    shData->manualComboRequested = false;
                     eventFire(&shData->comboEvent);
                     if (shData->overlayOpen) {
                         shData->hideRequested = true;
@@ -3630,7 +3639,9 @@ namespace tsl {
     static void setNextOverlay(const std::string& ovlPath, std::string origArgs) {
 
         std::string args = std::filesystem::path(ovlPath).filename();
-        args += " " + origArgs + " --skipCombo";
+        if (!origArgs.empty())
+            args += " " + origArgs;
+        args += " --skipCombo";
 
         envSetNextLoad(ovlPath.c_str(), args.c_str());
     }
@@ -3684,6 +3695,7 @@ namespace tsl {
         }
         overlay->onPreloadArgs(preloadHidden);
         if (skipComboRequested && !preloadHidden) {
+            shData.manualComboRequested = true;
             eventFire(&shData.comboEvent);
             overlay->disableNextAnimation();
         }
@@ -3691,12 +3703,12 @@ namespace tsl {
 
         while (shData.running) {
 
-            const uint64_t waitNowNs = armTicksToNs(armGetSystemTick());
-            const bool powerBlocked = shData.automaticOpenBlocked.load();
-            const uint64_t homeUntilNs = shData.homeCooldownUntilNs.load();
-            const bool autoBlocked = powerBlocked || detail::homeCooldownActive(waitNowNs, homeUntilNs);
-            const u64 timeout = detail::hiddenWaitNs(powerBlocked && !overlay->hasHiddenFrame(),
-                waitNowNs, homeUntilNs, overlay->hiddenPollInterval());
+            const uint64_t waitStartNs = armTicksToNs(armGetSystemTick());
+            const uint64_t cooldownUntilNs = detail::maxCooldownUntilNs(
+                shData.homeCooldownUntilNs.load(), shData.powerCooldownUntilNs.load());
+            const bool autoBlocked = detail::cooldownActive(waitStartNs, cooldownUntilNs);
+            const u64 timeout = detail::hiddenWaitNs(overlay->hasHiddenFrame(),
+                waitStartNs, cooldownUntilNs, overlay->hiddenPollInterval());
             Event* notification = autoBlocked ? nullptr : overlay->hiddenWakeEvent();
             int index = 0;
             Result wake;
@@ -3711,7 +3723,14 @@ namespace tsl {
             if (notificationWake || notificationError) overlay->onHiddenWake(!notificationError);
             const bool comboPending = (notificationWake || notificationError) &&
                 R_SUCCEEDED(eventWait(&shData.comboEvent, 0));
-            if (wake == KERNELRESULT(TimedOut) || ((notificationWake || notificationError) && !comboPending)) {
+            const uint64_t wakeNowNs = armTicksToNs(armGetSystemTick());
+            const bool manualWake = ((R_SUCCEEDED(wake) && !notificationWake) || comboPending) &&
+                shData.manualComboRequested.exchange(false);
+            if (!manualWake && detail::sleepJumpDetected(waitStartNs, wakeNowNs, timeout)) {
+                impl::extendAtomicDeadline(shData.powerCooldownUntilNs,
+                    detail::saturatingAddNs(wakeNowNs, detail::POWER_COOLDOWN_NS));
+            }
+            if (!manualWake && (wake == KERNELRESULT(TimedOut) || ((notificationWake || notificationError) && !comboPending))) {
                 bool neutral;
                 u64 hiddenKeysDown;
                 {
@@ -3723,18 +3742,24 @@ namespace tsl {
                     shData.keysDownPending = 0;
                 }
                 const uint64_t pollNowNs = armTicksToNs(armGetSystemTick());
-                bool blocked = shData.automaticOpenBlocked.load() ||
-                    detail::homeCooldownActive(pollNowNs, shData.homeCooldownUntilNs.load());
+                const uint64_t pollCooldownUntilNs = detail::maxCooldownUntilNs(
+                    shData.homeCooldownUntilNs.load(), shData.powerCooldownUntilNs.load());
+                bool blocked = detail::cooldownActive(pollNowNs, pollCooldownUntilNs);
                 bool open = !blocked && overlay->onHiddenPoll(neutral);
                 overlay->loopHiddenFrame(blocked, hiddenKeysDown);
                 if (!open) continue;
-            } else if (R_FAILED(wake) && !notificationError) {
+            } else if (!manualWake && R_FAILED(wake) && !notificationError) {
                 ASSERT_FATAL(wake);
+            } else if (!manualWake) {
+                eventClear(&shData.comboEvent);
+                overlay->loopHiddenFrame(true, 0);
+                continue;
             }
             {
-                const uint64_t wakeNowNs = armTicksToNs(armGetSystemTick());
-                if (shData.automaticOpenBlocked.load() ||
-                    detail::homeCooldownActive(wakeNowNs, shData.homeCooldownUntilNs.load())) {
+                const uint64_t openNowNs = armTicksToNs(armGetSystemTick());
+                const uint64_t openCooldownUntilNs = detail::maxCooldownUntilNs(
+                    shData.homeCooldownUntilNs.load(), shData.powerCooldownUntilNs.load());
+                if (detail::cooldownActive(openNowNs, openCooldownUntilNs)) {
                     eventClear(&shData.comboEvent);
                     overlay->loopHiddenFrame(true, 0);
                     continue;

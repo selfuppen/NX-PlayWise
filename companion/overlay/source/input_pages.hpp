@@ -37,6 +37,14 @@
         return click;
     }
 
+    void exit_to_overlay_menu()
+    {
+        // Explicitly target ovlmenu.ovl with --skipCombo so manual B exit
+        // opens Ultrahand/Tesla immediately even after --pw-preload startup.
+        tsl::setNextOverlay("sdmc:/switch/.overlays/ovlmenu.ovl", "");
+        tsl::Overlay::get()->close();
+    }
+
     void focus_parent_action()
     {
         if (parent_action_ < 0 || parent_action_ >= PTC_OVERLAY_PARENT_ACTION_COUNT) return;
@@ -373,7 +381,7 @@
             }
             if (keysDown & HidNpadButton_B) {
                 if (s_automatic_detail) tsl::Overlay::get()->hide();
-                else tsl::Overlay::get()->close();
+                else exit_to_overlay_menu();
                 return true;
             }
             if (keysDown & HidNpadButton_Minus) { open_status_details(); return true; }
@@ -430,7 +438,7 @@
             }
             if (keysDown & HidNpadButton_B) {
                 if (s_automatic_detail) tsl::Overlay::get()->hide();
-                else tsl::Overlay::get()->close();
+                else exit_to_overlay_menu();
                 return true;
             }
             if (keysDown & HidNpadButton_Minus) { open_status_details(); return true; }

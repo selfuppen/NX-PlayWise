@@ -820,7 +820,7 @@ The shortcut hint in a brief notice comes from PlayWise's saved overlay config (
 | `v2.5.3` + `nx-ovlloader 2.0.2` | **Tested & recommended** | Currently the only hardware-verified and source-audited combination. Newer releases should remain compatible as long as the INI and `.notify` contract is unchanged, though they have not been separately hardware-verified. |
 
 > [!TIP]
-> When enabling **Show restriction reasons automatically**, PlayWise attempts to switch an existing Ultrahand `[ultrahand] notifications` key from `false` to `true`. Reopen Ultrahand once afterward so it reloads the setting—no console reboot is required.
+> When enabling **Show restriction reasons automatically**, PlayWise inspects your Ultrahand version and `nx-ovlloader` setup, and when compatible (`Ultrahand v2.3.0+`) attempts to switch an existing `[ultrahand] notifications` key from `false` to `true` (also rechecked on subsequent boots, along with `playwise.flag` per-app mute detection). Reopen Ultrahand once afterward so it reloads the setting—no console reboot is required.
 
 #### Hint previews and setup
 
@@ -866,7 +866,10 @@ Use **Switch example** (`L` / `R` or tap) to preview both reminder styles and th
 | --- | --- |
 | ![Brief-notice example in the upper-left of the native restriction screen](../images/usage-en/settings/settings-notifications-short-light.png) | ![Upper-left brief-notice example in dark settings](../images/usage-en/settings/settings-notifications-short-dark.png) |
 
-**Make automatic details ready**: while unrestricted, open PlayWise once and confirm status refreshes, then use your overlay loader's hide shortcut to keep it loaded in the background. (Pressing `B` at a manually opened root exits to the manager, and pressing `HOME` / `POWER` pauses automatic details until you open PlayWise again.)
+**Make automatic details ready (with optional boot preload)**:
+- **Manual method**: while unrestricted, open PlayWise once and confirm status refreshes, then use your overlay loader's hide shortcut to keep it loaded in the background.
+- **Optional boot preload (Ultrahand `v2.3.0+` only)**: once **Show restriction reasons automatically** is enabled, press `X` (or tap the pill on the Detailed view card) in **Play restriction reminders** to enable boot preload. PlayWise maintains a marked managed block under `[on-boot]` in `sdmc:/switch/.packages/boot_package.ini` so `playwise.ovl` starts silently hidden on future boots and pops up automatically on restrictions without manual priming; turning it off removes only PlayWise's managed block while preserving all other entries.
+- **Single-slot tradeoff & daily navigation**: because `nx-ovlloader` hosts one overlay at a time, pressing your overlay combo while PlayWise is preloaded opens PlayWise directly; pressing `B` at a manually opened root exits directly into the Ultrahand/Tesla menu so you can launch other overlays, while pressing your overlay combo hides PlayWise and keeps it resident. Pressing `B` on an automatically opened restriction detail hides and keeps it resident. Pressing `HOME` (3 s) or sleeping/waking with `POWER` (8 s post-wake) briefly pauses automatic popups and resumes automatically once the cooldown elapses—no manual reopen needed.
 
 | Eye rest after automatic opening | Bedtime end on the child home page |
 | --- | --- |

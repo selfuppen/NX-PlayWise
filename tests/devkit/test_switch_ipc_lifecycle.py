@@ -107,10 +107,18 @@ def main() -> None:
     loop = libtesla[libtesla.index("static inline int loop(int argc, char** argv)"):]
     require("detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0)" in poller,
             "idle input throttling must preserve visible and held-button sampling")
-    require("detail::hiddenWaitNs(powerBlocked && !overlay->hasHiddenFrame()," in loop and
+    require("detail::hiddenWaitNs(overlay->hasHiddenFrame()," in loop and
+            "detail::sleepJumpDetected(waitStartNs, wakeNowNs, timeout)" in loop and
+            "shData.manualComboRequested.exchange(false)" in loop and
+            "shData->powerCooldownUntilNs" in poller and
             "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop and
             "--pw-preload" in loop,
-            "POWER hard-block and HOME cooldown must clear hidden frames cleanly and preserve --pw-preload")
+            "HOME/POWER bounded cooldowns, sleep-jump guard, manual combo gating and --pw-preload must stay intact")
+    input_pages = (ROOT / "companion/overlay/source/input_pages.hpp").read_text(encoding="utf-8")
+    require('tsl::setNextOverlay("sdmc:/switch/.overlays/ovlmenu.ovl", "");' in input_pages and
+            "if (s_automatic_detail) tsl::Overlay::get()->hide();" in input_pages and
+            "else exit_to_overlay_menu();" in input_pages,
+            "manual B exit on child root must return visibly to ovlmenu.ovl while auto-opened B stays hidden")
     require("autoBlocked ? nullptr : overlay->hiddenWakeEvent()" in loop and
             "eventWait(&shData.comboEvent, 0)" in loop and "overlay->onHiddenWake(!notificationError)" in loop,
             "IPC wait must preserve HOME/POWER, manual combo priority and timeout fallback")

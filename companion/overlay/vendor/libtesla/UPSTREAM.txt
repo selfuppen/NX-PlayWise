@@ -52,9 +52,10 @@ Local destination blend patch (2026-11-19): reuse the checked pixel offset and
 write opaque colors directly. Partial alpha retains pinned float rounding and
 alpha accumulation; playwise_blend.hpp is covered by exhaustive Host channel
 tests. No upstream files synced; pinned upstream commit remains unchanged.
-Local silent boot preload & HOME cooldown patch (2026-11-25): recognize
+Local silent boot preload & HOME/POWER cooldown patch (2026-11-25): recognize
 --pw-preload in argv to stay hidden even when an external launcher appends
---skipCombo, notify overlay via virtual onPreloadArgs(bool), and distinguish
-POWER (hard automaticOpenBlocked until manual combo) from HOME (bounded 3s
-cooldown in playwise_poll_policy.hpp after immediate hide/clear). No upstream
-files synced; pinned upstream commit remains unchanged.
+--skipCombo, notify overlay via virtual onPreloadArgs(bool), avoid double-space
+in setNextOverlay when origArgs is empty, and replace permanent POWER hard-block
+with bounded post-wake cooldown (HOME 3s, POWER 8s + sleep-jump guard + explicit
+manualComboRequested) in playwise_poll_policy.hpp after immediate hide/clear.
+No upstream files synced; pinned upstream commit remains unchanged.
