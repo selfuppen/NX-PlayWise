@@ -26,6 +26,8 @@
 #include "../handoff_ready.h"
 #include "../power_ledger.h"
 #include "../../companion/input_owner.h"
+#include "../../companion/notification_preferences.h"
+#include "../../platform/ultrahand_config.h"
 #ifdef PLAYWISE_PCTL_CAPTURE
 #include "../pctl_usage_tap.h"
 static void capture_tick(PtcSysmodule *sysmodule, const char *stage, bool force)
@@ -284,6 +286,15 @@ int main(int argc, char **argv)
 #ifndef PLAYWISE_DEVICE_LAB
     ptc_reason_notification_init(&reason_notification, storage, PTC_APP_ROOT,
         PLAYWISE_BUILD_RELEASE_ID, boot_id);
+    {
+        bool boot_notify_enabled = false;
+        bool cfg_ok = storage->vtable->read_text(storage, PTC_APP_ROOT "/config.json",
+            reason_config, sizeof(reason_config));
+        (void)ptc_reason_notification_preferences(cfg_ok ? reason_config : NULL,
+            &boot_notify_enabled, NULL);
+        ptc_overlay_env_boot_reconcile(storage, PTC_APP_ROOT,
+            boot_notify_enabled, NULL);
+    }
     ptc_input_owner_reader_init(&reason_owner, storage, PTC_APP_ROOT, PLAYWISE_BUILD_RELEASE_ID);
     (void)ptc_usage_evidence_init(&usage_evidence, storage, PTC_APP_ROOT, boot_id,
         PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, armTicksToNs(armGetSystemTick()),

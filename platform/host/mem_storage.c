@@ -66,6 +66,8 @@ static int allocate_file(PtcMemStorage *mem, const char *path)
             mem->files[i].present = true;
             snprintf(mem->files[i].path, sizeof(mem->files[i].path), "%s", path);
             mem->files[i].text[0] = '\0';
+            mem->files[i].byte_len = 0;
+            mem->files[i].is_binary = false;
             mem->files[i].modified_unix_seconds = mem->now_unix_seconds;
             mem->files[i].modified_time_valid = true;
             return i;
@@ -82,7 +84,7 @@ static bool mem_read_text(PtcStorage *storage, const char *path, char *out, size
         return false;
     }
     idx = find_file(mem, path);
-    if (idx < 0) {
+    if (idx < 0 || mem->files[idx].is_binary) {
         return false;
     }
     if (!out || out_size == 0 || strlen(file_text(mem, idx)) >= out_size) return false;
@@ -120,6 +122,8 @@ static bool mem_write_text_atomic(PtcStorage *storage, const char *path, const c
         memcpy(mem->files[idx].text, text, length + 1u);
         release_large_slot(mem, idx);
     }
+    mem->files[idx].byte_len = length;
+    mem->files[idx].is_binary = false;
     mem->files[idx].modified_unix_seconds = mem->now_unix_seconds++;
     mem->files[idx].modified_time_valid = true;
     return true;
@@ -341,6 +345,35 @@ static bool mem_read_lines(PtcStorage *storage, const char *path, char *line, si
     return true;
 }
 
+static bool mem_read_range(PtcStorage *storage, const char *path, uint64_t offset,
+                           void *out, size_t size, size_t *bytes_read)
+{
+    PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
+    int idx;
+    const char *src;
+    size_t total;
+    size_t available;
+    size_t copy_len;
+    if (bytes_read) *bytes_read = 0;
+    if (!path || (!out && size > 0) || mem->fail_reads ||
+        (mem->fail_read_path_contains && strstr(path, mem->fail_read_path_contains))) {
+        return false;
+    }
+    idx = find_file(mem, path);
+    if (idx < 0) return false;
+    src = file_text(mem, idx);
+    total = mem->files[idx].is_binary ? mem->files[idx].byte_len : strlen(src);
+    if (offset >= total) {
+        if (bytes_read) *bytes_read = 0;
+        return true;
+    }
+    available = total - (size_t)offset;
+    copy_len = size < available ? size : available;
+    if (copy_len > 0) memcpy(out, src + (size_t)offset, copy_len);
+    if (bytes_read) *bytes_read = copy_len;
+    return true;
+}
+
 static const PtcStorageVTable MEM_STORAGE_VTABLE = {
     mem_read_text,
     mem_write_text_atomic,
@@ -355,6 +388,7 @@ static const PtcStorageVTable MEM_STORAGE_VTABLE = {
     mem_read_lines,
     NULL,
     NULL,
+    mem_read_range,
 };
 
 void ptc_mem_storage_init(PtcMemStorage *mem)
@@ -372,4 +406,42 @@ void ptc_mem_storage_init(PtcMemStorage *mem)
 PtcStorage *ptc_mem_storage_as_storage(PtcMemStorage *mem)
 {
     return &mem->storage;
+}
+
+bool ptc_mem_storage_write_bytes(PtcMemStorage *mem, const char *path, const void *data, size_t size)
+{
+    int idx;
+    char *destination;
+    if (!mem || !path || (!data && size > 0)) return false;
+    if (mem->fail_writes ||
+        (mem->fail_write_path_contains && strstr(path, mem->fail_write_path_contains))) {
+        return false;
+    }
+    idx = find_file(mem, path);
+    if (idx < 0) idx = allocate_file(mem, path);
+    if (idx < 0) return false;
+    if (size <= PTC_MEM_STORAGE_TEXT_SIZE) {
+        release_large_slot(mem, idx);
+        destination = mem->files[idx].text;
+    } else if (size <= PTC_MEM_STORAGE_LARGE_TEXT_SIZE) {
+        int slot = large_slot_for_file(mem, idx);
+        if (slot < 0) {
+            for (slot = 0; slot < PTC_MEM_STORAGE_LARGE_FILE_COUNT; ++slot) {
+                if (mem->large_file_indices[slot] < 0) {
+                    mem->large_file_indices[slot] = idx;
+                    break;
+                }
+            }
+            if (slot >= PTC_MEM_STORAGE_LARGE_FILE_COUNT) return false;
+        }
+        destination = mem->large_text[slot];
+    } else {
+        return false;
+    }
+    if (size > 0) memcpy(destination, data, size);
+    mem->files[idx].byte_len = size;
+    mem->files[idx].is_binary = true;
+    mem->files[idx].modified_unix_seconds = mem->now_unix_seconds++;
+    mem->files[idx].modified_time_valid = true;
+    return true;
 }

@@ -12,6 +12,8 @@
 typedef struct {
     char path[PTC_MEM_STORAGE_PATH_SIZE];
     char text[PTC_MEM_STORAGE_TEXT_SIZE];
+    size_t byte_len;
+    bool is_binary;
     int64_t modified_unix_seconds;
     bool modified_time_valid;
     bool present;
@@ -37,5 +39,6 @@ typedef struct {
 
 void ptc_mem_storage_init(PtcMemStorage *mem);
 PtcStorage *ptc_mem_storage_as_storage(PtcMemStorage *mem);
+bool ptc_mem_storage_write_bytes(PtcMemStorage *mem, const char *path, const void *data, size_t size);
 
 #endif

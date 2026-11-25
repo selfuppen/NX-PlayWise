@@ -2219,13 +2219,17 @@ static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, con
 
     /* Two compact live readiness chips to the left of the toggle */
     const char *brief_state = ptc_ui_text(
+        m->reason_app_muted ? PTC_UI_T_NOTICE_STATE_MUTED :
         m->reason_external_notifications == 1 ? PTC_UI_T_NOTICE_STATE_READY :
         m->reason_external_notifications == 0 ? PTC_UI_T_NOTICE_STATE_OFF : PTC_UI_T_NOTICE_STATE_UNKNOWN);
-    uint32_t brief_fg = (m->reason_external_notifications == 1) ? UI_SUCCESS :
+    uint32_t brief_fg = m->reason_app_muted ? UI_WARNING_TEXT :
+                        (m->reason_external_notifications == 1) ? UI_SUCCESS :
                         (m->reason_external_notifications == 0 ? UI_WARNING_TEXT : UI_MUTED);
-    uint32_t brief_bg = (m->reason_external_notifications == 1) ? UI_SUCCESS_SOFT :
+    uint32_t brief_bg = m->reason_app_muted ? UI_WARNING_SOFT :
+                        (m->reason_external_notifications == 1) ? UI_SUCCESS_SOFT :
                         (m->reason_external_notifications == 0 ? UI_WARNING_SOFT : UI_PAGE);
-    uint32_t brief_bd = (m->reason_external_notifications == 1) ? UI_SUCCESS_BORDER :
+    uint32_t brief_bd = m->reason_app_muted ? UI_WARNING_BORDER :
+                        (m->reason_external_notifications == 1) ? UI_SUCCESS_BORDER :
                         (m->reason_external_notifications == 0 ? UI_WARNING_BORDER : UI_BORDER);
 
     const char *detail_state = ptc_ui_text(
@@ -2248,12 +2252,18 @@ static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, con
                                    ptc_ui_text(PTC_UI_T_NOTICE_CHANNEL_BRIEF), brief_state,
                                    brief_fg, brief_bg, brief_bd);
 
-    /* Left title + shortcut hint inside top bar */
+    /* Left title + shortcut hint (+ detected overlay manager) inside top bar */
     int left_max_w = detail_chip.x - (row.x + 22) - 14;
     fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_REASON_NOTIFICATIONS), 19, left_max_w);
     draw_text_bold(pixels, stride, row.x + 22, row.y + 34, fitted, 19, UI_INK);
-    snprintf(buf, sizeof(buf), "%s%s", m->reason_overlay_shortcut,
-             ptc_ui_text(m->reason_overlay_shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT : PTC_UI_T_NOTIFY_OPEN));
+    if (m->reason_manager_label[0]) {
+        snprintf(buf, sizeof(buf), "%s%s | %s", m->reason_overlay_shortcut,
+                 ptc_ui_text(m->reason_overlay_shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT : PTC_UI_T_NOTIFY_OPEN),
+                 m->reason_manager_label);
+    } else {
+        snprintf(buf, sizeof(buf), "%s%s", m->reason_overlay_shortcut,
+                 ptc_ui_text(m->reason_overlay_shortcut[0] ? PTC_UI_T_NOTIFY_SHORTCUT : PTC_UI_T_NOTIFY_OPEN));
+    }
     fit_text(fitted, sizeof(fitted), buf, 13, left_max_w);
     draw_text(pixels, stride, row.x + 22, row.y + 58, fitted, 13, UI_ACCENT);
 

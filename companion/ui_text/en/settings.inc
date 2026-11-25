@@ -413,3 +413,5 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_SETTINGS_PREVIEW_LANG_TITLE, "Languages & System Sync
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETTINGS_LANG_DESC1, "Shared by app and overlay; applies immediately.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETTINGS_LANG_DESC2, "Also press Up or ZL/ZR on Child or Today screens.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETTINGS_LANG_CTA, "Press A to Open Language Settings")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTICE_STATE_MUTED, "Muted")
+PTC_UI_TEXT_VALUE(PTC_UI_T_NOTICE_PROBED_MUTED, "Ultrahand playwise.flag mute marker detected; brief notices are currently blocked.")

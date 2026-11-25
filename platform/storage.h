@@ -69,6 +69,9 @@ typedef struct {
     bool (*write_text_transient)(PtcStorage *storage, const char *path, const char *text);
     /* Optional bounded read that distinguishes confirmed absence from I/O errors. */
     PtcStorageReadResult (*read_text_status)(PtcStorage *storage, const char *path, char *out, size_t out_size);
+    /* Optional bounded binary read at offset (e.g. NRO/NACP header inspection). */
+    bool (*read_range)(PtcStorage *storage, const char *path, uint64_t offset,
+                       void *out, size_t size, size_t *bytes_read);
 } PtcStorageVTable;
 
 struct PtcStorage {

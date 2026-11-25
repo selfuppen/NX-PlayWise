@@ -601,11 +601,13 @@ typedef struct {
     bool show_parent_shortcut_hint;
     bool reason_notifications_enabled;
     int reason_external_notifications;
+    bool reason_app_muted;
     bool reason_detail_ready;
     bool reason_overlay_installed;
     int notification_preview;
     char reason_test_message[384];
     char reason_overlay_shortcut[96];
+    char reason_manager_label[48];
     char custom_shortcut_label[96];
     char shortcut_draft_label[96];
     PtcUiOverlay overlay;

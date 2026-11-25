@@ -5,6 +5,7 @@
 #include "../../platform/host/mem_storage.h"
 #include "../../companion/nro/eden_observe.h"
 #include "../../platform/reason_detail.h"
+#include "../../platform/ultrahand_config.h"
 
 static int failures;
 static int sound_count;
@@ -435,6 +436,33 @@ static void test_notification_preferences(void)
           !ui.model.reason_notifications_enabled &&
           !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_TEST_SENT)),
           "successful standalone test aligns the brief example without enabling automatic reminders");
+
+    /* Stage A mute detection and verified Ultrahand manager label */
+    mem.storage.vtable->write_text_atomic(&mem.storage, "sdmc:/config/ultrahand/flags/notifications/playwise.flag", "");
+    ui.notification_test.pending = false;
+    test_notification(&ui);
+    check(ui.model.reason_app_muted && !ui.notification_test.pending &&
+          !strcmp(ui.model.reason_test_message, ptc_ui_text(PTC_UI_T_NOTICE_PROBED_MUTED)),
+          "playwise.flag mute blocks standalone test and reports muted state");
+    mem.storage.vtable->remove_path(&mem.storage, "sdmc:/config/ultrahand/flags/notifications/playwise.flag");
+
+    {
+        uint8_t *ovl = calloc(1, 0x40B8);
+        check(ovl != NULL, "setup fake ovlmenu allocation");
+        memcpy(ovl + 0x10, "NRO0", 4);
+        ovl[0x18] = 0x80;
+        memcpy(ovl + 0x80, "ASET", 4);
+        ovl[0x80 + 0x18] = 0x38;
+        ovl[0x80 + 0x21] = 0x40;
+        snprintf((char *)(ovl + 0xB8), 0x200, "Ultrahand");
+        snprintf((char *)(ovl + 0x2B8), 0x100, "ppkantorski");
+        snprintf((char *)(ovl + 0xB8 + 0x3060), 0x10, "2.5.3");
+        ptc_mem_storage_write_bytes(&mem, "sdmc:/switch/.overlays/ovlmenu.ovl", ovl, 0x40B8);
+        free(ovl);
+    }
+    probe_notification_environment(&ui);
+    check(!ui.model.reason_app_muted && !strcmp(ui.model.reason_manager_label, "Ultrahand 2.5.3"),
+          "environment probe reads Ultrahand version from ovlmenu.ovl NACP");
 }
 
 static void test_incremental_setup_options(void)

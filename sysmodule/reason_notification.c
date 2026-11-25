@@ -376,6 +376,7 @@ void ptc_reason_notification_tick(PtcReasonNotification *n, const PtcReasonObser
         ptc_ultrahand_config_read(n->storage, &n->external);
         n->config_ms = ms > UINT64_MAX - 2000 ? UINT64_MAX : ms + 2000;
     }
+    if (n->external.app_muted) { state(n, "fallback_receiver_muted"); return; }
     if (n->external.notifications != 1) { state(n, "fallback_receiver_unavailable"); return; }
     if (!publish(n, lang, wall, ms)) goto failed;
     n->pending = true;

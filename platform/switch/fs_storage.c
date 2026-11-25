@@ -315,6 +315,26 @@ static bool fs_read_lines(PtcStorage *storage, const char *path, char *line, siz
     return ok;
 }
 
+static bool fs_read_range(PtcStorage *storage, const char *path, uint64_t offset,
+                          void *out, size_t size, size_t *bytes_read)
+{
+    FILE *file;
+    size_t got;
+    bool ok;
+    (void)storage;
+    if (bytes_read) *bytes_read = 0;
+    if (!path || (!out && size > 0) || offset > (uint64_t)0x7fffffffULL) return false;
+    file = fopen(path, "rb");
+    if (!file) return false;
+    ok = fseek(file, (long)offset, SEEK_SET) == 0;
+    got = ok && size > 0 ? fread(out, 1, size, file) : 0;
+    if (ferror(file)) ok = false;
+    if (fclose(file) != 0) ok = false;
+    if (!ok) return false;
+    if (bytes_read) *bytes_read = got;
+    return true;
+}
+
 static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_read_text,
     fs_write_text_atomic,
@@ -329,6 +349,7 @@ static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_read_lines,
     fs_write_text_transient,
     fs_read_text_status,
+    fs_read_range,
 };
 
 void ptc_fs_storage_init(PtcFsStorage *fs)

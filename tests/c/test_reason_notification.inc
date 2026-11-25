@@ -13,8 +13,134 @@ static void *count_preference_allocation(size_t size)
     return malloc(size);
 }
 
+static void write_fake_ovlmenu(PtcMemStorage *mem, const char *title, const char *author, const char *version)
+{
+    /* Minimal valid NRO0 (0x80) + ASET (0x38) + NACP (0x4000) = 16568 bytes. */
+    uint8_t *blob = calloc(1, 0x40B8);
+    check_true(blob != NULL, "fake ovlmenu allocation");
+    if (!blob) return;
+    memcpy(blob + 0x10, "NRO0", 4);
+    blob[0x18] = 0x80; /* nro_size = 0x80 */
+    memcpy(blob + 0x80, "ASET", 4);
+    blob[0x80 + 0x18] = 0x38; /* nacp_offset = 0x38 */
+    blob[0x80 + 0x20] = 0x00;
+    blob[0x80 + 0x21] = 0x40; /* nacp_size = 0x4000 */
+    uint8_t *nacp = blob + 0x80 + 0x38;
+    if (title) snprintf((char *)nacp, 0x200, "%s", title);
+    if (author) snprintf((char *)(nacp + 0x200), 0x100, "%s", author);
+    if (version) snprintf((char *)(nacp + 0x3060), 0x10, "%s", version);
+    check_true(ptc_mem_storage_write_bytes(mem, "sdmc:/switch/.overlays/ovlmenu.ovl", blob, 0x40B8),
+        "write fake ovlmenu binary fixture");
+    free(blob);
+}
+
+static void seed_ovlloader(PtcStorage *s, bool boot2, const char *version)
+{
+    s->vtable->write_text_atomic(s, "sdmc:/atmosphere/contents/420000000007E51A/exefs.nsp", "nsp");
+    if (boot2)
+        s->vtable->write_text_atomic(s, "sdmc:/atmosphere/contents/420000000007E51A/flags/boot2.flag", "");
+    if (version) {
+        char json[128];
+        snprintf(json, sizeof(json), "{\"name\":\"nx-ovlloader\",\"version\":\"%s\"}", version);
+        s->vtable->write_text_atomic(s, "sdmc:/atmosphere/contents/420000000007E51A/toolbox.json", json);
+    }
+}
+
+static void test_overlay_env_and_boot_reconcile(void)
+{
+    PtcOverlayVersion v;
+    check_true(ptc_overlay_version_parse("2.5.3", &v) && v.major == 2 && v.minor == 5 && v.patch == 3 &&
+        ptc_overlay_version_at_least(&v, 2, 3, 0) && !ptc_overlay_version_at_least(&v, 2, 5, 4),
+        "semantic version parses standard X.Y.Z");
+    check_true(ptc_overlay_version_parse("v2.3.0-beta.1", &v) && v.major == 2 && v.minor == 3 && v.patch == 0 &&
+        ptc_overlay_version_at_least(&v, 2, 3, 0), "semantic version allows v prefix and suffix");
+    check_true(!ptc_overlay_version_parse("abc", &v) && !ptc_overlay_version_parse("2.", &v) &&
+        !ptc_overlay_version_parse("2", &v), "malformed version strings rejected");
+
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    check_true(mem != NULL, "overlay env fixture allocation");
+    if (!mem) return;
+    PtcStorage *s = &mem->storage;
+    PtcOverlayEnv env;
+    PtcOverlayBootReport report;
+    char text[2048];
+
+    /* 1. Ultrahand 2.5.3 + nx-ovlloader 2.0.3 + implicit default notifications */
+    ptc_mem_storage_init(mem);
+    write_fake_ovlmenu(mem, "Ultrahand", "ppkantorski", "2.5.3");
+    seed_ovlloader(s, true, "2.0.3");
+    s->vtable->write_text_atomic(s, "sdmc:/switch/.overlays/playwise.ovl", "ovl");
+    s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nfoo=bar\n");
+    ptc_overlay_env_probe(s, &env);
+    check_true(env.manager == PTC_OVERLAY_MANAGER_ULTRAHAND && env.ultrahand_notify_supported &&
+        env.loader_installed && env.loader_boot2 &&
+        env.loader_version.valid && env.loader_version.major == 2 && env.loader_version.patch == 3 &&
+        env.playwise_overlay_installed && env.notifications == 1 && env.notifications_implicit_default &&
+        !env.app_muted,
+        "verified Ultrahand 2.5.3 detects manager, loader, and implicit default notifications");
+    PtcUltrahandConfig cfg;
+    ptc_ultrahand_config_read(s, &cfg);
+    check_true(cfg.notifications == 1 && !cfg.app_muted,
+        "config read recognizes Ultrahand 2.3+ implicit notifications default");
+
+    /* 2. Per-app mute flag blocks fallback publishing */
+    s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/flags/notifications/playwise.flag", "");
+    ptc_overlay_env_probe(s, &env);
+    check_true(env.app_muted, "playwise.flag mute marker detected");
+    PtcReasonNotification n;
+    ptc_reason_notification_init(&n, s, "app", "r1", "0123456789abcdef");
+    PtcReasonObservation obs = {0};
+    obs.revision = 1; obs.reliable = true; obs.restricted = true;
+    obs.day = 2380; obs.captured_at = 100; obs.reason = PTC_REASON_DAILY; obs.instance = 1;
+    ptc_reason_notification_tick(&n, &obs, 1000, 100, true, false, false, PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(!n.pending && n.sequence == 0 && !strcmp(n.state, "fallback_receiver_muted"),
+        "playwise.flag prevents writing doomed .notify files");
+    s->vtable->remove_path(s, "sdmc:/config/ultrahand/flags/notifications/playwise.flag");
+
+    /* 3. Old Ultrahand 2.2.8 & Tesla Menu must never be auto-modified */
+    const char *off_ini = "[ultrahand]\r\nnotifications=false\r\nother=1\r\n";
+    s->vtable->write_text_atomic(s, "sdmc:/config/ultrahand/config.ini", off_ini);
+    write_fake_ovlmenu(mem, "Ultrahand", "ppkantorski", "2.2.8");
+    ptc_overlay_env_boot_reconcile(s, "app", true, &report);
+    check_true(report.env.manager == PTC_OVERLAY_MANAGER_ULTRAHAND && !report.env.ultrahand_notify_supported &&
+        !strcmp(report.notify_action, "skipped_incompatible") &&
+        s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
+        !strcmp(text, off_ini),
+        "Ultrahand < 2.3.0 refuses boot config modifications");
+
+    write_fake_ovlmenu(mem, "Tesla Menu", "WerWolv", "v1.1.2");
+    ptc_overlay_env_boot_reconcile(s, "app", true, &report);
+    check_true(report.env.manager == PTC_OVERLAY_MANAGER_TESLA && !report.env.ultrahand_notify_supported &&
+        ptc_ultrahand_prepare_notifications(s) == PTC_ULTRAHAND_PREPARE_UNAVAILABLE &&
+        s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
+        !strcmp(text, off_ini),
+        "Tesla Menu is detected and never mutated");
+
+    /* 4. Disabled master switch never touches third-party INI on Ultrahand 2.5.3 */
+    write_fake_ovlmenu(mem, "Ultrahand", "ppkantorski", "2.5.3");
+    ptc_overlay_env_boot_reconcile(s, "app", false, &report);
+    check_true(!strcmp(report.notify_action, "skipped_disabled") &&
+        s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
+        !strcmp(text, off_ini),
+        "disabled preference leaves Ultrahand untouched at boot");
+
+    /* 5. Enabled master switch (Stage A) reconciles notifications=false -> true & writes overlay-env.json */
+    ptc_overlay_env_boot_reconcile(s, "app", true, &report);
+    check_true(!strcmp(report.notify_action, "saved") &&
+        s->vtable->read_text(s, "sdmc:/config/ultrahand/config.ini", text, sizeof(text)) &&
+        !strcmp(text, "[ultrahand]\r\nnotifications=true\r\nother=1\r\n"),
+        "Stage A boot reconcile flips only notifications=false->true");
+    check_true(s->vtable->read_text(s, "app/support/overlay-env.json", text, sizeof(text)) &&
+        strstr(text, "\"manager\":\"ultrahand\"") && strstr(text, "\"manager_version\":\"2.5.3\"") &&
+        strstr(text, "\"boot_notify_action\":\"saved\""),
+        "boot reconcile writes bounded overlay-env.json diagnostic");
+
+    free(mem);
+}
+
 static void test_notification_dependency(void)
 {
+    test_overlay_env_and_boot_reconcile();
     PtcMemStorage *mem = malloc(sizeof(*mem));
     check_true(mem != NULL, "dependency fixture allocation"); if (!mem) return;
     ptc_mem_storage_init(mem);

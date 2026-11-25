@@ -13,15 +13,15 @@ static uint64_t notification_now_ms(void)
 
 void probe_notification_environment(UiState *ui)
 {
-    PtcUltrahandConfig external;
+    PtcOverlayEnv env;
     PtcReasonDetail ready;
-    PtcStorageMetadata meta;
     char boot[17];
-    ptc_ultrahand_config_read(ui->client.storage, &external);
-    ui->model.reason_external_notifications = external.notifications;
-    snprintf(ui->model.reason_overlay_shortcut, sizeof(ui->model.reason_overlay_shortcut), "%s", external.shortcut);
-    ui->model.reason_overlay_installed = ui->client.storage->vtable->metadata(ui->client.storage,
-        "sdmc:/switch/.overlays/playwise.ovl", &meta) && meta.type == PTC_STORAGE_ENTRY_FILE;
+    ptc_overlay_env_probe(ui->client.storage, &env);
+    ui->model.reason_external_notifications = env.notifications;
+    ui->model.reason_app_muted = env.app_muted;
+    snprintf(ui->model.reason_overlay_shortcut, sizeof(ui->model.reason_overlay_shortcut), "%s", env.shortcut);
+    ui->model.reason_overlay_installed = env.playwise_overlay_installed;
+    ptc_overlay_env_format_manager(&env, ui->model.reason_manager_label, sizeof(ui->model.reason_manager_label));
     ui->model.reason_detail_ready = ptc_reason_detail_runtime(ui->client.storage, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, boot) &&
         ptc_reason_detail_read(ui->client.storage, APP_ROOT, "ready", &ready) &&
         ptc_reason_detail_fresh(&ready, PLAYWISE_BUILD_RELEASE_ID, boot, notification_now_ms());
@@ -38,8 +38,8 @@ void test_notification(UiState *ui)
        Keep the illustrative view aligned even when delivery is unavailable. */
     ui->model.notification_preview = 1;
     probe_notification_environment(ui);
-    PtcUiTextId message = PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG;
-    if (ui->model.reason_external_notifications == 1) {
+    PtcUiTextId message = ui->model.reason_app_muted ? PTC_UI_T_NOTICE_PROBED_MUTED : PTC_UI_T_NOTICE_TEST_NEEDS_CONFIG;
+    if (ui->model.reason_external_notifications == 1 && !ui->model.reason_app_muted) {
         uint64_t id;
         randomGet(&id, sizeof(id));
         bool sent = ptc_notification_test_send(&ui->notification_test, ui->client.storage, APP_ROOT,
@@ -68,9 +68,7 @@ bool toggle_notification_preference(UiState *ui, int index)
     if (save_ui_preferences(ui)) {
         if (!notice) {
             PtcUltrahandPrepare prepared = ptc_ultrahand_prepare_notifications(ui->client.storage);
-            PtcUltrahandConfig external;
-            ptc_ultrahand_config_read(ui->client.storage, &external);
-            ui->model.reason_external_notifications = external.notifications;
+            probe_notification_environment(ui);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(
                 prepared == PTC_ULTRAHAND_PREPARE_SAVED ? PTC_UI_T_REASON_NOTICE_PREPARED :
                 prepared == PTC_ULTRAHAND_PREPARE_ALREADY_ON ? PTC_UI_T_REASON_NOTICE_EXTERNAL_ON :
@@ -101,7 +99,8 @@ void handle_notification_preferences_input(UiState *ui, u64 down)
     } else if (down & HidNpadButton_A) {
         if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_PROBE) {
             probe_notification_environment(ui);
-            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s", ptc_ui_text(PTC_UI_T_NOTICE_PROBED));
+            snprintf(ui->model.reason_test_message, sizeof(ui->model.reason_test_message), "%s",
+                     ptc_ui_text(ui->model.reason_app_muted ? PTC_UI_T_NOTICE_PROBED_MUTED : PTC_UI_T_NOTICE_PROBED));
         } else if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_TEST) test_notification(ui);
         else if (ui->model.overlay_selection == PTC_UI_NOTIFICATION_TOGGLE) {
             ui->model.message[0] = '\0';
