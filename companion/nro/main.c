@@ -274,7 +274,10 @@ int main(int argc, char **argv)
         custom_combo_held = custom_parent_combo_held(&ui, held);
         custom_combo_candidate = ui.model.view == PTC_UI_CHILD &&
             ui.model.overlay == PTC_UI_OVERLAY_NONE && ui.model.custom_shortcut_enabled &&
-            (held & ui.model.custom_shortcut_mask) != 0;
+            ptc_ui_shortcut_chord_blocking(
+                ui.model.custom_shortcut_mask,
+                HIDDEN_LEFT_SHOULDER_MASK | HIDDEN_RIGHT_SHOULDER_MASK,
+                held);
 
         custom_combo_triggered = ptc_ui_shortcut_hold_update(
             &ui.custom_shortcut_hold, custom_combo_held, CUSTOM_SHORTCUT_HOLD_TICKS);

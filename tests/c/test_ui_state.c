@@ -518,9 +518,49 @@ static void test_shortcut_hold_and_setup_migration(void)
     PtcUiShortcutHoldState hold = {0};
     PtcUiConfirmHoldState confirm_hold = {0};
     uint64_t lr_right = UINT64_C(0x10) | UINT64_C(0x40) | UINT64_C(0x4000);
+    uint64_t shoulders = UINT64_C(0x40) | UINT64_C(0x80) | UINT64_C(0x100) | UINT64_C(0x200);
+    uint64_t btn_l = UINT64_C(0x40), btn_r = UINT64_C(0x80);
+    uint64_t btn_zl = UINT64_C(0x100), btn_zr = UINT64_C(0x200);
+    uint64_t btn_plus = UINT64_C(0x400);
+    uint64_t btn_left = UINT64_C(0x1000), btn_up = UINT64_C(0x2000);
+    uint64_t btn_right = UINT64_C(0x4000), btn_down = UINT64_C(0x8000);
+    uint64_t lr_down = btn_l | btn_r | btn_down;
+    uint64_t zlzr_down = btn_zl | btn_zr | btn_down;
+    uint64_t lr_plus = btn_l | btn_r | btn_plus;
+    uint64_t legacy_xy = UINT64_C(0x4) | UINT64_C(0x8);
     check_true(ptc_ui_shortcut_mask_held(lr_right, lr_right), "L+R+right chord matches all configured buttons");
     check_true(!ptc_ui_shortcut_mask_held(lr_right, lr_right & ~UINT64_C(0x4000)),
                "incomplete L+R+right chord does not match");
+    check_true(!ptc_ui_shortcut_chord_blocking(0, shoulders, btn_down),
+               "empty custom shortcut never blocks child input");
+    check_true(!ptc_ui_shortcut_chord_blocking(lr_down, shoulders, btn_down),
+               "standalone Down is not blocked by L+R+Down parent shortcut");
+    check_true(!ptc_ui_shortcut_chord_blocking(zlzr_down, shoulders, btn_down),
+               "standalone Down is not blocked by ZL+ZR+Down parent shortcut");
+    check_true(!ptc_ui_shortcut_chord_blocking(lr_plus, shoulders, btn_plus),
+               "standalone Plus is not blocked by L+R+Plus parent shortcut");
+    check_true(ptc_ui_shortcut_chord_blocking(lr_down, shoulders, btn_l),
+               "holding L starts suppressing child actions for L+R+Down chord");
+    check_true(ptc_ui_shortcut_chord_blocking(lr_down, shoulders, btn_r | btn_down),
+               "holding R+Down suppresses child actions for L+R+Down chord");
+    check_true(ptc_ui_shortcut_chord_blocking(lr_down, shoulders, lr_down),
+               "holding full L+R+Down chord suppresses child actions");
+    check_true(ptc_ui_shortcut_chord_blocking(zlzr_down, shoulders, btn_zl),
+               "holding ZL suppresses child language shortcut while forming ZL+ZR+Down chord");
+    check_true(!ptc_ui_shortcut_chord_blocking(legacy_xy, shoulders, UINT64_C(0x4)),
+               "legacy non-shoulder chord keeps standalone single button working");
+    check_true(ptc_ui_shortcut_chord_blocking(legacy_xy, shoulders, legacy_xy),
+               "legacy non-shoulder chord suppresses child actions once both buttons are held");
+    check_true(ptc_ui_stick_direction_mask(0, 0, 16000, btn_left, btn_right, btn_up, btn_down) == 0,
+               "centered stick produces no direction");
+    check_true(ptc_ui_stick_direction_mask(16000, -16000, 16000, btn_left, btn_right, btn_up, btn_down) == 0,
+               "stick on deadzone edge produces no direction");
+    check_true(ptc_ui_stick_direction_mask(-17000, -28000, 16000, btn_left, btn_right, btn_up, btn_down) == btn_down,
+               "diagonal down-left stick with stronger vertical axis emits only Down");
+    check_true(ptc_ui_stick_direction_mask(-28000, -17000, 16000, btn_left, btn_right, btn_up, btn_down) == btn_left,
+               "diagonal down-left stick with stronger horizontal axis emits only Left");
+    check_true(ptc_ui_stick_direction_mask(20000, 20000, 16000, btn_left, btn_right, btn_up, btn_down) == btn_up,
+               "diagonal stick emits a single cardinal direction on exact tie");
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "first shortcut sample waits");
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "second shortcut sample waits");
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "third shortcut sample waits");
@@ -5256,6 +5296,17 @@ static void test_child_forecast_focus(void)
                "up from forecast row returns to default child home state");
     check_true(ptc_ui_move_child_focus(&model, 0, -1, 1000) && model.header_language_focused,
                "second up reaches header language switcher from forecast");
+    check_true(ptc_ui_move_child_focus(&model, -1, 1, 1000) && !model.header_language_focused,
+               "diagonal down-left leaves header language switcher");
+    check_true(ptc_ui_move_child_focus(&model, 1, 1, 1000) && model.child_forecast_focus == 1 &&
+               !model.child_actions_focused,
+               "diagonal down-right from default enters forecast before jumping to actions");
+    check_true(ptc_ui_move_child_focus(&model, 0, 1, 1000) && model.child_actions_focused &&
+               model.child_action_focus == 0,
+               "down from forecast enters child action bar");
+    check_true(ptc_ui_move_child_focus(&model, -1, -1, 1000) && !model.child_actions_focused &&
+               model.child_forecast_focus == 1,
+               "diagonal up-left at leftmost action pill still moves back up to forecast");
 }
 
 static void test_online_update_layout(void)

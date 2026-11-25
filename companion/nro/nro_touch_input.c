@@ -94,6 +94,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_CHILD_FORECAST:
         ui->model.header_language_focused = false;
+        ui->model.child_actions_focused = false;
         ui->model.child_forecast_focus = hit.index + 1;
         ptc_audio_play(PTC_SE_FOCUS);
         break;

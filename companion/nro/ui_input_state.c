@@ -24,6 +24,38 @@ bool ptc_ui_shortcut_mask_held(uint64_t configured_mask, uint64_t buttons)
     return configured_mask != 0 && (buttons & configured_mask) == configured_mask;
 }
 
+bool ptc_ui_shortcut_chord_blocking(
+    uint64_t configured_mask, uint64_t modifier_mask, uint64_t buttons)
+{
+    uint64_t chord_modifiers;
+    uint64_t overlap;
+    if (configured_mask == 0) return false;
+    if ((buttons & configured_mask) == configured_mask) return true;
+    /* Chords with a shoulder prefix (L+R / ZL+ZR) only suppress ordinary child
+     * inputs once a prefix shoulder is held, so standalone directions/Plus still work. */
+    chord_modifiers = configured_mask & modifier_mask;
+    if (chord_modifiers != 0) {
+        return (buttons & chord_modifiers) != 0;
+    }
+    /* Legacy custom masks without shoulders block only when multiple chord members are held. */
+    overlap = buttons & configured_mask;
+    return (overlap & (overlap - 1)) != 0;
+}
+
+uint64_t ptc_ui_stick_direction_mask(
+    int x, int y, int deadzone,
+    uint64_t left_bit, uint64_t right_bit, uint64_t up_bit, uint64_t down_bit)
+{
+    long long ax = x < 0 ? -(long long)x : (long long)x;
+    long long ay = y < 0 ? -(long long)y : (long long)y;
+    long long limit = deadzone < 0 ? 0 : (long long)deadzone;
+    if (ax <= limit && ay <= limit) return 0;
+    /* Emit only the dominant cardinal axis so slight diagonal stick tilt does
+     * not get swallowed by single-branch horizontal handlers. */
+    if (ax > ay) return x > 0 ? right_bit : left_bit;
+    return y > 0 ? up_bit : down_bit;
+}
+
 bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held, int required_samples)
 {
     if (!state || required_samples <= 0) return false;

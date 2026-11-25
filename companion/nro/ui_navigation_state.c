@@ -138,7 +138,6 @@ bool ptc_ui_move_child_focus(PtcUiModel *model, int horizontal, int vertical, in
                 model->child_action_focus = next;
                 return true;
             }
-            return false;
         }
         if (vertical < 0) {
             model->child_actions_focused = false;
@@ -168,16 +167,16 @@ bool ptc_ui_move_child_focus(PtcUiModel *model, int horizontal, int vertical, in
         model->header_language_focused = true;
         return true;
     }
-    if (horizontal > 0) {
-        model->child_actions_focused = true;
-        return true;
-    }
     if (vertical > 0) {
         int old = model->child_forecast_focus;
         ptc_ui_move_child_forecast_focus(model, 1, now);
         if (model->child_forecast_focus == old) {
             model->child_actions_focused = true;
         }
+        return true;
+    }
+    if (horizontal > 0) {
+        model->child_actions_focused = true;
         return true;
     }
     return false;

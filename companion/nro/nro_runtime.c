@@ -476,12 +476,10 @@ bool weekly_editing_blocked(UiState *ui)
 
 u64 stick_direction_buttons(HidAnalogStickState stick)
 {
-    u64 buttons = 0;
-    if (stick.x > STICK_DEADZONE) buttons |= HidNpadButton_Right;
-    if (stick.x < -STICK_DEADZONE) buttons |= HidNpadButton_Left;
-    if (stick.y > STICK_DEADZONE) buttons |= HidNpadButton_Up;
-    if (stick.y < -STICK_DEADZONE) buttons |= HidNpadButton_Down;
-    return buttons;
+    return ptc_ui_stick_direction_mask(
+        stick.x, stick.y, STICK_DEADZONE,
+        HidNpadButton_Left, HidNpadButton_Right,
+        HidNpadButton_Up, HidNpadButton_Down);
 }
 
 bool switch_random(uint8_t *out, size_t out_size, void *ctx)

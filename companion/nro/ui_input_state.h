@@ -5,6 +5,11 @@
 
 const char *ptc_ui_shortcut_common_label(int index);
 bool ptc_ui_shortcut_mask_held(uint64_t configured_mask, uint64_t buttons);
+bool ptc_ui_shortcut_chord_blocking(
+    uint64_t configured_mask, uint64_t modifier_mask, uint64_t buttons);
+uint64_t ptc_ui_stick_direction_mask(
+    int x, int y, int deadzone,
+    uint64_t left_bit, uint64_t right_bit, uint64_t up_bit, uint64_t down_bit);
 bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held, int required_samples);
 bool ptc_ui_single_button_release_update(
     bool *pending, uint64_t button, uint64_t down, uint64_t held, bool eligible);
