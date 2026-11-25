@@ -3,6 +3,37 @@
 void handle_overlay_input(UiState *ui, u64 down)
 {
     if (handle_parent_auth_error_input(ui, down)) return;
+    if (ui->model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW) {
+        if (ptc_ui_upgrade_flow_busy(&ui->model)) return;
+        if (ui->model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_RECONFIRM_READY) {
+            if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                start_reconfirm_activation(ui, ui->model.upgrade_flow_from_hot_reload);
+            } else if (down & HidNpadButton_B) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ptc_ui_upgrade_flow_close(&ui->model);
+                if (ui->model.view == PTC_UI_PARENT) {
+                    int action = ptc_ui_support_recommended_action(&ui->model);
+                    ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
+                    ui->model.parent_footer_focused = false;
+                    ui->model.header_language_focused = false;
+                    ui->model.selected_index = action >= 0 ? action : 0;
+                }
+            }
+        } else if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+            bool failed = ui->model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_FAILED;
+            ptc_audio_play(failed ? PTC_SE_CANCEL : PTC_SE_CONFIRM);
+            ptc_ui_upgrade_flow_close(&ui->model);
+            if (failed && ui->model.view == PTC_UI_PARENT) {
+                int action = ptc_ui_support_recommended_action(&ui->model);
+                ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
+                ui->model.parent_footer_focused = false;
+                ui->model.header_language_focused = false;
+                ui->model.selected_index = action >= 0 ? action : 0;
+            }
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE || ui->model.overlay == PTC_UI_OVERLAY_UPDATE_BACKUPS) {
         handle_online_update_input(ui, down);
         return;

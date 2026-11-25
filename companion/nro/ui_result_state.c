@@ -626,7 +626,10 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
     } else if (setup_activated) {
         ptc_audio_play(PTC_SE_SUCCESS);
-        snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_AUTOMATIC_CONTROL_IS_ENABLED_AND_FIRST_TIME));
+        snprintf(model->message, sizeof(model->message), "%s",
+                 ptc_ui_text(model->setup_wizard_completed
+                     ? PTC_UI_T_RECONFIRM_COMPLETED_MSG
+                     : PTC_UI_T_AUTOMATIC_CONTROL_IS_ENABLED_AND_FIRST_TIME));
     } else {
         if (type && strcmp(type, "claim_daily_buffer") == 0) {
             ptc_audio_play(PTC_SE_CLAIM_BUFFER);
@@ -653,8 +656,14 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             snprintf(model->feedback_detail, sizeof(model->feedback_detail),
                      "%s", ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
         } else if (type && strcmp(type, "complete_setup") == 0 &&
+                   ptc_ui_setup_activating_grace(model)) {
+            snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_SUMMARY));
+        } else if (type && strcmp(type, "complete_setup") == 0 &&
                    strcmp(model->setup_phase, "active") != 0) {
             snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_SETUP_CONTROLS_INACTIVE));
+        } else if (type && strcmp(type, "complete_setup") == 0 &&
+                   model->setup_wizard_completed) {
+            snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_COMPLETED_MSG));
         } else if (type && strcmp(type, "status") == 0 && model->view == PTC_UI_SETUP) {
             if (!ptc_ui_setup_message_visible(model)) model->message[0] = '\0';
         } else {

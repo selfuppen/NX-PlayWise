@@ -609,8 +609,10 @@ void confirm_operation(UiState *ui)
             ui->hot_reload_terminal_handled = false;
             ui->waiting = true;
             ui->model.waiting = true;
-            ui->model.overlay = PTC_UI_OVERLAY_NONE;
             sync_hot_reload_model(ui);
+            ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_HOT_RELOAD,
+                true, !ui->model.hot_reload_capture_restart, ui->hot_reload.detail);
+            ui->model.upgrade_flow_substep = 1;
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
         } else {
             sync_hot_reload_model(ui);
@@ -768,7 +770,7 @@ void confirm_operation(UiState *ui)
         apply_default_pairing_base_url(ui);
         break;
     case PTC_UI_OPERATION_COMPLETE_SETUP:
-        submit_transport_empty(ui, "complete_setup", ptc_ui_text(PTC_UI_T_COMPLETING_FIRST_TIME_SETUP), ptc_ui_text(PTC_UI_T_FAILED_TO_ENABLE_AUTOMATIC_CONTROL));
+        start_reconfirm_activation(ui, false);
         break;
     case PTC_UI_OPERATION_RETRY_SETUP_RELEASE:
         submit_transport_empty(ui, "retry_setup_release", ptc_ui_text(PTC_UI_T_RETRYING_TO_LIFT_CURRENT_RESTRICTIONS), ptc_ui_text(PTC_UI_T_RETRY_PRE_DELIMITATION_FAILED));

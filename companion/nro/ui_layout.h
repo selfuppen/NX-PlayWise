@@ -233,6 +233,7 @@ PtcUiRect ptc_ui_settings_page_back_rect(void);
 PtcUiRect ptc_ui_settings_page_primary_rect(void);
 PtcUiRect ptc_ui_settings_page_footer_rect(int index);
 PtcUiRect ptc_ui_auth_error_guide_rect(void);
+PtcUiRect ptc_ui_upgrade_flow_close_rect(void);
 PtcUiRect ptc_ui_plan_card_rect(int index);
 PtcUiRect ptc_ui_forecast_day_row_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);

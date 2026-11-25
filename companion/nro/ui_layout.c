@@ -1152,6 +1152,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 620;
         break;
     case PTC_UI_OVERLAY_CONFIRM:
+    case PTC_UI_OVERLAY_UPGRADE_FLOW:
     default:
         *width = 860;
         *height = 476;
@@ -1447,6 +1448,8 @@ PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
         return ptc_ui_settings_page_primary_rect();
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
         return (PtcUiRect){dialog.x + dialog.w - 36 - 220, dialog_button_top(dialog), 220, PTC_UI_DIALOG_BTN_H};
+    if (overlay == PTC_UI_OVERLAY_UPGRADE_FLOW)
+        return (PtcUiRect){dialog.x + dialog.w - 34 - 250, dialog_button_top(dialog), 250, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
 }
@@ -1462,6 +1465,8 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return ptc_ui_settings_page_primary_rect();
     if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
         return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 220, PTC_UI_DIALOG_BTN_H};
+    if (overlay == PTC_UI_OVERLAY_UPGRADE_FLOW)
+        return (PtcUiRect){dialog.x + dialog.w - 34 - 250 - 16 - 210, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP)
@@ -1478,6 +1483,12 @@ PtcUiRect ptc_ui_auth_error_guide_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_AUTH_ERROR);
     return (PtcUiRect){dialog.x + (dialog.w - 230) / 2, dialog_button_top(dialog), 230, PTC_UI_DIALOG_BTN_H};
+}
+
+PtcUiRect ptc_ui_upgrade_flow_close_rect(void)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_UPGRADE_FLOW);
+    return (PtcUiRect){dialog.x + (dialog.w - 280) / 2, dialog_button_top(dialog), 280, PTC_UI_DIALOG_BTN_H};
 }
 
 PtcUiRect ptc_ui_setup_pctl_step_rect(int index)

@@ -31,7 +31,10 @@ bool ptc_ui_update_badge_visible(const PtcUiModel *m)
 {
     return m && (m->view == PTC_UI_CHILD || m->view == PTC_UI_PARENT) &&
         m->overlay == PTC_UI_OVERLAY_NONE && m->update_status == PTC_UPDATE_AVAILABLE && m->update_version[0] &&
-        !m->update_busy && !m->waiting && !m->recovery_active && !m->weekly_dirty && !m->holiday_dirty &&
+        !m->update_busy && !m->waiting && !m->recovery_active &&
+        m->hot_reload_status != PTC_UI_HOT_RELOAD_RUNNING &&
+        !ptc_ui_setup_activating_grace(m) &&
+        !m->weekly_dirty && !m->holiday_dirty &&
         !m->bedtime_dirty && !m->dock_dirty && !ptc_ui_eye_care_dirty(m);
 }
 #include "ui_layout.h"
@@ -285,11 +288,62 @@ bool ptc_ui_setup_takeover_complete(const PtcUiModel *model)
          (strcmp(model->setup_phase, "active") == 0 && !model->disable_flag_present));
 }
 
+bool ptc_ui_setup_activating_grace(const PtcUiModel *model)
+{
+    return model && !model->disable_flag_present &&
+        strcmp(model->setup_phase, "released") == 0 &&
+        model->setup_activate_after > 0;
+}
+
 bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model)
 {
     return model && model->disable_flag_present &&
         strcmp(model->setup_phase, "protection") == 0 &&
         strcmp(model->disable_reason, "runtime_fingerprint_changed") == 0;
+}
+
+bool ptc_ui_upgrade_flow_busy(const PtcUiModel *model)
+{
+    if (!model || model->overlay != PTC_UI_OVERLAY_UPGRADE_FLOW) return false;
+    return model->upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_HOT_RELOAD ||
+        model->upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_REFRESHING ||
+        model->upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_ACTIVATING ||
+        model->upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT;
+}
+
+bool ptc_ui_upgrade_flow_blocks_input(const PtcUiModel *model)
+{
+    if (!model) return false;
+    return model->hot_reload_status == PTC_UI_HOT_RELOAD_RUNNING ||
+        ptc_ui_upgrade_flow_busy(model);
+}
+
+void ptc_ui_upgrade_flow_open(PtcUiModel *model, PtcUiUpgradeFlowStage stage,
+                              bool from_hot_reload, bool reconfirm_context, const char *detail)
+{
+    if (!model) return;
+    model->overlay = PTC_UI_OVERLAY_UPGRADE_FLOW;
+    model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
+    model->confirm_hold_required = false;
+    model->operation = PTC_UI_OPERATION_NONE;
+    model->upgrade_flow_stage = stage;
+    model->upgrade_flow_from_hot_reload = from_hot_reload;
+    model->upgrade_flow_reconfirm_context = reconfirm_context;
+    if (stage == PTC_UI_UPGRADE_FLOW_HOT_RELOAD && model->upgrade_flow_substep < 1)
+        model->upgrade_flow_substep = 1;
+    snprintf(model->upgrade_flow_detail, sizeof(model->upgrade_flow_detail), "%s",
+             detail ? detail : "");
+}
+
+void ptc_ui_upgrade_flow_close(PtcUiModel *model)
+{
+    if (!model) return;
+    model->overlay = PTC_UI_OVERLAY_NONE;
+    model->upgrade_flow_stage = PTC_UI_UPGRADE_FLOW_NONE;
+    model->upgrade_flow_substep = 0;
+    model->upgrade_flow_from_hot_reload = false;
+    model->upgrade_flow_reconfirm_context = false;
+    model->upgrade_flow_detail[0] = '\0';
 }
 
 bool ptc_ui_error_is_grant_code(const PtcUiModel *model)
@@ -317,6 +371,11 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     bool clear_pending_code;
     if (!model || model->overlay == PTC_UI_OVERLAY_NONE) {
         return false;
+    }
+    if (model->overlay == PTC_UI_OVERLAY_UPGRADE_FLOW) {
+        if (ptc_ui_upgrade_flow_busy(model)) return false;
+        ptc_ui_upgrade_flow_close(model);
+        return true;
     }
     if (model->rules_dialog_open) {
         model->rules_dialog_open = false;
@@ -438,6 +497,7 @@ const char *ptc_ui_support_problem(const PtcUiModel *model)
     if (model->disable_flag_present) return ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED);
     if (!model->status_loaded) return ptc_ui_text(PTC_UI_T_STATUS_HAS_NOT_BEEN_READ_YET);
     if (model->error_code) return ptc_ui_text(PTC_UI_T_THE_LAST_OPERATION_WAS_NOT_COMPLETED);
+    if (ptc_ui_setup_activating_grace(model)) return ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_PROBLEM);
     if (model->setup_wizard_completed && model->setup_issue_mask) return ptc_ui_text(PTC_UI_T_SETUP_RECORDED_PROBLEMS);
     if (strcmp(model->setup_phase, "active") != 0) return ptc_ui_text(model->setup_wizard_completed
         ? PTC_UI_T_SETUP_CONTROLS_INACTIVE : PTC_UI_T_FIRST_TIME_SETUP_NOT_COMPLETED_YET);
@@ -446,7 +506,7 @@ const char *ptc_ui_support_problem(const PtcUiModel *model)
 
 int ptc_ui_support_recommended_action(const PtcUiModel *model)
 {
-    if (model->waiting || model->apply_pending_confirmation) return -1;
+    if (model->waiting || model->apply_pending_confirmation || ptc_ui_setup_activating_grace(model)) return -1;
     if (model->parent_support_only || (model->setup_wizard_completed && model->setup_issue_mask)) return 4;
     if (model->recovery_active) {
         return ptc_ui_safety_action_available(model, 1) != PTC_UI_ACTION_DISABLED ? 1 : 4;
@@ -465,6 +525,7 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
     }
     switch (index) {
     case 0:
+        if (ptc_ui_setup_activating_grace(model)) return PTC_UI_ACTION_DISABLED;
         return ptc_ui_runtime_fingerprint_reconfirmation_needed(model) || model->disable_flag_present ||
             (strcmp(model->setup_phase, "active") != 0 && strcmp(model->setup_phase, "protection") != 0 &&
              strcmp(model->setup_phase, "failed") != 0)
@@ -473,6 +534,7 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
         return strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0 ||
             strcmp(model->setup_phase, "pending") == 0 ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_DISABLED;
     case 2:
+        if (ptc_ui_setup_activating_grace(model)) return PTC_UI_ACTION_DISABLED;
         return !model->disable_flag_present && strcmp(model->setup_phase, "protection") != 0 &&
             strcmp(model->setup_phase, "restored") != 0
             ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;

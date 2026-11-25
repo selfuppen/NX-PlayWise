@@ -47,6 +47,17 @@ void sync_hot_reload_model(UiState *ui)
             ? ui->hot_reload.journal.target_release_id : ui->hot_reload.journal.source_release_id);
     snprintf(ui->model.hot_reload_detail, sizeof(ui->model.hot_reload_detail), "%s",
         ui->hot_reload.detail);
+    if (ui->hot_reload.status == PTC_HOT_RELOAD_RUNNING) {
+        if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_WAIT_ACK)
+            ui->model.upgrade_flow_substep = 1;
+        else if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_NEED_IPC_CLOSE ||
+                 ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_WAIT_SOURCE_EXIT)
+            ui->model.upgrade_flow_substep = 2;
+        else if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_WAIT_TARGET_READY)
+            ui->model.upgrade_flow_substep = 3;
+        else if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_COMPLETE)
+            ui->model.upgrade_flow_substep = 4;
+    }
 }
 
 void open_hot_reload_confirmation(UiState *ui)
@@ -76,6 +87,13 @@ void poll_hot_reload(UiState *ui)
     }
     sync_hot_reload_model(ui);
     if (ui->hot_reload.status == PTC_HOT_RELOAD_RUNNING) {
+        if (ui->model.overlay != PTC_UI_OVERLAY_UPGRADE_FLOW ||
+            ui->model.upgrade_flow_stage != PTC_UI_UPGRADE_FLOW_HOT_RELOAD) {
+            ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_HOT_RELOAD,
+                true, !ui->model.hot_reload_capture_restart, ui->hot_reload.detail);
+        } else {
+            snprintf(ui->model.upgrade_flow_detail, sizeof(ui->model.upgrade_flow_detail), "%s", ui->hot_reload.detail);
+        }
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
     }
     if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_COMPLETE && !ui->hot_reload_terminal_handled) {
@@ -87,17 +105,28 @@ void poll_hot_reload(UiState *ui)
         if (ptc_switch_ipc_client_probe(&ui->ipc)) {
             ptc_companion_transport_set_suspended(&ui->transport, false);
             ui->hot_reload_reconfirm_redirect_pending = !ui->model.hot_reload_capture_restart;
+            ui->model.upgrade_flow_substep = 4;
+            ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_REFRESHING,
+                true, !ui->model.hot_reload_capture_restart,
+                ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_REFRESHING_STATUS));
             snprintf(ui->model.message, sizeof(ui->model.message),
                 "%s", ptc_ui_text(ui->model.hot_reload_capture_restart ? PTC_UI_T_CAPTURE_RESTART_DONE :
                     PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
             submit_status(ui);
             ptc_hot_reload_record_event(&ui->hot_reload, "status_submitted", ui->active_request_id, 0);
+            if (!ui->waiting) {
+                ui->hot_reload_reconfirm_redirect_pending = false;
+                ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                    true, !ui->model.hot_reload_capture_restart, ui->model.message);
+            }
         } else {
             ptc_hot_reload_record_event(&ui->hot_reload, "ipc_unavailable", NULL, 0);
             ui->hot_reload.status = PTC_HOT_RELOAD_UNAVAILABLE;
             snprintf(ui->hot_reload.detail, sizeof(ui->hot_reload.detail),
                 "%s", ptc_ui_text(PTC_UI_T_THE_BACKGROUND_HAS_BEEN_STARTED_BUT_IPC));
             sync_hot_reload_model(ui);
+            ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                true, !ui->model.hot_reload_capture_restart, ui->hot_reload.detail);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
         }
     } else if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED && !ui->hot_reload_terminal_handled) {
@@ -107,6 +136,8 @@ void poll_hot_reload(UiState *ui)
         /* A missing service can defer smGetService indefinitely. Keep this
            client's submissions suspended until a normal reopen/recovery. */
         ptc_companion_transport_set_suspended(&ui->transport, true);
+        ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+            true, !ui->model.hot_reload_capture_restart, ui->hot_reload.detail);
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
     }
     if (ui->hot_reload.status == PTC_HOT_RELOAD_PENDING &&

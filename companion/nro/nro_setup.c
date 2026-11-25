@@ -1,13 +1,54 @@
 #include "nro_app_internal.h"
 
+void start_reconfirm_activation(UiState *ui, bool from_hot_reload)
+{
+    bool reconfirm_context;
+    const char *wait_msg;
+    if (!ui || ui->waiting) return;
+    reconfirm_context = ui->model.setup_wizard_completed ||
+        ui->model.disable_flag_present ||
+        ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model);
+    wait_msg = ptc_ui_text(reconfirm_context
+        ? PTC_UI_T_RECONFIRM_SUBMITTING : PTC_UI_T_COMPLETING_FIRST_TIME_SETUP);
+    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_ACTIVATING,
+        from_hot_reload, reconfirm_context, wait_msg);
+    ui->upgrade_grace_started_at = 0;
+    submit_transport_empty(ui, "complete_setup", wait_msg,
+        ptc_ui_text(PTC_UI_T_FAILED_TO_ENABLE_AUTOMATIC_CONTROL));
+    if (!ui->waiting) {
+        ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+            from_hot_reload, reconfirm_context, ui->model.message);
+    }
+}
+
 void refresh_setup_activation(UiState *ui)
 {
     int64_t now;
-    if (!ui || ui->model.setup_review_active || ui->waiting || (ui->model.view != PTC_UI_SETUP &&
-        !(ui->model.setup_wizard_completed && strcmp(ui->model.setup_phase, "released") == 0))) {
+    bool grace_modal;
+    if (!ui || ui->model.setup_review_active || ui->waiting) {
+        return;
+    }
+    grace_modal = ui->model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW &&
+        ui->model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT;
+    if (ui->model.view != PTC_UI_SETUP &&
+        !grace_modal &&
+        !(ui->model.setup_wizard_completed && strcmp(ui->model.setup_phase, "released") == 0)) {
         return;
     }
     now = (int64_t)time(NULL);
+    if (grace_modal) {
+        if (ui->upgrade_grace_started_at <= 0) ui->upgrade_grace_started_at = now;
+        if ((ui->model.setup_activate_after > 0 && now >= ui->model.setup_activate_after + 15) ||
+            (now - ui->upgrade_grace_started_at >= 25)) {
+            ptc_audio_play(PTC_SE_ERROR);
+            ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_GRACE_TIMEOUT));
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_GRACE_TIMEOUT));
+            return;
+        }
+    }
     if (ptc_ui_setup_grace_remaining(&ui->model, now) != 0 ||
         ui->last_setup_refresh_second == now) {
         return;

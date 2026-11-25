@@ -184,6 +184,14 @@ void poll_result(UiState *ui, bool force)
             ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_BAD_REQUEST);
             cancel_bedtime_navigation(ui);
             set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), PTC_COMPANION_RESULT_INVALID);
+            if (ptc_ui_upgrade_flow_busy(&ui->model)) {
+#ifndef PLAYWISE_EDEN
+                ui->hot_reload_reconfirm_redirect_pending = false;
+#endif
+                ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                    ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                    ui->model.message);
+            }
             if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
             if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
             if (ui->request_view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS)
@@ -257,6 +265,73 @@ void poll_result(UiState *ui, bool force)
         config_backup_result(ui);
         refresh_disable_flag(ui);
         online_update_status_result(ui);
+        if (ui->model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW) {
+            if (ui->model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_REFRESHING &&
+                strcmp(ui->model.result_type, "status") == 0) {
+#ifndef PLAYWISE_EDEN
+                ui->hot_reload_reconfirm_redirect_pending = false;
+#endif
+                if (strcmp(ui->model.result_status, "ok") != 0) {
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ui->model.message);
+                } else if (ui->model.view == PTC_UI_PARENT &&
+                           !ui->model.parent_support_only &&
+                           !ui->model.hot_reload_capture_restart &&
+                           ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
+                    ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
+                    ui->model.selected_index = 0;
+                    ui->model.parent_footer_focused = false;
+                    ui->model.header_language_focused = false;
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_RECONFIRM_READY,
+                        ui->model.upgrade_flow_from_hot_reload, true,
+                        ptc_ui_text(PTC_UI_T_HOT_RELOAD_RECONFIRM_NEXT));
+                    snprintf(ui->model.message, sizeof(ui->model.message),
+                             "%s", ptc_ui_text(PTC_UI_T_HOT_RELOAD_RECONFIRM_NEXT));
+                } else {
+                    ptc_audio_play(PTC_SE_SUCCESS);
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_DONE,
+                        ui->model.upgrade_flow_from_hot_reload, false,
+                        ptc_ui_text(ui->model.hot_reload_capture_restart
+                            ? PTC_UI_T_CAPTURE_RESTART_DONE : PTC_UI_T_RECONFIRM_COMPLETED_MSG));
+                }
+            } else if (ui->model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_ACTIVATING &&
+                       strcmp(ui->model.result_type, "complete_setup") == 0) {
+                if (strcmp(ui->model.result_status, "ok") != 0) {
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ui->model.message);
+                } else if (strcmp(ui->model.setup_phase, "active") == 0 && !ui->model.disable_flag_present) {
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_DONE,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ptc_ui_text(PTC_UI_T_RECONFIRM_COMPLETED_MSG));
+                } else if (ptc_ui_setup_activating_grace(&ui->model)) {
+                    ui->upgrade_grace_started_at = (int64_t)time(NULL);
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_GRACE_WAIT,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_SUMMARY));
+                } else {
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ui->model.message);
+                }
+            } else if (ui->model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT &&
+                       strcmp(ui->model.result_type, "status") == 0) {
+                if (strcmp(ui->model.result_status, "ok") != 0) {
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ui->model.message);
+                } else if (strcmp(ui->model.setup_phase, "active") == 0 && !ui->model.disable_flag_present) {
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_DONE,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ptc_ui_text(PTC_UI_T_RECONFIRM_COMPLETED_MSG));
+                } else if (!ptc_ui_setup_activating_grace(&ui->model)) {
+                    ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+                        ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+                        ptc_ui_support_problem(&ui->model));
+                }
+            }
+        }
 #ifndef PLAYWISE_EDEN
         if (ui->hot_reload_reconfirm_redirect_pending &&
             strcmp(ui->model.result_type, "status") == 0) {
@@ -485,6 +560,14 @@ void poll_result(UiState *ui, bool force)
     }
     ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_READ_FAILED);
     set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), status);
+    if (ptc_ui_upgrade_flow_busy(&ui->model)) {
+#ifndef PLAYWISE_EDEN
+        ui->hot_reload_reconfirm_redirect_pending = false;
+#endif
+        ptc_ui_upgrade_flow_open(&ui->model, PTC_UI_UPGRADE_FLOW_FAILED,
+            ui->model.upgrade_flow_from_hot_reload, ui->model.upgrade_flow_reconfirm_context,
+            ui->model.message);
+    }
     if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
     if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
     if (ui->request_view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS)

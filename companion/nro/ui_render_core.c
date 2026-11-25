@@ -675,7 +675,10 @@ void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
     uint32_t color = UI_DANGER;
 
     if (!ptc_ui_parent_footer_status_visible(model)) return;
-    if (model->disable_flag_present) {
+    if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) {
+        snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_FOOTER_ALERT));
+        color = UI_WARNING;
+    } else if (model->disable_flag_present) {
         snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_CONTROLS_DISABLED_PRESS_A_FOR_RECOVERY));
     } else if (model->recovery_active) {
         snprintf(summary, sizeof(summary), "%s", ptc_ui_text(PTC_UI_T_RECOVERY_INCOMPLETE_PRESS_A_FOR_ACTIONS));

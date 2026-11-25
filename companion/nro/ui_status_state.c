@@ -656,6 +656,8 @@ const char *ptc_ui_runtime_notice_summary(const PtcUiModel *model)
     if (!model) return "";
     if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model))
         return ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_SUMMARY);
+    if (ptc_ui_setup_activating_grace(model))
+        return ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_SUMMARY);
     if (model->disable_flag_present) return ptc_ui_text(PTC_UI_T_CONTROL_HAS_BEEN_DEACTIVATED_PLEASE_CONTACT_SUPPORT);
     if (model->recovery_active) return ptc_ui_text(PTC_UI_T_SETTINGS_ARE_BEING_RESTORED_PLEASE_WAIT_FOR);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)
@@ -713,6 +715,9 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
     } else if (reconfirm) {
         snprintf(out->details, sizeof(out->details),
                  "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_DETAILS));
+    } else if (ptc_ui_setup_activating_grace(model)) {
+        snprintf(out->details, sizeof(out->details),
+                 "%s", ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_PROBLEM));
     } else if (model->disable_flag_present) {
         snprintf(out->details, sizeof(out->details),
                  "%s", ptc_ui_text(PTC_UI_T_STOPPED_UPDATING_THE_QUOTA_SETTING_PLEASE_GO));

@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include <inttypes.h>
 #include "nro_app_internal.h"
 #include "../../common/protocol/request_schema.h"
 #include "../../platform/host/mem_storage.h"
@@ -1416,6 +1417,110 @@ int main(void)
             check(sound_count == 5, "blocked update notes actions are silent");
             free(notes);
         }
+    }
+    {
+        static PtcMemStorage upgrade_mem;
+        UiState upgrade_ui;
+        char res_path[240];
+        char res_json[1024];
+        const int64_t t0 = fixed_time;
+        init(&upgrade_ui, &upgrade_mem);
+        upgrade_ui.model.view = PTC_UI_PARENT;
+        upgrade_ui.model.parent_page = PTC_UI_PARENT_SUPPORT;
+        upgrade_ui.model.setup_wizard_completed = true;
+        upgrade_ui.model.disable_flag_present = true;
+        snprintf(upgrade_ui.model.setup_phase, sizeof(upgrade_ui.model.setup_phase), "protection");
+        snprintf(upgrade_ui.model.disable_reason, sizeof(upgrade_ui.model.disable_reason), "runtime_fingerprint_changed");
+
+        start_reconfirm_activation(&upgrade_ui, true);
+        check(upgrade_ui.waiting &&
+              upgrade_ui.model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW &&
+              upgrade_ui.model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_ACTIVATING &&
+              ptc_ui_upgrade_flow_blocks_input(&upgrade_ui.model) &&
+              upgrade_ui.active_request_id[0] != '\0',
+              "reconfirm activation opens busy modal and submits complete_setup");
+
+        snprintf(res_path, sizeof(res_path), APP_ROOT "/results/%s.json", upgrade_ui.active_request_id);
+        snprintf(res_json, sizeof(res_json),
+                 "{\"version\":1,\"request_id\":\"%s\",\"type\":\"complete_setup\",\"status\":\"ok\","
+                 "\"state\":{\"day_index\":2500,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+                 "\"remaining_available\":true,\"remaining_minutes\":60,\"play_timer_enabled\":1,\"restricted_now\":0},"
+                 "\"setup\":{\"phase\":\"released\",\"activate_after\":%" PRId64 "},\"completed_at\":%" PRId64 "}",
+                 upgrade_ui.active_request_id, t0 + 5, t0);
+        upgrade_mem.storage.vtable->write_text_atomic(&upgrade_mem.storage, res_path, res_json);
+        monotonic_offset_ms += 100;
+        poll_result(&upgrade_ui, false);
+        check(!upgrade_ui.waiting &&
+              upgrade_ui.model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW &&
+              upgrade_ui.model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT &&
+              ptc_ui_upgrade_flow_blocks_input(&upgrade_ui.model) &&
+              ptc_ui_setup_activating_grace(&upgrade_ui.model),
+              "released complete_setup receipt enters locked grace-wait stage");
+
+        fixed_time = t0 + 3;
+        refresh_setup_activation(&upgrade_ui);
+        check(!upgrade_ui.waiting && upgrade_ui.model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT,
+              "grace wait does not prematurely poll status before activate_after");
+
+        fixed_time = t0 + 5;
+        refresh_setup_activation(&upgrade_ui);
+        check(upgrade_ui.waiting && upgrade_ui.active_request_id[0] != '\0',
+              "grace wait polls status once activate_after is reached");
+
+        snprintf(res_path, sizeof(res_path), APP_ROOT "/results/%s.json", upgrade_ui.active_request_id);
+        snprintf(res_json, sizeof(res_json),
+                 "{\"version\":1,\"request_id\":\"%s\",\"type\":\"status\",\"status\":\"ok\","
+                 "\"state\":{\"day_index\":2500,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+                 "\"remaining_available\":true,\"remaining_minutes\":60,\"play_timer_enabled\":1,\"restricted_now\":0},"
+                 "\"setup\":{\"phase\":\"active\",\"activate_after\":0},\"completed_at\":%" PRId64 "}",
+                 upgrade_ui.active_request_id, t0 + 5);
+        upgrade_mem.storage.vtable->write_text_atomic(&upgrade_mem.storage, res_path, res_json);
+        monotonic_offset_ms += 100;
+        poll_result(&upgrade_ui, false);
+        check(!upgrade_ui.waiting &&
+              upgrade_ui.model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW &&
+              upgrade_ui.model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_DONE &&
+              !ptc_ui_upgrade_flow_blocks_input(&upgrade_ui.model) &&
+              strcmp(upgrade_ui.model.setup_phase, "active") == 0,
+              "active status transitions grace-wait modal to unlocked done stage");
+
+        /* Bounded grace timeout never deadlocks the modal. */
+        init(&upgrade_ui, &upgrade_mem);
+        upgrade_ui.model.view = PTC_UI_PARENT;
+        upgrade_ui.model.setup_wizard_completed = true;
+        snprintf(upgrade_ui.model.setup_phase, sizeof(upgrade_ui.model.setup_phase), "released");
+        upgrade_ui.model.setup_activate_after = t0 + 5;
+        upgrade_ui.upgrade_grace_started_at = t0;
+        ptc_ui_upgrade_flow_open(&upgrade_ui.model, PTC_UI_UPGRADE_FLOW_GRACE_WAIT, false, true, "");
+        fixed_time = t0 + 21;
+        refresh_setup_activation(&upgrade_ui);
+        check(upgrade_ui.model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_FAILED &&
+              !ptc_ui_upgrade_flow_blocks_input(&upgrade_ui.model) &&
+              strcmp(upgrade_ui.model.upgrade_flow_detail, ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_GRACE_TIMEOUT)) == 0,
+              "grace-wait timeout escapes locked modal into actionable failed state");
+
+        /* Activation error receipt transitions ACTIVATING to FAILED. */
+        fixed_time = t0;
+        init(&upgrade_ui, &upgrade_mem);
+        upgrade_ui.model.view = PTC_UI_PARENT;
+        upgrade_ui.model.setup_wizard_completed = true;
+        start_reconfirm_activation(&upgrade_ui, false);
+        snprintf(res_path, sizeof(res_path), APP_ROOT "/results/%s.json", upgrade_ui.active_request_id);
+        snprintf(res_json, sizeof(res_json),
+                 "{\"version\":1,\"request_id\":\"%s\",\"type\":\"complete_setup\",\"status\":\"error\","
+                 "\"error\":{\"code\":401,\"reason\":\"pctl_read_failed\",\"message\":\"PCTL read failed\"},"
+                 "\"state\":{\"day_index\":2500,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
+                 "\"remaining_available\":false,\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},"
+                 "\"setup\":{\"phase\":\"failed\"},\"completed_at\":%" PRId64 "}",
+                 upgrade_ui.active_request_id, t0);
+        upgrade_mem.storage.vtable->write_text_atomic(&upgrade_mem.storage, res_path, res_json);
+        monotonic_offset_ms += 100;
+        poll_result(&upgrade_ui, false);
+        check(!upgrade_ui.waiting &&
+              upgrade_ui.model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW &&
+              upgrade_ui.model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_FAILED &&
+              !ptc_ui_upgrade_flow_blocks_input(&upgrade_ui.model),
+              "complete_setup error transitions modal to unlocked failed stage");
     }
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;

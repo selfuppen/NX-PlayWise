@@ -278,7 +278,9 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
                                                                               : ptc_ui_text(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE))) :
                            recommended == 1 ? ptc_ui_text(PTC_UI_T_SUGGESTION_SELECT_RETRY_REPAIR) :
                            recommended == 4 ? ptc_ui_text(PTC_UI_T_SUGGESTION_EXPORT_DIAGNOSTIC_PACKAGE_AND_KEEP_PROBLEM) :
-                           (model->waiting || model->apply_pending_confirmation ? ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN) : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU));
+                           (model->waiting || model->apply_pending_confirmation || ptc_ui_setup_activating_grace(model)
+                               ? ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN)
+                               : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU));
         draw_wrapped_text(pixels, stride, banner.x + 12, banner.y + 92, next, 12,
                           banner.width - 24, 16, 2, b_fg);
     }

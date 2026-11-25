@@ -5361,6 +5361,123 @@ static void test_online_update_layout(void)
         "current software status clears support badge");
 }
 
+static void test_upgrade_flow_and_grace_state(void)
+{
+    PtcUiModel model = {0};
+    PtcUiNoticeProjection notice;
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_SUPPORT;
+    model.status_loaded = true;
+    model.status_updated_at = 1800000000;
+    model.day_index = 2500;
+    model.setup_wizard_completed = true;
+    model.update_status = 3;
+    strcpy(model.update_version, "2.2.0");
+
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "released");
+    model.setup_activate_after = 1800000005;
+    check_true(ptc_ui_setup_activating_grace(&model),
+               "released phase with activate_after is classified as activation grace");
+    check_int(ptc_ui_safety_action_available(&model, 0), PTC_UI_ACTION_DISABLED,
+              "support enable action is disabled during released activation grace");
+    check_int(ptc_ui_safety_action_available(&model, 2), PTC_UI_ACTION_DISABLED,
+              "emergency disable action is disabled during released activation grace");
+    check_int(ptc_ui_support_recommended_action(&model), -1,
+              "released activation grace does not recommend duplicate re-enable");
+    check_true(strcmp(ptc_ui_support_problem(&model), ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_PROBLEM)) == 0,
+               "released activation grace reports activating problem copy");
+    ptc_ui_project_notice(&model, &notice);
+    check_true(notice.visible && notice.level == PTC_UI_NOTICE_WARNING &&
+               strcmp(notice.summary, ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_SUMMARY)) == 0,
+               "released activation grace projects warning notice summary");
+    check_true(!ptc_ui_update_badge_visible(&model),
+               "update badge is hidden during released activation grace");
+
+    {
+        PtcUiModel res_model = {0};
+        res_model.setup_wizard_completed = true;
+        const char *released_json =
+            "{\"version\":1,\"request_id\":\"req-rel\",\"type\":\"complete_setup\",\"status\":\"ok\","
+            "\"state\":{\"day_index\":2500,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+            "\"remaining_available\":true,\"remaining_minutes\":60,\"play_timer_enabled\":1,\"restricted_now\":0},"
+            "\"setup\":{\"phase\":\"released\",\"activate_after\":1800000005},\"completed_at\":1800000000}";
+        check_true(ptc_ui_apply_result_json(&res_model, released_json), "released complete_setup result parses");
+        check_true(strcmp(res_model.message, ptc_ui_text(PTC_UI_T_SETUP_GRACE_ACTIVATING_SUMMARY)) == 0,
+                   "released complete_setup shows grace activating copy instead of inactive error");
+
+        const char *active_json =
+            "{\"version\":1,\"request_id\":\"req-act\",\"type\":\"complete_setup\",\"status\":\"ok\","
+            "\"state\":{\"day_index\":2500,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+            "\"remaining_available\":true,\"remaining_minutes\":60,\"play_timer_enabled\":1,\"restricted_now\":0},"
+            "\"setup\":{\"phase\":\"active\",\"activate_after\":0},\"completed_at\":1800000006}";
+        check_true(ptc_ui_apply_result_json(&res_model, active_json), "active complete_setup result parses");
+        check_true(strcmp(res_model.message, ptc_ui_text(PTC_UI_T_RECONFIRM_COMPLETED_MSG)) == 0,
+                   "completed-wizard activation uses reconfirm completion copy");
+    }
+
+    model.setup_phase[0] = '\0';
+    model.setup_activate_after = 0;
+    model.hot_reload_status = PTC_UI_HOT_RELOAD_RUNNING;
+    check_true(ptc_ui_upgrade_flow_blocks_input(&model),
+               "running hot reload blocks global input even before modal opens");
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(0)), PTC_UI_HIT_NONE, 0,
+              "running hot reload suppresses background touch hit-testing");
+    model.hot_reload_status = PTC_UI_HOT_RELOAD_UNKNOWN;
+
+    const PtcUiUpgradeFlowStage busy_stages[] = {
+        PTC_UI_UPGRADE_FLOW_HOT_RELOAD,
+        PTC_UI_UPGRADE_FLOW_REFRESHING,
+        PTC_UI_UPGRADE_FLOW_ACTIVATING,
+        PTC_UI_UPGRADE_FLOW_GRACE_WAIT
+    };
+    for (size_t i = 0; i < sizeof(busy_stages) / sizeof(busy_stages[0]); ++i) {
+        ptc_ui_upgrade_flow_open(&model, busy_stages[i], true, true, "busy");
+        check_true(model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW &&
+                   ptc_ui_upgrade_flow_busy(&model) &&
+                   ptc_ui_upgrade_flow_blocks_input(&model),
+                   "busy upgrade flow stages lock modal and block global input");
+        check_true(!ptc_ui_update_badge_visible(&model),
+                   "busy upgrade flow hides software update badge");
+        ptc_ui_cancel_overlay(&model);
+        check_true(model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW &&
+                   model.upgrade_flow_stage == busy_stages[i],
+                   "cancel overlay cannot dismiss busy upgrade flow modal");
+        check_hit(hit_center(&model, ptc_ui_confirm_rect(PTC_UI_OVERLAY_UPGRADE_FLOW)), PTC_UI_HIT_NONE, 0,
+                  "busy upgrade flow rejects confirm touch hit");
+        check_hit(hit_center(&model, ptc_ui_cancel_rect(PTC_UI_OVERLAY_UPGRADE_FLOW)), PTC_UI_HIT_NONE, 0,
+                  "busy upgrade flow rejects cancel touch hit");
+        check_hit(hit_center(&model, ptc_ui_upgrade_flow_close_rect()), PTC_UI_HIT_NONE, 0,
+                  "busy upgrade flow rejects close touch hit");
+    }
+
+    ptc_ui_upgrade_flow_open(&model, PTC_UI_UPGRADE_FLOW_RECONFIRM_READY, true, true, "ready");
+    check_true(!ptc_ui_upgrade_flow_busy(&model) && !ptc_ui_upgrade_flow_blocks_input(&model),
+               "reconfirm-ready stage unlocks explicit modal choices");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(PTC_UI_OVERLAY_UPGRADE_FLOW)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "reconfirm-ready primary button maps to overlay confirm");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(PTC_UI_OVERLAY_UPGRADE_FLOW)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "reconfirm-ready secondary button maps to overlay cancel");
+    ptc_ui_cancel_overlay(&model);
+    check_true(model.overlay == PTC_UI_OVERLAY_NONE && model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_NONE,
+               "cancel overlay closes non-busy reconfirm-ready modal cleanly");
+
+    ptc_ui_upgrade_flow_open(&model, PTC_UI_UPGRADE_FLOW_DONE, true, true, "done");
+    check_true(!ptc_ui_upgrade_flow_busy(&model) && !ptc_ui_upgrade_flow_blocks_input(&model),
+               "completed upgrade flow unlocks modal dismissal");
+    check_hit(hit_center(&model, ptc_ui_upgrade_flow_close_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "completed upgrade flow close button maps to overlay cancel");
+    ptc_ui_upgrade_flow_close(&model);
+    check_true(model.overlay == PTC_UI_OVERLAY_NONE && model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_NONE,
+               "closing completed upgrade flow resets stage");
+
+    ptc_ui_upgrade_flow_open(&model, PTC_UI_UPGRADE_FLOW_FAILED, true, true, "failed");
+    check_true(!ptc_ui_upgrade_flow_busy(&model) && !ptc_ui_upgrade_flow_blocks_input(&model),
+               "failed upgrade flow unlocks modal dismissal");
+    check_hit(hit_center(&model, ptc_ui_upgrade_flow_close_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "failed upgrade flow close button maps to overlay cancel");
+    ptc_ui_upgrade_flow_close(&model);
+}
+
 int main(void)
 {
     test_direct_usage_freshness();
@@ -5374,6 +5491,7 @@ int main(void)
     test_data_freshness_and_software_update();
     test_child_forecast_focus();
     test_online_update_layout();
+    test_upgrade_flow_and_grace_state();
     test_dock_ui();
     test_dock_editor_preview();
     test_calendar_update_tab();

@@ -39,6 +39,20 @@ static PtcUiHit make_hit(PtcUiHitKind kind, int index)
 static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
 {
     int i;
+    if (model->overlay == PTC_UI_OVERLAY_UPGRADE_FLOW) {
+        if (ptc_ui_upgrade_flow_busy(model)) return make_hit(PTC_UI_HIT_NONE, 0);
+        if (model->upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_RECONFIRM_READY) {
+            if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y))
+                return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
+            if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))
+                return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        } else if (model->upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_DONE ||
+                   model->upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_FAILED) {
+            if (ptc_ui_rect_contains(ptc_ui_upgrade_flow_close_rect(), x, y))
+                return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        }
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
     if (model->waiting && model->overlay == PTC_UI_OVERLAY_SCHEDULED)
         return make_hit(PTC_UI_HIT_NONE, 0);
     if (model->overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
@@ -589,6 +603,9 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
     int i;
     int count;
     if (!model) {
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (ptc_ui_upgrade_flow_blocks_input(model)) {
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (ptc_ui_update_badge_visible(model) && rect_contains_with_padding(ptc_ui_update_badge_rect(model), 4, x, y))

@@ -202,7 +202,13 @@ bool ptc_ui_plan_save_requires_hold(const PtcUiModel *model, PtcUiPlanKind kind,
 void ptc_ui_project_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
                                 bool dirty, int64_t now, PtcUiPlanImpactProjection *out);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
+bool ptc_ui_setup_activating_grace(const PtcUiModel *model);
 bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model);
+bool ptc_ui_upgrade_flow_busy(const PtcUiModel *model);
+bool ptc_ui_upgrade_flow_blocks_input(const PtcUiModel *model);
+void ptc_ui_upgrade_flow_open(PtcUiModel *model, PtcUiUpgradeFlowStage stage,
+                              bool from_hot_reload, bool reconfirm_context, const char *detail);
+void ptc_ui_upgrade_flow_close(PtcUiModel *model);
 bool ptc_ui_error_is_grant_code(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical);

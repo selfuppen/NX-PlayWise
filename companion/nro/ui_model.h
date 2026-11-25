@@ -145,8 +145,20 @@ typedef enum {
     PTC_UI_OVERLAY_ONLINE_UPDATE = 46,
     PTC_UI_OVERLAY_UPDATE_BACKUPS = 47,
     PTC_UI_OVERLAY_NOTIFICATIONS = 48,
-    PTC_UI_OVERLAY_EYE_CARE_RULES = 49
+    PTC_UI_OVERLAY_EYE_CARE_RULES = 49,
+    PTC_UI_OVERLAY_UPGRADE_FLOW = 50
 } PtcUiOverlay;
+
+typedef enum {
+    PTC_UI_UPGRADE_FLOW_NONE = 0,
+    PTC_UI_UPGRADE_FLOW_HOT_RELOAD = 1,
+    PTC_UI_UPGRADE_FLOW_REFRESHING = 2,
+    PTC_UI_UPGRADE_FLOW_RECONFIRM_READY = 3,
+    PTC_UI_UPGRADE_FLOW_ACTIVATING = 4,
+    PTC_UI_UPGRADE_FLOW_GRACE_WAIT = 5,
+    PTC_UI_UPGRADE_FLOW_DONE = 6,
+    PTC_UI_UPGRADE_FLOW_FAILED = 7
+} PtcUiUpgradeFlowStage;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
 #define PTC_UI_OVERLAY_OPEN_FRAMES 8
@@ -783,6 +795,11 @@ typedef struct {
     char hot_reload_detail[192];
     int hot_reload_status;
     bool hot_reload_capture_restart;
+    PtcUiUpgradeFlowStage upgrade_flow_stage;
+    int upgrade_flow_substep;
+    bool upgrade_flow_from_hot_reload;
+    bool upgrade_flow_reconfirm_context;
+    char upgrade_flow_detail[192];
     char repository_url[128];
     char gitee_repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];

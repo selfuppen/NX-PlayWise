@@ -178,6 +178,9 @@ int main(int argc, char **argv)
         ui.waiting = true;
         ui.model.waiting = true;
         snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
+        ptc_ui_upgrade_flow_open(&ui.model, PTC_UI_UPGRADE_FLOW_HOT_RELOAD, true,
+            !ui.model.hot_reload_capture_restart, ui.hot_reload.detail);
+        sync_hot_reload_model(&ui);
     } else if (!backend_expected) {
         ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_INIT_FAILED);
         snprintf(ui.model.message, sizeof(ui.model.message),
@@ -235,6 +238,23 @@ int main(int argc, char **argv)
             memset(&left_stick, 0, sizeof(left_stick));
             memset(&right_stick, 0, sizeof(right_stick));
             touch_active = touch_down = details_touch_drag = false;
+            touch_x = touch_y = details_touch_y = -1;
+            ui.minus_pending = false;
+            ui.hidden_ticks = 0;
+            memset(&ui.custom_shortcut_hold, 0, sizeof(ui.custom_shortcut_hold));
+            memset(&ui.r_stick_repeat, 0, sizeof(ui.r_stick_repeat));
+            ui.r_stick_prev_h_dir = 0;
+        }
+        bool upgrade_input_blocked = ptc_ui_upgrade_flow_blocks_input(&ui.model);
+        if (upgrade_input_blocked) {
+            if (down != 0 || (touch_active && !touch_down)) {
+                ptc_audio_play(PTC_SE_ERROR);
+            }
+            touch_down = touch_active;
+            down = held = 0;
+            memset(&left_stick, 0, sizeof(left_stick));
+            memset(&right_stick, 0, sizeof(right_stick));
+            touch_active = details_touch_drag = false;
             touch_x = touch_y = details_touch_y = -1;
             ui.minus_pending = false;
             ui.hidden_ticks = 0;
@@ -405,7 +425,7 @@ int main(int argc, char **argv)
                 ptc_ui_home_details_scroll(&ui.model, details_touch_y - touch_y);
                 details_touch_y = touch_y;
             }
-        } else {
+        } else if (!upgrade_input_blocked) {
             touch_down = false;
             details_touch_drag = false;
         }

@@ -5,6 +5,7 @@
 void handle_touch(UiState *ui, int x, int y)
 {
     if (handle_parent_auth_error_touch(ui, x, y)) return;
+    if (ptc_ui_upgrade_flow_blocks_input(&ui->model)) return;
     PtcUiHit hit = ptc_ui_hit_test(&ui->model, x, y);
     if (ui->waiting && ui->model.view == PTC_UI_PARENT &&
         ui->model.overlay == PTC_UI_OVERLAY_NONE &&
@@ -283,7 +284,8 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
+        if (ui->model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW ||
+            ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP ||
             ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION ||
@@ -327,6 +329,10 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CONFIRM:
+        if (ui->model.overlay == PTC_UI_OVERLAY_UPGRADE_FLOW) {
+            handle_overlay_input(ui, HidNpadButton_A);
+            break;
+        }
         if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY ||
             ui->model.overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
             handle_overlay_input(ui, HidNpadButton_X);

@@ -2301,9 +2301,242 @@ static void draw_notification_preferences(uint32_t *pixels, uint32_t stride, con
     }
 }
 
+static void draw_upgrade_flow_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    PtcUiModel shell_model = *model;
+    shell_model.overlay_title[0] = '\0';
+    shell_model.overlay_body[0] = '\0';
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 860, 476);
+
+    PtcUiUpgradeFlowStage stage = model->upgrade_flow_stage;
+    bool busy = ptc_ui_upgrade_flow_busy(model);
+    bool is_done = stage == PTC_UI_UPGRADE_FLOW_DONE;
+    bool is_failed = stage == PTC_UI_UPGRADE_FLOW_FAILED;
+    bool is_reconfirm = stage == PTC_UI_UPGRADE_FLOW_RECONFIRM_READY;
+    bool is_grace = stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT;
+    int64_t grace_sec = is_grace ? ptc_ui_setup_grace_remaining(model, ptc_ui_render_now()) : -1;
+
+    /* 1. Header: semantic icon + bold title + right status pill */
+    const char *title = ptc_ui_text(
+        stage == PTC_UI_UPGRADE_FLOW_HOT_RELOAD || stage == PTC_UI_UPGRADE_FLOW_REFRESHING
+            ? PTC_UI_T_UPGRADE_FLOW_TITLE_LOAD :
+        is_reconfirm ? PTC_UI_T_UPGRADE_FLOW_TITLE_RECONFIRM :
+        stage == PTC_UI_UPGRADE_FLOW_ACTIVATING || is_grace ? PTC_UI_T_UPGRADE_FLOW_TITLE_ACTIVATING :
+        is_done ? PTC_UI_T_UPGRADE_FLOW_TITLE_DONE : PTC_UI_T_UPGRADE_FLOW_TITLE_FAILED);
+
+    char badge_buf[48] = "";
+    uint32_t tone_fg = UI_ACCENT;
+    uint32_t tone_bg = UI_ACCENT_SOFT;
+    uint32_t tone_bd = UI_ACCENT;
+    int symbol_kind = 2; /* warning/info dot */
+
+    if (is_done) {
+        snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_HEALTH_OK_BADGE));
+        tone_fg = UI_SUCCESS; tone_bg = UI_SUCCESS_SOFT; tone_bd = UI_SUCCESS_BORDER; symbol_kind = 1;
+    } else if (is_failed) {
+        snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_ERR_BADGE));
+        tone_fg = UI_DANGER; tone_bg = UI_DANGER_SOFT; tone_bd = UI_DANGER_BORDER; symbol_kind = 3;
+    } else if (is_reconfirm) {
+        snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE));
+        tone_fg = UI_WARNING_TEXT; tone_bg = UI_WARNING_SOFT; tone_bd = UI_WARNING_BORDER; symbol_kind = 2;
+    } else if (is_grace) {
+        if (grace_sec > 0) snprintf(badge_buf, sizeof(badge_buf), "%lld s", (long long)grace_sec);
+        else snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING));
+        tone_fg = UI_WARNING_TEXT; tone_bg = UI_WARNING_SOFT; tone_bd = UI_WARNING_BORDER; symbol_kind = 2;
+    } else if (stage == PTC_UI_UPGRADE_FLOW_HOT_RELOAD) {
+        int sub = model->upgrade_flow_substep;
+        if (sub < 1) sub = 1;
+        if (sub > 4) sub = 4;
+        snprintf(badge_buf, sizeof(badge_buf), "%d / 4", sub);
+        tone_fg = UI_ACCENT; tone_bg = UI_ACCENT_SOFT; tone_bd = UI_ACCENT; symbol_kind = 2;
+    } else if (stage == PTC_UI_UPGRADE_FLOW_REFRESHING) {
+        snprintf(badge_buf, sizeof(badge_buf), "4 / 4");
+        tone_fg = UI_ACCENT; tone_bg = UI_ACCENT_SOFT; tone_bd = UI_ACCENT; symbol_kind = 2;
+    } else {
+        snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING));
+        tone_fg = UI_ACCENT; tone_bg = UI_ACCENT_SOFT; tone_bd = UI_ACCENT; symbol_kind = 2;
+    }
+
+    draw_status_symbol(pixels, stride, dialog.x + 50, dialog.y + 52,
+                       is_reconfirm || is_grace ? UI_WARNING : tone_fg, symbol_kind);
+    char fitted_badge[48];
+    fit_text(fitted_badge, sizeof(fitted_badge), badge_buf, 13, 160);
+    int bw = measure_text(fitted_badge, 13) + 24;
+    if (bw < 68) bw = 68;
+    UiRect bpill = {dialog.x + dialog.width - 34 - bw, dialog.y + 38, bw, 28};
+    fill_round_rect(pixels, stride, bpill, 14, tone_bg);
+    draw_rect_outline(pixels, stride, bpill, 14, 1, tone_bd);
+    draw_text_center(pixels, stride, bpill, fitted_badge, 13, tone_fg);
+
+    char fitted_title[128];
+    int title_max = bpill.x - (dialog.x + 74) - 12;
+    if (title_max < 200) title_max = 200;
+    fit_text(fitted_title, sizeof(fitted_title), title, 24, title_max);
+    draw_text_bold(pixels, stride, dialog.x + 74, dialog.y + 60, fitted_title, 24, UI_INK);
+
+    /* 2. Stepper bar (3 steps when started from hot reload, 2 steps from direct Support recheck) */
+    {
+        UiRect area = {dialog.x + 34, dialog.y + 92, dialog.width - 68, 38};
+        int count = model->upgrade_flow_from_hot_reload ? 3 : 2;
+        const PtcUiTextId keys3[3] = {
+            PTC_UI_T_UPGRADE_FLOW_STEP_1,
+            PTC_UI_T_UPGRADE_FLOW_STEP_2,
+            PTC_UI_T_UPGRADE_FLOW_STEP_3
+        };
+        const PtcUiTextId keys2[2] = {
+            PTC_UI_T_UPGRADE_FLOW_STEP_2,
+            PTC_UI_T_UPGRADE_FLOW_STEP_3
+        };
+        int active_step = 0;
+        if (model->upgrade_flow_from_hot_reload) {
+            if (stage == PTC_UI_UPGRADE_FLOW_HOT_RELOAD || stage == PTC_UI_UPGRADE_FLOW_REFRESHING) active_step = 0;
+            else if (stage == PTC_UI_UPGRADE_FLOW_RECONFIRM_READY || stage == PTC_UI_UPGRADE_FLOW_ACTIVATING) active_step = 1;
+            else if (stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT) active_step = 2;
+            else if (stage == PTC_UI_UPGRADE_FLOW_DONE) active_step = 3;
+            else active_step = (model->hot_reload_status == PTC_UI_HOT_RELOAD_SUCCESS ||
+                                model->hot_reload_status == PTC_UI_HOT_RELOAD_CURRENT) ? 1 : 0;
+        } else {
+            if (stage == PTC_UI_UPGRADE_FLOW_ACTIVATING || stage == PTC_UI_UPGRADE_FLOW_RECONFIRM_READY) active_step = 0;
+            else if (stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT) active_step = 1;
+            else if (stage == PTC_UI_UPGRADE_FLOW_DONE) active_step = 2;
+            else active_step = 0;
+        }
+        const int arrow_w = 24;
+        int pill_w = (area.width - arrow_w * (count - 1)) / count;
+        for (int i = 0; i < count; ++i) {
+            UiRect pill = {area.x + i * (pill_w + arrow_w), area.y, pill_w, area.height};
+            bool step_done = i < active_step;
+            bool step_curr = i == active_step;
+            uint32_t pbg = step_done ? UI_SUCCESS_SOFT :
+                (step_curr ? (is_failed ? UI_DANGER_SOFT : (is_reconfirm || is_grace ? UI_WARNING_SOFT : UI_ACCENT_SOFT)) : UI_RAISED);
+            uint32_t pbd = step_done ? UI_SUCCESS_BORDER :
+                (step_curr ? (is_failed ? UI_DANGER_BORDER : (is_reconfirm || is_grace ? UI_WARNING_BORDER : UI_ACCENT)) : UI_BORDER);
+            uint32_t pfg = step_done ? UI_SUCCESS :
+                (step_curr ? (is_failed ? UI_DANGER : (is_reconfirm || is_grace ? UI_WARNING_TEXT : UI_ACCENT)) : UI_MUTED);
+            fill_round_rect(pixels, stride, pill, 10, pbg);
+            draw_rect_outline(pixels, stride, pill, 10, step_curr ? 2 : 1, pbd);
+            char fitted_step[96];
+            fit_text(fitted_step, sizeof(fitted_step),
+                     ptc_ui_text(count == 3 ? keys3[i] : keys2[i]), 14, pill.width - 18);
+            draw_text_center(pixels, stride, pill, fitted_step, 14, pfg);
+            if (i < count - 1) {
+                draw_text_center(pixels, stride,
+                                 (UiRect){pill.x + pill.width, area.y, arrow_w, area.height},
+                                 ">", 14, step_done ? UI_SUCCESS : UI_MUTED);
+            }
+        }
+    }
+
+    /* 3. Main status & progress card */
+    {
+        UiRect card = {dialog.x + 34, dialog.y + 148, dialog.width - 68, 224};
+        uint32_t cbg = is_done ? UI_SUCCESS_SOFT :
+            (is_failed ? UI_DANGER_SOFT : (is_reconfirm || is_grace ? UI_WARNING_SOFT : UI_PAGE));
+        uint32_t cbd = is_done ? UI_SUCCESS_BORDER :
+            (is_failed ? UI_DANGER_BORDER : (is_reconfirm || is_grace ? UI_WARNING_BORDER : UI_BORDER));
+        fill_round_rect(pixels, stride, card, 14, cbg);
+        draw_rect_outline(pixels, stride, card, 14, 1, cbd);
+
+        char primary_msg[256];
+        const char *secondary_msg = "";
+        if (stage == PTC_UI_UPGRADE_FLOW_HOT_RELOAD) {
+            snprintf(primary_msg, sizeof(primary_msg), "%s",
+                     model->hot_reload_detail[0] ? model->hot_reload_detail :
+                     (model->upgrade_flow_detail[0] ? model->upgrade_flow_detail : ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_TITLE_LOAD)));
+            secondary_msg = ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_WAIT_LOCK_HINT);
+        } else if (stage == PTC_UI_UPGRADE_FLOW_REFRESHING) {
+            snprintf(primary_msg, sizeof(primary_msg), "%s", ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_REFRESHING_STATUS));
+            secondary_msg = ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_WAIT_LOCK_HINT);
+        } else if (is_reconfirm) {
+            snprintf(primary_msg, sizeof(primary_msg), "%s", ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_RECONFIRM_BODY));
+            secondary_msg = ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_DETAILS);
+        } else if (stage == PTC_UI_UPGRADE_FLOW_ACTIVATING) {
+            snprintf(primary_msg, sizeof(primary_msg), "%s",
+                     ptc_ui_text(model->upgrade_flow_reconfirm_context
+                         ? PTC_UI_T_RECONFIRM_SUBMITTING : PTC_UI_T_COMPLETING_FIRST_TIME_SETUP));
+            secondary_msg = ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_WAIT_LOCK_HINT);
+        } else if (is_grace) {
+            if (grace_sec > 0) {
+                snprintf(primary_msg, sizeof(primary_msg),
+                         ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_GRACE_COUNTDOWN), (long long)grace_sec);
+            } else {
+                snprintf(primary_msg, sizeof(primary_msg), "%s", ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_GRACE_FINALIZING));
+            }
+            secondary_msg = ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_WAIT_LOCK_HINT);
+        } else if (is_done) {
+            snprintf(primary_msg, sizeof(primary_msg), "%s",
+                     model->upgrade_flow_detail[0] ? model->upgrade_flow_detail : ptc_ui_text(PTC_UI_T_RECONFIRM_COMPLETED_MSG));
+            secondary_msg = ptc_ui_text(PTC_UI_T_SETUP_CHECK_NOTICE);
+        } else {
+            snprintf(primary_msg, sizeof(primary_msg), "%s",
+                     model->upgrade_flow_detail[0] ? model->upgrade_flow_detail :
+                     (model->message[0] ? model->message : ptc_ui_text(PTC_UI_T_OPERATION_INCOMPLETE)));
+            secondary_msg = ptc_ui_text(PTC_UI_T_PLEASE_GO_TO_SUPPORT_AND_RECOVERY_TO);
+        }
+
+        draw_wrapped_text(pixels, stride, card.x + 24, card.y + 42, primary_msg, 19,
+                          card.width - 48, 28, 2, is_failed ? UI_DANGER : UI_INK);
+
+        if (busy) {
+            int pct = 20;
+            if (stage == PTC_UI_UPGRADE_FLOW_HOT_RELOAD) {
+                int sub = model->upgrade_flow_substep;
+                pct = sub <= 1 ? 22 : (sub == 2 ? 46 : (sub == 3 ? 72 : 90));
+            } else if (stage == PTC_UI_UPGRADE_FLOW_REFRESHING) {
+                pct = 94;
+            } else if (stage == PTC_UI_UPGRADE_FLOW_ACTIVATING) {
+                pct = 38;
+            } else if (is_grace) {
+                if (grace_sec >= 5) pct = 54;
+                else if (grace_sec > 0) pct = 54 + (int)(5 - grace_sec) * 9;
+                else pct = 95;
+            }
+            UiRect track = {card.x + 24, card.y + 114, card.width - 48, 16};
+            fill_round_rect(pixels, stride, track, 8, UI_GAUGE_SLOT);
+            draw_rect_outline(pixels, stride, track, 8, 1, UI_GAUGE_SLOT_BORDER);
+            int fill_w = track.width * pct / 100;
+            if (fill_w < 16) fill_w = 16;
+            if (fill_w > track.width) fill_w = track.width;
+            fill_round_rect(pixels, stride, (UiRect){track.x, track.y, fill_w, track.height},
+                            8, is_grace ? UI_WARNING : UI_ACCENT);
+            draw_wrapped_text(pixels, stride, card.x + 24, card.y + 162, secondary_msg, 14,
+                              card.width - 48, 20, 2, is_grace ? UI_WARNING_TEXT : UI_MUTED);
+        } else {
+            draw_wrapped_text(pixels, stride, card.x + 24, card.y + 122, secondary_msg, 15,
+                              card.width - 48, 22, 3, is_done ? UI_SUCCESS : (is_reconfirm ? UI_WARNING_TEXT : UI_MUTED));
+        }
+    }
+
+    /* 4. Bottom action area: locked badge while busy, clear buttons when actionable */
+    if (busy) {
+        UiRect lock_pill = {dialog.x + (dialog.width - 360) / 2, dialog.y + dialog.height - 82, 360, 52};
+        fill_round_rect(pixels, stride, lock_pill, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, lock_pill, 12, 1, UI_BORDER);
+        char fitted_wait[96];
+        fit_text(fitted_wait, sizeof(fitted_wait), ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_BEING_PROCESSED_PLEASE_WAIT),
+                 16, lock_pill.width - 28);
+        draw_text_center(pixels, stride, lock_pill, fitted_wait, 16, UI_MUTED);
+    } else if (is_reconfirm) {
+        draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
+                           ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_BTN_TO_SUPPORT), UI_RAISED, UI_INK, true);
+        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
+                           ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_BTN_RECONFIRM), UI_ACCENT, UI_ON_ACCENT, false);
+    } else if (is_done) {
+        draw_dialog_button(pixels, stride, ptc_ui_upgrade_flow_close_rect(),
+                           ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_BTN_DONE), UI_SUCCESS, UI_ON_ACCENT, false);
+    } else {
+        draw_dialog_button(pixels, stride, ptc_ui_upgrade_flow_close_rect(),
+                           ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_BTN_CLOSE_SUPPORT), UI_ACCENT, UI_ON_ACCENT, false);
+    }
+}
+
 bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
+    case PTC_UI_OVERLAY_UPGRADE_FLOW:
+        draw_upgrade_flow_overlay(pixels, stride, model);
+        return true;
     case PTC_UI_OVERLAY_NOTIFICATIONS:
         draw_notification_preferences(pixels, stride, model);
         return true;

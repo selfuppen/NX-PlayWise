@@ -141,6 +141,7 @@ typedef struct {
     bool exit_requested;
     PtcUiView request_view;
     int64_t last_setup_refresh_second;
+    int64_t upgrade_grace_started_at;
     int pending_today_action;
     int pending_parent_page;
     bool pending_leave_parent;
@@ -274,6 +275,7 @@ void poll_result(UiState *ui, bool force);
 void poll_eden_ready_result(UiState *ui);
 #endif
 void refresh_setup_activation(UiState *ui);
+void start_reconfirm_activation(UiState *ui, bool from_hot_reload);
 void enter_parent_area(UiState *ui);
 void select_setup_shortcut(UiState *ui, int index);
 bool commit_shortcut_preferences(UiState *ui);
