@@ -1521,6 +1521,41 @@ int main(void)
               upgrade_ui.model.upgrade_flow_stage == PTC_UI_UPGRADE_FLOW_FAILED &&
               !ptc_ui_upgrade_flow_blocks_input(&upgrade_ui.model),
               "complete_setup error transitions modal to unlocked failed stage");
+
+        /* Suspended transport (e.g. after hot-reload failure) must not trap B-back in an error loop. */
+        navigation_fixture(&upgrade_ui, &upgrade_mem);
+        for (int opt = 0; opt < PTC_UI_SETUP_OPTION_COUNT; ++opt)
+            upgrade_ui.model.setup_option_versions[opt] = ptc_ui_setup_option_revision(opt);
+        upgrade_ui.model.parent_page = PTC_UI_PARENT_SUPPORT;
+        upgrade_ui.model.status_loaded = false;
+        upgrade_ui.model.result_status[0] = '\0';
+        ptc_companion_transport_set_suspended(&upgrade_ui.transport, true);
+        request_parent_navigation(&upgrade_ui, -1, true);
+        check(upgrade_ui.model.view == PTC_UI_CHILD && !upgrade_ui.waiting &&
+              upgrade_ui.active_request_id[0] == '\0',
+              "leaving parent area while transport is suspended lands on child view without error loop");
+
+        /* Explicit refresh while suspended enters PTC_UI_ERROR, and B-back returns cleanly to child view. */
+        submit_status(&upgrade_ui);
+        check(upgrade_ui.model.view == PTC_UI_ERROR && !upgrade_ui.waiting,
+              "explicit refresh while suspended enters error view");
+        enter_child_area(&upgrade_ui);
+        check(upgrade_ui.model.view == PTC_UI_CHILD && !upgrade_ui.waiting,
+              "returning from error view while suspended stays on child view without re-triggering refresh");
+
+        /* Persistent storage write failure also must not trap B-back in an error loop. */
+        ptc_companion_transport_set_suspended(&upgrade_ui.transport, false);
+        upgrade_mem.fail_writes = true;
+        submit_status(&upgrade_ui);
+        check(upgrade_ui.model.view == PTC_UI_ERROR && !upgrade_ui.waiting,
+              "persistent write failure enters error view on explicit refresh");
+        enter_child_area(&upgrade_ui);
+        check(upgrade_ui.model.view == PTC_UI_CHILD && !upgrade_ui.waiting,
+              "returning from error view under persistent write failure stays on child view");
+        upgrade_mem.fail_writes = false;
+        refresh_status_on_navigation(&upgrade_ui);
+        check(upgrade_ui.waiting && upgrade_ui.active_request_id[0] != '\0',
+              "subsequent navigation resumes refresh once transport and storage recover");
     }
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;

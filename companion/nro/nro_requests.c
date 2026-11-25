@@ -41,7 +41,8 @@ void refresh_status_on_navigation(UiState *ui)
     time_t now;
     struct tm local;
     uint16_t day;
-    if (!ui || ui->waiting || ui->recovering_redemption || ui->status_refresh_pending) return;
+    if (!ui || ui->waiting || ui->recovering_redemption || ui->status_refresh_pending ||
+        ui->transport.suspended) return;
     now = time(NULL);
     /* Navigation may reuse display data, never an action's safety precheck.
      * Keep the original timestamp so the visible age/manual refresh stay true. */
@@ -102,12 +103,16 @@ void activate_parent_status(UiState *ui)
 
 void enter_child_area(UiState *ui)
 {
+    bool from_error;
     if (!ui) {
         return;
     }
+    from_error = ui->model.view == PTC_UI_ERROR;
     ui->model.header_language_focused = false;
     ui->model.view = PTC_UI_CHILD;
-    refresh_status_on_navigation(ui);
+    if (!from_error) {
+        refresh_status_on_navigation(ui);
+    }
 }
 
 void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)
