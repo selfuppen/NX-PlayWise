@@ -60,10 +60,12 @@ with bounded post-wake cooldown (HOME 3s, POWER 8s + sleep-jump guard + explicit
 manualComboRequested) in playwise_poll_policy.hpp after immediate hide/clear.
 Local wake re-show & unlock-aware cooldown patch (2026-11-26): also detect
 >=3s kernel suspend jumps on the 50ms input poller wait (covering short sleeps
-under 8s), record atomic post-wake input/POWER/HOME timestamps, and expose
-virtual onSleepWakeDetected/onHiddenWakeSignals/wakeEarlyUnlockEnabled hooks
-with effectivePowerCooldownUntilNs and evaluateWakeRecheck in
-playwise_poll_policy.hpp so lock-screen unlock input releases cooldown after
->=2s + 0.8s quiet (tolerating <=2s wake POWER event skew) without waking
-dark-sleep or interrupting lock-screen input.
+under 8s), track HOS 3-press same-button / 3-tap touch unlock completion via
+WakeUnlockTracker plus atomic post-wake input/POWER/HOME timestamps, and expose
+virtual onSleepWakeDetected/onHiddenWakeSignals/wakeEarlyReleaseMode hooks with
+effectivePowerCooldownUntilNs and evaluateWakeRecheck in playwise_poll_policy.hpp
+so lock-screen unlock releases cooldown only after 3-press/3-tap completion
+(>=2s + 0.8s quiet), lock-screen-off active wakes release after >=3s (blocking
+dark wakes), and <=2s wake POWER event skew is tolerated without shortening
+genuinely later POWER presses or HOME cooldown.
 No upstream files synced; pinned upstream commit remains unchanged.

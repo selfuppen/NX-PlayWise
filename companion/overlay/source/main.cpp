@@ -1512,20 +1512,25 @@ public:
         next_detail_poll_ms_ = 0;
     }
 
-    void onHiddenWakeSignals(uint64_t lastUserInputNs, uint64_t lastPowerEventNs, uint64_t lastHomeEventNs) override
+    void onHiddenWakeSignals(uint64_t lastUserInputNs, uint64_t lastPowerEventNs,
+                             uint64_t lastHomeEventNs, uint64_t lastWakeUnlockCompletedNs) override
     {
         wake_last_user_input_ns_ = lastUserInputNs;
         wake_last_power_event_ns_ = lastPowerEventNs;
         wake_last_home_event_ns_ = lastHomeEventNs;
+        wake_unlock_completed_ns_ = lastWakeUnlockCompletedNs;
     }
 
-    bool wakeEarlyUnlockEnabled() const override
+    tsl::detail::WakeEarlyMode wakeEarlyReleaseMode() const override
     {
-        /* Keep early unlock release active after wake_recheck_pending_ is
+        /* Keep early wake release active after wake_recheck_pending_ is
            consumed so the UI does not snap back into the remaining 8s POWER
            cooldown while awaiting the backend's detail request/event. */
-        return wake_lock_screen_enabled_ &&
-            automatic_enabled_ && gui_ && gui_->automatic_detail_allowed();
+        if (!automatic_enabled_ || !gui_ || !gui_->automatic_detail_allowed())
+            return tsl::detail::WakeEarlyMode::None;
+        return wake_lock_screen_enabled_
+            ? tsl::detail::WakeEarlyMode::LockScreen
+            : tsl::detail::WakeEarlyMode::NoLockScreen;
     }
 
     Event* hiddenWakeEvent() override
@@ -1548,8 +1553,12 @@ public:
     {
         if (brief_notice_.active) return UINT64_C(50000000);
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
-        bool wake_active = ptc_overlay_reason_wake_active(&reason_wake_, ms) ||
-            (wake_recheck_pending_ && wake_detected_ns_ != 0 && wake_last_user_input_ns_ > wake_detected_ns_);
+        bool wake_ready_poll = wake_recheck_pending_ && wake_detected_ns_ != 0 &&
+            (wake_lock_screen_enabled_
+                ? (wake_unlock_completed_ns_ > wake_detected_ns_)
+                : tsl::detail::activeWakeSignalPresent(wake_detected_ns_, wake_sleep_start_ns_,
+                    wake_last_user_input_ns_, wake_last_power_event_ns_, wake_last_home_event_ns_));
+        bool wake_active = ptc_overlay_reason_wake_active(&reason_wake_, ms) || wake_ready_poll;
         /* Failed detail writes stop that writer. Brief reception remains read-only. */
         return ptc_overlay_hidden_poll_idle_ns(automatic_enabled_, eventActive(&reason_event_), wake_active, 0);
     }
@@ -1683,7 +1692,7 @@ public:
             const uint64_t wake_now_ns = armTicksToNs(armGetSystemTick());
             const auto gate = tsl::detail::evaluateWakeRecheck(
                 wake_recheck_pending_, wake_detected_ns_, wake_sleep_start_ns_, wake_now_ns,
-                wake_lock_screen_enabled_, neutral && !brief_notice_.active,
+                wake_lock_screen_enabled_, neutral && !brief_notice_.active, wake_unlock_completed_ns_,
                 wake_last_user_input_ns_, wake_last_power_event_ns_, wake_last_home_event_ns_);
             if (gate == tsl::detail::WakeRecheckGate::Expired || gate == tsl::detail::WakeRecheckGate::Inactive) {
                 wake_recheck_pending_ = false;
@@ -1907,6 +1916,7 @@ private:
     bool wake_lock_screen_enabled_ = true;
     uint64_t wake_detected_ns_ = 0, wake_sleep_start_ns_ = 0;
     uint64_t wake_last_user_input_ns_ = 0, wake_last_power_event_ns_ = 0, wake_last_home_event_ns_ = 0;
+    uint64_t wake_unlock_completed_ns_ = 0;
     uint64_t next_config_ms_ = 0;
     uint64_t next_runtime_ms_ = 0;
     bool runtime_known_ = false;

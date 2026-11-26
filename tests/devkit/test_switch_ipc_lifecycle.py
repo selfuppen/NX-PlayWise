@@ -105,12 +105,14 @@ def main() -> None:
     require("Overlay::get()->hide()" not in poller and "shData->hideRequested = true;" in poller,
             "the input thread must signal hide instead of modifying GUI state")
     loop = libtesla[libtesla.index("static inline int loop(int argc, char** argv)"):]
-    require("detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0)" in poller,
-            "idle input throttling must preserve visible and held-button sampling")
+    require("detail::inputPollNs(\n                    shData->overlayOpen.load(), shData->keysHeld != 0 || shData->touchState.count != 0)" in poller and
+            "wakeUnlockTracker.observeSample(" in poller,
+            "idle input throttling must preserve visible, held-button and active-touch sampling plus 3-press/3-tap unlock tracking")
     require("detail::hiddenWaitNs(overlay->hasHiddenFrame()," in loop and
             "detail::sleepJumpDetected(waitStartNs, wakeNowNs, timeout)" in loop and
             "detail::sleepJumpDetected(pollerWaitStartNs, pollerWakeNowNs, pollerTimeoutNs)" in poller and
             "detail::effectivePowerCooldownUntilNs(" in loop and
+            "overlay->wakeEarlyReleaseMode()" in loop and
             "shData.manualComboRequested.exchange(false)" in loop and
             "shData->powerCooldownUntilNs" in poller and
             "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop and
