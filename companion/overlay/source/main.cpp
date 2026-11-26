@@ -1521,7 +1521,10 @@ public:
 
     bool wakeEarlyUnlockEnabled() const override
     {
-        return wake_recheck_pending_ && wake_lock_screen_enabled_ &&
+        /* Keep early unlock release active after wake_recheck_pending_ is
+           consumed so the UI does not snap back into the remaining 8s POWER
+           cooldown while awaiting the backend's detail request/event. */
+        return wake_lock_screen_enabled_ &&
             automatic_enabled_ && gui_ && gui_->automatic_detail_allowed();
     }
 

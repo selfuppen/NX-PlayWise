@@ -54,6 +54,9 @@ static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 108'000'000'000ULL, true, 102'500'000'000ULL) == 103'700'000'000ULL);
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 108'000'000'000ULL, true, 107'500'000'000ULL) == 108'000'000'000ULL);
+// A newer post-wake POWER press extends beyond wakeNs + 8s and must not be shortened.
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    100'000'000'000ULL, 112'000'000'000ULL, true, 101'000'000'000ULL) == 112'000'000'000ULL);
 // Wake recheck gating: lock screen ON, lock screen OFF, dark wake & expiration.
 static_assert(tsl::detail::evaluateWakeRecheck(
     false, 100'000'000'000ULL, 80'000'000'000ULL, 103'000'000'000ULL,

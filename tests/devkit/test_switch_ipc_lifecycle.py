@@ -192,6 +192,7 @@ def main() -> None:
             "setsysGetLockScreenFlag(" in overlay and
             "ASSERT_FATAL(setsysGetLockScreenFlag" not in overlay and
             "tsl::detail::evaluateWakeRecheck(" in overlay and
+            "wake_recheck_pending_ && wake_lock_screen_enabled_" not in overlay and
             "ptc_switch_ipc_query_reason_ready(" in nro_prefs,
             "sysmodule IPC server, overlay wake recheck, and NRO probe must wire RAM readiness and wake re-show safely")
     # An unanswered detail offer is dropped once its observation ages, so the

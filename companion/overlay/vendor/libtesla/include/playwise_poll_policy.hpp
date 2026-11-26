@@ -67,7 +67,8 @@ namespace tsl::detail {
         uint64_t wakeNs, uint64_t powerCooldownUntilNs,
         bool lockScreenEnabled, uint64_t lastUserInputNs) {
         if (!lockScreenEnabled || wakeNs == 0 || powerCooldownUntilNs == 0 ||
-            lastUserInputNs <= wakeNs) {
+            lastUserInputNs <= wakeNs ||
+            powerCooldownUntilNs > saturatingAddNs(wakeNs, POWER_COOLDOWN_NS)) {
             return powerCooldownUntilNs;
         }
         uint64_t minDeadline = saturatingAddNs(wakeNs, WAKE_EARLY_MIN_NS);
