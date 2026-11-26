@@ -54,18 +54,19 @@
   ],
   "releases": [
     {
-      "notes": "# 任我玩 PlayWise 3.3.1\n\n**零日常 SD 写入（内存 IPC 租约） · 浮窗自动弹窗免手开与休眠恢复 · 升级热加载模态流与稳定性加固**  \n**Zero routine SD writes (in-memory IPC lease) · Zero-manual-open overlay popups & sleep recovery · Hot-reload modal flow & stability hardening**\n\n## 简体中文\n\n3.3.1 围绕**受限自动弹窗可靠性、零日常 SD 写入、休眠/退回桌面自动恢复**以及**升级免整机重启体验**完成系统性收口，并将浮窗隐藏驻留态的常规健康轮询从 SD 写入全面迁入内存 `pctc:u` IPC 租约。\n\n### 零日常 SD 写入与系统资源减负\n\n- **内存 IPC 就绪租约（零日常 SD 写入）**：新增可选 `pctc:u` IPC 命令 `UPDATE_REASON_READY`（Cmd 5）与 `QUERY_REASON_READY`（Cmd 6）。隐藏态 `playwise.ovl` 的在线租约直接保存于后台进程内存并与调用方 IPC 会话绑定，会话关闭即刻清零，彻底取消 `ready.json` 的 20 秒周期落盘（实测 15 秒空闲 + 10 秒退隐期间 0 次 SD 写入、续租延迟从 37 ms 降至 `< 1 ms`）；NRO 环境自检优先查询内存租约并保留旧版 SD 文件回退兼容。\n- **后台轮询降频与 `time:u` 会话精简**：订阅驻留隐藏态轮询频率由 4 Hz 降至 1 Hz；精简后台与浮窗对 `time:u` 服务的持久会话占用，降低长时间挂机与多 sysmodule 共存时的服务槽位压力。\n\n### 受限自动弹窗：开机预加载、休眠自恢复与退出收口\n\n- **开机环境探测与保守配置自愈**：启动时自动探测 Ultrahand / nx-ovlloader 环境状态与逐应用静音标记 `playwise.flag`；对未开启 `notifications` 的 Ultrahand 兼容环境执行保守的 `false → true` 配置校正并保留原有其他键值。\n- **可选实验性 Ultrahand 开机预加载（`--pw-preload`）**：支持通过 `boot_package.ini` `[on-boot]` 托管块按需启用开机预加载，使开机进入游戏后无需先手动打开一次浮窗即可直接弹出受限详情说明；配套 `HOME` 键 3 秒",
+      "notes": "# 任我玩 PlayWise 3.3.2\n\n**休眠唤醒解锁后自动重弹受限浮窗（锁屏 3 连按 / 无锁屏 1 次确认） · 应用内更新重启生效提示与全流程引导**  \n**Auto re-show restriction overlay on sleep/wake (3-press lock-screen / 1-press no-lock fast pickup) · In-app update reboot guidance**\n\n## 简体中文\n\n3.3.2 聚焦**受限期间休眠唤醒的真实交互体验**与**应用内更新重启引导**：当主机在受限状态休眠后再唤醒，任我玩浮窗会准确识别系统锁屏解锁或无锁屏预唤醒确认动作，在用户真正进入桌面/游戏后约 1 秒自动重弹当前受限原因浮窗，不再漏弹或在未解锁预唤醒画面误弹；同时在应用内在线更新全流程补齐「需重启生效 / 浮窗已更新」提示与操作引导。\n\n### 休眠唤醒自动重弹受限浮窗\n\n- **受限唤醒自动重弹**：系统从真休眠唤醒且当前仍处于受限状态（每日额满 / 护眼休息 / 就寝 / 非电视限额）时，后台通过内存 IPC 通知驻留浮窗重新弹出当前受限原因提示，并自动跳过已解除的旧原因。\n- **系统锁屏开启态（3 连按 / 3 连触精确识别）**：对齐 HOS 系统「连按同键 3 次或连点屏幕 3 次解锁」逻辑，追踪同键 3 连按（`A/B/X/Y/方向键/L/R/ZL/ZR`）与 3 连触并过滤 `POWER` 键，确认解锁松手后立即结束冷却、约 1 秒内弹出浮窗；未完成解锁停留在锁屏页时不误弹。\n- **系统锁屏关闭态（预唤醒防误弹 + 1 次确认 ~1 秒快弹）**：针对 HOS 无锁屏态「按 POWER 后仍停在预唤醒画面、需再按 1 次任意键或点 1 次屏才进入亮屏桌面」的真实行为，以最新唤醒 `POWER` 事件为时间基准，未确认停留在预唤醒页时不误弹；确认进入桌面松手后约 1 秒即弹出（由原先约 8 秒大幅缩短）。\n- **唤醒诊断遥测（`wake_diag`）**：在状态与诊断链路补充唤醒时序、冷却提前释放原因与 `POWER` 基准偏移等只读诊断字段，便",
       "package": {
-        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.3.1/playwise-3.3.1.zip",
-        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.3.1/playwise-3.3.1.zip",
-        "md5": "c6db658067c34abd4433993592503489",
-        "name": "playwise-3.3.1.zip",
-        "sha256": "dffbc948d52aa45d577501b109c5065fe9f7eac98dc0aa97aab2657077137262",
-        "size": 3873865
+        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.3.2/playwise-3.3.2.zip",
+        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.3.2/playwise-3.3.2.zip",
+        "md5": "7ed158b2df489f6f055c77148ba8dcba",
+        "name": "playwise-3.3.2.zip",
+        "sha256": "467d3dbce1fbbd84f3bbd68cbd08a3b5fac8008fa18ad2944ab82938a4ce1dab",
+        "size": 3879656
       },
       "prerelease": false,
-      "tag": "v3.3.1",
-      "version": "3.3.1"
+      "requires_reboot": true,
+      "tag": "v3.3.2",
+      "version": "3.3.2"
     },
     {
       "notes": "这是 **3.1.8-beta.2 预发行测试版**。完整真机资格仍为 `pending`，面向愿意反馈问题的用户。\n\n## 本版变化\n\n- 优化主机应用、游戏内浮窗和离线家长网页的文案与操作流程，孩子页更清楚地展示受限提醒。\n- 修复任我玩驻留时简要提示的接收与清屏问题，优化隐藏浮窗唤醒、详情入口及重复提醒处理。\n- 减少后台轮询、通知续租、SD 文件读取和浮窗绘制的重复工作。\n- 修复英文护眼说明的单屏溢出，并同步“检查更新与版本”入口及安装包校验。\n\n## 验证范围\n\n最终 clean 候选为 `1cbf8a49c40add88beab59c92a4004e3413e4014`，构建身份为 `playwise-3.1.8-beta.2+1cbf8a49c40a.03190e8a8162f633`。统一 devkitPro 发布构建的 C／Python／UI 回归、标准包／完整包／Device Lab 校验及 Eden NRO 构建校验通过。\n\n同一最终 Eden NRO 完成首次设置、PIN、离线码与持久化等主场景 17/17、通知场景 4/4、离线家长网页及真实浏览器兑换场景 5/5；本批进程健康退出，证据封存并离线复核，所属运行目录按正式执行器清理。\n\n最终 beta.2 已在 Nintendo Switch OLED（HOS 22.5.0、Atmosphère 1.11.2）通过正常家长 PIN 的不同版本后台安全交接、新 boot 浮窗握手、孩子页和浮窗打开退出，以及约 62 秒的1952累计增长观察。限时窗口结束后恢复原30分钟周计划，完整0x44设置与原有效政策一致；额度耗尽后系统停止计时、累计保持稳定，操作者确认额度耗尽状态可见。标准采集以正常终末结束，三次完整原流一致且两段间隔均超过7秒。该烟测未重复最终版本的游戏、跨午夜、休眠或底座测试。\n\n版本前的主体候选已在 Nintendo Switch OLED、HOS 22.5.0、Atmosphère 1.11.2 上验证后台交接、浮窗正常打开退出、Woodo 的实际限制与恢复操控，以及原限时规则下的自然午夜累计归零和次日额度切换。历史证据按原候选范围引用，上",
