@@ -58,16 +58,16 @@ static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
     tsl::detail::WakeEarlyMode::LockScreen, 99'000'000'000ULL,
     101'000'000'000ULL, 100'200'000'000ULL, 0) == 108'000'000'000ULL);
-// - LockScreen: 3-press unlock completed releases at max(wakeNs + 2s, quietBase + 0.8s).
+// - LockScreen: 3-press unlock completed releases at max(anchorNs + 2s, quietBase + 0.8s).
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
     tsl::detail::WakeEarlyMode::LockScreen, 101'000'000'000ULL,
-    101'000'000'000ULL, 100'200'000'000ULL, 0) == 102'000'000'000ULL);
-// - LockScreen: wake POWER button event arriving ~0.5s after suspend resume still allows early release.
+    101'000'000'000ULL, 100'200'000'000ULL, 0) == 102'200'000'000ULL);
+// - LockScreen: wake POWER button event arriving ~0.5s after suspend resume anchors at 100.5s (+2s = 102.5s).
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'500'000'000ULL,
     tsl::detail::WakeEarlyMode::LockScreen, 101'000'000'000ULL,
-    101'000'000'000ULL, 100'500'000'000ULL, 0) == 102'000'000'000ULL);
+    101'000'000'000ULL, 100'500'000'000ULL, 0) == 102'500'000'000ULL);
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
     tsl::detail::WakeEarlyMode::LockScreen, 102'400'000'000ULL,
@@ -86,23 +86,34 @@ static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
     tsl::detail::WakeEarlyMode::NoLockScreen, 0,
     70'000'000'000ULL, 79'500'000'000ULL, 0) == 108'000'000'000ULL);
-// - NoLockScreen: active POWER wake releases at wakeNs + 3s (including <=3s late POWER event skew).
+// - NoLockScreen: POWER wake WITHOUT the 1-press/1-tap confirmation stays full 8s (pre-wake screen auto-sleeps in ~9s).
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
-    100'000'000'000ULL, 80'000'000'000ULL, 110'500'000'000ULL,
+    100'000'000'000ULL, 80'000'000'000ULL, 108'500'000'000ULL,
     tsl::detail::WakeEarlyMode::NoLockScreen, 0,
-    70'000'000'000ULL, 102'500'000'000ULL, 0) == 103'000'000'000ULL);
-// - NoLockScreen: post-wake user input adds 0.8s quiet settle past 3s if needed.
+    70'000'000'000ULL, 100'500'000'000ULL, 0) == 108'500'000'000ULL);
+// - NoLockScreen: POWER wake + 1 press/tap releases at max(anchor + 2s, input + 0.8s),
+//   even when a re-wake POWER press arrives 13.7s after the initial sleep wake (2cf40c53 hardware trace!).
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    230'137'000'000ULL, 223'421'000'000ULL, 251'825'000'000ULL,
+    tsl::detail::WakeEarlyMode::NoLockScreen, 0,
+    244'956'000'000ULL, 243'825'000'000ULL, 0) == 245'825'000'000ULL);
+// - NoLockScreen: HOME wake (goes straight into HOME without 1-press prompt) releases at wakeNs + 3s.
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
+    tsl::detail::WakeEarlyMode::NoLockScreen, 0,
+    70'000'000'000ULL, 79'500'000'000ULL, 100'200'000'000ULL) == 103'000'000'000ULL);
+// - NoLockScreen: post-wake user input past anchor + 1.2s adds 0.8s quiet settle.
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'500'000'000ULL,
     tsl::detail::WakeEarlyMode::NoLockScreen, 0,
     102'600'000'000ULL, 100'500'000'000ULL, 0) == 103'400'000'000ULL);
-// - NoLockScreen: genuinely later post-wake POWER press (e.g. power menu) keeps full 8s.
+// - NoLockScreen: POWER press beyond 45s wake window (no longer anchored) keeps full 8s.
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
-    100'000'000'000ULL, 80'000'000'000ULL, 112'000'000'000ULL,
+    100'000'000'000ULL, 80'000'000'000ULL, 158'000'000'000ULL,
     tsl::detail::WakeEarlyMode::NoLockScreen, 0,
-    70'000'000'000ULL, 104'000'000'000ULL, 0) == 112'000'000'000ULL);
+    151'000'000'000ULL, 150'000'000'000ULL, 0) == 158'000'000'000ULL);
 
-// Wake recheck gating: lock screen ON (requires 3-press/3-tap completion), lock screen OFF (3s + active wake), dark wake & expiration.
+// Wake recheck gating: lock screen ON (requires 3-press/3-tap completion), lock screen OFF (1-press or HOME wake), dark wake & expiration.
 static_assert(tsl::detail::evaluateWakeRecheck(
     false, 100'000'000'000ULL, 80'000'000'000ULL, 102'000'000'000ULL,
     true, true, 101'000'000'000ULL, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Inactive);
@@ -128,16 +139,22 @@ static_assert(tsl::detail::evaluateWakeRecheck(
 static_assert(tsl::detail::evaluateWakeRecheck(
     true, 100'000'000'000ULL, 80'000'000'000ULL, 102'000'000'000ULL,
     true, true, 101'000'000'000ULL, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Ready);
-// Lock screen OFF: dark wake blocked, <3s waits, >=3s with active POWER/HOME signal is ready.
+// Lock screen OFF: dark wake blocked, untouched POWER wake waits, 1-press/1-tap after POWER becomes ready at max(anchor+2s, input+0.8s), HOME wake ready at 3s.
 static_assert(tsl::detail::evaluateWakeRecheck(
     true, 100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
     false, true, 0, 70'000'000'000ULL, 79'500'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Wait);
 static_assert(tsl::detail::evaluateWakeRecheck(
-    true, 100'000'000'000ULL, 80'000'000'000ULL, 102'900'000'000ULL,
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
     false, true, 0, 70'000'000'000ULL, 100'200'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Wait);
 static_assert(tsl::detail::evaluateWakeRecheck(
-    true, 100'000'000'000ULL, 80'000'000'000ULL, 103'000'000'000ULL,
-    false, true, 0, 70'000'000'000ULL, 100'200'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Ready);
+    true, 230'137'000'000ULL, 223'421'000'000ULL, 245'824'000'000ULL,
+    false, true, 0, 244'956'000'000ULL, 243'825'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Wait);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 230'137'000'000ULL, 223'421'000'000ULL, 245'825'000'000ULL,
+    false, true, 0, 244'956'000'000ULL, 243'825'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Ready);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 102'900'000'000ULL,
+    false, true, 0, 70'000'000'000ULL, 0, 100'000'000'000ULL) == tsl::detail::WakeRecheckGate::Wait);
 static_assert(tsl::detail::evaluateWakeRecheck(
     true, 100'000'000'000ULL, 80'000'000'000ULL, 103'000'000'000ULL,
     false, true, 0, 70'000'000'000ULL, 0, 100'000'000'000ULL) == tsl::detail::WakeRecheckGate::Ready);

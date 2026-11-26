@@ -3602,9 +3602,11 @@ namespace tsl {
                         const uint64_t prevInputNs = shData->lastUserInputNs.load();
                         extendAtomicDeadline(shData->lastUserInputNs, inputNowNs);
                         const uint64_t wakeNs = shData->lastSleepWakeNs.load();
+                        const uint64_t wakeAnchor = detail::wakePowerAnchorNs(
+                            wakeNs, shData->lastPowerEventNs.load());
                         const uint64_t pwrUntil = shData->powerCooldownUntilNs.load();
-                        if (!shData->overlayOpen && wakeNs != 0 && inputNowNs > wakeNs &&
-                            prevInputNs <= wakeNs && detail::cooldownActive(inputNowNs, pwrUntil)) {
+                        if (!shData->overlayOpen && wakeAnchor != 0 && inputNowNs > wakeAnchor &&
+                            prevInputNs <= wakeAnchor && detail::cooldownActive(inputNowNs, pwrUntil)) {
                             eventFire(&shData->comboEvent);
                         }
                     }
@@ -3649,6 +3651,9 @@ namespace tsl {
                         extendAtomicDeadline(shData->lastPowerEventNs, nowNs);
                         extendAtomicDeadline(shData->powerCooldownUntilNs,
                             detail::saturatingAddNs(nowNs, detail::POWER_COOLDOWN_NS));
+                        if (!shData->overlayOpen && pollerTrackedWakeNs != 0) {
+                            wakeUnlockTracker.resetForWake(nowNs);
+                        }
                     } else if (idx == WaiterObject_HomeButton) {
                         extendAtomicDeadline(shData->lastHomeEventNs, nowNs);
                         extendAtomicDeadline(shData->homeCooldownUntilNs,

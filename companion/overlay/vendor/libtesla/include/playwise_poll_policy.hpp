@@ -138,6 +138,17 @@ namespace tsl::detail {
         return interval;
     }
 
+    // Anchor the active wake window to the latest wake-window POWER press when
+    // the console auto-slept briefly (<3s kernel suspend) before the user woke
+    // it again within the same 45s wake recheck window.
+    constexpr uint64_t wakePowerAnchorNs(uint64_t wakeNs, uint64_t lastPowerEventNs) {
+        if (wakeNs == 0) return 0;
+        if (lastPowerEventNs > wakeNs && lastPowerEventNs - wakeNs < WAKE_RECHECK_WINDOW_NS) {
+            return lastPowerEventNs;
+        }
+        return wakeNs;
+    }
+
     // Distinguish user-initiated wakes from background screen-off dark wakes.
     constexpr bool activeWakeSignalPresent(
         uint64_t wakeNs, uint64_t wakeStartNs,
@@ -152,63 +163,84 @@ namespace tsl::detail {
     }
 
     // Release the 8s POWER cooldown early after a genuine sleep wake:
-    // - LockScreen: only after 3 identical presses / 3 taps complete, >=2s post-wake & 0.8s quiet.
-    // - NoLockScreen: only on an active (non-dark) wake, >=3s post-wake & 0.8s quiet if input seen.
+    // - LockScreen: only after 3 identical presses / 3 taps complete after wakeAnchor,
+    //   >=2s post-anchor & 0.8s quiet.
+    // - NoLockScreen: when woken via POWER, HOS still requires 1 press/tap to enter HOME
+    //   (otherwise auto-sleeps in ~9s); once that post-anchor input occurs, release at
+    //   max(anchor + 2s, lastUserInputNs + 0.8s). If woken via HOME (no POWER press),
+    //   allow release at wakeNs + 3s (matching HOME_COOLDOWN_NS).
     // Never extends beyond powerCooldownUntilNs, never shortens HOME cooldown, and
-    // never shortens genuinely later post-wake POWER presses (e.g. power menu).
+    // never shortens dark wakes or non-wake POWER presses (Mode::None).
     constexpr uint64_t effectivePowerCooldownUntilNs(
         uint64_t wakeNs, uint64_t wakeStartNs, uint64_t powerCooldownUntilNs,
         WakeEarlyMode mode, uint64_t unlockCompletedNs,
         uint64_t lastUserInputNs, uint64_t lastPowerEventNs, uint64_t lastHomeEventNs) {
-        if (mode == WakeEarlyMode::None || wakeNs == 0 || powerCooldownUntilNs == 0 ||
-            powerCooldownUntilNs > saturatingAddNs(wakeNs, POWER_COOLDOWN_NS + WAKE_POWER_COOLDOWN_SKEW_NS)) {
+        if (mode == WakeEarlyMode::None || wakeNs == 0 || powerCooldownUntilNs == 0) {
+            return powerCooldownUntilNs;
+        }
+        const uint64_t anchorNs = wakePowerAnchorNs(wakeNs, lastPowerEventNs);
+        if (powerCooldownUntilNs > saturatingAddNs(anchorNs, POWER_COOLDOWN_NS + WAKE_POWER_COOLDOWN_SKEW_NS)) {
             return powerCooldownUntilNs;
         }
         if (mode == WakeEarlyMode::LockScreen) {
-            if (unlockCompletedNs <= wakeNs) return powerCooldownUntilNs;
-            uint64_t minDeadline = saturatingAddNs(wakeNs, WAKE_EARLY_MIN_NS);
+            if (unlockCompletedNs <= anchorNs) return powerCooldownUntilNs;
+            uint64_t minDeadline = saturatingAddNs(anchorNs, WAKE_EARLY_MIN_NS);
             uint64_t quietBase = maxCooldownUntilNs(unlockCompletedNs, lastUserInputNs);
             uint64_t quietDeadline = saturatingAddNs(quietBase, WAKE_UNLOCK_QUIET_NS);
             uint64_t earlyDeadline = maxCooldownUntilNs(minDeadline, quietDeadline);
             return earlyDeadline < powerCooldownUntilNs ? earlyDeadline : powerCooldownUntilNs;
         }
-        if (!activeWakeSignalPresent(wakeNs, wakeStartNs, lastUserInputNs, lastPowerEventNs, lastHomeEventNs)) {
-            return powerCooldownUntilNs;
+        if (lastUserInputNs > anchorNs) {
+            uint64_t minDeadline = saturatingAddNs(anchorNs, WAKE_EARLY_MIN_NS);
+            uint64_t quietDeadline = saturatingAddNs(lastUserInputNs, WAKE_UNLOCK_QUIET_NS);
+            uint64_t earlyDeadline = maxCooldownUntilNs(minDeadline, quietDeadline);
+            return earlyDeadline < powerCooldownUntilNs ? earlyDeadline : powerCooldownUntilNs;
         }
+        const uint64_t postSleepFloor = saturatingAddNs(wakeStartNs, WAKE_BUTTON_SKEW_NS);
+        const uint64_t wakeLowerBound = wakeNs > WAKE_BUTTON_SKEW_NS ? wakeNs - WAKE_BUTTON_SKEW_NS : 0;
+        const bool homeWake = lastHomeEventNs > postSleepFloor && lastHomeEventNs >= wakeLowerBound &&
+            lastHomeEventNs >= anchorNs;
+        if (!homeWake) return powerCooldownUntilNs;
         uint64_t minDeadline = saturatingAddNs(wakeNs, WAKE_NO_LOCK_EARLY_MIN_NS);
-        uint64_t quietDeadline = lastUserInputNs > wakeNs
-            ? saturatingAddNs(lastUserInputNs, WAKE_UNLOCK_QUIET_NS)
-            : 0;
-        uint64_t earlyDeadline = maxCooldownUntilNs(minDeadline, quietDeadline);
-        return earlyDeadline < powerCooldownUntilNs ? earlyDeadline : powerCooldownUntilNs;
+        return minDeadline < powerCooldownUntilNs ? minDeadline : powerCooldownUntilNs;
     }
 
-    // Gate post-sleep wake rechecks so screen-off dark wakes and incomplete
-    // lock-screen sequences (e.g. 1-2 presses on the 3-press prompt) never pop up.
+    // Gate post-sleep wake rechecks so screen-off dark wakes, incomplete
+    // lock-screen sequences (1-2 presses), and untouched pre-wake screens never pop up.
     constexpr WakeRecheckGate evaluateWakeRecheck(
         bool pending, uint64_t wakeNs, uint64_t wakeStartNs, uint64_t nowNs,
         bool lockScreenEnabled, bool neutral, uint64_t unlockCompletedNs,
         uint64_t lastUserInputNs, uint64_t lastPowerEventNs, uint64_t lastHomeEventNs) {
         if (!pending || wakeNs == 0) return WakeRecheckGate::Inactive;
         if (nowNs < wakeNs) return WakeRecheckGate::Expired;
-        if (nowNs - wakeNs >= WAKE_RECHECK_WINDOW_NS) return WakeRecheckGate::Expired;
+        const uint64_t anchorNs = wakePowerAnchorNs(wakeNs, lastPowerEventNs);
+        if (nowNs < anchorNs) return WakeRecheckGate::Expired;
+        if (nowNs - anchorNs >= WAKE_RECHECK_WINDOW_NS) return WakeRecheckGate::Expired;
         if (lockScreenEnabled) {
-            if (unlockCompletedNs <= wakeNs || !neutral) return WakeRecheckGate::Wait;
+            if (unlockCompletedNs <= anchorNs || !neutral) return WakeRecheckGate::Wait;
             const uint64_t quietBase = maxCooldownUntilNs(
-                unlockCompletedNs, lastUserInputNs > wakeNs ? lastUserInputNs : 0);
+                unlockCompletedNs, lastUserInputNs > anchorNs ? lastUserInputNs : 0);
             if (nowNs < quietBase) return WakeRecheckGate::Expired;
-            if (nowNs - wakeNs < WAKE_EARLY_MIN_NS ||
+            if (nowNs - anchorNs < WAKE_EARLY_MIN_NS ||
                 nowNs - quietBase < WAKE_UNLOCK_QUIET_NS) {
                 return WakeRecheckGate::Wait;
             }
             return WakeRecheckGate::Ready;
         }
-        if (!activeWakeSignalPresent(wakeNs, wakeStartNs, lastUserInputNs, lastPowerEventNs, lastHomeEventNs)) {
-            return WakeRecheckGate::Wait;
+        if (lastUserInputNs > anchorNs) {
+            if (!neutral) return WakeRecheckGate::Wait;
+            if (nowNs < lastUserInputNs) return WakeRecheckGate::Expired;
+            if (nowNs - anchorNs < WAKE_EARLY_MIN_NS ||
+                nowNs - lastUserInputNs < WAKE_UNLOCK_QUIET_NS) {
+                return WakeRecheckGate::Wait;
+            }
+            return WakeRecheckGate::Ready;
         }
-        if (!neutral || nowNs - wakeNs < WAKE_NO_LOCK_EARLY_MIN_NS) return WakeRecheckGate::Wait;
-        if (lastUserInputNs > wakeNs &&
-            (nowNs < lastUserInputNs || nowNs - lastUserInputNs < WAKE_UNLOCK_QUIET_NS)) {
+        const uint64_t postSleepFloor = saturatingAddNs(wakeStartNs, WAKE_BUTTON_SKEW_NS);
+        const uint64_t wakeLowerBound = wakeNs > WAKE_BUTTON_SKEW_NS ? wakeNs - WAKE_BUTTON_SKEW_NS : 0;
+        const bool homeWake = lastHomeEventNs > postSleepFloor && lastHomeEventNs >= wakeLowerBound &&
+            lastHomeEventNs >= anchorNs;
+        if (!homeWake || !neutral || nowNs - wakeNs < WAKE_NO_LOCK_EARLY_MIN_NS) {
             return WakeRecheckGate::Wait;
         }
         return WakeRecheckGate::Ready;

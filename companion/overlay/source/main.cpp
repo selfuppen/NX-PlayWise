@@ -1526,10 +1526,12 @@ public:
 
     tsl::detail::WakeEarlyMode wakeEarlyReleaseMode() const override
     {
-        /* Keep early wake release active after wake_recheck_pending_ is
-           consumed so the UI does not snap back into the remaining 8s POWER
-           cooldown while awaiting the backend's detail request/event. */
-        if (!automatic_enabled_ || !gui_ || !gui_->automatic_detail_allowed())
+        /* Only allow early POWER cooldown release while actively awaiting a wake
+           recheck or its 2s detail-offer pickup window; once completed or expired,
+           all later POWER presses (e.g. power menu) keep the full 8s cooldown. */
+        const uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
+        const bool awaiting_wake = wake_recheck_pending_ || ptc_overlay_reason_wake_active(&reason_wake_, ms);
+        if (!awaiting_wake || !automatic_enabled_ || !gui_ || !gui_->automatic_detail_allowed())
             return tsl::detail::WakeEarlyMode::None;
         return wake_lock_screen_enabled_
             ? tsl::detail::WakeEarlyMode::LockScreen
@@ -1556,11 +1558,13 @@ public:
     {
         if (brief_notice_.active) return UINT64_C(50000000);
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
-        bool wake_ready_poll = wake_recheck_pending_ && wake_detected_ns_ != 0 &&
+        const uint64_t wake_anchor = tsl::detail::wakePowerAnchorNs(wake_detected_ns_, wake_last_power_event_ns_);
+        bool wake_ready_poll = wake_recheck_pending_ && wake_anchor != 0 &&
             (wake_lock_screen_enabled_
-                ? (wake_unlock_completed_ns_ > wake_detected_ns_)
-                : tsl::detail::activeWakeSignalPresent(wake_detected_ns_, wake_sleep_start_ns_,
-                    wake_last_user_input_ns_, wake_last_power_event_ns_, wake_last_home_event_ns_));
+                ? (wake_unlock_completed_ns_ > wake_anchor)
+                : (wake_last_user_input_ns_ > wake_anchor ||
+                    tsl::detail::activeWakeSignalPresent(wake_detected_ns_, wake_sleep_start_ns_,
+                        wake_last_user_input_ns_, 0, wake_last_home_event_ns_)));
         bool wake_active = ptc_overlay_reason_wake_active(&reason_wake_, ms) || wake_ready_poll;
         /* Failed detail writes stop that writer. Brief reception remains read-only. */
         return ptc_overlay_hidden_poll_idle_ns(automatic_enabled_, eventActive(&reason_event_), wake_active, 0);
