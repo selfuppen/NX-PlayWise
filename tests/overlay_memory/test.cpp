@@ -20,7 +20,7 @@ static_assert(tsl::detail::WAKE_EARLY_MIN_NS == 2'000'000'000ULL);
 static_assert(tsl::detail::WAKE_NO_LOCK_EARLY_MIN_NS == 3'000'000'000ULL);
 static_assert(tsl::detail::WAKE_UNLOCK_QUIET_NS == 800'000'000ULL);
 static_assert(tsl::detail::WAKE_RECHECK_WINDOW_NS == 45'000'000'000ULL);
-static_assert(tsl::detail::WAKE_POWER_COOLDOWN_SKEW_NS == 2'000'000'000ULL);
+static_assert(tsl::detail::WAKE_POWER_COOLDOWN_SKEW_NS == 3'000'000'000ULL);
 static_assert(tsl::detail::WAKE_UNLOCK_STEP_TIMEOUT_NS == 10'000'000'000ULL);
 static_assert(tsl::detail::WAKE_UNLOCK_PRESSES_REQUIRED == 3);
 static_assert(tsl::detail::saturatingAddNs(1000, 500) == 1500);
@@ -86,11 +86,11 @@ static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
     tsl::detail::WakeEarlyMode::NoLockScreen, 0,
     70'000'000'000ULL, 79'500'000'000ULL, 0) == 108'000'000'000ULL);
-// - NoLockScreen: active POWER wake releases at wakeNs + 3s (including <=2s late POWER event skew).
+// - NoLockScreen: active POWER wake releases at wakeNs + 3s (including <=3s late POWER event skew).
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
-    100'000'000'000ULL, 80'000'000'000ULL, 108'500'000'000ULL,
+    100'000'000'000ULL, 80'000'000'000ULL, 110'500'000'000ULL,
     tsl::detail::WakeEarlyMode::NoLockScreen, 0,
-    70'000'000'000ULL, 100'500'000'000ULL, 0) == 103'000'000'000ULL);
+    70'000'000'000ULL, 102'500'000'000ULL, 0) == 103'000'000'000ULL);
 // - NoLockScreen: post-wake user input adds 0.8s quiet settle past 3s if needed.
 static_assert(tsl::detail::effectivePowerCooldownUntilNs(
     100'000'000'000ULL, 80'000'000'000ULL, 108'500'000'000ULL,

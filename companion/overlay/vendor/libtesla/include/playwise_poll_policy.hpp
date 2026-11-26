@@ -13,10 +13,11 @@ namespace tsl::detail {
     constexpr uint64_t WAKE_RECHECK_WINDOW_NS = 45'000'000'000ULL;
     constexpr uint64_t WAKE_BUTTON_SKEW_NS = 1'000'000'000ULL;
     // On real Switch hardware, the POWER button wake event can arrive up to
-    // ~1-2s after kernel suspend resume, extending powerCooldownUntilNs slightly
-    // beyond wakeNs + POWER_COOLDOWN_NS. Treat extensions within this skew as
-    // belonging to the same wake, while still preserving genuinely later POWER presses.
-    constexpr uint64_t WAKE_POWER_COOLDOWN_SKEW_NS = 2'000'000'000ULL;
+    // ~2-3s after kernel suspend resume (e.g. while OLED display finishes waking),
+    // extending powerCooldownUntilNs beyond wakeNs + POWER_COOLDOWN_NS. Treat
+    // extensions within this skew as belonging to the same wake, while still
+    // preserving genuinely later post-wake POWER presses (e.g. power menu).
+    constexpr uint64_t WAKE_POWER_COOLDOWN_SKEW_NS = 3'000'000'000ULL;
     constexpr uint64_t WAKE_UNLOCK_STEP_TIMEOUT_NS = 10'000'000'000ULL;
     constexpr uint8_t WAKE_UNLOCK_PRESSES_REQUIRED = 3;
     // Physical buttons only (A..Down = bits 0..15, Joy-Con SL/SR = bits 24..27).

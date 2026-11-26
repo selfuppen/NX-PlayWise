@@ -3005,9 +3005,11 @@ namespace tsl {
         virtual bool onHiddenPoll(bool neutral) { return false; }
         virtual void onSleepWakeDetected(uint64_t wakeNs, uint64_t wakeStartNs) { (void)wakeNs; (void)wakeStartNs; }
         virtual void onHiddenWakeSignals(uint64_t lastUserInputNs, uint64_t lastPowerEventNs,
-                                         uint64_t lastHomeEventNs, uint64_t lastWakeUnlockCompletedNs) {
+                                         uint64_t lastHomeEventNs, uint64_t lastWakeUnlockCompletedNs,
+                                         uint64_t powerCooldownUntilNs, uint64_t effectivePowerCooldownNs) {
             (void)lastUserInputNs; (void)lastPowerEventNs;
             (void)lastHomeEventNs; (void)lastWakeUnlockCompletedNs;
+            (void)powerCooldownUntilNs; (void)effectivePowerCooldownNs;
         }
         virtual detail::WakeEarlyMode wakeEarlyReleaseMode() const { return detail::WakeEarlyMode::None; }
         virtual Event* hiddenWakeEvent() { return nullptr; }
@@ -3819,8 +3821,9 @@ namespace tsl {
                     shData.keysDownPending = 0;
                 }
                 const uint64_t pollNowNs = armTicksToNs(armGetSystemTick());
+                const uint64_t pollRawPowerCooldownNs = shData.powerCooldownUntilNs.load();
                 const uint64_t pollEffectivePowerCooldownNs = detail::effectivePowerCooldownUntilNs(
-                    observedSleepWakeNs, shData.lastSleepStartNs.load(), shData.powerCooldownUntilNs.load(),
+                    observedSleepWakeNs, shData.lastSleepStartNs.load(), pollRawPowerCooldownNs,
                     overlay->wakeEarlyReleaseMode(), shData.lastWakeUnlockCompletedNs.load(),
                     shData.lastUserInputNs.load(), shData.lastPowerEventNs.load(), shData.lastHomeEventNs.load());
                 const uint64_t pollCooldownUntilNs = detail::maxCooldownUntilNs(
@@ -3828,7 +3831,7 @@ namespace tsl {
                 bool blocked = detail::cooldownActive(pollNowNs, pollCooldownUntilNs);
                 overlay->onHiddenWakeSignals(shData.lastUserInputNs.load(),
                     shData.lastPowerEventNs.load(), shData.lastHomeEventNs.load(),
-                    shData.lastWakeUnlockCompletedNs.load());
+                    shData.lastWakeUnlockCompletedNs.load(), pollRawPowerCooldownNs, pollEffectivePowerCooldownNs);
                 bool open = !blocked && overlay->onHiddenPoll(neutral);
                 overlay->loopHiddenFrame(blocked, hiddenKeysDown);
                 if (!open) continue;

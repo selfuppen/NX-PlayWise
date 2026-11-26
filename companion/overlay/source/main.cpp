@@ -1513,12 +1513,15 @@ public:
     }
 
     void onHiddenWakeSignals(uint64_t lastUserInputNs, uint64_t lastPowerEventNs,
-                             uint64_t lastHomeEventNs, uint64_t lastWakeUnlockCompletedNs) override
+                             uint64_t lastHomeEventNs, uint64_t lastWakeUnlockCompletedNs,
+                             uint64_t powerCooldownUntilNs, uint64_t effectivePowerCooldownNs) override
     {
         wake_last_user_input_ns_ = lastUserInputNs;
         wake_last_power_event_ns_ = lastPowerEventNs;
         wake_last_home_event_ns_ = lastHomeEventNs;
         wake_unlock_completed_ns_ = lastWakeUnlockCompletedNs;
+        wake_power_cooldown_until_ns_ = powerCooldownUntilNs;
+        wake_effective_cooldown_until_ns_ = effectivePowerCooldownNs;
     }
 
     tsl::detail::WakeEarlyMode wakeEarlyReleaseMode() const override
@@ -1854,13 +1857,14 @@ private:
     {
         unsigned key = (brief_notice_.active ? 1u : 0u) | (automatic_enabled_ ? 2u : 0u) |
             (runtime_known_ ? 4u : 0u) | (blocked ? 8u : 0u) | (automatic_failures_ << 8);
+        bool wake_changed = !blocked && wake_detected_ns_ != 0 && wake_detected_ns_ != brief_diag_wake_ns_;
         if ((!automatic_enabled_ && !brief_diag_sampled_) || brief_diag_updates_ >= 32 ||
             brief_diag_failures_ >= 5 || ms < next_brief_diag_ms_ ||
-            (brief_diag_sampled_ && key == brief_diag_key_ &&
+            (brief_diag_sampled_ && !wake_changed && key == brief_diag_key_ &&
              !std::strcmp(brief_diag_seen_[0], brief_notice_.seen[0]) &&
              !std::strcmp(brief_diag_seen_[1], brief_notice_.seen[1]))) return;
         next_brief_diag_ms_ = ms + 1000;
-        char text[3072], timing[1536];
+        char text[3584], timing[1536];
         if (!ptc_overlay_hidden_timing_format(&hidden_timing_, timing, sizeof(timing))) {
             ++brief_diag_failures_;
             return;
@@ -1869,11 +1873,23 @@ private:
             "\"ui_instance\":\"%llu\",\"sampled_mono_ms\":\"%llu\",\"automatic_enabled\":%s,"
             "\"runtime_known\":%s,\"home_power_blocked\":%s,\"detail_io_failures\":%u,"
             "\"brief_active\":%s,\"reason_file\":\"%s\",\"test_file\":\"%s\","
-            "\"update_count\":%u,\"display_confirmed\":false,\"hidden_timing\":%s}",
+            "\"update_count\":%u,\"display_confirmed\":false,\"hidden_timing\":%s,"
+            "\"wake_diag\":{\"lock_screen\":%s,\"wake_ms\":\"%llu\",\"sleep_start_ms\":\"%llu\","
+            "\"last_power_ms\":\"%llu\",\"last_home_ms\":\"%llu\",\"last_input_ms\":\"%llu\","
+            "\"unlock_done_ms\":\"%llu\",\"power_cooldown_ms\":\"%llu\",\"effective_cooldown_ms\":\"%llu\"}}",
             PLAYWISE_BUILD_RELEASE_ID, runtime_boot_, (unsigned long long)ui_instance_ms_,
             (unsigned long long)ms, automatic_enabled_ ? "true" : "false", runtime_known_ ? "true" : "false",
             blocked ? "true" : "false", automatic_failures_, brief_notice_.active ? "true" : "false",
-            brief_notice_.seen[0], brief_notice_.seen[1], brief_diag_updates_ + 1, timing);
+            brief_notice_.seen[0], brief_notice_.seen[1], brief_diag_updates_ + 1, timing,
+            wake_lock_screen_enabled_ ? "true" : "false",
+            (unsigned long long)(wake_detected_ns_ / 1000000),
+            (unsigned long long)(wake_sleep_start_ns_ / 1000000),
+            (unsigned long long)(wake_last_power_event_ns_ / 1000000),
+            (unsigned long long)(wake_last_home_event_ns_ / 1000000),
+            (unsigned long long)(wake_last_user_input_ns_ / 1000000),
+            (unsigned long long)(wake_unlock_completed_ns_ / 1000000),
+            (unsigned long long)(wake_power_cooldown_until_ns_ / 1000000),
+            (unsigned long long)(wake_effective_cooldown_until_ns_ / 1000000));
         if (length < 0 || static_cast<size_t>(length) >= sizeof(text)) {
             ++brief_diag_failures_;
             return;
@@ -1886,6 +1902,7 @@ private:
         ++brief_diag_updates_;
         brief_diag_sampled_ = true;
         brief_diag_key_ = key;
+        if (!blocked) brief_diag_wake_ns_ = wake_detected_ns_;
         for (unsigned i = 0; i < 2; ++i)
             std::snprintf(brief_diag_seen_[i], sizeof(brief_diag_seen_[i]), "%s", brief_notice_.seen[i]);
     }
@@ -1917,6 +1934,8 @@ private:
     uint64_t wake_detected_ns_ = 0, wake_sleep_start_ns_ = 0;
     uint64_t wake_last_user_input_ns_ = 0, wake_last_power_event_ns_ = 0, wake_last_home_event_ns_ = 0;
     uint64_t wake_unlock_completed_ns_ = 0;
+    uint64_t wake_power_cooldown_until_ns_ = 0, wake_effective_cooldown_until_ns_ = 0;
+    uint64_t brief_diag_wake_ns_ = 0;
     uint64_t next_config_ms_ = 0;
     uint64_t next_runtime_ms_ = 0;
     bool runtime_known_ = false;

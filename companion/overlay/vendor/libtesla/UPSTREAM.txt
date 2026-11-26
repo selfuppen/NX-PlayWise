@@ -66,6 +66,6 @@ virtual onSleepWakeDetected/onHiddenWakeSignals/wakeEarlyReleaseMode hooks with
 effectivePowerCooldownUntilNs and evaluateWakeRecheck in playwise_poll_policy.hpp
 so lock-screen unlock releases cooldown only after 3-press/3-tap completion
 (>=2s + 0.8s quiet), lock-screen-off active wakes release after >=3s (blocking
-dark wakes), and <=2s wake POWER event skew is tolerated without shortening
+dark wakes), and <=3s wake POWER event skew is tolerated without shortening
 genuinely later POWER presses or HOME cooldown.
 No upstream files synced; pinned upstream commit remains unchanged.
