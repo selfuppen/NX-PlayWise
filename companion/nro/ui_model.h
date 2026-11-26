@@ -783,6 +783,8 @@ typedef struct {
     bool update_check_on_startup;
     bool update_stable_only;
     bool update_busy;
+    bool update_requires_reboot;
+    bool update_overlay_changed;
     unsigned update_received_kib;
     unsigned update_size_kib;
     unsigned update_source;

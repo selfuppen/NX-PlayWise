@@ -16,7 +16,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from tools.build.sync_gitee_releases import (
-    GITEE_REPO, GITHUB_REPO, MARKER, Api, Git, SafeRedirect, SyncError,
+    GITEE_REPO, GITHUB_REPO, MARKER, REQUIRES_REBOOT_MARKER, Api, Git, SafeRedirect, SyncError,
     candidates, compare, hashes, json_bytes, preview, public_url, published_calendars, sync, version_parts,
 )
 
@@ -150,6 +150,22 @@ class MirrorTests(unittest.TestCase):
         self.assertEqual(self.run_sync(), feed)
         self.assertEqual(self.api.uploads, 5)
         self.assertEqual(self.api.deletes, 0)
+
+    def test_requires_reboot_marker_in_release_body(self) -> None:
+        normal = self.api.release("v3.3.1")
+        normal["body"] = "常规热更新说明"
+        feed = self.run_sync()
+        entry = feed["releases"][0]
+        self.assertNotIn("requires_reboot", entry)
+        self.assertEqual(entry["notes"], "常规热更新说明")
+
+        reboot = self.api.release("v3.3.2")
+        reboot["body"] = f"{REQUIRES_REBOOT_MARKER}\n\n新版浮窗功能需要重启生效"
+        feed = self.run_sync()
+        entry = feed["releases"][0]
+        self.assertTrue(entry.get("requires_reboot"))
+        self.assertNotIn(REQUIRES_REBOOT_MARKER, entry["notes"])
+        self.assertEqual(entry["notes"], "新版浮窗功能需要重启生效")
 
     def test_new_nonlatest_release_and_explicit_history(self) -> None:
         old = self.api.release("v1.0.0")

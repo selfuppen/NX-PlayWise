@@ -204,12 +204,14 @@ static bool offer_entry(const cJSON *o, PtcUpdateOffer *offer)
 {
     const char *version = field(o, "version"), *tag = field(o, "tag"), *notes = field(o, "notes");
     const cJSON *pre = cJSON_GetObjectItemCaseSensitive(o, "prerelease"), *p = cJSON_GetObjectItemCaseSensitive(o, "package");
+    const cJSON *reboot = cJSON_GetObjectItemCaseSensitive(o, "requires_reboot");
     const cJSON *size = cJSON_GetObjectItemCaseSensitive(p, "size");
     const char *md5 = field(p, "md5"), *sha = field(p, "sha256"), *name = field(p, "name");
     const char *gitee = field(p, "gitee_url"), *github = field(p, "github_url");
     int order; char expected[512];
     if (!cJSON_IsObject(o) || !version || !ptc_update_version_compare(version, version, &order) ||
         !tag || tag[0] != 'v' || strcmp(tag + 1, version) || !cJSON_IsBool(pre) ||
+        (reboot && !cJSON_IsBool(reboot)) ||
         !notes || strlen(notes) >= sizeof(offer->notes) || !cJSON_IsObject(p) ||
         !cJSON_IsNumber(size) || size->valuedouble < 1 || size->valuedouble > PTC_UPDATE_ZIP_LIMIT ||
         size->valuedouble != (double)(unsigned)size->valuedouble ||
@@ -225,6 +227,7 @@ static bool offer_entry(const cJSON *o, PtcUpdateOffer *offer)
     strcpy(offer->gitee_url, gitee); strcpy(offer->github_url, github);
     offer->size_bytes = (unsigned)size->valuedouble; offer->size_kib = (offer->size_bytes + 1023u) / 1024u;
     offer->prerelease = cJSON_IsTrue(pre) || ptc_update_version_prerelease(version);
+    offer->requires_reboot = cJSON_IsTrue(reboot);
     /* Remote descriptions are plain text; JSON validation already checked UTF-8. */
     size_t n = 0;
     for (const unsigned char *s = (const unsigned char *)notes; *s; ++s)

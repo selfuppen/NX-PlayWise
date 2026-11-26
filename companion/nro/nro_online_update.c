@@ -27,6 +27,11 @@ static void sync_model(UiState *ui)
     snprintf(ui->model.update_notes, sizeof(ui->model.update_notes), "%s", u->offer.notes);
     ui->model.update_size_kib = u->offer.size_kib;
     ui->model.update_source = u->source;
+    bool has_journal = u->journal.transaction_id[0] != '\0' &&
+        (u->status == PTC_UPDATE_AWAITING_REOPEN || u->status == PTC_UPDATE_BACKEND_PENDING ||
+         u->status == PTC_UPDATE_RECONFIRM || u->status == PTC_UPDATE_COMPLETED);
+    ui->model.update_requires_reboot = u->offer.requires_reboot || (has_journal && u->journal.requires_reboot);
+    ui->model.update_overlay_changed = has_journal && ptc_update_journal_overlay_changed(&u->journal);
 }
 
 static bool history(PtcOnlineUpdater *u, const char *id, PtcUpdateJournal *j)
@@ -191,7 +196,8 @@ void online_update_action(UiState *ui, int action)
     }
     else if (action == 1 && !ui->model.parent_support_only && u->status == PTC_UPDATE_AVAILABLE) {
         if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_UPDATE_DOWNLOAD))) return;
-        open_confirm_overlay(ui, PTC_UI_OPERATION_ONLINE_UPDATE, ptc_ui_text(PTC_UI_T_UPDATE_DOWNLOAD), ptc_ui_text(PTC_UI_T_UPDATE_CONFIRM));
+        open_confirm_overlay(ui, PTC_UI_OPERATION_ONLINE_UPDATE, ptc_ui_text(PTC_UI_T_UPDATE_DOWNLOAD),
+            ptc_ui_text(u->offer.requires_reboot ? PTC_UI_T_UPDATE_CONFIRM_REBOOT : PTC_UI_T_UPDATE_CONFIRM));
         ui->model.confirm_hold_required = true;
     } else if ((action == 2 || action == 3) && !ui->model.parent_support_only) {
         bool old = action == 2 ? ui->model.update_check_on_startup : ui->model.update_stable_only;

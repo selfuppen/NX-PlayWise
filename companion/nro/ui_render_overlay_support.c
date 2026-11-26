@@ -173,10 +173,16 @@ static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
             /* Side assurance note */
             UiRect note_card = {meta.x + 20, meta.y + 292, meta.width - 40, 152};
-            fill_round_rect(pixels, stride, note_card, 10, UI_ACCENT_SOFT);
-            draw_rect_outline(pixels, stride, note_card, 10, 1, UI_BORDER);
+            bool show_notes_reboot = m->update_requires_reboot &&
+                (m->update_status == PTC_UPDATE_AVAILABLE || m->update_status == PTC_UPDATE_DOWNLOADING ||
+                 m->update_status == PTC_UPDATE_VERIFYING || m->update_status == PTC_UPDATE_BACKUP_PENDING ||
+                 m->update_status == PTC_UPDATE_INSTALLING || m->update_status == PTC_UPDATE_AWAITING_REOPEN ||
+                 m->update_status == PTC_UPDATE_BACKEND_PENDING || m->update_status == PTC_UPDATE_RECONFIRM ||
+                 m->update_status == PTC_UPDATE_COMPLETED);
+            fill_round_rect(pixels, stride, note_card, 10, show_notes_reboot ? UI_WARNING_SOFT : UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, note_card, 10, 1, show_notes_reboot ? UI_WARNING_BORDER : UI_BORDER);
             draw_wrapped_text(pixels, stride, note_card.x + 12, note_card.y + 28,
-                              ptc_ui_text(PTC_UI_T_UPDATE_NOTES_SIDE_NOTE),
+                              ptc_ui_text(show_notes_reboot ? PTC_UI_T_UPDATE_NOTES_SIDE_NOTE_REBOOT : PTC_UI_T_UPDATE_NOTES_SIDE_NOTE),
                               13, note_card.width - 24, 21, 6, UI_INK);
         }
 
@@ -426,6 +432,17 @@ static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     draw_settings_page_shell(pixels, stride, m, ptc_ui_text(PTC_UI_T_UPDATE_TITLE), ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
 
+    bool active_or_done = m->update_status == PTC_UPDATE_AVAILABLE ||
+                          m->update_status == PTC_UPDATE_DOWNLOADING ||
+                          m->update_status == PTC_UPDATE_VERIFYING ||
+                          m->update_status == PTC_UPDATE_BACKUP_PENDING ||
+                          m->update_status == PTC_UPDATE_INSTALLING ||
+                          m->update_status == PTC_UPDATE_AWAITING_REOPEN ||
+                          m->update_status == PTC_UPDATE_BACKEND_PENDING ||
+                          m->update_status == PTC_UPDATE_RECONFIRM ||
+                          m->update_status == PTC_UPDATE_COMPLETED;
+    bool show_reboot_notice = active_or_done && (m->update_requires_reboot || m->update_overlay_changed);
+
     /* Tier 1: Version info (Scheme A chips & banner) + Release notes / progress summary box */
     draw_plan_card(pixels, stride, (UiRect){54, 168, 1172, 206}, false);
     {
@@ -445,16 +462,30 @@ static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiMod
         draw_rect_outline(pixels, stride, banner, 10, 1, st_bd);
         fill_round_rect(pixels, stride, (UiRect){banner.x + 14, banner.y + 17, 10, 10}, 5, st_dot);
 
-        int size_w = 0;
+        int right_reserved = 0;
         char size_buf[128] = "";
         if (m->update_size_kib) {
             snprintf(size_buf, sizeof(size_buf), "%u KiB / %s", m->update_size_kib,
                 m->update_source == 2 ? "GitHub" : (m->update_source == 1 ? "Gitee" : "Gitee / GitHub"));
             fit_text(size_buf, sizeof(size_buf), size_buf, 12, 200);
-            size_w = measure_text(size_buf, 12);
+            int size_w = measure_text(size_buf, 12);
             draw_text(pixels, stride, banner.x + banner.width - 14 - size_w, banner.y + 27, size_buf, 12, UI_MUTED);
+            right_reserved = size_w + 16;
         }
-        int status_max_w = banner.width - 42 - (size_w ? size_w + 16 : 0);
+        if (show_reboot_notice) {
+            const char *rp_txt = ptc_ui_text(m->update_requires_reboot
+                ? PTC_UI_T_UPDATE_REBOOT_PILL : PTC_UI_T_UPDATE_OVERLAY_RELOAD_PILL);
+            int rpw = measure_text(rp_txt, 12) + 18;
+            if (rpw > 180) rpw = 180;
+            UiRect rpill = {banner.x + banner.width - 14 - right_reserved - rpw, banner.y + 10, rpw, 24};
+            fill_round_rect(pixels, stride, rpill, 12, UI_WARNING_SOFT);
+            draw_rect_outline(pixels, stride, rpill, 12, 1, UI_WARNING_BORDER);
+            fit_text(text, sizeof(text), rp_txt, 12, rpill.width - 10);
+            draw_text_center(pixels, stride, rpill, text, 12, UI_WARNING_TEXT);
+            right_reserved += rpw + 12;
+        }
+        int status_max_w = banner.width - 42 - right_reserved;
+        if (status_max_w < 120) status_max_w = 120;
         fit_text(text, sizeof(text), ptc_ui_text(update_status_key(m->update_status)), 18, status_max_w);
         draw_text_bold(pixels, stride, banner.x + 32, banner.y + 28, text, 18, st_color);
 
@@ -530,20 +561,39 @@ static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiMod
             bool has_err = m->update_error > 0 && (size_t)m->update_error < sizeof(errors) / sizeof(errors[0]);
             const char *notes = has_err ? ptc_ui_text(errors[m->update_error]) :
                 (m->update_notes[0] ? m->update_notes : ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
-            draw_wrapped_text(pixels, stride, notes_box.x + 16, notes_box.y + 62,
-                notes, 14, notes_box.width - 32, 22, 4, has_err ? UI_DANGER : UI_MUTED);
+            if (!has_err && show_reboot_notice) {
+                UiRect rbox = {notes_box.x + 16, notes_box.y + 48, notes_box.width - 32, 48};
+                fill_round_rect(pixels, stride, rbox, 8, UI_WARNING_SOFT);
+                draw_rect_outline(pixels, stride, rbox, 8, 1, UI_WARNING_BORDER);
+                draw_wrapped_text(pixels, stride, rbox.x + 10, rbox.y + 18,
+                    ptc_ui_text(m->update_requires_reboot ? PTC_UI_T_UPDATE_REBOOT_NOTICE_BOX : PTC_UI_T_UPDATE_OVERLAY_NOTICE_BOX),
+                    12, rbox.width - 20, 17, 2, UI_WARNING_TEXT);
+                draw_wrapped_text(pixels, stride, notes_box.x + 16, notes_box.y + 116,
+                    notes, 13, notes_box.width - 32, 20, 2, UI_MUTED);
+            } else {
+                draw_wrapped_text(pixels, stride, notes_box.x + 16, notes_box.y + 62,
+                    notes, 14, notes_box.width - 32, 22, 4, has_err ? UI_DANGER : UI_MUTED);
+            }
         }
     }
 
     /* Tier 2: 4-step update pipeline (Scheme B) */
     draw_plan_card(pixels, stride, (UiRect){54, 386, 1172, 120}, false);
-    fit_text(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_STEPS_TITLE), 13, 1132);
-    draw_text_bold(pixels, stride, 74, 410, text, 13, UI_MUTED);
+    {
+        PtcUiTextId steps_title_key = PTC_UI_T_UPDATE_STEPS_TITLE;
+        if (show_reboot_notice) {
+            steps_title_key = m->update_requires_reboot
+                ? PTC_UI_T_UPDATE_STEPS_TITLE_REBOOT : PTC_UI_T_UPDATE_STEPS_TITLE_OVERLAY;
+        }
+        fit_text(text, sizeof(text), ptc_ui_text(steps_title_key), 13, 1132);
+        draw_text_bold(pixels, stride, 74, 410, text, 13, show_reboot_notice ? UI_WARNING_TEXT : UI_MUTED);
+    }
     {
         static const int step_ids[4] = {0, 1, 7, 5};
-        static const PtcUiTextId step_subs[4] = {
+        const PtcUiTextId step_subs[4] = {
             PTC_UI_T_UPDATE_STEP1_SUB, PTC_UI_T_UPDATE_STEP2_SUB,
-            PTC_UI_T_UPDATE_STEP3_SUB, PTC_UI_T_UPDATE_STEP4_SUB
+            PTC_UI_T_UPDATE_STEP3_SUB,
+            (show_reboot_notice && m->update_requires_reboot) ? PTC_UI_T_UPDATE_STEP4_SUB_REBOOT : PTC_UI_T_UPDATE_STEP4_SUB
         };
         const PtcUiTextId step_titles[4] = {
             m->update_status == PTC_UPDATE_BACKUP_UNKNOWN ? PTC_UI_T_UPDATE_WAIT_RECEIPT : PTC_UI_T_UPDATE_CHECK,
@@ -2344,6 +2394,12 @@ static void draw_upgrade_flow_overlay(uint32_t *pixels, uint32_t stride, const P
     bool is_failed = stage == PTC_UI_UPGRADE_FLOW_FAILED;
     bool is_reconfirm = stage == PTC_UI_UPGRADE_FLOW_RECONFIRM_READY;
     bool is_grace = stage == PTC_UI_UPGRADE_FLOW_GRACE_WAIT;
+    bool done_needs_reboot = is_done && model->upgrade_flow_from_hot_reload && !model->hot_reload_capture_restart &&
+                             model->update_requires_reboot;
+    bool done_overlay_hint = is_done && model->upgrade_flow_from_hot_reload && !model->hot_reload_capture_restart &&
+                             !done_needs_reboot &&
+                             (model->update_overlay_changed || model->reason_overlay_preload_enabled ||
+                              (model->reason_notifications_enabled && !model->reason_detail_ready));
     int64_t grace_sec = is_grace ? ptc_ui_setup_grace_remaining(model, ptc_ui_render_now()) : -1;
 
     /* 1. Header: semantic icon + bold title + right status pill */
@@ -2354,15 +2410,21 @@ static void draw_upgrade_flow_overlay(uint32_t *pixels, uint32_t stride, const P
         stage == PTC_UI_UPGRADE_FLOW_ACTIVATING || is_grace ? PTC_UI_T_UPGRADE_FLOW_TITLE_ACTIVATING :
         is_done ? PTC_UI_T_UPGRADE_FLOW_TITLE_DONE : PTC_UI_T_UPGRADE_FLOW_TITLE_FAILED);
 
-    char badge_buf[48] = "";
+    char badge_buf[64] = "";
     uint32_t tone_fg = UI_ACCENT;
     uint32_t tone_bg = UI_ACCENT_SOFT;
     uint32_t tone_bd = UI_ACCENT;
     int symbol_kind = 2; /* warning/info dot */
 
     if (is_done) {
-        snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_HEALTH_OK_BADGE));
-        tone_fg = UI_SUCCESS; tone_bg = UI_SUCCESS_SOFT; tone_bd = UI_SUCCESS_BORDER; symbol_kind = 1;
+        if (done_needs_reboot || done_overlay_hint) {
+            snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(done_needs_reboot
+                ? PTC_UI_T_UPDATE_REBOOT_PILL : PTC_UI_T_UPDATE_OVERLAY_RELOAD_PILL));
+            tone_fg = UI_WARNING_TEXT; tone_bg = UI_WARNING_SOFT; tone_bd = UI_WARNING_BORDER; symbol_kind = 1;
+        } else {
+            snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_HEALTH_OK_BADGE));
+            tone_fg = UI_SUCCESS; tone_bg = UI_SUCCESS_SOFT; tone_bd = UI_SUCCESS_BORDER; symbol_kind = 1;
+        }
     } else if (is_failed) {
         snprintf(badge_buf, sizeof(badge_buf), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_ERR_BADGE));
         tone_fg = UI_DANGER; tone_bg = UI_DANGER_SOFT; tone_bd = UI_DANGER_BORDER; symbol_kind = 3;
@@ -2388,9 +2450,9 @@ static void draw_upgrade_flow_overlay(uint32_t *pixels, uint32_t stride, const P
     }
 
     draw_status_symbol(pixels, stride, dialog.x + 50, dialog.y + 52,
-                       is_reconfirm || is_grace ? UI_WARNING : tone_fg, symbol_kind);
-    char fitted_badge[48];
-    fit_text(fitted_badge, sizeof(fitted_badge), badge_buf, 13, 160);
+                       is_done ? UI_SUCCESS : (is_reconfirm || is_grace ? UI_WARNING : tone_fg), symbol_kind);
+    char fitted_badge[64];
+    fit_text(fitted_badge, sizeof(fitted_badge), badge_buf, 13, 210);
     int bw = measure_text(fitted_badge, 13) + 24;
     if (bw < 68) bw = 68;
     UiRect bpill = {dialog.x + dialog.width - 34 - bw, dialog.y + 38, bw, 28};
@@ -2531,6 +2593,19 @@ static void draw_upgrade_flow_overlay(uint32_t *pixels, uint32_t stride, const P
                             8, is_grace ? UI_WARNING : UI_ACCENT);
             draw_wrapped_text(pixels, stride, card.x + 24, card.y + 162, secondary_msg, 14,
                               card.width - 48, 20, 2, is_grace ? UI_WARNING_TEXT : UI_MUTED);
+        } else if (done_needs_reboot || done_overlay_hint) {
+            UiRect guide_box = {card.x + 20, card.y + 98, card.width - 40, 110};
+            fill_round_rect(pixels, stride, guide_box, 10, UI_WARNING_SOFT);
+            draw_rect_outline(pixels, stride, guide_box, 10, 1, UI_WARNING_BORDER);
+            char fitted_guide_title[128];
+            fit_text(fitted_guide_title, sizeof(fitted_guide_title),
+                     ptc_ui_text(done_needs_reboot ? PTC_UI_T_UPGRADE_FLOW_REBOOT_TITLE : PTC_UI_T_UPGRADE_FLOW_OVERLAY_TITLE),
+                     15, guide_box.width - 32);
+            draw_text_bold(pixels, stride, guide_box.x + 16, guide_box.y + 26,
+                           fitted_guide_title, 15, UI_WARNING_TEXT);
+            draw_wrapped_text(pixels, stride, guide_box.x + 16, guide_box.y + 52,
+                              ptc_ui_text(done_needs_reboot ? PTC_UI_T_UPGRADE_FLOW_REBOOT_GUIDE : PTC_UI_T_UPGRADE_FLOW_OVERLAY_GUIDE),
+                              14, guide_box.width - 32, 22, 2, UI_INK);
         } else {
             draw_wrapped_text(pixels, stride, card.x + 24, card.y + 122, secondary_msg, 15,
                               card.width - 48, 22, 3, is_done ? UI_SUCCESS : (is_reconfirm ? UI_WARNING_TEXT : UI_MUTED));

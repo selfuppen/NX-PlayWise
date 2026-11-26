@@ -35,12 +35,14 @@ typedef struct {
     int64_t created_at;
     char phase[32];
     unsigned next_file;
+    bool requires_reboot;
     PtcUpdateFile files[PTC_UPDATE_FILE_COUNT];
 } PtcUpdateJournal;
 
 bool ptc_update_journal_parse(const char *text, PtcUpdateJournal *journal);
 bool ptc_update_journal_save(const PtcUpdateIo *io, const PtcUpdateJournal *journal);
 bool ptc_update_journal_load(const PtcUpdateIo *io, PtcUpdateJournal *journal);
+bool ptc_update_journal_overlay_changed(const PtcUpdateJournal *journal);
 bool ptc_update_install_busy_phase(const char *phase);
 bool ptc_update_path(char *out, size_t size, const PtcUpdateJournal *journal, const char *part, int file);
 /* Caller freezes target after-digests during package validation. They are

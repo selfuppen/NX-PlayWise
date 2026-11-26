@@ -119,8 +119,25 @@ static void versions(void)
     assert(ptc_update_feed_select(&feed, false, &offer) && ptc_update_offer_status(&offer, "1.0.0", false) == PTC_UPDATE_CURRENT);
     assert(!ptc_update_offer_parse("{\"schema_version\":1,\"schema_version\":1,\"releases\":[]}", &offer));
     test_update_metadata(metadata, sizeof(metadata), "3.1.1", true);
-    assert(ptc_update_offer_parse(metadata, &offer) && offer.prerelease);
+    assert(ptc_update_offer_parse(metadata, &offer) && offer.prerelease && !offer.requires_reboot);
     assert(ptc_update_offer_status(&offer, "3.1.0", true) == PTC_UPDATE_CHANNEL_EXCLUDED);
+    {
+        cJSON *o = ptc_update_parse_json(metadata);
+        cJSON *rel = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(o, "releases"), 0);
+        cJSON_AddBoolToObject(rel, "requires_reboot", true);
+        char *reboot_json = cJSON_PrintUnformatted(o);
+        assert(ptc_update_offer_parse(reboot_json, &offer) && offer.requires_reboot);
+        free(reboot_json);
+        cJSON_ReplaceItemInObjectCaseSensitive(rel, "requires_reboot", cJSON_CreateBool(false));
+        reboot_json = cJSON_PrintUnformatted(o);
+        assert(ptc_update_offer_parse(reboot_json, &offer) && !offer.requires_reboot);
+        free(reboot_json);
+        cJSON_ReplaceItemInObjectCaseSensitive(rel, "requires_reboot", cJSON_CreateString("yes"));
+        reboot_json = cJSON_PrintUnformatted(o);
+        assert(!ptc_update_offer_parse(reboot_json, &offer));
+        free(reboot_json);
+        cJSON_Delete(o);
+    }
     const char *bad_fields[] = {"size", "md5", "sha256", "name", "gitee_url", "github_url"};
     for (unsigned i = 0; i < sizeof(bad_fields) / sizeof(bad_fields[0]); ++i) {
         cJSON *o = ptc_update_parse_json(metadata);
@@ -181,12 +198,32 @@ int main(void)
     versions();
     Fixture *f = malloc(sizeof(*f)); assert(f); PtcUpdateJournal j, reopened;
     fixture(f, &j); PtcUpdateIo ops = io(f);
+    j.requires_reboot = true;
     assert(ptc_update_prepare(&ops, &j)); assert(ptc_update_install(&ops, &j));
     assert(ptc_update_files_match(&ops, &j, true)); unsigned operations = f->calls;
     assert(ptc_update_journal_load(&ops, &reopened)); assert(!strcmp(reopened.phase, "files_installed"));
+    assert(reopened.requires_reboot);
+    assert(ptc_update_journal_overlay_changed(&reopened));
+    {
+        PtcUpdateJournal unchanged = reopened;
+        int ovl_idx = ptc_update_asset_index("switch/.overlays/playwise.ovl");
+        assert(ovl_idx >= 0);
+        strcpy(unchanged.files[ovl_idx].before_sha256, unchanged.files[ovl_idx].after_sha256);
+        assert(!ptc_update_journal_overlay_changed(&unchanged));
+        unchanged.files[ovl_idx].existed = false;
+        assert(ptc_update_journal_overlay_changed(&unchanged));
+    }
     assert(ptc_update_rollback(&ops, &reopened)); assert(ptc_update_files_match(&ops, &reopened, false)); untouched(f);
     char prior_text[PTC_UPDATE_JOURNAL_LIMIT];
     assert(read_file(f, "switch/playwise/updates/active.json", prior_text, sizeof(prior_text)));
+    {
+        cJSON *bad_reboot = ptc_update_parse_json(prior_text);
+        assert(bad_reboot && cJSON_ReplaceItemInObjectCaseSensitive(bad_reboot, "requires_reboot", cJSON_CreateNumber(1)));
+        char *bad_text = cJSON_PrintUnformatted(bad_reboot);
+        PtcUpdateJournal parsed_bad;
+        assert(bad_text && !ptc_update_journal_parse(bad_text, &parsed_bad));
+        free(bad_text); cJSON_Delete(bad_reboot);
+    }
     cJSON *prior = ptc_update_parse_json(prior_text);
     assert(prior && cJSON_ReplaceItemInObjectCaseSensitive(prior, "transaction_id", cJSON_CreateString("ffffffffffffffffffffffffffffffff")));
     char *prior_json = cJSON_PrintUnformatted(prior); assert(prior_json); cJSON_Delete(prior);

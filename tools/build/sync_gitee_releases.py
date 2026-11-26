@@ -23,6 +23,7 @@ GITHUB_REPO = "selfuppen/NX-PlayWise"
 GITEE_REPO = "selfuppen/nx-playwise"
 BRANCH = "update-feed"
 MARKER = "<!-- playwise-release-mirror:v1 -->"
+REQUIRES_REBOOT_MARKER = "<!-- playwise:requires-reboot -->"
 MAX_ATTACHMENT = 100 * 1024 * 1024
 MAX_ZIP = 32 * 1024 * 1024
 VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?\Z")
@@ -381,12 +382,18 @@ def sync(api: Api, git: Git, directory: Path, *, tag: str = "", calendars: list[
         package = state["releases"][release["tag_name"]]["assets"].get(name)
         if not package or not 0 < package["size"] <= MAX_ZIP:
             raise SyncError("latest release has no compatible standard ZIP")
-        notes = "".join(c for c in (release.get("body") or "") if ord(c) >= 32 or c == "\n")
+        raw_body = release.get("body") or ""
+        requires_reboot = REQUIRES_REBOOT_MARKER in raw_body
+        clean_body = raw_body.replace(REQUIRES_REBOOT_MARKER, "").strip() if requires_reboot else raw_body
+        notes = "".join(c for c in clean_body if ord(c) >= 32 or c == "\n")
         notes = notes.encode("utf-8")[:2047].decode("utf-8", errors="ignore")
-        feed["releases"].append({"version": version, "tag": release["tag_name"], "prerelease": preview(release), "notes": notes,
+        entry = {"version": version, "tag": release["tag_name"], "prerelease": preview(release), "notes": notes,
             "package": {"name": name, **{k: package[k] for k in ("size", "sha256", "md5")},
                         "gitee_url": public_url("gitee", release["tag_name"], name),
-                        "github_url": public_url("github", release["tag_name"], name)}})
+                        "github_url": public_url("github", release["tag_name"], name)}}
+        if requires_reboot:
+            entry["requires_reboot"] = True
+        feed["releases"].append(entry)
     state["seen_release_ids"] = sorted(r["id"] for r in published)
     git.publish(feed, state)
     return feed

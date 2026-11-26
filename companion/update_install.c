@@ -68,6 +68,8 @@ bool ptc_update_journal_parse(const char *text, PtcUpdateJournal *j)
          !strcmp(j->phase, "completed") || !strcmp(j->phase, "rolled_back"));
     if (ok && !strcmp(j->phase, "completed")) ok = j->target_pid && ptc_update_hex(j->target_boot_id, 16) &&
         strcmp(j->source_boot_id, j->target_boot_id) && ptc_update_request_id(j->status_request_id) && ptc_update_hex(j->status_sha256, 64);
+    const cJSON *reboot = cJSON_GetObjectItemCaseSensitive(o, "requires_reboot");
+    ok = ok && (!reboot || cJSON_IsBool(reboot));
     const cJSON *files = cJSON_GetObjectItemCaseSensitive(o, "files");
     ok = ok && cJSON_IsArray(files) && cJSON_GetArraySize(files) == PTC_UPDATE_FILE_COUNT;
     for (int i = 0; ok && i < PTC_UPDATE_FILE_COUNT; ++i) {
@@ -85,8 +87,15 @@ bool ptc_update_journal_parse(const char *text, PtcUpdateJournal *j)
         if (i == 1) ok = ok && entry->existed && !entry->before_size && !entry->after_size &&
             !strcmp(entry->before_sha256, entry->after_sha256);
     }
-    if (ok) { j->next_file = (unsigned)next; j->created_at = (int64_t)timestamp; }
+    if (ok) { j->next_file = (unsigned)next; j->created_at = (int64_t)timestamp; j->requires_reboot = cJSON_IsTrue(reboot); }
     cJSON_Delete(o); return ok;
+}
+
+bool ptc_update_journal_overlay_changed(const PtcUpdateJournal *j)
+{
+    int idx = ptc_update_asset_index("switch/.overlays/playwise.ovl");
+    if (!j || idx < 0 || !j->files[idx].after_sha256[0]) return false;
+    return !j->files[idx].existed || strcmp(j->files[idx].before_sha256, j->files[idx].after_sha256) != 0;
 }
 
 bool ptc_update_path(char *out, size_t size, const PtcUpdateJournal *j, const char *part, int file)
@@ -122,6 +131,7 @@ static cJSON *journal_json(const PtcUpdateJournal *j)
     cJSON_AddStringToObject(o, "status_sha256", j->status_sha256);
     cJSON_AddNumberToObject(o, "created_at", (double)j->created_at);
     cJSON_AddNumberToObject(o, "next_file", j->next_file);
+    if (j->requires_reboot) cJSON_AddBoolToObject(o, "requires_reboot", true);
     cJSON_AddItemToObject(o, "files", files);
     for (int i = 0; i < PTC_UPDATE_FILE_COUNT; ++i) {
         cJSON *f = cJSON_CreateObject();

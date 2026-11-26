@@ -425,6 +425,7 @@ bool ptc_online_update_pending_backup(PtcOnlineUpdater *u, bool save)
         cJSON_AddStringToObject(o, "zip_sha256", u->journal.zip_sha256);
         cJSON_AddNumberToObject(o, "source_pid", (double)u->journal.source_pid);
         cJSON_AddNumberToObject(o, "created_at", (double)u->journal.created_at);
+        if (u->journal.requires_reboot) cJSON_AddBoolToObject(o, "requires_reboot", true);
         cJSON *files = cJSON_AddArrayToObject(o, "target_files");
         bool frozen = files != NULL;
         for (int i = 0; frozen && i < PTC_UPDATE_FILE_COUNT; ++i) {
@@ -459,8 +460,10 @@ bool ptc_online_update_pending_backup(PtcOnlineUpdater *u, bool save)
         if (ok) strcpy(fields[i].out, value);
     }
     const cJSON *pid = cJSON_GetObjectItemCaseSensitive(o, "source_pid"), *created = cJSON_GetObjectItemCaseSensitive(o, "created_at");
+    const cJSON *reboot = cJSON_GetObjectItemCaseSensitive(o, "requires_reboot");
     int order;
-    ok = ok && cJSON_IsNumber(pid) && pid->valuedouble > 0 && pid->valuedouble <= 9007199254740991.0 &&
+    ok = ok && (!reboot || cJSON_IsBool(reboot)) &&
+        cJSON_IsNumber(pid) && pid->valuedouble > 0 && pid->valuedouble <= 9007199254740991.0 &&
         (double)(uint64_t)pid->valuedouble == pid->valuedouble && cJSON_IsNumber(created) && created->valuedouble >= 0 && created->valuedouble <= 9007199254740991.0 &&
         (double)(int64_t)created->valuedouble == created->valuedouble &&
         ptc_update_hex(u->journal.transaction_id, 32) && ptc_update_hex(u->journal.source_boot_id, 16) &&
@@ -481,6 +484,8 @@ bool ptc_online_update_pending_backup(PtcOnlineUpdater *u, bool save)
     }
     if (ok) {
         u->journal.source_pid = (uint64_t)pid->valuedouble; u->journal.created_at = (int64_t)created->valuedouble; u->backup_submitted = true;
+        u->journal.requires_reboot = cJSON_IsTrue(reboot);
+        u->offer.requires_reboot = u->journal.requires_reboot;
         strcpy(u->offer.version, u->journal.target_version); strcpy(u->offer.md5, u->journal.md5);
     }
     cJSON_Delete(o); return ok;
@@ -498,6 +503,7 @@ bool ptc_online_update_start(PtcOnlineUpdater *u, int job)
         char id[33]; snprintf(id, sizeof(id), "%016llx%016llx", (unsigned long long)randomGet64(), (unsigned long long)randomGet64());
         strcpy(u->journal.transaction_id, id);
         u->journal.created_at = (int64_t)time(NULL);
+        u->journal.requires_reboot = u->offer.requires_reboot;
         char relative[128], directory[768];
         snprintf(relative, sizeof(relative), "switch/playwise/updates/%s", id);
         if (!ptc_update_fs_path(&u->fs, relative, directory, sizeof(directory)) || !ptc_update_fs_mkdirs(directory) ||

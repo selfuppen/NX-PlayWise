@@ -23,6 +23,7 @@ typedef struct {
     char sha256[65];
     char gitee_url[512], github_url[512];
     bool prerelease;
+    bool requires_reboot;
 } PtcUpdateOffer;
 
 typedef struct { PtcUpdateOffer offers[2]; unsigned count; } PtcUpdateFeed;
