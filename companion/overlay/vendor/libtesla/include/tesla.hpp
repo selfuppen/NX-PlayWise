@@ -3003,6 +3003,11 @@ namespace tsl {
         virtual void onPreloadArgs(bool preloaded) { (void)preloaded; }
         virtual u64 hiddenPollInterval() { return UINT64_MAX; }
         virtual bool onHiddenPoll(bool neutral) { return false; }
+        virtual void onSleepWakeDetected(uint64_t wakeNs, uint64_t wakeStartNs) { (void)wakeNs; (void)wakeStartNs; }
+        virtual void onHiddenWakeSignals(uint64_t lastUserInputNs, uint64_t lastPowerEventNs, uint64_t lastHomeEventNs) {
+            (void)lastUserInputNs; (void)lastPowerEventNs; (void)lastHomeEventNs;
+        }
+        virtual bool wakeEarlyUnlockEnabled() const { return false; }
         virtual Event* hiddenWakeEvent() { return nullptr; }
         virtual void onHiddenWake(bool usable) { (void)usable; }
         virtual bool hasHiddenFrame() { return false; }
@@ -3458,6 +3463,12 @@ namespace tsl {
             std::atomic<bool> manualComboRequested{false};
             std::atomic<uint64_t> homeCooldownUntilNs{0};
             std::atomic<uint64_t> powerCooldownUntilNs{0};
+            std::atomic<uint64_t> lastSleepStartNs{0};
+            std::atomic<uint64_t> lastSleepWakeNs{0};
+            std::atomic<uint64_t> lastUserInputNs{0};
+            std::atomic<uint64_t> lastPowerEventNs{0};
+            std::atomic<uint64_t> lastHomeEventNs{0};
+            std::atomic<bool> unlockActivityNotified{false};
 
             std::mutex dataMutex;
             u64 keysDown = 0;
@@ -3562,6 +3573,21 @@ namespace tsl {
                     if (hidGetTouchScreenStates(&shData->touchState, 1) == 0)
                         shData->touchState = { 0 };
 
+                    const bool userActive = shData->keysDown || shData->keysHeld || shData->touchState.count != 0 ||
+                        std::abs(shData->joyStickPosLeft.x) >= 16000 || std::abs(shData->joyStickPosLeft.y) >= 16000 ||
+                        std::abs(shData->joyStickPosRight.x) >= 16000 || std::abs(shData->joyStickPosRight.y) >= 16000;
+                    if (userActive) {
+                        const uint64_t inputNowNs = armTicksToNs(armGetSystemTick());
+                        extendAtomicDeadline(shData->lastUserInputNs, inputNowNs);
+                        const uint64_t wakeNs = shData->lastSleepWakeNs.load();
+                        const uint64_t pwrUntil = shData->powerCooldownUntilNs.load();
+                        if (!shData->overlayOpen && wakeNs != 0 && inputNowNs > wakeNs &&
+                            detail::cooldownActive(inputNowNs, pwrUntil) &&
+                            !shData->unlockActivityNotified.exchange(true)) {
+                            eventFire(&shData->comboEvent);
+                        }
+                    }
+
                     if (((shData->keysHeld & tsl::cfg::launchCombo) == tsl::cfg::launchCombo) && shData->keysDown & tsl::cfg::launchCombo) {
                         if (shData->overlayOpen) {
                             shData->hideRequested = true;
@@ -3581,14 +3607,27 @@ namespace tsl {
 
                 // Visible/held input stays fast; hidden idle avoids 50Hz wakes.
                 s32 idx = 0;
-                Result rc = waitObjects(&idx, objects, WaiterObject_Count,
-                    detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0));
+                const uint64_t pollerWaitStartNs = armTicksToNs(armGetSystemTick());
+                const uint64_t pollerTimeoutNs = detail::inputPollNs(shData->overlayOpen.load(), shData->keysHeld != 0);
+                Result rc = waitObjects(&idx, objects, WaiterObject_Count, pollerTimeoutNs);
+                const uint64_t pollerWakeNowNs = armTicksToNs(armGetSystemTick());
+                const bool pollerSleepJump = detail::sleepJumpDetected(pollerWaitStartNs, pollerWakeNowNs, pollerTimeoutNs);
+                if (pollerSleepJump) {
+                    shData->lastSleepStartNs.store(pollerWaitStartNs);
+                    extendAtomicDeadline(shData->lastSleepWakeNs, pollerWakeNowNs);
+                    shData->unlockActivityNotified.store(false);
+                    extendAtomicDeadline(shData->powerCooldownUntilNs,
+                        detail::saturatingAddNs(pollerWakeNowNs, detail::POWER_COOLDOWN_NS));
+                    if (!shData->overlayOpen) eventFire(&shData->comboEvent);
+                }
                 if (R_SUCCEEDED(rc)) {
-                    uint64_t nowNs = armTicksToNs(armGetSystemTick());
+                    uint64_t nowNs = pollerWakeNowNs;
                     if (idx == WaiterObject_PowerButton) {
+                        extendAtomicDeadline(shData->lastPowerEventNs, nowNs);
                         extendAtomicDeadline(shData->powerCooldownUntilNs,
                             detail::saturatingAddNs(nowNs, detail::POWER_COOLDOWN_NS));
                     } else if (idx == WaiterObject_HomeButton) {
+                        extendAtomicDeadline(shData->lastHomeEventNs, nowNs);
                         extendAtomicDeadline(shData->homeCooldownUntilNs,
                             detail::saturatingAddNs(nowNs, detail::HOME_COOLDOWN_NS));
                     }
@@ -3701,11 +3740,20 @@ namespace tsl {
         }
 
 
+        uint64_t observedSleepWakeNs = 0;
         while (shData.running) {
 
+            const uint64_t pollerWakeNs = shData.lastSleepWakeNs.load();
+            if (pollerWakeNs > observedSleepWakeNs) {
+                observedSleepWakeNs = pollerWakeNs;
+                overlay->onSleepWakeDetected(pollerWakeNs, shData.lastSleepStartNs.load());
+            }
             const uint64_t waitStartNs = armTicksToNs(armGetSystemTick());
+            const uint64_t effectivePowerCooldownNs = detail::effectivePowerCooldownUntilNs(
+                observedSleepWakeNs, shData.powerCooldownUntilNs.load(),
+                overlay->wakeEarlyUnlockEnabled(), shData.lastUserInputNs.load());
             const uint64_t cooldownUntilNs = detail::maxCooldownUntilNs(
-                shData.homeCooldownUntilNs.load(), shData.powerCooldownUntilNs.load());
+                shData.homeCooldownUntilNs.load(), effectivePowerCooldownNs);
             const bool autoBlocked = detail::cooldownActive(waitStartNs, cooldownUntilNs);
             const u64 timeout = detail::hiddenWaitNs(overlay->hasHiddenFrame(),
                 waitStartNs, cooldownUntilNs, overlay->hiddenPollInterval());
@@ -3727,8 +3775,16 @@ namespace tsl {
             const bool manualWake = ((R_SUCCEEDED(wake) && !notificationWake) || comboPending) &&
                 shData.manualComboRequested.exchange(false);
             if (!manualWake && detail::sleepJumpDetected(waitStartNs, wakeNowNs, timeout)) {
+                shData.lastSleepStartNs.store(waitStartNs);
+                impl::extendAtomicDeadline(shData.lastSleepWakeNs, wakeNowNs);
+                shData.unlockActivityNotified.store(false);
                 impl::extendAtomicDeadline(shData.powerCooldownUntilNs,
                     detail::saturatingAddNs(wakeNowNs, detail::POWER_COOLDOWN_NS));
+            }
+            const uint64_t latestWakeNs = shData.lastSleepWakeNs.load();
+            if (latestWakeNs > observedSleepWakeNs) {
+                observedSleepWakeNs = latestWakeNs;
+                overlay->onSleepWakeDetected(latestWakeNs, shData.lastSleepStartNs.load());
             }
             if (!manualWake && (wake == KERNELRESULT(TimedOut) || ((notificationWake || notificationError) && !comboPending))) {
                 bool neutral;
@@ -3742,9 +3798,14 @@ namespace tsl {
                     shData.keysDownPending = 0;
                 }
                 const uint64_t pollNowNs = armTicksToNs(armGetSystemTick());
+                const uint64_t pollEffectivePowerCooldownNs = detail::effectivePowerCooldownUntilNs(
+                    observedSleepWakeNs, shData.powerCooldownUntilNs.load(),
+                    overlay->wakeEarlyUnlockEnabled(), shData.lastUserInputNs.load());
                 const uint64_t pollCooldownUntilNs = detail::maxCooldownUntilNs(
-                    shData.homeCooldownUntilNs.load(), shData.powerCooldownUntilNs.load());
+                    shData.homeCooldownUntilNs.load(), pollEffectivePowerCooldownNs);
                 bool blocked = detail::cooldownActive(pollNowNs, pollCooldownUntilNs);
+                overlay->onHiddenWakeSignals(shData.lastUserInputNs.load(),
+                    shData.lastPowerEventNs.load(), shData.lastHomeEventNs.load());
                 bool open = !blocked && overlay->onHiddenPoll(neutral);
                 overlay->loopHiddenFrame(blocked, hiddenKeysDown);
                 if (!open) continue;
@@ -3757,8 +3818,11 @@ namespace tsl {
             }
             {
                 const uint64_t openNowNs = armTicksToNs(armGetSystemTick());
+                const uint64_t openEffectivePowerCooldownNs = detail::effectivePowerCooldownUntilNs(
+                    observedSleepWakeNs, shData.powerCooldownUntilNs.load(),
+                    overlay->wakeEarlyUnlockEnabled(), shData.lastUserInputNs.load());
                 const uint64_t openCooldownUntilNs = detail::maxCooldownUntilNs(
-                    shData.homeCooldownUntilNs.load(), shData.powerCooldownUntilNs.load());
+                    shData.homeCooldownUntilNs.load(), openEffectivePowerCooldownNs);
                 if (detail::cooldownActive(openNowNs, openCooldownUntilNs)) {
                     eventClear(&shData.comboEvent);
                     overlay->loopHiddenFrame(true, 0);

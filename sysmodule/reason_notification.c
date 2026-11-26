@@ -146,6 +146,12 @@ void ptc_reason_notification_init(PtcReasonNotification *n, PtcStorage *s,
         if (!((boot[i] >= '0' && boot[i] <= '9') || (boot[i] >= 'a' && boot[i] <= 'f'))) n->blocked = true;
 }
 
+void ptc_reason_notification_request_wake_recheck(PtcReasonNotification *n)
+{
+    if (!n || n->blocked) return;
+    ptc_reason_event_request_wake_recheck(&n->event);
+}
+
 static bool observation_same_day(const PtcReasonObservation *s, int64_t wall)
 {
     if (!s->reliable || !s->restricted || s->reason <= PTC_REASON_NONE || s->reason > PTC_REASON_DOCK ||
@@ -279,9 +285,14 @@ static DetailResult advance_detail(PtcReasonNotification *n, const PtcReasonObse
             ack.owner, ms * UINT64_C(1000000));
     if (!confirmed && !cancel && (!expired || grace)) return DETAIL_CONTINUE;
     if (!ptc_reason_detail_clear(n->storage, n->root, &n->detail)) return DETAIL_CLEANUP_FAILED;
+    bool from_wake = n->detail_from_wake;
     n->detail_pending = false;
+    n->detail_from_wake = false;
     state(n, confirmed ? "detail_drawn_confirmed" : cancel ? "detail_cancelled" : "detail_timeout");
     if (confirmed) return DETAIL_CONFIRMED;
+    /* Wake re-shows are detail-only for a resident overlay; never spam a brief
+       toast if the user dismissed/locked again or the UI became unavailable. */
+    if (from_wake) return DETAIL_CONTINUE;
     return !cancel && !suppressed && observation_current(s, wall) ? DETAIL_FALLBACK : DETAIL_CONTINUE;
 }
 
@@ -290,6 +301,7 @@ static bool try_detail(PtcReasonNotification *n, const PtcReasonObservation *s, 
 {
     PtcReasonDetail detail;
     PtcReasonDetailDecision *d = &n->detail_decision;
+    bool wake_only = n->event.wake_recheck_attempt;
     *d = (PtcReasonDetailDecision){.available = true, .repeat = n->event.repeat,
         .failures = n->detail_failures, .day = s->day, .reason = s->reason,
         .instance = s->instance, .ms = ms,
@@ -318,18 +330,28 @@ static bool try_detail(PtcReasonNotification *n, const PtcReasonObservation *s, 
         ptc_reason_detail_fresh(&detail, n->event.release, n->event.boot, detail.expires_ms - 1);
     bool same_identity_or_missing = !d->ready_read_ok ||
         (d->ready_release_match && d->ready_boot_match);
-    if (!d->ready_fresh && !d->repeat && d->failures < 5 && d->clock_budget_available && d->sequence_available &&
+    if (!wake_only && !d->ready_fresh && !d->repeat && d->failures < 5 && d->clock_budget_available && d->sequence_available &&
         (expired_matching_lease || (n->ready_wait_deadline_ms && same_identity_or_missing))) {
         if (!n->ready_wait_deadline_ms) n->ready_wait_deadline_ms = ms + READY_RENEWAL_WAIT_MS;
         if (ms < n->ready_wait_deadline_ms) return true;
     }
     n->ready_wait_deadline_ms = 0;
+    if (!d->ready_fresh || !d->clock_budget_available || !d->sequence_available) {
+        if (wake_only) {
+            /* Resident UI was no longer ready when recheck ran; drop silently
+               without emitting a fallback .notify toast or bumping debounce. */
+            state(n, "wake_recheck_not_ready");
+            return true;
+        }
+        ptc_reason_event_attempted(&n->event, ms);
+        return false;
+    }
     ptc_reason_event_attempted(&n->event, ms);
-    if (!d->ready_fresh || !d->clock_budget_available || !d->sequence_available) return false;
     detail.sequence = ++n->detail_sequence;
     detail.issued_ms = ms; detail.expires_ms = ms + PTC_REASON_DETAIL_PICKUP_MS;
     detail.day = s->day; detail.reason = s->reason; detail.instance = s->instance;
     n->detail = detail; n->detail_pending = true;
+    n->detail_from_wake = wake_only;
     n->detail_accepted_ms = n->detail_draw_deadline_ms = 0;
     if (ptc_reason_detail_write(n->storage, n->root, "request", &detail)) {
         if (n->wake) n->wake(n->wake_ctx);

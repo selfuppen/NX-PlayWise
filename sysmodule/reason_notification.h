@@ -47,6 +47,7 @@ typedef struct {
     bool blocked;
     bool pending;
     bool detail_pending;
+    bool detail_from_wake;
     uint64_t ready_wait_deadline_ms;
     uint64_t detail_sequence;
     uint64_t detail_accepted_ms;
@@ -67,6 +68,8 @@ typedef struct {
 
 void ptc_reason_notification_init(PtcReasonNotification *n, PtcStorage *s,
     const char *root, const char *release, const char *boot);
+/* Request a single-shot wake re-show check on the next fresh observation. */
+void ptc_reason_notification_request_wake_recheck(PtcReasonNotification *n);
 /* Pass freshly read contents, or NULL after a failed read. */
 void ptc_reason_preferences_update(PtcReasonPreferences *preferences, const char *config);
 /* Snapshot formatting only; false means invalid cause or insufficient buffer. */

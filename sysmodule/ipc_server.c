@@ -383,6 +383,44 @@ bool ptc_ipc_server_read_reason_ready(void *ctx, PtcReasonDetail *out)
     mutexUnlock(&server->reason_mutex);
     return ok;
 }
+
+static void handle_reason_wake_recheck(PtcIpcServer *server, const void *data, size_t size)
+{
+    PtcIpcReasonSubscription request;
+    bool should_wake = false;
+    if (size < sizeof(request)) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    memcpy(&request, data, sizeof(request));
+    if (!memchr(request.release, 0, sizeof(request.release)) || !memchr(request.boot, 0, sizeof(request.boot)) ||
+        strcmp(request.release, PLAYWISE_BUILD_RELEASE_ID) != 0 ||
+        strcmp(request.boot, server->sysmodule->boot_id) != 0) {
+        make_response(MAKERESULT(Module_Libnx, LibnxError_BadInput), NULL, 0);
+        return;
+    }
+    mutexLock(&server->reason_mutex);
+    if (!server->reason_stopping) {
+        server->reason_wake_recheck = true;
+        should_wake = true;
+    }
+    mutexUnlock(&server->reason_mutex);
+    if (should_wake) eventFire(&server->wake_event);
+    make_response(0, NULL, 0);
+}
+
+bool ptc_ipc_server_take_reason_wake_recheck(PtcIpcServer *server)
+{
+    bool pending = false;
+    if (!server) return false;
+    mutexLock(&server->reason_mutex);
+    if (!server->reason_stopping && server->reason_wake_recheck) {
+        pending = true;
+        server->reason_wake_recheck = false;
+    }
+    mutexUnlock(&server->reason_mutex);
+    return pending;
+}
 #endif
 
 static void close_session(PtcIpcServer *server, unsigned index)
@@ -429,6 +467,9 @@ static bool dispatch(PtcIpcServer *server, unsigned index)
         break;
     case PTC_IPC_CMD_QUERY_REASON_READY:
         handle_reason_ready_query(server, data, data_size);
+        break;
+    case PTC_IPC_CMD_REQUEST_WAKE_REASON_RECHECK:
+        handle_reason_wake_recheck(server, data, data_size);
         break;
 #else
     (void)index;
@@ -518,6 +559,7 @@ void ptc_ipc_server_stop(PtcIpcServer *server)
         subscriber->session = INVALID_HANDLE;
     }
     server->reason_ready_valid = false;
+    server->reason_wake_recheck = false;
     server->reason_ready_session = INVALID_HANDLE;
     memset(&server->reason_ready, 0, sizeof(server->reason_ready));
     mutexUnlock(&server->reason_mutex);

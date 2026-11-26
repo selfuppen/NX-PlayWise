@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Minimum interval between same-instance wake re-shows to prevent SD/UI churn
+   from rapid power-button toggling while keeping normal sleep/wake responsive. */
+#define PTC_REASON_WAKE_DEBOUNCE_MS UINT64_C(15000)
+
 typedef enum {
     PTC_REASON_NONE, PTC_REASON_DAILY, PTC_REASON_BEDTIME,
     PTC_REASON_EYE, PTC_REASON_DOCK
@@ -38,7 +42,10 @@ typedef struct {
     uint64_t last_ms;
     uint64_t next_publish_ms;
     uint64_t next_repeat_ms;
+    uint64_t next_wake_publish_ms;
     bool repeat; /* this attempt is a brief countdown reminder, never a detail offer */
+    bool wake_recheck; /* pending single-shot wake re-show request from resident UI */
+    bool wake_recheck_attempt; /* current positive return came from wake_recheck (detail-only) */
     int64_t last_wall;
     bool handled_valid;
     bool dirty;
@@ -47,6 +54,7 @@ typedef struct {
 } PtcReasonEvent;
 
 void ptc_reason_event_init(PtcReasonEvent *event, const char *release, const char *boot);
+void ptc_reason_event_request_wake_recheck(PtcReasonEvent *event);
 /* Identity, time and suppression are supplied by the caller, never read here. */
 bool ptc_reason_event_update(PtcReasonEvent *event, const char *release, const char *boot,
     const PtcReasonObservation *sample, uint64_t now_ms, int64_t wall,

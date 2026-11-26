@@ -5,6 +5,17 @@ namespace tsl::detail {
     constexpr uint64_t HOME_COOLDOWN_NS = 3'000'000'000ULL;
     constexpr uint64_t POWER_COOLDOWN_NS = 8'000'000'000ULL;
     constexpr uint64_t WAKE_JUMP_THRESHOLD_NS = 3'000'000'000ULL;
+    constexpr uint64_t WAKE_EARLY_MIN_NS = 3'000'000'000ULL;
+    constexpr uint64_t WAKE_UNLOCK_QUIET_NS = 1'200'000'000ULL;
+    constexpr uint64_t WAKE_RECHECK_WINDOW_NS = 45'000'000'000ULL;
+    constexpr uint64_t WAKE_BUTTON_SKEW_NS = 1'000'000'000ULL;
+
+    enum class WakeRecheckGate : uint8_t {
+        Inactive = 0,
+        Wait,
+        Ready,
+        Expired,
+    };
 
     // Held buttons retain fast sampling so chord completion and release remain
     // responsive. Hidden idle sampling only discovers the manual launch chord.
@@ -46,5 +57,53 @@ namespace tsl::detail {
             return remaining;
         }
         return interval;
+    }
+
+    // When the system lock screen is enabled and post-wake user input has been
+    // observed (e.g. 3-press unlock), allow releasing the 8s POWER cooldown once
+    // at least 3s have elapsed since wake AND input has stayed quiet for 1.2s.
+    // Never extends beyond powerCooldownUntilNs and never shortens HOME cooldown.
+    constexpr uint64_t effectivePowerCooldownUntilNs(
+        uint64_t wakeNs, uint64_t powerCooldownUntilNs,
+        bool lockScreenEnabled, uint64_t lastUserInputNs) {
+        if (!lockScreenEnabled || wakeNs == 0 || powerCooldownUntilNs == 0 ||
+            lastUserInputNs <= wakeNs) {
+            return powerCooldownUntilNs;
+        }
+        uint64_t minDeadline = saturatingAddNs(wakeNs, WAKE_EARLY_MIN_NS);
+        uint64_t quietDeadline = saturatingAddNs(lastUserInputNs, WAKE_UNLOCK_QUIET_NS);
+        uint64_t earlyDeadline = maxCooldownUntilNs(minDeadline, quietDeadline);
+        return earlyDeadline < powerCooldownUntilNs ? earlyDeadline : powerCooldownUntilNs;
+    }
+
+    // Gate post-sleep wake rechecks so screen-off dark wakes and active lock-screen
+    // button sequences never trigger an automatic overlay popup.
+    constexpr WakeRecheckGate evaluateWakeRecheck(
+        bool pending, uint64_t wakeNs, uint64_t wakeStartNs, uint64_t nowNs,
+        bool lockScreenEnabled, bool neutral,
+        uint64_t lastUserInputNs, uint64_t lastPowerEventNs, uint64_t lastHomeEventNs) {
+        if (!pending || wakeNs == 0) return WakeRecheckGate::Inactive;
+        if (nowNs < wakeNs) return WakeRecheckGate::Expired;
+        if (nowNs - wakeNs >= WAKE_RECHECK_WINDOW_NS) return WakeRecheckGate::Expired;
+        const bool sawUserInput = lastUserInputNs > wakeNs;
+        if (lockScreenEnabled) {
+            if (!sawUserInput || !neutral) return WakeRecheckGate::Wait;
+            if (nowNs < lastUserInputNs) return WakeRecheckGate::Expired;
+            if (nowNs - wakeNs < WAKE_EARLY_MIN_NS ||
+                nowNs - lastUserInputNs < WAKE_UNLOCK_QUIET_NS) {
+                return WakeRecheckGate::Wait;
+            }
+            return WakeRecheckGate::Ready;
+        }
+        const uint64_t postSleepFloor = saturatingAddNs(wakeStartNs, WAKE_BUTTON_SKEW_NS);
+        const uint64_t wakeLowerBound = wakeNs > WAKE_BUTTON_SKEW_NS ? wakeNs - WAKE_BUTTON_SKEW_NS : 0;
+        const bool powerSignal = lastPowerEventNs > postSleepFloor && lastPowerEventNs >= wakeLowerBound;
+        const bool homeSignal = lastHomeEventNs > postSleepFloor && lastHomeEventNs >= wakeLowerBound;
+        if (!sawUserInput && !powerSignal && !homeSignal) return WakeRecheckGate::Wait;
+        if (!neutral) return WakeRecheckGate::Wait;
+        if (sawUserInput && (nowNs < lastUserInputNs || nowNs - lastUserInputNs < WAKE_UNLOCK_QUIET_NS)) {
+            return WakeRecheckGate::Wait;
+        }
+        return WakeRecheckGate::Ready;
     }
 }

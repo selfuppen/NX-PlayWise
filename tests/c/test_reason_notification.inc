@@ -1411,3 +1411,147 @@ static void test_reason_snapshot_text(void)
     s.reliable=false;
     check_true(!ptc_reason_notification_body(&s,100,PTC_UI_LANGUAGE_ENGLISH,"",body,sizeof(body)),"unknown cause publishes nothing");
 }
+
+static void count_wake(void *ctx)
+{
+    ++*(unsigned *)ctx;
+}
+
+static void test_reason_wake_reshow(void)
+{
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcStorage *storage;
+    PtcReasonNotification n;
+    PtcReasonObservation s;
+    TestMemReadyProvider provider;
+    PtcReasonDetail req, accepted, ack;
+    PtcInputOwnerWriter owner;
+    unsigned wakes = 0;
+    check_true(mem != NULL, "allocate wake re-show fixture");
+    if (!mem) return;
+    ptc_mem_storage_init(mem);
+    storage = ptc_mem_storage_as_storage(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    storage->vtable->write_text_atomic(storage, "app/handover/runtime-ready.json",
+        "{\"profile\":\"release\",\"release_id\":\"release1\",\"boot_id\":\"0123456789abcdef\"}");
+
+    memset(&provider, 0, sizeof(provider));
+    provider.valid = true;
+    snprintf(provider.detail.release, sizeof(provider.detail.release), "release1");
+    snprintf(provider.detail.boot, sizeof(provider.detail.boot), "0123456789abcdef");
+    provider.detail.ui_instance = 9001;
+    provider.detail.issued_ms = 5000;
+    provider.detail.expires_ms = 6500;
+
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    n.read_ready = test_mem_ready_read;
+    n.read_ready_ctx = &provider;
+    n.wake = count_wake;
+    n.wake_ctx = &wakes;
+
+    /* 1. Initial restriction triggers normal detail offer and confirms. */
+    s = reason_sample(1, PTC_REASON_DAILY, 1, 100);
+    notify_tick(&n, &s, 5500, 100, true);
+    check_true(n.detail_pending && wakes == 1 &&
+        ptc_reason_detail_read(storage, "app", "request", &req),
+        "initial daily restriction opens detail offer");
+    ptc_input_owner_writer_init(&owner, storage, "app", "release1", UINT64_C(1000000000));
+    check_true(ptc_input_owner_acquire(&owner, UINT64_C(5600) * UINT64_C(1000000)), "acquire owner for initial confirm");
+    accepted = req; accepted.stage_ms = 5600;
+    check_true(ptc_reason_detail_write(storage, "app", "accepted", &accepted), "write initial accepted");
+    ack = req; ack.stage_ms = 5700; snprintf(ack.owner, sizeof(ack.owner), "%s", owner.owner);
+    check_true(ptc_reason_detail_write(storage, "app", "ack", &ack), "write initial ack");
+    notify_tick(&n, &s, 5800, 100, true);
+    check_true(!n.detail_pending && !strcmp(n.state, "detail_drawn_confirmed"), "initial detail confirmed");
+    ptc_input_owner_release(&owner, UINT64_C(5900) * UINT64_C(1000000));
+
+    /* 2. Same-instance observation without wake_recheck does not re-trigger. */
+    s = reason_sample(2, PTC_REASON_DAILY, 1, 130);
+    provider.detail.issued_ms = 35000; provider.detail.expires_ms = 36500;
+    notify_tick(&n, &s, 35500, 130, true);
+    check_true(!n.detail_pending && !n.pending && wakes == 1,
+        "unchanged instance stays deduplicated without wake_recheck");
+
+    /* 3. Wake recheck within 15s debounce of previous popup is ignored cleanly. */
+    ptc_mem_storage_init(mem);
+    storage->vtable->write_text_atomic(storage, "sdmc:/config/ultrahand/config.ini", "[ultrahand]\nnotifications=true\n");
+    storage->vtable->write_text_atomic(storage, "app/handover/runtime-ready.json",
+        "{\"profile\":\"release\",\"release_id\":\"release1\",\"boot_id\":\"0123456789abcdef\"}");
+    ptc_reason_notification_init(&n, storage, "app", "release1", "0123456789abcdef");
+    n.read_ready = test_mem_ready_read; n.read_ready_ctx = &provider;
+    n.wake = count_wake; n.wake_ctx = &wakes;
+    wakes = 0;
+    provider.detail.issued_ms = 5000; provider.detail.expires_ms = 6500;
+    s = reason_sample(1, PTC_REASON_DAILY, 1, 100);
+    notify_tick(&n, &s, 5500, 100, true);
+    check_true(n.detail_pending && wakes == 1 && ptc_reason_detail_read(storage, "app", "request", &req),
+        "seed attempt at 5500ms");
+    ptc_input_owner_writer_init(&owner, storage, "app", "release1", UINT64_C(2000000000));
+    check_true(ptc_input_owner_acquire(&owner, UINT64_C(5600) * UINT64_C(1000000)), "acquire owner");
+    accepted = req; accepted.stage_ms = 5600;
+    check_true(ptc_reason_detail_write(storage, "app", "accepted", &accepted), "write accepted");
+    ack = req; ack.stage_ms = 5700; snprintf(ack.owner, sizeof(ack.owner), "%s", owner.owner);
+    check_true(ptc_reason_detail_write(storage, "app", "ack", &ack), "write ack");
+    notify_tick(&n, &s, 5800, 100, true);
+    ptc_input_owner_release(&owner, UINT64_C(5900) * UINT64_C(1000000));
+
+    s = reason_sample(2, PTC_REASON_DAILY, 1, 114);
+    provider.detail.issued_ms = 20000; provider.detail.expires_ms = 21500;
+    ptc_reason_notification_request_wake_recheck(&n);
+    notify_tick(&n, &s, 20499, 114, true);
+    check_true(!n.detail_pending && !n.pending && wakes == 1,
+        "wake recheck inside 15s debounce (5500 + 15000 = 20500) is suppressed");
+
+    /* 4. Wake recheck at >= 15s debounce with fresh observation & ready lease re-opens detail. */
+    s = reason_sample(3, PTC_REASON_DAILY, 1, 115);
+    provider.detail.issued_ms = 20000; provider.detail.expires_ms = 21500;
+    ptc_reason_notification_request_wake_recheck(&n);
+    notify_tick(&n, &s, 20500, 115, true);
+    check_true(n.detail_pending && !n.pending && wakes == 2 && n.detail_from_wake &&
+        ptc_reason_detail_read(storage, "app", "request", &req) && req.sequence == 2,
+        "wake recheck at 15s debounce re-opens detail for unchanged restricted instance");
+
+    /* 5. Wake recheck detail timeout never falls back to a .notify brief toast. */
+    notify_tick(&n, &s, 23100, 115, true);
+    check_true(!n.detail_pending && !n.pending && !strcmp(n.state, "detail_timeout"),
+        "timed-out wake recheck does not emit a fallback .notify toast");
+
+    /* 6. Wake recheck when UI ready lease is missing drops silently without .notify fallback. */
+    provider.valid = false;
+    s = reason_sample(4, PTC_REASON_DAILY, 1, 140);
+    ptc_reason_notification_request_wake_recheck(&n);
+    notify_tick(&n, &s, 45000, 140, true);
+    check_true(!n.detail_pending && !n.pending && !strcmp(n.state, "wake_recheck_not_ready"),
+        "wake recheck without ready overlay drops cleanly without .notify toast");
+
+    /* 7. Wake recheck when restriction cleared during sleep emits nothing. */
+    provider.valid = true;
+    provider.detail.issued_ms = 65000; provider.detail.expires_ms = 66500;
+    s = reason_sample(5, PTC_REASON_NONE, 0, 160);
+    s.restricted = false;
+    ptc_reason_notification_request_wake_recheck(&n);
+    notify_tick(&n, &s, 65500, 160, true);
+    check_true(!n.detail_pending && !n.pending && !n.event.wake_recheck,
+        "wake recheck emits nothing when restriction cleared during sleep");
+
+    /* 8. Wake recheck with stale observation or suppression clears flag and emits nothing. */
+    s = reason_sample(6, PTC_REASON_BEDTIME, 42, 200);
+    provider.detail.issued_ms = 85000; provider.detail.expires_ms = 86500;
+    notify_tick(&n, &s, 85500, 200, true);
+    check_true(n.detail_pending, "seed bedtime instance");
+    notify_tick(&n, &s, 89000, 200, true); /* timeout initial bedtime */
+    notify_tick(&n, &s, 92000, 200, true); /* clear fallback toast */
+    s = reason_sample(7, PTC_REASON_BEDTIME, 42, 220);
+    provider.detail.issued_ms = 110000; provider.detail.expires_ms = 111500;
+    ptc_reason_notification_request_wake_recheck(&n);
+    ptc_reason_notification_tick(&n, &s, 110500, 223, true, false, false, PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(!n.detail_pending && !n.pending && !n.event.wake_recheck,
+        "stale post-wake observation (>2s) cancels wake recheck without popping");
+    s = reason_sample(8, PTC_REASON_BEDTIME, 42, 223);
+    ptc_reason_notification_request_wake_recheck(&n);
+    ptc_reason_notification_tick(&n, &s, 110600, 223, true, true, false, PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(!n.detail_pending && !n.pending && !n.event.wake_recheck,
+        "suppressed visible owner cancels wake recheck without popping");
+
+    free(mem);
+}

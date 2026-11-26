@@ -20,10 +20,16 @@ void ptc_reason_event_init(PtcReasonEvent *e, const char *release, const char *b
     snprintf(e->boot, sizeof(e->boot), "%s", boot);
 }
 
+void ptc_reason_event_request_wake_recheck(PtcReasonEvent *e)
+{
+    if (e) e->wake_recheck = true;
+}
+
 bool ptc_reason_event_update(PtcReasonEvent *e, const char *release, const char *boot,
     const PtcReasonObservation *s, uint64_t ms, int64_t wall, bool enabled, bool suppressed)
 {
     e->repeat = false;
+    e->wake_recheck_attempt = false;
     bool clock_ok = ms >= e->last_ms && (!e->last_wall || wall >= e->last_wall);
     bool identity_ok = !strcmp(release, e->release) && !strcmp(boot, e->boot);
     bool fresh = s->reliable && s->captured_at > 0 && wall >= s->captured_at &&
@@ -40,6 +46,7 @@ bool ptc_reason_event_update(PtcReasonEvent *e, const char *release, const char 
     if (!enabled || suppressed) {
         e->next_repeat_ms = repeat_deadline(ms);
         e->dirty = false;
+        e->wake_recheck = false;
         /* Details/disable can begin after the last policy sample aged. Consume
            the known instance now so leaving details cannot replay its intent. */
         if (e->latest_accepted) {
@@ -52,12 +59,16 @@ bool ptc_reason_event_update(PtcReasonEvent *e, const char *release, const char 
         (s->reason <= PTC_REASON_NONE || s->reason > PTC_REASON_DOCK || !s->instance))) {
         e->next_repeat_ms = repeat_deadline(ms);
         e->dirty = false;
+        e->wake_recheck = false;
         e->latest_accepted = false;
         return false;
     }
     /* An aged sample cannot publish or replace history. Retain only the hint
        that a handoff occurred; publication still needs a new fresh observation. */
-    if (!fresh) return false;
+    if (!fresh) {
+        e->wake_recheck = false;
+        return false;
+    }
     bool new_observation = s->revision != e->latest.revision || became_enabled || !e->latest_accepted;
     if (new_observation) {
         bool changed = e->latest_accepted && !same(s, &e->latest);
@@ -72,10 +83,24 @@ bool ptc_reason_event_update(PtcReasonEvent *e, const char *release, const char 
         e->handled = *s;
         e->handled_valid = true;
         e->dirty = false;
+        e->wake_recheck = false;
         return false;
     }
-    if (e->dirty)
+    if (e->dirty) {
+        e->wake_recheck = false;
         return ms >= e->observed_ms && ms - e->observed_ms < 2000 && ms >= e->next_publish_ms;
+    }
+    if (e->wake_recheck) {
+        /* Single-shot wake re-show for an unchanged, still-restricted instance.
+           Requires a fresh post-wake observation and respects the 15s debounce. */
+        e->wake_recheck = false;
+        if (ms >= e->observed_ms && ms - e->observed_ms < 2000 &&
+            ms >= e->next_publish_ms && ms >= e->next_wake_publish_ms) {
+            e->wake_recheck_attempt = true;
+            return true;
+        }
+        return false;
+    }
     /* Repeats consume only a new policy observation, not an aged cached sample.
        Do not mark dirty while waiting: this minute timer must not speed up idle polling. */
     uint32_t max_seconds = s->reason == PTC_REASON_EYE ? 3600 : 86400;
@@ -93,6 +118,9 @@ void ptc_reason_event_attempted(PtcReasonEvent *e, uint64_t ms)
     e->handled = e->latest;
     e->handled_valid = true;
     e->dirty = false;
+    e->wake_recheck = false;
     e->next_publish_ms = ms > UINT64_MAX - 10000 ? UINT64_MAX : ms + 10000;
+    e->next_wake_publish_ms = ms > UINT64_MAX - PTC_REASON_WAKE_DEBOUNCE_MS
+        ? UINT64_MAX : ms + PTC_REASON_WAKE_DEBOUNCE_MS;
     e->next_repeat_ms = repeat_deadline(ms);
 }

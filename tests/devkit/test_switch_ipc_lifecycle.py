@@ -109,11 +109,13 @@ def main() -> None:
             "idle input throttling must preserve visible and held-button sampling")
     require("detail::hiddenWaitNs(overlay->hasHiddenFrame()," in loop and
             "detail::sleepJumpDetected(waitStartNs, wakeNowNs, timeout)" in loop and
+            "detail::sleepJumpDetected(pollerWaitStartNs, pollerWakeNowNs, pollerTimeoutNs)" in poller and
+            "detail::effectivePowerCooldownUntilNs(" in loop and
             "shData.manualComboRequested.exchange(false)" in loop and
             "shData->powerCooldownUntilNs" in poller and
             "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop and
             "--pw-preload" in loop,
-            "HOME/POWER bounded cooldowns, sleep-jump guard, manual combo gating and --pw-preload must stay intact")
+            "HOME/POWER bounded cooldowns, sleep-jump guard, unlock early-release, manual combo gating and --pw-preload must stay intact")
     input_pages = (ROOT / "companion/overlay/source/input_pages.hpp").read_text(encoding="utf-8")
     require('tsl::setNextOverlay("sdmc:/switch/.overlays/ovlmenu.ovl", "");' in input_pages and
             "if (s_automatic_detail) tsl::Overlay::get()->hide();" in input_pages and
@@ -181,10 +183,17 @@ def main() -> None:
     nro_prefs = (ROOT / "companion/nro/nro_preferences.c").read_text(encoding="utf-8")
     require("PTC_IPC_CMD_UPDATE_REASON_READY" in ipc_server and
             "PTC_IPC_CMD_QUERY_REASON_READY" in ipc_server and
+            "PTC_IPC_CMD_REQUEST_WAKE_REASON_RECHECK" in ipc_server and
             "ptc_ipc_server_read_reason_ready" in ipc_server and
+            "ptc_ipc_server_take_reason_wake_recheck" in ipc_server and
             "reason_notification.read_ready = ptc_ipc_server_read_reason_ready;" in sysmodule and
+            "ptc_reason_notification_request_wake_recheck(&reason_notification);" in sysmodule and
+            "ptc_switch_ipc_request_wake_reason_recheck(" in overlay and
+            "setsysGetLockScreenFlag(" in overlay and
+            "ASSERT_FATAL(setsysGetLockScreenFlag" not in overlay and
+            "tsl::detail::evaluateWakeRecheck(" in overlay and
             "ptc_switch_ipc_query_reason_ready(" in nro_prefs,
-            "sysmodule IPC server and NRO probe must wire zero-SD-write RAM readiness lease and query")
+            "sysmodule IPC server, overlay wake recheck, and NRO probe must wire RAM readiness and wake re-show safely")
     # An unanswered detail offer is dropped once its observation ages, so the
     # presence lease must stay short and be renewed only from neutral input.
     hidden = overlay[overlay.index("bool onHiddenPoll(bool neutral) override"):overlay.index("void onFrameRendered() override")]

@@ -20,6 +20,7 @@ bool ptc_switch_ipc_client_probe(PtcSwitchIpcClient *client);
 bool ptc_switch_ipc_subscribe_reason(PtcSwitchIpcClient *client, const char *release, const char *boot, Event *event);
 bool ptc_switch_ipc_update_reason_ready(PtcSwitchIpcClient *client, const PtcReasonDetail *ready);
 void ptc_switch_ipc_clear_reason_ready(PtcSwitchIpcClient *client);
+bool ptc_switch_ipc_request_wake_reason_recheck(PtcSwitchIpcClient *client, const char *release, const char *boot);
 #endif
 bool ptc_switch_ipc_query_reason_ready(PtcSwitchIpcClient *client, const char *release, const char *boot,
     PtcReasonDetail *out);

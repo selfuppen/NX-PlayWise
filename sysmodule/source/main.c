@@ -340,6 +340,7 @@ int main(int argc, char **argv)
 
     while (!exit_for_handoff) {
         bool notified;
+        bool wake_recheck = false;
         bool due;
         uint64_t elapsed_ms;
         uint32_t wait_ms;
@@ -361,15 +362,18 @@ int main(int argc, char **argv)
         notified = ipc_available ? ptc_ipc_server_wait(&ipc_server, wait_ms) : false;
         if (!ipc_available) svcSleepThread((int64_t)wait_ms * 1000000LL);
         if (ipc_available) ptc_ipc_server_lock_storage(&ipc_server);
+#ifndef PLAYWISE_DEVICE_LAB
+        wake_recheck = ipc_available && ptc_ipc_server_take_reason_wake_recheck(&ipc_server);
+#endif
         elapsed_ms = armTicksToNs(armGetSystemTick() - last_full_tick) / 1000000ULL;
         if (elapsed_ms > UINT32_MAX) elapsed_ms = UINT32_MAX;
         /* 无通知时先做一次轻量到期探测：队列为空、标志与分钟未变、
            未到护眼或 setup 宽限期限、也未到扫描退避间隔时，完整轮次不会产生
            任何可观察动作，跳过它即可避免反复重读规则/日历与身份文件。
            交接取消后立即补一次完整轮次，恢复节奏与原来一致。 */
-        due = notified || resume_tick || ptc_sysmodule_tick_due(&sysmodule, (uint32_t)elapsed_ms);
+        due = notified || wake_recheck || resume_tick || ptc_sysmodule_tick_due(&sysmodule, (uint32_t)elapsed_ms);
         if (due) {
-            (void)ptc_sysmodule_scheduler_tick(&sysmodule, notified);
+            (void)ptc_sysmodule_scheduler_tick(&sysmodule, notified || wake_recheck);
             last_full_tick = armGetSystemTick();
             resume_tick = false;
         }
@@ -408,6 +412,8 @@ int main(int argc, char **argv)
         bool reason_suppressed = reason_preferences.enabled && !reason_stopping &&
             reason_sample.reliable && reason_sample.restricted &&
             ptc_input_owner_suppress_notification(&reason_owner, reason_ns);
+        if (wake_recheck && reason_preferences.enabled && !reason_stopping)
+            ptc_reason_notification_request_wake_recheck(&reason_notification);
         ptc_reason_notification_tick(&reason_notification, &reason_sample, reason_ns / 1000000,
             reason_clock.unix_seconds, reason_preferences.enabled, reason_suppressed, reason_stopping,
             reason_preferences.language);

@@ -301,6 +301,27 @@ void ptc_switch_ipc_clear_reason_ready(PtcSwitchIpcClient *client)
     memset(&lease, 0, sizeof(lease));
     (void)serviceDispatchIn(&client->service, PTC_IPC_CMD_UPDATE_REASON_READY, lease);
 }
+
+bool ptc_switch_ipc_request_wake_reason_recheck(PtcSwitchIpcClient *client, const char *release, const char *boot)
+{
+    PtcIpcReasonSubscription request;
+    Result rc;
+    if (!client || !client->initialized || !release || !boot ||
+        strlen(release) >= sizeof(request.release) ||
+        strlen(boot) != sizeof(request.boot) - 1) return false;
+    memset(&request, 0, sizeof(request));
+    strcpy(request.release, release);
+    strcpy(request.boot, boot);
+    rc = serviceDispatchIn(&client->service, PTC_IPC_CMD_REQUEST_WAKE_REASON_RECHECK, request);
+    if (R_FAILED(rc)) {
+        if (R_MODULE(rc) != Module_Libnx) {
+            serviceClose(&client->service);
+            client->initialized = false;
+        }
+        return false;
+    }
+    return true;
+}
 #endif
 
 bool ptc_switch_ipc_query_reason_ready(PtcSwitchIpcClient *client, const char *release, const char *boot,

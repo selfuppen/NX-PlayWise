@@ -16,6 +16,9 @@ static_assert(tsl::detail::hiddenPollNs(false, UINT64_MAX) == UINT64_MAX);
 static_assert(tsl::detail::HOME_COOLDOWN_NS == 3'000'000'000ULL);
 static_assert(tsl::detail::POWER_COOLDOWN_NS == 8'000'000'000ULL);
 static_assert(tsl::detail::WAKE_JUMP_THRESHOLD_NS == 3'000'000'000ULL);
+static_assert(tsl::detail::WAKE_EARLY_MIN_NS == 3'000'000'000ULL);
+static_assert(tsl::detail::WAKE_UNLOCK_QUIET_NS == 1'200'000'000ULL);
+static_assert(tsl::detail::WAKE_RECHECK_WINDOW_NS == 45'000'000'000ULL);
 static_assert(tsl::detail::saturatingAddNs(1000, 500) == 1500);
 static_assert(tsl::detail::saturatingAddNs(UINT64_MAX - 10, 50) == UINT64_MAX);
 static_assert(!tsl::detail::cooldownActive(1000, 0));
@@ -40,6 +43,57 @@ static_assert(tsl::detail::hiddenWaitNs(false, 1000, 1000 + 8'000'000'000ULL, 25
 static_assert(tsl::detail::hiddenWaitNs(true, 1000, 1000 + 8'000'000'000ULL, 250'000'000ULL) == 250'000'000ULL);
 static_assert(tsl::detail::hiddenWaitNs(true, 1000, 4000, 250'000'000ULL) == 3000ULL);
 static_assert(tsl::detail::hiddenWaitNs(false, 5000, 4000, 250'000'000ULL) == 250'000'000ULL);
+// Unlock-aware early cooldown release (lock screen ON, >= 3s since wake & >= 1.2s quiet).
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    100'000'000'000ULL, 108'000'000'000ULL, false, 101'000'000'000ULL) == 108'000'000'000ULL);
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    100'000'000'000ULL, 108'000'000'000ULL, true, 99'000'000'000ULL) == 108'000'000'000ULL);
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    100'000'000'000ULL, 108'000'000'000ULL, true, 101'000'000'000ULL) == 103'000'000'000ULL);
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    100'000'000'000ULL, 108'000'000'000ULL, true, 102'500'000'000ULL) == 103'700'000'000ULL);
+static_assert(tsl::detail::effectivePowerCooldownUntilNs(
+    100'000'000'000ULL, 108'000'000'000ULL, true, 107'500'000'000ULL) == 108'000'000'000ULL);
+// Wake recheck gating: lock screen ON, lock screen OFF, dark wake & expiration.
+static_assert(tsl::detail::evaluateWakeRecheck(
+    false, 100'000'000'000ULL, 80'000'000'000ULL, 103'000'000'000ULL,
+    true, true, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Inactive);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 99'000'000'000ULL,
+    true, true, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Expired);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 145'000'000'000ULL,
+    true, true, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Expired);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
+    true, true, 80'000'000'000ULL, 100'000'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Wait);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 102'900'000'000ULL,
+    true, true, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Wait);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 103'000'000'000ULL,
+    true, true, 102'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Wait);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 103'000'000'000ULL,
+    true, false, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Wait);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 103'000'000'000ULL,
+    true, true, 101'000'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Ready);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
+    false, true, 70'000'000'000ULL, 79'500'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Wait);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
+    false, true, 70'000'000'000ULL, 100'000'000'000ULL, 0) == tsl::detail::WakeRecheckGate::Ready);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
+    false, true, 70'000'000'000ULL, 0, 100'000'000'000ULL) == tsl::detail::WakeRecheckGate::Ready);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 108'000'000'000ULL,
+    false, true, 107'500'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Wait);
+static_assert(tsl::detail::evaluateWakeRecheck(
+    true, 100'000'000'000ULL, 80'000'000'000ULL, 108'700'000'000ULL,
+    false, true, 107'500'000'000ULL, 0, 0) == tsl::detail::WakeRecheckGate::Ready);
 
 namespace {
 std::size_t live_bytes = 0;

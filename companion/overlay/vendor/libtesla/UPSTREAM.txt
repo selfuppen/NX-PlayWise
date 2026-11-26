@@ -58,4 +58,11 @@ Local silent boot preload & HOME/POWER cooldown patch (2026-11-25): recognize
 in setNextOverlay when origArgs is empty, and replace permanent POWER hard-block
 with bounded post-wake cooldown (HOME 3s, POWER 8s + sleep-jump guard + explicit
 manualComboRequested) in playwise_poll_policy.hpp after immediate hide/clear.
+Local wake re-show & unlock-aware cooldown patch (2026-11-26): also detect
+>=3s kernel suspend jumps on the 50ms input poller wait (covering short sleeps
+under 8s), record atomic post-wake input/POWER/HOME timestamps, and expose
+virtual onSleepWakeDetected/onHiddenWakeSignals/wakeEarlyUnlockEnabled hooks
+with effectivePowerCooldownUntilNs and evaluateWakeRecheck in
+playwise_poll_policy.hpp so lock-screen unlock input releases cooldown after
+>=3s + 1.2s quiet without waking dark-sleep or interrupting lock-screen input.
 No upstream files synced; pinned upstream commit remains unchanged.

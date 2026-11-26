@@ -1497,6 +1497,34 @@ public:
         }
     }
 
+    void onSleepWakeDetected(uint64_t wakeNs, uint64_t wakeStartNs) override
+    {
+        /* Query lock-screen setting once per real sleep wake using libtesla's
+           existing set:sys session; fall back to conservative lock_screen=true
+           on error so dark wakes or unlock prompts are never interrupted. */
+        bool lock_flag = false;
+        wake_lock_screen_enabled_ = R_SUCCEEDED(setsysGetLockScreenFlag(&lock_flag)) ? lock_flag : true;
+        wake_recheck_pending_ = automatic_enabled_ && gui_ && gui_->automatic_detail_allowed();
+        wake_detected_ns_ = wakeNs;
+        wake_sleep_start_ns_ = wakeStartNs;
+        next_reason_subscribe_ms_ = 0;
+        next_ready_ms_ = 0;
+        next_detail_poll_ms_ = 0;
+    }
+
+    void onHiddenWakeSignals(uint64_t lastUserInputNs, uint64_t lastPowerEventNs, uint64_t lastHomeEventNs) override
+    {
+        wake_last_user_input_ns_ = lastUserInputNs;
+        wake_last_power_event_ns_ = lastPowerEventNs;
+        wake_last_home_event_ns_ = lastHomeEventNs;
+    }
+
+    bool wakeEarlyUnlockEnabled() const override
+    {
+        return wake_recheck_pending_ && wake_lock_screen_enabled_ &&
+            automatic_enabled_ && gui_ && gui_->automatic_detail_allowed();
+    }
+
     Event* hiddenWakeEvent() override
     {
         return automatic_enabled_ && runtime_known_ && gui_ && gui_->automatic_detail_allowed() &&
@@ -1589,6 +1617,7 @@ public:
                 armTicksToNs(armGetSystemTick()) / 1000000, read_ok);
         }
         if (!automatic_enabled_) {
+            wake_recheck_pending_ = false;
             eventClose(&reason_event_);
             ptc_switch_ipc_clear_reason_ready(&bridge_.ipc);
             return false;
@@ -1645,6 +1674,23 @@ public:
                 ptc_reason_detail_write(s, APP_ROOT, "ready", &ready);
             ptc_overlay_hidden_timing_ready_end(&hidden_timing_, armTicksToNs(armGetSystemTick()) / 1000000, written);
             if (!written) { ++automatic_failures_; return false; }
+        }
+        if (wake_recheck_pending_) {
+            const uint64_t wake_now_ns = armTicksToNs(armGetSystemTick());
+            const auto gate = tsl::detail::evaluateWakeRecheck(
+                wake_recheck_pending_, wake_detected_ns_, wake_sleep_start_ns_, wake_now_ns,
+                wake_lock_screen_enabled_, neutral && !brief_notice_.active,
+                wake_last_user_input_ns_, wake_last_power_event_ns_, wake_last_home_event_ns_);
+            if (gate == tsl::detail::WakeRecheckGate::Expired || gate == tsl::detail::WakeRecheckGate::Inactive) {
+                wake_recheck_pending_ = false;
+            } else if (gate == tsl::detail::WakeRecheckGate::Ready) {
+                wake_recheck_pending_ = false;
+                if (bridge_.ipc.initialized &&
+                    ptc_switch_ipc_request_wake_reason_recheck(&bridge_.ipc, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_)) {
+                    ptc_overlay_reason_wake(&reason_wake_, wake_now_ns / 1000000);
+                    next_request_audit_ms_ = 0;
+                }
+            }
         }
         if (!ptc_overlay_reason_scan(&reason_wake_, eventActive(&reason_event_), ms, &next_request_audit_ms_))
             return false;
@@ -1728,6 +1774,7 @@ public:
 
     void onShow() override
     {
+        wake_recheck_pending_ = false;
         ptc_switch_ipc_clear_reason_ready(&bridge_.ipc);
         ptc_overlay_brief_poll(&brief_notice_, nullptr, APP_ROOT, PLAYWISE_BUILD_RELEASE_ID, runtime_boot_,
             armTicksToNs(armGetSystemTick()) / 1000000, false, false, false);
@@ -1852,6 +1899,10 @@ private:
     bool automatic_ack_written_ = false;
     bool automatic_enabled_ = false;
     bool preloaded_hidden_ = false;
+    bool wake_recheck_pending_ = false;
+    bool wake_lock_screen_enabled_ = true;
+    uint64_t wake_detected_ns_ = 0, wake_sleep_start_ns_ = 0;
+    uint64_t wake_last_user_input_ns_ = 0, wake_last_power_event_ns_ = 0, wake_last_home_event_ns_ = 0;
     uint64_t next_config_ms_ = 0;
     uint64_t next_runtime_ms_ = 0;
     bool runtime_known_ = false;

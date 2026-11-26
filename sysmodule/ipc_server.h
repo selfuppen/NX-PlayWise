@@ -42,6 +42,7 @@ typedef struct {
     Handle reason_ready_session;
     PtcReasonDetail reason_ready;
     bool reason_ready_valid;
+    bool reason_wake_recheck;
     bool reason_stopping;
 #endif
     Event wake_event;
@@ -63,6 +64,7 @@ void ptc_ipc_server_signal_completed(PtcIpcServer *server);
 #ifndef PLAYWISE_DEVICE_LAB
 void ptc_ipc_server_signal_reason(void *ctx);
 bool ptc_ipc_server_read_reason_ready(void *ctx, PtcReasonDetail *out);
+bool ptc_ipc_server_take_reason_wake_recheck(PtcIpcServer *server);
 #endif
 void ptc_ipc_server_lock_storage(PtcIpcServer *server);
 void ptc_ipc_server_unlock_storage(PtcIpcServer *server);
