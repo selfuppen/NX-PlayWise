@@ -5,10 +5,15 @@ namespace tsl::detail {
     constexpr uint64_t HOME_COOLDOWN_NS = 3'000'000'000ULL;
     constexpr uint64_t POWER_COOLDOWN_NS = 8'000'000'000ULL;
     constexpr uint64_t WAKE_JUMP_THRESHOLD_NS = 3'000'000'000ULL;
-    constexpr uint64_t WAKE_EARLY_MIN_NS = 3'000'000'000ULL;
-    constexpr uint64_t WAKE_UNLOCK_QUIET_NS = 1'200'000'000ULL;
+    constexpr uint64_t WAKE_EARLY_MIN_NS = 2'000'000'000ULL;
+    constexpr uint64_t WAKE_UNLOCK_QUIET_NS = 800'000'000ULL;
     constexpr uint64_t WAKE_RECHECK_WINDOW_NS = 45'000'000'000ULL;
     constexpr uint64_t WAKE_BUTTON_SKEW_NS = 1'000'000'000ULL;
+    // On real Switch hardware, the POWER button wake event can arrive up to
+    // ~1-2s after kernel suspend resume, extending powerCooldownUntilNs slightly
+    // beyond wakeNs + POWER_COOLDOWN_NS. Treat extensions within this skew as
+    // belonging to the same wake, while still preserving genuinely later POWER presses.
+    constexpr uint64_t WAKE_POWER_COOLDOWN_SKEW_NS = 2'000'000'000ULL;
 
     enum class WakeRecheckGate : uint8_t {
         Inactive = 0,
@@ -61,14 +66,14 @@ namespace tsl::detail {
 
     // When the system lock screen is enabled and post-wake user input has been
     // observed (e.g. 3-press unlock), allow releasing the 8s POWER cooldown once
-    // at least 3s have elapsed since wake AND input has stayed quiet for 1.2s.
+    // at least 2s have elapsed since wake AND input has stayed quiet for 0.8s.
     // Never extends beyond powerCooldownUntilNs and never shortens HOME cooldown.
     constexpr uint64_t effectivePowerCooldownUntilNs(
         uint64_t wakeNs, uint64_t powerCooldownUntilNs,
         bool lockScreenEnabled, uint64_t lastUserInputNs) {
         if (!lockScreenEnabled || wakeNs == 0 || powerCooldownUntilNs == 0 ||
             lastUserInputNs <= wakeNs ||
-            powerCooldownUntilNs > saturatingAddNs(wakeNs, POWER_COOLDOWN_NS)) {
+            powerCooldownUntilNs > saturatingAddNs(wakeNs, POWER_COOLDOWN_NS + WAKE_POWER_COOLDOWN_SKEW_NS)) {
             return powerCooldownUntilNs;
         }
         uint64_t minDeadline = saturatingAddNs(wakeNs, WAKE_EARLY_MIN_NS);

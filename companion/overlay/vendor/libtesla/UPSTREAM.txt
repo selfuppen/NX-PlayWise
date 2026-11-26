@@ -64,5 +64,6 @@ under 8s), record atomic post-wake input/POWER/HOME timestamps, and expose
 virtual onSleepWakeDetected/onHiddenWakeSignals/wakeEarlyUnlockEnabled hooks
 with effectivePowerCooldownUntilNs and evaluateWakeRecheck in
 playwise_poll_policy.hpp so lock-screen unlock input releases cooldown after
->=3s + 1.2s quiet without waking dark-sleep or interrupting lock-screen input.
+>=2s + 0.8s quiet (tolerating <=2s wake POWER event skew) without waking
+dark-sleep or interrupting lock-screen input.
 No upstream files synced; pinned upstream commit remains unchanged.

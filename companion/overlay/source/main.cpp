@@ -1548,7 +1548,8 @@ public:
     {
         if (brief_notice_.active) return UINT64_C(50000000);
         uint64_t ms = armTicksToNs(armGetSystemTick()) / 1000000;
-        bool wake_active = ptc_overlay_reason_wake_active(&reason_wake_, ms);
+        bool wake_active = ptc_overlay_reason_wake_active(&reason_wake_, ms) ||
+            (wake_recheck_pending_ && wake_detected_ns_ != 0 && wake_last_user_input_ns_ > wake_detected_ns_);
         /* Failed detail writes stop that writer. Brief reception remains read-only. */
         return ptc_overlay_hidden_poll_idle_ns(automatic_enabled_, eventActive(&reason_event_), wake_active, 0);
     }
