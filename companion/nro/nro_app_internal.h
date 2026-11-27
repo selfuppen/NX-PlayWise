@@ -201,6 +201,7 @@ void open_online_update_badge(UiState *ui);
 void poll_online_update(UiState *ui);
 void handle_online_update_input(UiState *ui, u64 down);
 void online_update_action(UiState *ui, int action);
+void toggle_update_check_on_startup(UiState *ui);
 void confirm_online_update(UiState *ui, PtcUiOperation operation);
 bool online_update_backup_result(UiState *ui);
 bool online_update_backup_before_submit(UiState *ui);

@@ -397,7 +397,12 @@ PtcUiRect ptc_ui_software_info_repo_source_rect(int index)
 
 PtcUiRect ptc_ui_software_info_update_banner_rect(void)
 {
-    return (PtcUiRect){54, 412, 730, 108};
+    return (PtcUiRect){54, 384, 730, 86};
+}
+
+PtcUiRect ptc_ui_software_info_auto_check_rect(void)
+{
+    return (PtcUiRect){54, 480, 730, 68};
 }
 
 /* Unified 3-in-1 Grant & Pairing full-page shell (Scheme A2):

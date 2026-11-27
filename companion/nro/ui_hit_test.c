@@ -202,6 +202,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_software_info_update_banner_rect(), x, y) ||
             ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y))
             return make_hit(PTC_UI_HIT_UPDATE_ACTION, 8);
+        if (ptc_ui_rect_contains(ptc_ui_software_info_auto_check_rect(), x, y))
+            return make_hit(PTC_UI_HIT_SOFTWARE_INFO_AUTO_CHECK, 0);
         if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
         if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&

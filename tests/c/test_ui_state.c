@@ -4235,10 +4235,14 @@ static void test_language_and_short_weekly_limits(void)
         PtcUiRect repo0 = ptc_ui_software_info_repo_source_rect(0);
         PtcUiRect repo1 = ptc_ui_software_info_repo_source_rect(1);
         PtcUiRect banner = ptc_ui_software_info_update_banner_rect();
+        PtcUiRect auto_check = ptc_ui_software_info_auto_check_rect();
         check_true(qr0.w > 0 && qr1.w > 0 && !rects_overlap(qr0, qr1), "software info QR tabs do not overlap");
         check_true(repo0.w > 0 && repo1.w > 0 && !rects_overlap(repo0, repo1), "software info repo source tabs do not overlap");
         check_true(!rects_overlap(banner, qr0) && !rects_overlap(banner, qr1), "update banner and QR tabs do not overlap");
         check_true(!rects_overlap(banner, repo0) && !rects_overlap(banner, repo1), "update banner and repo source tabs do not overlap");
+        check_true(auto_check.w > 0 && auto_check.h > 0 && !rects_overlap(banner, auto_check) &&
+                   !rects_overlap(auto_check, qr0) && !rects_overlap(auto_check, qr1),
+                   "software info startup check card does not overlap banner or QR tabs");
         check_hit(hit_center(&model, qr0), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 0, "hit software info QR tab 0");
         check_hit(hit_center(&model, qr1), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 1, "hit software info QR tab 1");
         check_hit(hit_center(&model, repo0), PTC_UI_HIT_NONE, 0, "repo source inactive on PWA tab");
@@ -4246,6 +4250,7 @@ static void test_language_and_short_weekly_limits(void)
         check_hit(hit_center(&model, repo0), PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, 0, "hit software info repo source GitHub");
         check_hit(hit_center(&model, repo1), PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, 1, "hit software info repo source Gitee");
         check_hit(hit_center(&model, banner), PTC_UI_HIT_UPDATE_ACTION, 8, "hit software info update banner");
+        check_hit(hit_center(&model, auto_check), PTC_UI_HIT_SOFTWARE_INFO_AUTO_CHECK, 0, "hit software info startup check toggle");
         check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
             "software info top back button cancels overlay");
     }

@@ -45,6 +45,10 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_TAB);
         ui->model.software_info_repo_source = hit.index ? 1 : 0;
         break;
+    case PTC_UI_HIT_SOFTWARE_INFO_AUTO_CHECK:
+        ui->model.overlay_selection = 1;
+        toggle_update_check_on_startup(ui);
+        break;
     case PTC_UI_HIT_UPDATE_BADGE:
         ptc_audio_play(PTC_SE_CONFIRM);
         open_online_update_badge(ui);

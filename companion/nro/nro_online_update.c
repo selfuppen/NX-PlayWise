@@ -1,13 +1,16 @@
 #include "nro_app_internal.h"
 
-#ifndef PLAYWISE_EDEN
 static bool ui_busy(const UiState *ui)
 {
     return ui->waiting || ui->recovering_redemption || ui->model.recovery_active ||
-        ui->model.weekly_dirty || ui->model.holiday_dirty || ui->model.bedtime_dirty || ui->model.dock_dirty ||
-        ui->hot_reload.status == PTC_HOT_RELOAD_RUNNING;
+        ui->model.weekly_dirty || ui->model.holiday_dirty || ui->model.bedtime_dirty || ui->model.dock_dirty
+#ifndef PLAYWISE_EDEN
+        || ui->hot_reload.status == PTC_HOT_RELOAD_RUNNING
+#endif
+        ;
 }
 
+#ifndef PLAYWISE_EDEN
 static void sync_model(UiState *ui)
 {
     PtcOnlineUpdater *u = &ui->updater;
@@ -163,6 +166,27 @@ void open_online_update(UiState *ui)
 #endif
 }
 
+void toggle_update_check_on_startup(UiState *ui)
+{
+    if (!ui || ui->model.view != PTC_UI_PARENT || ui->model.parent_support_only) return;
+    if (ui->model.update_busy || ui_busy(ui)
+#ifndef PLAYWISE_EDEN
+        || ui->updater.worker_live
+#endif
+        ) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UPDATE_BUSY));
+        return;
+    }
+    bool old = ui->model.update_check_on_startup;
+    ui->model.update_check_on_startup = !old;
+    if (!save_ui_preferences(ui)) {
+        ui->model.update_check_on_startup = old;
+        ptc_audio_play(PTC_SE_ERROR);
+    } else {
+        ptc_audio_play(PTC_SE_TOGGLE);
+    }
+}
+
 void online_update_action(UiState *ui, int action)
 {
     if (!ui || ui->model.view != PTC_UI_PARENT) return;
@@ -199,17 +223,18 @@ void online_update_action(UiState *ui, int action)
         open_confirm_overlay(ui, PTC_UI_OPERATION_ONLINE_UPDATE, ptc_ui_text(PTC_UI_T_UPDATE_DOWNLOAD),
             ptc_ui_text(u->offer.requires_reboot ? PTC_UI_T_UPDATE_CONFIRM_REBOOT : PTC_UI_T_UPDATE_CONFIRM));
         ui->model.confirm_hold_required = true;
-    } else if ((action == 2 || action == 3) && !ui->model.parent_support_only) {
-        bool old = action == 2 ? ui->model.update_check_on_startup : ui->model.update_stable_only;
-        if (action == 2) ui->model.update_check_on_startup = !old; else ui->model.update_stable_only = !old;
+    } else if (action == 2 && !ui->model.parent_support_only) {
+        toggle_update_check_on_startup(ui);
+    } else if (action == 3 && !ui->model.parent_support_only) {
+        bool old = ui->model.update_stable_only;
+        ui->model.update_stable_only = !old;
         if (!save_ui_preferences(ui)) {
-            if (action == 2) ui->model.update_check_on_startup = old;
-            else ui->model.update_stable_only = old;
+            ui->model.update_stable_only = old;
             ptc_audio_play(PTC_SE_ERROR);
         } else {
             ptc_audio_play(PTC_SE_TOGGLE);
         }
-        if (action == 3 && u->feed.count) {
+        if (u->feed.count) {
             (void)ptc_update_feed_select(&u->feed, ui->model.update_stable_only, &u->offer);
             u->status = ptc_update_offer_status(&u->offer, PLAYWISE_VERSION, ui->model.update_stable_only);
         }

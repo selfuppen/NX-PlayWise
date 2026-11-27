@@ -304,7 +304,7 @@ Software information exposes an X shortcut and a separate touch button while pre
 
 Eight actions share measured geometry, focus and touch handling. Disabled actions are rejected by the same projection used by the renderer. Checking and downloading permit cancellation; installation does not. Versions, approximate store size, release summaries and errors must fit their measured bounds without covering health indicators or the footer. Backups use a scrolling four-row list and existing selective restore, PIN and hold confirmation. History deletion also requires PIN and hold; active or unknown material is retained.
 
-Multilingual light/dark previews: `settings/settings-online-update`, `settings/settings-online-update-downloading`, `settings/settings-online-update-recovery` and `settings/settings-update-backups`. Host previews do not establish network, SD, backend, Overlay or hardware acceptance.
+Multilingual light/dark previews: `settings/settings-online-update`, `settings/settings-online-update-reboot`, `settings/settings-upgrade-flow-done-reboot`, `settings/settings-online-update-downloading`, `settings/settings-online-update-recovery` and `settings/settings-update-backups`. Host previews do not establish network, SD, backend, Overlay or hardware acceptance.
 
 The update card also shows the running backend identity. Y or touch opens full release notes; pagination and rendering share measured line breaks. Backup rows show verification, date and source; footer touch controls share L/R paging and PIN/hold deletion. Failed deletion retains material and explains the conflict. Reading and backup pages return to update details. Additional multilingual light/dark scenes: `settings/settings-online-update-notes[-next]`.
 

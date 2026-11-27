@@ -1853,6 +1853,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.software_info_repo_source = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH) ? 0 : 1;
             snprintf(settings_dlg.pwa_url, sizeof(settings_dlg.pwa_url), "https://selfuppen.github.io/NX-PlayWise/");
             settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
+            settings_dlg.update_check_on_startup = true;
+            settings_dlg.update_status = PTC_UPDATE_CURRENT;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
             failed |= save_preview(directory, "settings", "settings-software-info", &settings_dlg, dark);
             settings_dlg.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
@@ -1864,6 +1866,20 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.update_source = 1;
             snprintf(settings_dlg.update_notes, sizeof(settings_dlg.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
             failed |= save_preview(directory, "settings", "settings-online-update", &settings_dlg, dark);
+            settings_dlg.update_requires_reboot = true;
+            failed |= save_preview(directory, "settings", "settings-online-update-reboot", &settings_dlg, dark);
+            settings_dlg.update_requires_reboot = false;
+            {
+                PtcUiModel upg_dlg = settings_dlg;
+                upg_dlg.overlay = PTC_UI_OVERLAY_UPGRADE_FLOW;
+                upg_dlg.upgrade_flow_stage = PTC_UI_UPGRADE_FLOW_DONE;
+                upg_dlg.upgrade_flow_from_hot_reload = true;
+                upg_dlg.hot_reload_capture_restart = false;
+                upg_dlg.update_requires_reboot = true;
+                upg_dlg.update_overlay_changed = false;
+                upg_dlg.upgrade_flow_detail[0] = '\0';
+                failed |= save_preview(directory, "settings", "settings-upgrade-flow-done-reboot", &upg_dlg, dark);
+            }
             settings_dlg.update_notes_open = true;
             settings_dlg.update_notes[0] = '\0';
             for (int note = 0; note < 28; ++note) {
@@ -2174,6 +2190,15 @@ static int render_config_backup_previews(const char *directory, const PtcUiModel
         failed |= save_preview(directory, "settings", "config-backup-invalid", &model, dark);
     }
     return failed;
+}
+
+static bool action_trace_has_text(const char *needle)
+{
+    if (!needle) return false;
+    for (int i = 0; i < action_trace.count; ++i) {
+        if (strcmp(action_trace.text[i], needle) == 0) return true;
+    }
+    return false;
 }
 
 static int check_action_text(UiRect card, const char *required_title)
@@ -2769,11 +2794,11 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
             failed += check_action_text(to_uirect(ptc_ui_language_option_rect(c)), NULL);
     }
 
-    /* 3. Software Info & Check Updates (Scheme A: version/update workbench + switchable QR card) */
+    /* 3. Software Info & Check Updates (Scheme A: version/update workbench + startup check toggle + switchable QR card) */
     for (int qr_tab = 0; qr_tab < 2; ++qr_tab) {
         int repo_sources = qr_tab == 1 ? 2 : 1;
         for (int repo_src = 0; repo_src < repo_sources; ++repo_src) {
-            for (int has_upd = 0; has_upd < 2; ++has_upd) {
+            for (int scenario = 0; scenario < 4; ++scenario) {
                 PtcUiModel model = *baseline;
                 model.view = PTC_UI_PARENT;
                 model.parent_page = PTC_UI_PARENT_SETTINGS;
@@ -2784,16 +2809,128 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
                 snprintf(model.repository_url, sizeof(model.repository_url), "https://github.com/selfuppen/NX-PlayWise");
                 snprintf(model.gitee_repository_url, sizeof(model.gitee_repository_url), "https://gitee.com/selfuppen/nx-playwise");
                 snprintf(model.pwa_url, sizeof(model.pwa_url), "https://selfuppen.github.io/NX-PlayWise/");
-                model.update_status = has_upd ? PTC_UPDATE_AVAILABLE : PTC_UPDATE_CURRENT;
-                if (has_upd) snprintf(model.update_version, sizeof(model.update_version), "0.3.0");
-                else model.update_version[0] = '\0';
+                if (scenario == 0) {
+                    model.update_status = PTC_UPDATE_IDLE;
+                    model.update_check_on_startup = false;
+                    model.overlay_selection = 0;
+                } else if (scenario == 1) {
+                    model.update_status = PTC_UPDATE_CURRENT;
+                    model.update_check_on_startup = true;
+                    model.overlay_selection = 1;
+                } else if (scenario == 2) {
+                    model.update_status = PTC_UPDATE_AVAILABLE;
+                    model.update_check_on_startup = true;
+                    snprintf(model.update_version, sizeof(model.update_version), "0.3.0");
+                } else {
+                    model.update_status = PTC_UPDATE_FAILED;
+                    model.update_check_on_startup = false;
+                    model.overlay_selection = 1;
+                }
                 ptc_ui_graphics_draw(&model, &theme);
                 memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
                 draw_support_overlay_surface(preview_pixels, 1280, &model);
                 action_trace.enabled = false;
                 failed += check_action_text((UiRect){54, 168, 730, 472}, NULL);
                 failed += check_action_text((UiRect){802, 168, 424, 472}, NULL);
+                if (scenario == 0 && (action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_UP_TO_DATE)) ||
+                                      !action_trace_has_text(ptc_ui_text(PTC_UI_T_UPDATE_IDLE)) ||
+                                      !action_trace_has_text(ptc_ui_text(PTC_UI_T_OFF)) ||
+                                      action_trace_has_text(ptc_ui_text(PTC_UI_T_MUTED)))) {
+                    fprintf(stderr, "FAIL: software info idle/off state text mismatch\n");
+                    ++failed;
+                }
+                if (scenario == 1 && (!action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_UP_TO_DATE)) ||
+                                      !action_trace_has_text(ptc_ui_text(PTC_UI_T_ON)))) {
+                    fprintf(stderr, "FAIL: software info current/on state text mismatch\n");
+                    ++failed;
+                }
+                if (scenario == 3 && (!action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_CHECK_FAILED)) ||
+                                      !action_trace_has_text(ptc_ui_text(PTC_UI_T_OFF)))) {
+                    fprintf(stderr, "FAIL: software info failed/off state text mismatch\n");
+                    ++failed;
+                }
             }
+        }
+    }
+    /* 4. Online Update startup toggle off uses Off rather than Muted */
+    {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.update_status = PTC_UPDATE_IDLE;
+        model.update_check_on_startup = false;
+        model.overlay_selection = 2;
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_update_action_rect(2)), NULL);
+        if (!action_trace_has_text(ptc_ui_text(PTC_UI_T_OFF)) || action_trace_has_text(ptc_ui_text(PTC_UI_T_MUTED))) {
+            fprintf(stderr, "FAIL: online update startup toggle off text mismatch\n");
+            ++failed;
+        }
+    }
+    /* 5. Reboot & overlay-changed update guidance (Online Update + Notes + Upgrade Flow Done) */
+    for (int mode = 0; mode < 2; ++mode) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.update_status = PTC_UPDATE_AVAILABLE;
+        model.update_check_on_startup = true;
+        model.update_size_kib = 3715;
+        model.update_source = 1;
+        model.update_requires_reboot = (mode == 0);
+        model.update_overlay_changed = (mode == 1);
+        snprintf(model.update_installed_version, sizeof(model.update_installed_version), "3.1.2-alpha");
+        snprintf(model.update_version, sizeof(model.update_version), "3.2.0-beta.10");
+        snprintf(model.update_notes, sizeof(model.update_notes), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TRUST));
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text((UiRect){54, 168, 1172, 206}, NULL);
+        failed += check_action_text((UiRect){54, 386, 1172, 120}, NULL);
+        if (!action_trace_has_text(ptc_ui_text(mode == 0 ? PTC_UI_T_UPDATE_REBOOT_PILL : PTC_UI_T_UPDATE_OVERLAY_RELOAD_PILL))) {
+            fprintf(stderr, "FAIL: online update reboot/overlay pill missing mode=%d\n", mode);
+            ++failed;
+        }
+        if (mode == 0) {
+            model.update_notes_open = true;
+            model.update_notes_page = 0;
+            ptc_ui_graphics_draw(&model, &theme);
+            memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+            draw_support_overlay_surface(preview_pixels, 1280, &model);
+            action_trace.enabled = false;
+            failed += check_action_text((UiRect){54, 174, 340, 464}, NULL);
+        }
+    }
+    for (int mode = 0; mode < 3; ++mode) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SUPPORT;
+        model.overlay = model.rendered_overlay = PTC_UI_OVERLAY_UPGRADE_FLOW;
+        model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+        model.upgrade_flow_stage = PTC_UI_UPGRADE_FLOW_DONE;
+        model.upgrade_flow_from_hot_reload = true;
+        model.hot_reload_capture_restart = false;
+        model.update_requires_reboot = (mode == 1);
+        model.update_overlay_changed = (mode == 2);
+        ptc_ui_graphics_draw(&model, &theme);
+        memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+        draw_support_overlay_surface(preview_pixels, 1280, &model);
+        action_trace.enabled = false;
+        failed += check_action_text(to_uirect(ptc_ui_dialog_rect(860, 476)), NULL);
+        if (mode == 1 && !action_trace_has_text(ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_REBOOT_TITLE))) {
+            fprintf(stderr, "FAIL: upgrade flow done reboot title missing\n");
+            ++failed;
+        }
+        if (mode == 2 && !action_trace_has_text(ptc_ui_text(PTC_UI_T_UPGRADE_FLOW_OVERLAY_TITLE))) {
+            fprintf(stderr, "FAIL: upgrade flow done overlay reload title missing\n");
+            ++failed;
         }
     }
     return failed;

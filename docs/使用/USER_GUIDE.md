@@ -777,9 +777,19 @@ See also [Development Environment Guide](../开发/DEVELOPMENT_ENVIRONMENT_GUIDE
 
 ## In-app online updates
 
-After manually installing a version with online-update support, open Parent area → Support and recovery → Software information, then press X or touch Update. Startup checks are asynchronous and optional; installation always requires the parent's PIN and hold confirmation. Stable and prerelease versions are offered by default, and parents decide whether to update or select stable-only. Equal and older versions are not installed. Checks and downloads use the project Gitee repository first, with GitHub as fallback. The page shows the source and package size; downloads and installation never start automatically. Install the new updater in full once to migrate from the old store source.
+After manually installing a version with online-update support, open Parent area → Support and recovery → Check Updates & Version to toggle "Check on startup" directly (enabled by default) or press X / touch Update to open the update workbench. Startup checks are asynchronous and optional; installation always requires the parent's PIN and hold confirmation. Stable and prerelease versions are offered by default, and parents decide whether to update or select stable-only. Equal and older versions are not installed. Checks and downloads use the project Gitee repository first, with GitHub as fallback. The page shows the source and package size; downloads and installation never start automatically. Install the new updater in full once to migrate from the old store source.
 
 The app checks the complete package, independently backs up settings and old program files, and installs only program assets. Existing settings, PIN, pairing keys, usage and ledgers remain intact. Exit and reopen the app after file installation, then use the existing backend-loading flow and any required safety confirmation. An unsupported older package requires manual installation. The current source uses HTTPS and integrity checks without an independent publisher signature.
+
+When a release requires a full console reboot for all features, or when the update replaces the in-game overlay (`playwise.ovl`), the update status banner, release summary box, 4-step pipeline heading, and Step 4 completion dialog highlight an amber prompt ("Reboot needed" or "Reload overlay"). Finish Step 4 to hot-reload the background service with rules and allowance preserved, then hold POWER → Power Options → Restart (or exit and reopen the overlay with `B` when only the overlay changed).
+
+<details>
+<summary>View previews for updates requiring a reboot</summary>
+
+![Online update preview for a release requiring reboot](../images/usage-en/settings/settings-online-update-reboot-light.png)
+![Post-update completion dialog with reboot guidance](../images/usage-en/settings/settings-upgrade-flow-done-reboot-dark.png)
+
+</details>
 
 Pre-update backups reuse selective restoration. Restoring pairing information rotates its key and requires pairing the phone again; restoration does not refund usage. If a backup receipt is unknown, wait for the original receipt rather than submitting again. Preserve the update directory after interrupted installation and follow Support and recovery. Restored files and a restored running process are separate outcomes. [Implementation and recovery contract (Chinese)](../设计/在线更新.md).
 

@@ -421,3 +421,8 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_NOTICE_PRELOAD_REMOVED, "Boot preload disabled and Pl
 PTC_UI_TEXT_VALUE(PTC_UI_T_NOTICE_PRELOAD_UNAVAILABLE, "Boot preload requires Ultrahand 2.3.0+, nx-ovlloader, and playwise.ovl.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_NOTICE_PRELOAD_NEEDS_ENABLE, "Enable automatic restriction notices above before enabling boot preload.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_NOTICE_PROBED_MUTED, "Ultrahand playwise.flag mute marker detected; brief notices are currently blocked.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SW_INFO_UPDATING, "Updating")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SW_INFO_UPDATE_PENDING, "Update pending")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SW_INFO_CHECK_FAILED, "Check failed")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SW_INFO_MANUAL_UPDATE, "Manual update")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SW_INFO_CHANNEL_EXCLUDED, "Beta only")

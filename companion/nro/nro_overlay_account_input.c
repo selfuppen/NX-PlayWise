@@ -266,6 +266,15 @@ static void handle_album_manager_overlay_input(UiState *ui, u64 down)
 
 static void handle_software_info_overlay_input(UiState *ui, u64 down)
 {
+    if (down & (HidNpadButton_Up | HidNpadButton_Down)) {
+        ptc_audio_play(PTC_SE_FOCUS);
+        ui->model.overlay_selection = ui->model.overlay_selection == 1 ? 0 : 1;
+        return;
+    }
+    if (down & HidNpadButton_ZL) {
+        toggle_update_check_on_startup(ui);
+        return;
+    }
     if (down & (HidNpadButton_L | HidNpadButton_Left)) {
         ptc_audio_play(PTC_SE_TAB);
         ui->model.software_info_qr_tab = 0;
@@ -286,15 +295,19 @@ static void handle_software_info_overlay_input(UiState *ui, u64 down)
         open_online_update(ui);
         return;
     }
-            if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
-                ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !ui->model.parent_support_only) {
-    #ifndef PLAYWISE_EDEN
-                open_hot_reload_confirmation(ui);
-    #endif
-            } else if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
-                ptc_ui_cancel_overlay(&ui->model);
-            }
-            return;
+    if ((down & HidNpadButton_A) && ui->model.overlay_selection == 1) {
+        toggle_update_check_on_startup(ui);
+        return;
+    }
+    if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
+        ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !ui->model.parent_support_only) {
+#ifndef PLAYWISE_EDEN
+        open_hot_reload_confirmation(ui);
+#endif
+    } else if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+        ptc_ui_cancel_overlay(&ui->model);
+    }
+    return;
 }
 
 static void handle_auth_error_overlay_input(UiState *ui, u64 down)

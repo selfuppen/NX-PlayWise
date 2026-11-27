@@ -97,6 +97,8 @@ PREVIEW_FILES = (
     "grant/grant-manager-dark.png",
     "settings/settings-software-info-dark.png",
     "settings/settings-online-update-light.png",
+    "settings/settings-online-update-reboot-light.png",
+    "settings/settings-upgrade-flow-done-reboot-dark.png",
     "settings/settings-online-update-notes-light.png",
     "settings/settings-online-update-downloading-dark.png",
     "settings/settings-online-update-recovery-light.png",

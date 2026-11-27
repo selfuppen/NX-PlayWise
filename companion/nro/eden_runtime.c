@@ -317,7 +317,7 @@ static bool seed_files(PtcStorage *storage)
     };
     static const char CONFIG[] =
         "{\"version\":1,\"device_id\":\"" PTC_EDEN_TEST_DEVICE_ID "\",\"max_add_minutes\":240,"
-        "\"default_request_timeout_ms\":60000,"
+        "\"default_request_timeout_ms\":60000,\"update_check_on_startup\":true,"
         "\"pairing_base_url\":\"https://selfuppen.github.io/NX-PlayWise/\"}\n";
     static const char AUTH[] =
         "{\"version\":1,\"pin_hash\":\"\",\"pin_salt\":\"\",\"hash\":\"hmac-sha256\","

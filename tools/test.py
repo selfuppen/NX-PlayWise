@@ -228,6 +228,7 @@ def verify_playwise_package() -> None:
         config = read_json(package_app / "defaults" / "config.json")
         rules = read_json(package_app / "defaults" / "rules.json")
         require("grant_secret" not in config and "control_mode" not in config, "release config must contain neither secrets nor legacy modes")
+        require(config.get("update_check_on_startup") is True, "release default config must enable update_check_on_startup")
         require(
             rules.get("version") == 2
             and rules.get("bedtime_holiday_mode") == "custom"

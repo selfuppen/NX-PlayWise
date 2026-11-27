@@ -150,6 +150,7 @@ typedef enum {
     PTC_UI_HIT_SHORTCUT_PREFIX,
     PTC_UI_HIT_SOFTWARE_INFO_QR_TAB,
     PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE,
+    PTC_UI_HIT_SOFTWARE_INFO_AUTO_CHECK,
     PTC_UI_HIT_SETUP_PCTL_STEP
 } PtcUiHitKind;
 
@@ -220,6 +221,7 @@ PtcUiRect ptc_ui_notification_verification_rect(void);
 PtcUiRect ptc_ui_software_info_qr_tab_rect(int index);
 PtcUiRect ptc_ui_software_info_repo_source_rect(int index);
 PtcUiRect ptc_ui_software_info_update_banner_rect(void);
+PtcUiRect ptc_ui_software_info_auto_check_rect(void);
 PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_qr_panel_rect(int index);
 PtcUiRect ptc_ui_qr_code_rect(void);

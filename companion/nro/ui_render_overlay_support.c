@@ -652,7 +652,7 @@ static void draw_online_update(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
         if (i == 2) {
             UiRect sw_rect = {box.x + box.width - 60, box.y + 20, 42, 22};
-            const char *st_txt = ptc_ui_text(m->update_check_on_startup ? PTC_UI_T_ON : PTC_UI_T_MUTED);
+            const char *st_txt = ptc_ui_text(m->update_check_on_startup ? PTC_UI_T_ON : PTC_UI_T_OFF);
             int st_w = measure_text(st_txt, 13);
             int right_edge = sw_rect.x - st_w - 10;
             fit_text(text, sizeof(text), ptc_ui_text(PTC_UI_T_UPDATE_AUTO_CHECK_LABEL), 16, right_edge - (box.x + 20) - 8);
@@ -941,28 +941,70 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
                              ptc_ui_text(PTC_UI_T_SW_INFO_SUBTITLE));
 
     /* --- Left top card: Version hero + 3 component identity chips --- */
-    UiRect top_card = {54, 168, 730, 232};
+    UiRect top_card = {54, 168, 730, 206};
     draw_plan_card(pixels, stride, top_card, false);
 
-    snprintf(buf, sizeof(buf), "PlayWise  %s", model->software_version[0] ? model->software_version : "-");
+    bool is_up_to_date = (model->update_status == PTC_UPDATE_CURRENT ||
+                          model->update_status == PTC_UPDATE_LOCAL_NEWER ||
+                          model->update_status == PTC_UPDATE_COMPLETED);
+    bool is_upd_err = (model->update_status == PTC_UPDATE_FAILED ||
+                       model->update_status == PTC_UPDATE_RECOVERY_REQUIRED ||
+                       model->update_status == PTC_UPDATE_MANUAL_REQUIRED);
+    bool is_upd_pending = (model->update_status == PTC_UPDATE_AWAITING_REOPEN ||
+                           model->update_status == PTC_UPDATE_BACKEND_PENDING ||
+                           model->update_status == PTC_UPDATE_RECONFIRM ||
+                           model->update_status == PTC_UPDATE_BACKUP_UNKNOWN);
+    bool is_upd_checking = (model->update_status == PTC_UPDATE_CHECKING ||
+                            model->update_status == PTC_UPDATE_DOWNLOADING ||
+                            model->update_status == PTC_UPDATE_VERIFYING ||
+                            model->update_status == PTC_UPDATE_BACKUP_PENDING ||
+                            model->update_status == PTC_UPDATE_INSTALLING);
+
+    uint32_t pill_bg = UI_RAISED;
+    uint32_t pill_bd = UI_BORDER;
+    uint32_t pill_fg = UI_MUTED;
     if (update_available) {
         snprintf(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_SW_INFO_NEW_VERSION), model->update_version);
-    } else {
+        pill_bg = UI_WARNING_SOFT; pill_bd = UI_WARNING_BORDER; pill_fg = UI_WARNING_TEXT;
+    } else if (model->update_status == PTC_UPDATE_AVAILABLE) {
+        snprintf(fitted, sizeof(fitted), "%s", ptc_ui_text(PTC_UI_T_UPDATE_AVAILABLE));
+        pill_bg = UI_WARNING_SOFT; pill_bd = UI_WARNING_BORDER; pill_fg = UI_WARNING_TEXT;
+    } else if (is_up_to_date) {
         snprintf(fitted, sizeof(fitted), "%s", ptc_ui_text(PTC_UI_T_SW_INFO_UP_TO_DATE));
+        pill_bg = UI_SUCCESS_SOFT; pill_bd = UI_SUCCESS_BORDER; pill_fg = UI_SUCCESS;
+    } else if (is_upd_checking) {
+        snprintf(fitted, sizeof(fitted), "%s", ptc_ui_text(
+            model->update_status == PTC_UPDATE_CHECKING ? PTC_UI_T_UPDATE_CHECKING : PTC_UI_T_SW_INFO_UPDATING));
+        pill_bg = UI_ACCENT_SOFT; pill_bd = UI_ACCENT; pill_fg = UI_ACCENT;
+    } else if (is_upd_pending) {
+        snprintf(fitted, sizeof(fitted), "%s", ptc_ui_text(PTC_UI_T_SW_INFO_UPDATE_PENDING));
+        pill_bg = UI_WARNING_SOFT; pill_bd = UI_WARNING_BORDER; pill_fg = UI_WARNING_TEXT;
+    } else if (is_upd_err) {
+        PtcUiTextId err_lbl = model->update_status == PTC_UPDATE_RECOVERY_REQUIRED
+            ? PTC_UI_T_REQUIRES_RECOVERY
+            : (model->update_status == PTC_UPDATE_MANUAL_REQUIRED
+                ? PTC_UI_T_SW_INFO_MANUAL_UPDATE : PTC_UI_T_SW_INFO_CHECK_FAILED);
+        snprintf(fitted, sizeof(fitted), "%s", ptc_ui_text(err_lbl));
+        pill_bg = UI_DANGER_SOFT; pill_bd = UI_DANGER_BORDER; pill_fg = UI_DANGER;
+    } else if (model->update_status == PTC_UPDATE_CHANNEL_EXCLUDED) {
+        snprintf(fitted, sizeof(fitted), "%s", ptc_ui_text(PTC_UI_T_SW_INFO_CHANNEL_EXCLUDED));
+    } else {
+        snprintf(fitted, sizeof(fitted), "%s", ptc_ui_text(PTC_UI_T_UPDATE_IDLE));
     }
+
+    snprintf(buf, sizeof(buf), "PlayWise  %s", model->software_version[0] ? model->software_version : "-");
     int pill_w = measure_text(fitted, 13) + 26;
-    if (pill_w > 240) pill_w = 240;
-    UiRect ver_pill = {top_card.x + top_card.width - 22 - pill_w, top_card.y + 18, pill_w, 30};
-    fill_round_rect(pixels, stride, ver_pill, 15, update_available ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
-    draw_rect_outline(pixels, stride, ver_pill, 15, 1, update_available ? UI_WARNING_BORDER : UI_SUCCESS_BORDER);
+    if (pill_w > 250) pill_w = 250;
+    UiRect ver_pill = {top_card.x + top_card.width - 22 - pill_w, top_card.y + 16, pill_w, 30};
+    fill_round_rect(pixels, stride, ver_pill, 15, pill_bg);
+    draw_rect_outline(pixels, stride, ver_pill, 15, 1, pill_bd);
     {
         char pill_fit[128];
         fit_text(pill_fit, sizeof(pill_fit), fitted, 13, ver_pill.width - 14);
-        draw_text_center(pixels, stride, ver_pill, pill_fit, 13,
-                         update_available ? UI_WARNING_TEXT : UI_SUCCESS);
+        draw_text_center(pixels, stride, ver_pill, pill_fit, 13, pill_fg);
     }
     fit_text(fitted, sizeof(fitted), buf, 26, ver_pill.x - (top_card.x + 24) - 14);
-    draw_text_bold(pixels, stride, top_card.x + 24, top_card.y + 42, fitted, 26, UI_INK);
+    draw_text_bold(pixels, stride, top_card.x + 24, top_card.y + 40, fitted, 26, UI_INK);
 
     /* 3 Component chips: Host App, Background Service, Update Channel */
     int chip_gap = 12;
@@ -979,34 +1021,36 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     };
     uint32_t chip_colors[3] = {UI_ACCENT, status_color, UI_INK};
     for (int i = 0; i < 3; ++i) {
-        UiRect chip = {top_card.x + 24 + i * (chip_w + chip_gap), top_card.y + 68, chip_w, 84};
+        UiRect chip = {top_card.x + 24 + i * (chip_w + chip_gap), top_card.y + 62, chip_w, 80};
         fill_round_rect(pixels, stride, chip, 10, UI_PAGE);
         draw_rect_outline(pixels, stride, chip, 10, 1, UI_BORDER);
-        fill_round_rect(pixels, stride, (UiRect){chip.x + 12, chip.y + 16, 8, 8}, 4, chip_colors[i]);
+        fill_round_rect(pixels, stride, (UiRect){chip.x + 12, chip.y + 15, 8, 8}, 4, chip_colors[i]);
         fit_text(fitted, sizeof(fitted), chip_labels[i], 12, chip.width - 36);
-        draw_text(pixels, stride, chip.x + 26, chip.y + 24, fitted, 12, UI_MUTED);
-        draw_wrapped_text(pixels, stride, chip.x + 12, chip.y + 48,
+        draw_text(pixels, stride, chip.x + 26, chip.y + 22, fitted, 12, UI_MUTED);
+        draw_wrapped_text(pixels, stride, chip.x + 12, chip.y + 44,
                           chip_values[i], 14, chip.width - 24, 18, 2, chip_colors[i]);
     }
 
     /* Integrity note at bottom of top card */
-    draw_wrapped_text(pixels, stride, top_card.x + 24, top_card.y + 174,
+    draw_wrapped_text(pixels, stride, top_card.x + 24, top_card.y + 164,
                       ptc_ui_text(PTC_UI_T_SW_INFO_INTEGRITY_NOTE), 13,
                       top_card.width - 48, 18, 2, UI_MUTED);
 
     /* --- Left middle card: Prominent online update action banner --- */
     UiRect banner = to_uirect(ptc_ui_software_info_update_banner_rect());
+    uint32_t banner_bar_color = update_available ? UI_ACCENT :
+        (is_up_to_date ? UI_SUCCESS : (is_upd_err ? UI_DANGER : (is_upd_pending ? UI_WARNING : UI_ACCENT)));
     fill_round_rect(pixels, stride, banner, 14, update_available ? UI_ACCENT_SOFT : UI_RAISED);
     draw_rect_outline(pixels, stride, banner, 14, update_available ? 2 : 1,
                       update_available ? UI_ACCENT : UI_BORDER);
-    fill_round_rect(pixels, stride, (UiRect){banner.x + 12, banner.y + 18, 5, banner.height - 36},
-                    3, update_available ? UI_ACCENT : UI_SUCCESS);
+    fill_round_rect(pixels, stride, (UiRect){banner.x + 12, banner.y + 16, 5, banner.height - 32},
+                    3, banner_bar_color);
 
     const char *btn_lbl = ptc_ui_text(update_available ? PTC_UI_T_UPDATE_NOW_ENTRY : PTC_UI_T_UPDATE_ENTRY);
     int cta_w = measure_text(btn_lbl, 15) + 34;
     if (cta_w < 146) cta_w = 146;
     if (cta_w > 220) cta_w = 220;
-    UiRect cta = {banner.x + banner.width - 22 - cta_w, banner.y + (banner.height - 42) / 2, cta_w, 42};
+    UiRect cta = {banner.x + banner.width - 22 - cta_w, banner.y + (banner.height - 40) / 2, cta_w, 40};
     fill_round_rect(pixels, stride, cta, 10, update_available ? UI_ACCENT : UI_SURFACE);
     draw_rect_outline(pixels, stride, cta, 10, 1, update_available ? UI_ACCENT : UI_CONTROL);
     fit_text(fitted, sizeof(fitted), btn_lbl, 15, cta.width - 16);
@@ -1018,28 +1062,66 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     } else {
         snprintf(buf, sizeof(buf), "%s", ptc_ui_text(PTC_UI_T_SW_INFO_BANNER_IDLE));
     }
-    fit_text(fitted, sizeof(fitted), buf, 20, banner_text_w);
-    draw_text_bold(pixels, stride, banner.x + 30, banner.y + 42, fitted, 20,
+    fit_text(fitted, sizeof(fitted), buf, 19, banner_text_w);
+    draw_text_bold(pixels, stride, banner.x + 30, banner.y + 32, fitted, 19,
                    update_available ? UI_ACCENT : UI_INK);
-    draw_wrapped_text(pixels, stride, banner.x + 30, banner.y + 68,
-                      ptc_ui_text(PTC_UI_T_SW_INFO_BANNER_DESC), 14,
-                      banner_text_w, 19, 2, UI_MUTED);
+    draw_wrapped_text(pixels, stride, banner.x + 30, banner.y + 55,
+                      ptc_ui_text(PTC_UI_T_SW_INFO_BANNER_DESC), 13,
+                      banner_text_w, 17, 2, UI_MUTED);
+
+    /* --- Left third card: Direct startup update check toggle --- */
+    {
+        UiRect auto_card = to_uirect(ptc_ui_software_info_auto_check_rect());
+        bool auto_disabled = model->parent_support_only || model->update_busy;
+        bool auto_focused = (model->overlay_selection == 1);
+        if (!auto_disabled && !auto_focused) draw_card_shadow(pixels, stride, auto_card, 14);
+        fill_round_rect(pixels, stride, auto_card, 14,
+                        auto_disabled ? UI_RAISED : (auto_focused ? UI_ACCENT_SOFT : UI_SURFACE));
+        if (auto_focused && !auto_disabled) draw_focus_ring(pixels, stride, auto_card, 14);
+        else if (auto_focused) draw_rect_outline(pixels, stride, auto_card, 14, 2, UI_ACCENT);
+        else draw_rect_outline(pixels, stride, auto_card, 14, 1, UI_BORDER);
+
+        UiRect sw_rect = {auto_card.x + auto_card.width - 64, auto_card.y + 22, 44, 24};
+        const char *st_txt = ptc_ui_text(model->update_check_on_startup ? PTC_UI_T_ON : PTC_UI_T_OFF);
+        int st_w = measure_text(st_txt, 14);
+        int st_x = sw_rect.x - 10 - st_w;
+        int key_w = measure_text("ZL", 11) + 14;
+        UiRect key_rect = {st_x - 12 - key_w, auto_card.y + 23, key_w, 22};
+
+        fill_round_rect(pixels, stride, key_rect, 6, UI_PAGE);
+        draw_rect_outline(pixels, stride, key_rect, 6, 1, UI_BORDER);
+        draw_text_center(pixels, stride, key_rect, "ZL", 11, auto_disabled ? UI_DISABLED : UI_MUTED);
+
+        draw_text_bold(pixels, stride, st_x, auto_card.y + 39, st_txt, 14,
+                       auto_disabled ? UI_DISABLED : (model->update_check_on_startup ? UI_SUCCESS : UI_MUTED));
+        draw_toggle_switch(pixels, stride, sw_rect, model->update_check_on_startup,
+                           auto_focused, auto_disabled, NULL, NULL);
+
+        int left_max_w = key_rect.x - (auto_card.x + 24) - 14;
+        if (left_max_w < 120) left_max_w = 120;
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_UPDATE_AUTO_CHECK_LABEL), 16, left_max_w);
+        draw_text_bold(pixels, stride, auto_card.x + 24, auto_card.y + 28, fitted, 16,
+                       auto_disabled ? UI_DISABLED : (auto_focused ? UI_ACCENT : UI_INK));
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_UPDATE_AUTO_CHECK_DESC), 13, left_max_w);
+        draw_text(pixels, stride, auto_card.x + 24, auto_card.y + 51, fitted, 13,
+                  auto_disabled ? UI_DISABLED : UI_MUTED);
+    }
 
     /* --- Left bottom card: Hot-reload & runtime status strip --- */
-    UiRect reload_card = {54, 532, 730, 108};
+    UiRect reload_card = {54, 558, 730, 82};
     draw_plan_card(pixels, stride, reload_card, false);
-    draw_text_bold(pixels, stride, reload_card.x + 24, reload_card.y + 34,
+    draw_text_bold(pixels, stride, reload_card.x + 24, reload_card.y + 28,
                    ptc_ui_text(PTC_UI_T_LOADING_STATUS), 16, UI_INK);
     int st_w = measure_text(status, 13) + 24;
     if (st_w > 260) st_w = 260;
-    UiRect st_pill = {reload_card.x + reload_card.width - 24 - st_w, reload_card.y + 16, st_w, 28};
-    fill_round_rect(pixels, stride, st_pill, 14, status_soft);
-    draw_rect_outline(pixels, stride, st_pill, 14, 1, status_border);
+    UiRect st_pill = {reload_card.x + reload_card.width - 24 - st_w, reload_card.y + 12, st_w, 26};
+    fill_round_rect(pixels, stride, st_pill, 13, status_soft);
+    draw_rect_outline(pixels, stride, st_pill, 13, 1, status_border);
     fit_text(fitted, sizeof(fitted), status, 13, st_pill.width - 12);
     draw_text_center(pixels, stride, st_pill, fitted, 13, status_color);
-    draw_wrapped_text(pixels, stride, reload_card.x + 24, reload_card.y + 62,
+    draw_wrapped_text(pixels, stride, reload_card.x + 24, reload_card.y + 52,
                       model->hot_reload_detail[0] ? model->hot_reload_detail : ptc_ui_text(PTC_UI_T_THE_CURRENT_INSTALLED_VERSION_HAS_BEEN_LOADED),
-                      14, reload_card.width - 48, 20, 2, UI_MUTED);
+                      13, reload_card.width - 48, 17, 2, UI_MUTED);
 
     /* --- Right column: Switchable QR scan card --- */
     UiRect qr_card = {802, 168, 424, 472};

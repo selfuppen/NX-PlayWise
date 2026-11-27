@@ -1608,6 +1608,64 @@ int main(void)
         check(upgrade_ui.waiting && upgrade_ui.active_request_id[0] != '\0',
               "subsequent navigation resumes refresh once transport and storage recover");
     }
+    {
+        static PtcMemStorage upd_mem;
+        UiState upd_ui, reloaded_ui;
+        init(&upd_ui, &upd_mem);
+        load_ui_preferences(&upd_ui);
+        check(upd_ui.model.update_check_on_startup,
+              "update_check_on_startup defaults to true when config.json is absent");
+        upd_mem.storage.vtable->write_text_atomic(&upd_mem.storage, APP_ROOT "/config.json",
+            "{\"version\":1,\"device_id\":\"switch-01\"}");
+        load_ui_preferences(&upd_ui);
+        check(upd_ui.model.update_check_on_startup,
+              "update_check_on_startup defaults to true when field is missing");
+
+        upd_ui.model.view = PTC_UI_PARENT;
+        upd_ui.model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+        toggle_update_check_on_startup(&upd_ui);
+        check(!upd_ui.model.update_check_on_startup,
+              "parent can disable startup update check directly");
+        /* Reload from the same mem storage instance without resetting upd_mem. */
+        memset(&reloaded_ui, 0, sizeof(reloaded_ui));
+        reloaded_ui.pending_parent_page = reloaded_ui.pending_bedtime_section = -1;
+        ptc_companion_file_client_init(&reloaded_ui.client, APP_ROOT, &upd_mem.storage);
+        reloaded_ui.model.update_check_on_startup = true;
+        load_ui_preferences(&reloaded_ui);
+        check(!reloaded_ui.model.update_check_on_startup,
+              "disabled update_check_on_startup persists across preference reload");
+
+        upd_ui.model.parent_support_only = true;
+        toggle_update_check_on_startup(&upd_ui);
+        check(!upd_ui.model.update_check_on_startup,
+              "read-only support cannot toggle startup update check");
+        upd_ui.model.parent_support_only = false;
+
+        upd_ui.model.update_busy = true;
+        toggle_update_check_on_startup(&upd_ui);
+        check(!upd_ui.model.update_check_on_startup &&
+              strcmp(upd_ui.model.message, ptc_ui_text(PTC_UI_T_UPDATE_BUSY)) == 0,
+              "busy updater blocks toggling startup update check");
+        upd_ui.model.update_busy = false;
+
+        upd_ui.model.view = PTC_UI_CHILD;
+        toggle_update_check_on_startup(&upd_ui);
+        check(!upd_ui.model.update_check_on_startup,
+              "child view cannot toggle startup update check");
+        upd_ui.model.view = PTC_UI_PARENT;
+
+        upd_mem.fail_writes = true;
+        sound_count = 0;
+        toggle_update_check_on_startup(&upd_ui);
+        check(!upd_ui.model.update_check_on_startup && sound_count == 1 && last_sound == PTC_SE_ERROR,
+              "storage write failure rolls back update_check_on_startup toggle");
+        upd_mem.fail_writes = false;
+
+        toggle_update_check_on_startup(&upd_ui);
+        check(upd_ui.model.update_check_on_startup,
+              "parent can re-enable startup update check");
+        (void)reloaded_ui;
+    }
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;
 }
