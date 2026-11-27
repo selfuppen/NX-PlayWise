@@ -116,8 +116,25 @@ def main() -> None:
             "shData.manualComboRequested.exchange(false)" in loop and
             "shData->powerCooldownUntilNs" in poller and
             "overlay->loopHiddenFrame(blocked, hiddenKeysDown)" in loop and
-            "--pw-preload" in loop,
-            "HOME/POWER bounded cooldowns, sleep-jump guard, unlock early-release, manual combo gating and --pw-preload must stay intact")
+            "--pw-preload" in loop and
+            "--pw-reload-once" in loop and
+            "overlay->onReloadOnceArg(reloadOnce);" in loop,
+            "HOME/POWER bounded cooldowns, sleep-jump guard, unlock early-release, manual combo gating, --pw-preload and --pw-reload-once must stay intact")
+    show_pos = loop.index("overlay->show();")
+    while_pos = loop.index("while (shData.running)", show_pos)
+    close_after_show = loop.index("if (overlay->shouldClose())", show_pos)
+    close_inner = loop.index("if (overlay->shouldClose())", while_pos)
+    hide_inner = loop.index("if (overlay->shouldHide())", while_pos)
+    require(close_after_show < while_pos and close_inner < hide_inner,
+            "libtesla loop must check shouldClose() immediately after show() and prioritize shouldClose() over shouldHide()")
+    hidden_close_pos = loop.index("if (overlay->shouldClose())", loop.index("overlay->onHiddenPoll(neutral)"))
+    require(hidden_close_pos < show_pos,
+            "libtesla hidden loop must honor close() requested by onHiddenPoll")
+    require("handoff_overlay_on_owner_failure(" in overlay and
+            "--pw-reload-once" in overlay and
+            'envSetNextLoad("sdmc:/switch/.overlays/ovlmenu.ovl", "ovlmenu.ovl");' in overlay and
+            "ptc_input_owner_runtime_release_mismatch(&s_input_owner)" in overlay,
+            "PlayWise Overlay must perform bounded single-shot reload or clean ovlmenu handoff on release mismatch")
     input_pages = (ROOT / "companion/overlay/source/input_pages.hpp").read_text(encoding="utf-8")
     require('tsl::setNextOverlay("sdmc:/switch/.overlays/ovlmenu.ovl", "");' in input_pages and
             "if (s_automatic_detail) tsl::Overlay::get()->hide();" in input_pages and

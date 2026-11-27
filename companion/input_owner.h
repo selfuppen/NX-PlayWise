@@ -47,6 +47,7 @@ typedef struct {
     bool active;
     bool released;
     bool failed;
+    bool release_mismatch;
 } PtcInputOwnerWriter;
 
 typedef struct {
@@ -65,6 +66,9 @@ bool ptc_input_owner_maintain(PtcInputOwnerWriter *writer, uint64_t now_ns);
 /* Fresh identity check for a physical input or its release, before dispatch. */
 bool ptc_input_owner_accept(PtcInputOwnerWriter *writer, uint64_t now_ns);
 bool ptc_input_owner_begin_ui(PtcInputOwnerWriter *writer);
+/* Returns true only when handover/runtime-ready.json is a valid release
+   record whose release_id differs from the writer's bound release_id. */
+bool ptc_input_owner_runtime_release_mismatch(PtcInputOwnerWriter *writer);
 void ptc_input_owner_release(PtcInputOwnerWriter *writer, uint64_t now_ns);
 void ptc_input_owner_reader_init(PtcInputOwnerReader *reader, PtcStorage *storage,
     const char *root, const char *release);

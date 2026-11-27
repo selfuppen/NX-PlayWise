@@ -65,7 +65,13 @@
         if (!s_owner_visible || !(verify_identity
                 ? ptc_input_owner_accept(&s_input_owner, armTicksToNs(now))
                 : ptc_input_owner_maintain(&s_input_owner, armTicksToNs(now)))) {
-            if (s_owner_visible) tsl::Overlay::get()->hide();
+            if (s_owner_visible) {
+                if (s_input_owner.release_mismatch) {
+                    handoff_overlay_on_owner_failure(true, !s_automatic_detail);
+                } else {
+                    tsl::Overlay::get()->hide();
+                }
+            }
             return true;
         }
         /* Do not start PIN/edits during an unconfirmed automatic focus transfer.

@@ -230,6 +230,52 @@ static void test_blocked_input_read_budget(void)
         "repaired storage and a due neutral frame restore input");
 }
 
+static void test_release_mismatch_distinction(void)
+{
+    fixture();
+    check(!ptc_input_owner_runtime_release_mismatch(&writer),
+        "matching release_id is not a release mismatch");
+
+    runtime("playwise-newer-release+111111111111.fedcba9876543210", "fedcba9876543210");
+    check(!ptc_input_owner_acquire(&writer, START) && writer.release_mismatch,
+        "acquire sets release_mismatch when valid runtime carries another release_id");
+    check(ptc_input_owner_runtime_release_mismatch(&writer) && writer.release_mismatch,
+        "runtime_release_mismatch returns true only for another valid release_id");
+
+    check(original->remove_path(&mem.storage, RUNTIME), "remove runtime for absent check");
+    check(!ptc_input_owner_runtime_release_mismatch(&writer) && !writer.release_mismatch,
+        "missing runtime is not reported as release_mismatch");
+    check(!ptc_input_owner_acquire(&writer, START + 1) && !writer.release_mismatch,
+        "acquire with missing runtime leaves release_mismatch false");
+
+    put(RUNTIME, "{not-valid-json");
+    check(!ptc_input_owner_runtime_release_mismatch(&writer) && !writer.release_mismatch,
+        "corrupt runtime is not reported as release_mismatch");
+
+    runtime(RELEASE, "0123456789abcdef");
+    mem.fail_read_path_contains = "runtime-ready";
+    check(!ptc_input_owner_runtime_release_mismatch(&writer) && !writer.release_mismatch,
+        "read failure is not reported as release_mismatch");
+    mem.fail_read_path_contains = NULL;
+
+    runtime(RELEASE, "fedcba9876543210");
+    check(!ptc_input_owner_runtime_release_mismatch(&writer) && !writer.release_mismatch,
+        "same release with new boot_id is not reported as release_mismatch");
+
+    runtime(RELEASE, "0123456789abcdef");
+    check(ptc_input_owner_acquire(&writer, START + 2) && !writer.release_mismatch,
+        "matching release acquire succeeds and clears release_mismatch");
+    runtime("playwise-newer-release+222222222222.0123456789abcdef", "1122334455667788");
+    check(!ptc_input_owner_accept(&writer, START + 3) && writer.release_mismatch,
+        "accept detects mid-session release switch");
+
+    fixture();
+    check(ptc_input_owner_acquire(&writer, START), "acquire before maintain release switch");
+    runtime("playwise-newer-release+333333333333.0123456789abcdef", "8877665544332211");
+    check(!ptc_input_owner_maintain(&writer, START + PTC_INPUT_OWNER_RENEW_NS) && writer.release_mismatch,
+        "maintain detects release switch on renewal");
+}
+
 int main(void)
 {
     char text[512], foreign[512];
@@ -373,6 +419,7 @@ int main(void)
     test_notification_suppression_reads();
     test_fresh_byte_cache();
     test_blocked_input_read_budget();
+    test_release_mismatch_distinction();
     if (failures) return 1;
     puts("PASS: bounded Overlay ownership, notification runtime read, atomic-gap protection and NRO neutral drain");
     return 0;

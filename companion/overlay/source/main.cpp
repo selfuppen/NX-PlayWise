@@ -46,6 +46,30 @@ static PtcInputOwnerWriter s_input_owner;
 static bool s_owner_visible = false;
 static bool s_automatic_detail = false;
 static bool s_automatic_detail_confirmed = false;
+static bool s_reload_once_attempted = false;
+
+static void handoff_overlay_on_owner_failure(bool release_mismatch, bool visible_reopen)
+{
+    s_owner_visible = false;
+    if (release_mismatch && !s_reload_once_attempted) {
+        if (visible_reopen) {
+            tsl::setNextOverlay("sdmc:/switch/.overlays/playwise.ovl", "--pw-reload-once");
+        } else {
+            tsl::setNextOverlay("sdmc:/switch/.overlays/playwise.ovl", "--pw-preload --pw-reload-once");
+        }
+        tsl::Overlay::get()->close();
+        return;
+    }
+    if (visible_reopen) {
+        tsl::setNextOverlay("sdmc:/switch/.overlays/ovlmenu.ovl", "");
+        tsl::Overlay::get()->close();
+    } else if (release_mismatch) {
+        envSetNextLoad("sdmc:/switch/.overlays/ovlmenu.ovl", "ovlmenu.ovl");
+        tsl::Overlay::get()->close();
+    } else {
+        tsl::Overlay::get()->hide();
+    }
+}
 
 static bool save_overlay_language_setting(PtcStorage *storage, PtcOverlayLanguageSetting setting)
 {
@@ -369,7 +393,11 @@ public:
     void update() override
     {
         if (s_owner_visible && !ptc_input_owner_maintain(&s_input_owner, armTicksToNs(armGetSystemTick()))) {
-            tsl::Overlay::get()->hide();
+            if (s_input_owner.release_mismatch) {
+                handoff_overlay_on_owner_failure(true, !s_automatic_detail);
+            } else {
+                tsl::Overlay::get()->hide();
+            }
             return;
         }
         if (s_owner_visible && ptc_input_owner_begin_ui(&s_input_owner)) {
@@ -1497,6 +1525,11 @@ public:
         }
     }
 
+    void onReloadOnceArg(bool reloadOnce) override
+    {
+        s_reload_once_attempted = reloadOnce;
+    }
+
     void onSleepWakeDetected(uint64_t wakeNs, uint64_t wakeStartNs) override
     {
         /* Query lock-screen setting once per real sleep wake using libtesla's
@@ -1550,6 +1583,7 @@ public:
             ptc_overlay_reason_wake(&reason_wake_, armTicksToNs(armGetSystemTick()) / 1000000);
         } else {
             eventClose(&reason_event_);
+            next_runtime_ms_ = 0;
         }
         next_detail_poll_ms_ = next_brief_read_ms_ = 0;
     }
@@ -1663,7 +1697,16 @@ public:
         }
         if (!runtime_known_ || !bridge_.ipc.initialized || reason_session_ != bridge_.ipc.service.session)
             eventClose(&reason_event_);
-        if (!runtime_known_) return false;
+        if (!runtime_known_) {
+            if (neutral && !brief_notice_.active && !bridge_.waiting &&
+                ms >= next_release_check_ms_) {
+                next_release_check_ms_ = ms + PTC_OVERLAY_HIDDEN_RUNTIME_RETRY_MS;
+                if (ptc_input_owner_runtime_release_mismatch(&s_input_owner)) {
+                    handoff_overlay_on_owner_failure(true, false);
+                }
+            }
+            return false;
+        }
         if (!eventActive(&reason_event_) && ms >= next_reason_subscribe_ms_) {
             next_reason_subscribe_ms_ = ms + PTC_OVERLAY_HIDDEN_RUNTIME_MS;
             if (!bridge_.ipc.initialized) (void)ptc_switch_ipc_client_probe(&bridge_.ipc);
@@ -1804,7 +1847,7 @@ public:
             automatic_draw_deadline_ms_);
         s_owner_visible = true;
         if (!ptc_input_owner_acquire(&s_input_owner, armTicksToNs(armGetSystemTick()))) {
-            hide();
+            handoff_overlay_on_owner_failure(s_input_owner.release_mismatch, !s_automatic_detail);
         } else if (gui_) {
             gui_->start_child_open();
         }
@@ -1816,6 +1859,7 @@ public:
         if (gui_) gui_->on_child_hidden(s_automatic_detail && !automatic_ack_written_);
         ptc_overlay_hidden_timing_init(&hidden_timing_);
         next_detail_poll_ms_ = 0;
+        next_release_check_ms_ = 0;
         next_request_audit_ms_ = next_reason_audit_ms_ = 0;
         s_owner_visible = false;
         s_automatic_detail = false;
@@ -1942,6 +1986,7 @@ private:
     uint64_t brief_diag_wake_ns_ = 0;
     uint64_t next_config_ms_ = 0;
     uint64_t next_runtime_ms_ = 0;
+    uint64_t next_release_check_ms_ = 0;
     bool runtime_known_ = false;
     char runtime_boot_[17] = {0};
 };

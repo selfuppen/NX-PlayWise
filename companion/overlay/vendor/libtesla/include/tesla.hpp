@@ -3001,6 +3001,7 @@ namespace tsl {
 
         // PlayWise cooperation stays on the UI thread, outside the HID mutex.
         virtual void onPreloadArgs(bool preloaded) { (void)preloaded; }
+        virtual void onReloadOnceArg(bool reloadOnce) { (void)reloadOnce; }
         virtual u64 hiddenPollInterval() { return UINT64_MAX; }
         virtual bool onHiddenPoll(bool neutral) { return false; }
         virtual void onSleepWakeDetected(uint64_t wakeNs, uint64_t wakeStartNs) { (void)wakeNs; (void)wakeStartNs; }
@@ -3752,14 +3753,18 @@ namespace tsl {
         // Argument parsing: --pw-preload keeps the overlay silently resident on boot
         // even when Ultrahand's "open" command appends --skipCombo.
         bool preloadHidden = false;
+        bool reloadOnce = false;
         bool skipComboRequested = false;
         for (u8 arg = 0; arg < argc; arg++) {
             if (strcasecmp(argv[arg], "--pw-preload") == 0) {
                 preloadHidden = true;
+            } else if (strcasecmp(argv[arg], "--pw-reload-once") == 0) {
+                reloadOnce = true;
             } else if (strcasecmp(argv[arg], "--skipCombo") == 0) {
                 skipComboRequested = true;
             }
         }
+        overlay->onReloadOnceArg(reloadOnce);
         overlay->onPreloadArgs(preloadHidden);
         if (skipComboRequested && !preloadHidden) {
             shData.manualComboRequested = true;
@@ -3838,6 +3843,11 @@ namespace tsl {
                     shData.lastPowerEventNs.load(), shData.lastHomeEventNs.load(),
                     shData.lastWakeUnlockCompletedNs.load(), pollRawPowerCooldownNs, pollEffectivePowerCooldownNs);
                 bool open = !blocked && overlay->onHiddenPoll(neutral);
+                if (overlay->shouldClose()) {
+                    overlay->loopHiddenFrame(true, 0);
+                    shData.running = false;
+                    break;
+                }
                 overlay->loopHiddenFrame(blocked, hiddenKeysDown);
                 if (!open) continue;
             } else if (!manualWake && R_FAILED(wake) && !notificationError) {
@@ -3872,6 +3882,9 @@ namespace tsl {
             overlay->clearScreen();
             overlay->m_hiddenFrameDrawn = false;
 
+            if (overlay->shouldClose()) {
+                shData.running = false;
+            }
 
             while (shData.running) {
                 // Only the UI thread may mutate GUI/animation state.
@@ -3895,11 +3908,13 @@ namespace tsl {
                 if (!overlay->fadeAnimationPlaying())
                     overlay->handleInput(keysDown, keysHeld, touchState.count, touchState.touches[0], left, right);
 
+                if (overlay->shouldClose()) {
+                    shData.running = false;
+                    break;
+                }
+
                 if (overlay->shouldHide())
                     break;
-
-                if (overlay->shouldClose())
-                    shData.running = false;
             }
 
             overlay->clearScreen();

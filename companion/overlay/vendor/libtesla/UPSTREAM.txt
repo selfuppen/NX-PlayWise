@@ -70,4 +70,10 @@ entry confirmation (>=2s + 0.8s quiet anchored to wakePowerAnchorNs) or >=3s
 for direct HOME wakes (blocking dark wakes and untouched pre-wake screens), and
 once wake recheck finishes, wakeEarlyReleaseMode returns None so later POWER
 presses keep full 8s cooldown.
+Local release-mismatch reload & close lifecycle patch (2026-11-27): add
+--pw-reload-once argument parsing and virtual onReloadOnceArg(bool), exit the
+hidden poll loop cleanly when onHiddenPoll requests close(), skip the inner
+render/input loop if onShow() immediately calls close() (zero flash frames),
+and prioritize shouldClose() before shouldHide() in the visible loop so exit
+transitions are never swallowed by resetFlags().
 No upstream files synced; pinned upstream commit remains unchanged.

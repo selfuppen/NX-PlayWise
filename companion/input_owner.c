@@ -178,9 +178,16 @@ bool ptc_input_owner_acquire(PtcInputOwnerWriter *w, uint64_t now)
     char boot[17];
     unsigned slot;
     Lease lease;
+    int rt;
     if (!w || !w->instance_ns || !now || now <= w->epoch_ns) return false;
+    w->release_mismatch = false;
     if (w->active) return ptc_input_owner_maintain(w, now);
-    if (runtime(&w->context, boot, false) != 1 || !bind(&w->context, boot)) return false;
+    rt = runtime(&w->context, boot, false);
+    if (rt == 0) {
+        w->release_mismatch = true;
+        return false;
+    }
+    if (rt != 1 || !bind(&w->context, boot)) return false;
     for (slot = 0; slot < 2; ++slot) {
         int found = read_lease(&w->context, slot, &lease);
         if (found < 0 || (found && (lease.issued > now || (lease.visible && lease.expires > now)))) return false;
@@ -202,11 +209,18 @@ bool ptc_input_owner_maintain(PtcInputOwnerWriter *w, uint64_t now)
     char boot[17];
     unsigned slot;
     Lease lease;
+    int rt;
     if (!w || !w->active) return false;
     if (now < w->last_ns || now >= w->expires_ns) goto failed;
     w->last_ns = now;
     if (now < w->renew_ns) return true;
-    if (runtime(&w->context, boot, false) != 1 || strcmp(boot, w->context.boot)) goto failed;
+    w->release_mismatch = false;
+    rt = runtime(&w->context, boot, false);
+    if (rt == 0) {
+        w->release_mismatch = true;
+        goto failed;
+    }
+    if (rt != 1 || strcmp(boot, w->context.boot)) goto failed;
     for (slot = 0; slot < 2; ++slot)
         if (read_lease(&w->context, slot, &lease) != 1 || strcmp(lease.owner, w->owner) || !lease.visible) goto failed;
     if (!write_lease(w, w->next_slot, now, true)) goto failed;
@@ -223,11 +237,24 @@ failed:
 bool ptc_input_owner_accept(PtcInputOwnerWriter *w, uint64_t now)
 {
     char boot[17];
+    int rt;
     if (!ptc_input_owner_maintain(w, now)) return false;
-    if (runtime(&w->context, boot, false) == 1 && !strcmp(boot, w->context.boot)) return true;
+    rt = runtime(&w->context, boot, false);
+    if (rt == 1 && !strcmp(boot, w->context.boot)) return true;
+    if (rt == 0) w->release_mismatch = true;
     w->active = false;
     w->failed = true;
     return false;
+}
+
+bool ptc_input_owner_runtime_release_mismatch(PtcInputOwnerWriter *w)
+{
+    char boot[17];
+    int rt;
+    if (!w) return false;
+    rt = runtime(&w->context, boot, false);
+    w->release_mismatch = (rt == 0);
+    return w->release_mismatch;
 }
 
 bool ptc_input_owner_begin_ui(PtcInputOwnerWriter *w)
