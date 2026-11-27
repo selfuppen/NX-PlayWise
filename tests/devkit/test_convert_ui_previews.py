@@ -117,10 +117,46 @@ def test_parse_args() -> None:
     args = convert_ui_previews.parse_args(["--jobs", "4", "--force"])
     require(args.jobs == 4, "jobs should be 4")
     require(args.force is True, "force should be True")
+    require(args.remove_source is False, "default remove_source should be False")
+
+    args_rm = convert_ui_previews.parse_args(["--remove-source"])
+    require(args_rm.remove_source is True, "parse_args must accept --remove-source")
 
     args_default = convert_ui_previews.parse_args([])
     require(args_default.jobs is None, "default jobs should be None")
     require(args_default.force is False, "default force should be False")
+
+
+def test_convert_remove_source() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        ppm1 = tmp_path / "a.ppm"
+        ppm2 = tmp_path / "b.ppm"
+        ppm1.write_bytes(make_ppm(2, 2, (11, 22, 33)))
+        ppm2.write_bytes(make_ppm(2, 2, (44, 55, 66)))
+
+        converted, skipped, total = convert_ui_previews.convert_all(
+            tmp_path, jobs=2, remove_source=True
+        )
+        require((converted, skipped, total) == (2, 0, 2), f"unexpected result: {(converted, skipped, total)}")
+        require(not ppm1.exists() and not ppm2.exists(), "source PPMs must be removed after conversion")
+        require((tmp_path / "a.png").is_file() and (tmp_path / "b.png").is_file(), "PNGs must exist")
+
+        # Second pass with no remaining PPMs must count existing PNGs as cached
+        converted, skipped, total = convert_ui_previews.convert_all(
+            tmp_path, jobs=1, remove_source=True
+        )
+        require((converted, skipped, total) == (0, 2, 2), f"expected (0, 2, 2), got {(converted, skipped, total)}")
+
+        # Missing both PPM and PNG for explicit source must fail
+        try:
+            convert_ui_previews.convert_all(
+                tmp_path, jobs=1, sources=[tmp_path / "missing.ppm"], remove_source=True
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError("missing source PPM without cached PNG must fail")
 
 
 def main() -> None:
@@ -129,6 +165,7 @@ def main() -> None:
     test_convert_all_incremental()
     test_convert_all_parallel()
     test_parse_args()
+    test_convert_remove_source()
     print("PASS: test_convert_ui_previews")
 
 

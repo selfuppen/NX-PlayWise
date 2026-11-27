@@ -499,6 +499,13 @@ def host_git_autocrlf() -> str | None:
     return value
 
 
+def _resolve_preview_scope(only: str, preview_scope: str | None) -> str:
+    resolved = ("docs" if only == "all" else "docs-zh") if preview_scope is None else preview_scope
+    if resolved not in SCOPES:
+        raise PackageError(f"unknown preview scope: {resolved}")
+    return resolved
+
+
 def container_command(
     container_path: str = DEFAULT_CONTAINER_PATH,
     *,
@@ -509,7 +516,7 @@ def container_command(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
-    preview_scope: str = "docs-zh",
+    preview_scope: str | None = None,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -561,10 +568,7 @@ def container_command(
 
     targets_str = f"make {job_flag}{' '.join(targets)}"
     test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
-    if preview_scope not in SCOPES:
-        raise PackageError(f"unknown preview scope: {preview_scope}")
-    if only == "all":
-        preview_scope = "all"
+    preview_scope = _resolve_preview_scope(only, preview_scope)
     preview_cmd = (f"make {job_flag}ui-previews PREVIEW_SCOPE={preview_scope} PREVIEW_JOBS={jobs or 8} && "
                    if with_previews else "")
     sync_cmd = (f"python3 tools/build/sync_doc_previews.py --scope {preview_scope} && "
@@ -613,7 +617,7 @@ def ssh_command(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
-    preview_scope: str = "docs-zh",
+    preview_scope: str | None = None,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -666,7 +670,7 @@ def run_container(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
-    preview_scope: str = "docs-zh",
+    preview_scope: str | None = None,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -738,7 +742,7 @@ def build_and_verify(
     with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
-    preview_scope: str = "docs-zh",
+    preview_scope: str | None = None,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -754,9 +758,9 @@ def build_and_verify(
     package_dir = ROOT / "build" / "packages"
     device_lab_dir = ROOT / "build" / "device-lab"
     eden_dir = ROOT / "build" / "eden-test"
+    preview_scope = _resolve_preview_scope(only, preview_scope)
 
     if only == "all":
-        preview_scope = "all"
         target_pkgs = {"playwise", "complete", "device_lab"}
         check_eden = with_eden
         with_previews = True
@@ -1023,8 +1027,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--preview-scope",
         choices=SCOPES,
-        default="docs-zh",
-        help="Preview set: docs-zh (default), docs (Chinese/English), all (full matrix; always used by --release).",
+        default=None,
+        help="Preview set: docs-zh (default), docs (Chinese/English; default for --release), all (full matrix on demand).",
     )
     parser.add_argument(
         "--previews",
@@ -1074,6 +1078,8 @@ def parse_args() -> argparse.Namespace:
         help="Parallel compilation and preview worker budget. Default: 8; use 1 for serial execution.",
     )
     args = parser.parse_args()
+    if args.preview_scope is None:
+        args.preview_scope = "docs" if (args.release or args.only == "all") else "docs-zh"
     if args.jobs is not None and args.jobs < 1:
         parser.error("--jobs must be positive")
     values = (args.verified_model, args.verified_hos, args.verified_atmosphere)

@@ -457,12 +457,13 @@ static void test_child_button_bounds(const char *font_path, const std::filesyste
     std::puts("PASS: child button bounds and complete three-language labels in both themes, including width pressure");
 }
 
-static void test_stale_rest(const char *font_path, const std::filesystem::path &dir)
+static void test_stale_rest(const char *font_path, const std::filesystem::path &dir, bool write_files = true)
 {
     const char *names[] = {"overlay-rest-stale", "overlay-rest-refresh-failed",
         "overlay-rest-refreshing", "overlay-rest-expired"};
     for (int i = 0; i < 4; ++i) {
-        if (!ptc_preview_selected((dir / (std::string(names[i]) + ".ppm")).generic_string().c_str(), false)) continue;
+        if (write_files &&
+            !ptc_preview_selected((dir / (std::string(names[i]) + ".ppm")).generic_string().c_str(), false)) continue;
         tsl::gfx::Renderer renderer(font_path);
         PtcOverlayBridge bridge{};
         PtcOverlayInput input{};
@@ -526,7 +527,7 @@ static void test_stale_rest(const char *font_path, const std::filesystem::path &
         renderer.drawRect(0, 648, 448, 72, {0, 0, 0, 13});
         renderer.drawRect(15, 647, 448 - 30, 1, {14, 14, 15, 15});
         draw_overlay_footer_hints(&renderer, view.current_footer_spec(), "12:34", {14, 14, 15, 15});
-        renderer.save((dir / (std::string(names[i]) + ".ppm")).string());
+        if (write_files) renderer.save((dir / (std::string(names[i]) + ".ppm")).string());
     }
 }
 
@@ -1025,20 +1026,23 @@ int main(int argc, char **argv) {
     if (argc != 3) return 2;
     try {
         tsl::gfx::Renderer renderer(argv[1]);
-        test_child_policy_freshness();
-        test_disabled_status(argv[1]);
-        test_child_restriction_refresh(renderer);
-        test_detail_countdown_refresh(renderer);
-        test_child_reminder_home(renderer);
-        test_child_cards(renderer);
-        test_parent_cards(renderer);
-        test_surface_outline(renderer);
-        test_child_header_controls(argv[1]);
-        test_dynamic_footer_hints(argv[1]);
-        if (std::strcmp(argv[2], "--check-header") == 0) {
-            test_child_button_bounds(argv[1], "build/host/ui-regression-previews/overlay");
-            std::puts("PASS: Overlay header brand, controls and focus in three languages");
-            return 0;
+        const bool no_write = std::strcmp(argv[2], "--check-all-scenes") == 0;
+        if (!no_write) {
+            test_child_policy_freshness();
+            test_disabled_status(argv[1]);
+            test_child_restriction_refresh(renderer);
+            test_detail_countdown_refresh(renderer);
+            test_child_reminder_home(renderer);
+            test_child_cards(renderer);
+            test_parent_cards(renderer);
+            test_surface_outline(renderer);
+            test_child_header_controls(argv[1]);
+            test_dynamic_footer_hints(argv[1]);
+            if (std::strcmp(argv[2], "--check-header") == 0) {
+                test_child_button_bounds(argv[1], "build/host/ui-regression-previews/overlay");
+                std::puts("PASS: Overlay header brand, controls and focus in three languages");
+                return 0;
+            }
         }
         const PtcUiLanguagePreference languages[] = {PTC_UI_LANGUAGE_SIMPLIFIED,
             PTC_UI_LANGUAGE_ENGLISH, PTC_UI_LANGUAGE_TRADITIONAL};
@@ -1066,12 +1070,16 @@ int main(int argc, char **argv) {
             int child_overflows = 0;
             ptc_ui_language_set_resolved(languages[language]);
             test_text_layout(renderer);
-            auto dir = std::filesystem::path(argv[2]) / folders[language] / "overlay";
-            if (!ptc_preview_selected(dir.generic_string().c_str(), true)) return 0;
-            std::filesystem::create_directories(dir);
-            test_stale_rest(argv[1], dir);
+            auto dir = no_write ? std::filesystem::path(folders[language]) / "overlay" :
+                std::filesystem::path(argv[2]) / folders[language] / "overlay";
+            if (!no_write) {
+                if (!ptc_preview_selected(dir.generic_string().c_str(), true)) return 0;
+                std::filesystem::create_directories(dir);
+            }
+            test_stale_rest(argv[1], dir, !no_write);
             for (int scene = 0; scene < static_cast<int>(sizeof(scenes) / sizeof(scenes[0])); ++scene) {
-                if (!ptc_preview_selected((dir / (std::string(scenes[scene]) + ".ppm")).generic_string().c_str(), false)) continue;
+                if (!no_write &&
+                    !ptc_preview_selected((dir / (std::string(scenes[scene]) + ".ppm")).generic_string().c_str(), false)) continue;
                 PtcOverlayBridge bridge{};
                 PtcOverlayInput input{};
                 ptc_overlay_input_init(&input);
@@ -1618,7 +1626,7 @@ int main(int argc, char **argv) {
                 require(footer_geom.action_x >= PTC_OVERLAY_FOOTER_SAFE_X &&
                     footer_geom.action_x + footer_geom.action_w <= footer_geom.clock_x - 8,
                     "rendered footer action hint must clear x<150 and the clock");
-                renderer.save((dir / (std::string(scenes[scene]) + ".ppm")).string());
+                if (!no_write) renderer.save((dir / (std::string(scenes[scene]) + ".ppm")).string());
             }
             require(child_overflows == 0, "ordinary child pages must fit on one screen in all three languages");
             return 0;
@@ -1668,7 +1676,9 @@ int main(int argc, char **argv) {
         }
         if (failed) return 1;
 #endif
-        std::puts("PASS: selected production Overlay scenes rendered and checked");
+        std::puts(no_write ?
+            "PASS: all production Overlay scenes checked in memory (3 languages, no disk writes)" :
+            "PASS: selected production Overlay scenes rendered and checked");
         return 0;
     } catch (const std::exception &error) {
         std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;

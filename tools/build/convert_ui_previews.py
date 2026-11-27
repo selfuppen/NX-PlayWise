@@ -21,7 +21,7 @@ def chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
 
-def convert_one(source_path: str) -> None:
+def convert_one(source_path: str, *, remove_source: bool = False) -> None:
     source = Path(source_path)
     magic, dimensions, maximum, pixels = source.read_bytes().split(b"\n", 3)
     width, height = map(int, dimensions.split())
@@ -34,6 +34,12 @@ def convert_one(source_path: str) -> None:
     png += chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b"")
     target = source.with_suffix(".png")
     target.write_bytes(png)
+    if remove_source:
+        source.unlink(missing_ok=True)
+
+
+def _convert_one_remove(source_path: str) -> None:
+    convert_one(source_path, remove_source=True)
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -57,6 +63,11 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Force re-conversion of all PPM previews regardless of timestamp",
     )
+    parser.add_argument(
+        "--remove-source",
+        action="store_true",
+        help="Delete source PPM files after PNG conversion",
+    )
     return parser.parse_args(args)
 
 
@@ -66,6 +77,7 @@ def convert_all(
     jobs: int | None = None,
     force: bool = False,
     sources: list[Path] | None = None,
+    remove_source: bool = False,
 ) -> tuple[int, int, int]:
     """Convert all PPM files in preview_dir to PNG.
 
@@ -74,12 +86,24 @@ def convert_all(
     if not preview_dir.is_dir():
         return 0, 0, 0
 
-    sources = sorted(preview_dir.rglob("*.ppm")) if sources is None else sources
+    if sources is None:
+        sources = sorted(preview_dir.rglob("*.ppm"))
+        if not sources:
+            if remove_source and not force:
+                existing = [p for p in preview_dir.rglob("*.png") if p.is_file() and p.stat().st_size > 0]
+                return 0, len(existing), len(existing)
+            return 0, 0, 0
+
     tasks: list[Path] = []
     skipped = 0
 
     for source in sources:
         target = source.with_suffix(".png")
+        if not source.is_file():
+            if not force and target.is_file() and target.stat().st_size > 0:
+                skipped += 1
+                continue
+            raise FileNotFoundError(f"missing source PPM: {source}")
         if (
             not force
             and target.is_file()
@@ -87,6 +111,8 @@ def convert_all(
             and target.stat().st_mtime >= source.stat().st_mtime
         ):
             skipped += 1
+            if remove_source:
+                source.unlink(missing_ok=True)
         else:
             tasks.append(source)
 
@@ -96,14 +122,15 @@ def convert_all(
     if not tasks:
         return 0, skipped, total
 
+    worker = _convert_one_remove if remove_source else convert_one
     if (jobs is not None and jobs <= 1) or len(tasks) == 1:
         for task in tasks:
-            convert_one(str(task))
+            worker(str(task))
     else:
         max_workers = jobs or min(os.cpu_count() or 4, 16, len(tasks))
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             chunksize = max(1, len(tasks) // (max_workers * 4))
-            list(executor.map(convert_one, [str(p) for p in tasks], chunksize=chunksize))
+            list(executor.map(worker, [str(p) for p in tasks], chunksize=chunksize))
 
     return converted, skipped, total
 
@@ -111,7 +138,9 @@ def convert_all(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     t0 = time.perf_counter()
-    converted, skipped, total = convert_all(args.dir, jobs=args.jobs, force=args.force)
+    converted, skipped, total = convert_all(
+        args.dir, jobs=args.jobs, force=args.force, remove_source=args.remove_source
+    )
     elapsed = time.perf_counter() - t0
     print(
         f"PASS: convert-previews: {converted} converted, {skipped} up-to-date "

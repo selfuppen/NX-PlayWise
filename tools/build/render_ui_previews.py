@@ -31,8 +31,11 @@ def selected_files(scope: str) -> list[str] | None:
             for prefix in prefixes for name in PREVIEW_FILES]
 
 
-def inventory(directory: Path, kind: str, selection: list[str] | None) -> dict[str, list[int]]:
-    paths = (directory / name for name in selection) if selection is not None else directory.rglob("*.ppm")
+def inventory(directory: Path, kind: str, selection: list[str] | None, *, suffix: str = ".png") -> dict[str, list[int]]:
+    if selection is not None:
+        paths = (directory / Path(name).with_suffix(suffix) for name in selection)
+    else:
+        paths = directory.rglob(f"*{suffix}")
     outputs = {}
     for path in paths:
         name = path.relative_to(directory).as_posix()
@@ -56,11 +59,11 @@ def render(kind: str, scope: str, directory: Path, *, jobs: int = 8, force: bool
     selection = selected_files(scope)
     # Binary content includes compiled source, flags and dependencies. Make still
     # validates those dependencies; only image generation is cached here.
-    identity = {"schema": 1, "scope": scope, "selection": selection,
+    identity = {"schema": 2, "format": "png", "scope": scope, "selection": selection,
                 "inputs": [hashlib.sha256(path.read_bytes()).hexdigest()
                            for path in (renderer, font, Path(__file__))]}
     cache = directory / f".{kind}-render.json"
-    current = inventory(directory, kind, selection)
+    current = inventory(directory, kind, selection, suffix=".png")
     try:
         previous = json.loads(cache.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -83,10 +86,20 @@ def render(kind: str, scope: str, directory: Path, *, jobs: int = 8, force: bool
     if kind == "nro" and scope == "all":
         command.append("--all-styles")
     subprocess.run(command, env=env, check=True)
-    outputs = inventory(directory, kind, selection)
+    ppm_outputs = inventory(directory, kind, selection, suffix=".ppm")
     expected = sum(("overlay" in Path(name).parts) == (kind == "overlay") for name in selection or [])
-    if not outputs or (selection is not None and len(outputs) != expected):
-        raise ValueError(f"{kind}: missing rendered scenes ({len(outputs)}/{expected})")
+    if not ppm_outputs or (selection is not None and len(ppm_outputs) != expected):
+        raise ValueError(f"{kind}: missing rendered scenes ({len(ppm_outputs)}/{expected})")
+    convert_all(
+        directory,
+        jobs=max(1, jobs // 2),
+        force=True,
+        sources=[directory / name for name in sorted(ppm_outputs)],
+        remove_source=True,
+    )
+    outputs = inventory(directory, kind, selection, suffix=".png")
+    if not outputs or len(outputs) != len(ppm_outputs):
+        raise ValueError(f"{kind}: missing converted PNG scenes ({len(outputs)}/{len(ppm_outputs)})")
     payload = {"identity": identity, "outputs": outputs}
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory,
                                      suffix=".json", delete=False) as stream:
@@ -113,7 +126,9 @@ def main() -> int:
     if args.kind == "convert":
         selection = selected_files(args.scope)
         sources = None if selection is None else [args.dir / name for name in selection]
-        converted, skipped, total = convert_all(args.dir, jobs=args.jobs, force=args.force, sources=sources)
+        converted, skipped, total = convert_all(
+            args.dir, jobs=args.jobs, force=args.force, sources=sources, remove_source=True
+        )
         print(f"PASS: selected PNG previews: {converted} converted, {skipped} cached ({total} total)")
     else:
         render(args.kind, args.scope, args.dir, jobs=args.jobs, force=args.force)

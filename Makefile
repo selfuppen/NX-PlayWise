@@ -130,7 +130,7 @@ UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/ui_language.
 
 STAGE_TIMER ?= python3 tools/build/stage_timer.py
 
-.PHONY: all manifest device-lab-manifest eden-test-manifest build-manifests test-host test-python test ui-previews render-nro-previews render-overlay-previews convert-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_CONFIG
+.PHONY: all manifest device-lab-manifest eden-test-manifest build-manifests test-host test-python test ui-previews render-nro-previews render-overlay-previews convert-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_CONFIG test-ui-scenes test-overlay-scenes
 
 all: test
 
@@ -231,6 +231,12 @@ test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 
 test-host: test-ui-primitives
 
+.PHONY: test-ui-scenes
+test-ui-scenes: $(HOST_BUILD_DIR)/ui_preview
+	$(STAGE_TIMER) global test-ui -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-all-scenes
+
+test-host: test-ui-scenes
+
 # UI preview generation with the pinned, redistributable documentation font.
 OVERLAY_PREVIEW_C_SRCS := companion/policy_status.c companion/ui_language.c companion/overlay/input_model.c companion/overlay/bridge.c companion/transport_client.c common/time/ptc_time.c common/protocol/error_code.c companion/nro/ui_theme.c
 $(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) | $(HOST_BUILD_DIR)
@@ -244,6 +250,12 @@ test-overlay-header: $(HOST_BUILD_DIR)/overlay_preview
 	$(STAGE_TIMER) global test-ui -- $(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-header
 
 test-host: test-overlay-header
+
+.PHONY: test-overlay-scenes
+test-overlay-scenes: $(HOST_BUILD_DIR)/overlay_preview
+	$(STAGE_TIMER) global test-ui -- $(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf --check-all-scenes
+
+test-host: test-overlay-scenes
 
 $(HOST_BUILD_DIR)/overlay_preview_save_test: tests/overlay_preview/test_save.cpp tests/overlay_preview/renderer.hpp companion/ui_emoji.h | $(HOST_BUILD_DIR)
 	$(STAGE_TIMER) global test-compile -- $(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -Wformat -Wformat-security -I. -o $@ $< -lm

@@ -153,8 +153,11 @@ def test_container_command() -> None:
     require("PREVIEW_SCOPE=docs-zh PREVIEW_JOBS=8" in only_previews,
             "default previews select only Chinese documentation with bounded parallelism")
     require("--scope docs-zh" in only_previews, "Chinese-only preview must not synchronize English")
-    require("PREVIEW_SCOPE=all" in release and "--scope all" in release,
-            "release preserves the full visual matrix")
+    require("PREVIEW_SCOPE=docs" in release and "--scope docs" in release,
+            "release defaults to bilingual documentation previews instead of full uncompressed matrix")
+    release_all = package_remote.container_command(only="all", preview_scope="all")
+    require("PREVIEW_SCOPE=all" in release_all and "--scope all" in release_all,
+            "explicit preview_scope=all still preserves the full visual matrix on demand")
     require("PREVIEW_SCOPE=docs PREVIEW_JOBS=1" in package_remote.container_command(
         only="previews", preview_scope="docs", jobs=1), "scope and serial budget propagate")
     require("ui-previews" in only_previews, "only=previews must target ui-previews")
@@ -781,6 +784,11 @@ def test_parse_args_stripped_components() -> None:
     with mock.patch.object(sys, "argv", ["package_remote.py", "--release"]):
         args = package_remote.parse_args()
         require(args.release is True, "parse_args must accept --release")
+        require(args.preview_scope == "docs", "release build must default preview scope to docs")
+
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--release", "--preview-scope", "all"]):
+        args = package_remote.parse_args()
+        require(args.preview_scope == "all", "explicit --preview-scope all must override release default")
 
     with mock.patch.object(sys, "argv", ["package_remote.py", "--with-device-lab"]):
         args = package_remote.parse_args()

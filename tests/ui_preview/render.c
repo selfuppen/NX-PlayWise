@@ -16,6 +16,7 @@
 
 uint32_t preview_pixels[1280 * 720];
 static bool preview_all_styles;
+static bool preview_no_write;
 
 static struct {
     bool enabled;
@@ -591,7 +592,7 @@ static int save_preview(const char *directory, const char *module, const char *n
     if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
     n = snprintf(path, sizeof(path), "%s/%s-%s.ppm", dir_path, name, dark ? "dark" : "light");
     if (n < 0 || (size_t)n >= sizeof(path)) return 1;
-    bool selected = ptc_preview_selected(path, false);
+    bool selected = preview_no_write || ptc_preview_selected(path, false);
     /* These callers sample the framebuffer after this function returns. Keep
        their assertions independent of whether a documentation file is needed. */
     bool sampled = (strcmp(module, "child") == 0 &&
@@ -632,7 +633,7 @@ static int save_preview(const char *directory, const char *module, const char *n
     bool check_heading = child_heading_trace.enabled;
     child_heading_trace.enabled = false;
     if (check_heading && check_child_forecast_heading(dark)) return 1;
-    if (!selected) return 0;
+    if (!selected || preview_no_write) return 0;
     /* The details dialog is tall enough that the marker at y=100 would land on its
        card titles (and the child guide bar), so it moves into the scrim under the
        dialog. Shorter dialogs keep the marker in the scrim above them. */
@@ -3244,8 +3245,8 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
         int n = snprintf(target_dir, sizeof(target_dir), "%s", root_dir);
         if (n < 0 || (size_t)n >= sizeof(target_dir)) return 1;
     }
-    if (!ptc_preview_selected(target_dir, true)) return 0;
-    ptc_mkdir(target_dir);
+    if (!preview_no_write && !ptc_preview_selected(target_dir, true)) return 0;
+    if (!preview_no_write) ptc_mkdir(target_dir);
     ptc_ui_language_set_resolved(lang);
     PtcUiModel model = *base_model;
     localize_preview_baseline(&model);
@@ -3257,7 +3258,7 @@ static int render_language_pass(const char *root_dir, const char *subdir, PtcUiL
         } else {
             snprintf(styled_dir, sizeof(styled_dir), "%s/style-%s", target_dir,
                 ptc_ui_theme_style_name((PtcUiThemeStyle)style));
-            ptc_mkdir(styled_dir);
+            if (!preview_no_write) ptc_mkdir(styled_dir);
         }
         ptc_ui_theme_set_style((PtcUiThemeStyle)style);
         failed |= render_update_previews(styled_dir, &model);
@@ -3335,11 +3336,16 @@ int main(int argc, char **argv)
         free(bytes);
         return failed;
     }
+    if (argc == 3 && strcmp(argv[2], "--check-all-scenes") == 0) {
+        preview_no_write = true;
+        preview_all_styles = true;
+    }
 
+    const char *out_root = preview_no_write ? "" : argv[2];
     #if defined(_WIN32)
-    failed |= render_language_pass(argv[2], "", PTC_UI_LANGUAGE_SIMPLIFIED, &model);
-    failed |= render_language_pass(argv[2], "en", PTC_UI_LANGUAGE_ENGLISH, &model);
-    failed |= render_language_pass(argv[2], "zh_hant", PTC_UI_LANGUAGE_TRADITIONAL, &model);
+    failed |= render_language_pass(out_root, "", PTC_UI_LANGUAGE_SIMPLIFIED, &model);
+    failed |= render_language_pass(out_root, "en", PTC_UI_LANGUAGE_ENGLISH, &model);
+    failed |= render_language_pass(out_root, "zh_hant", PTC_UI_LANGUAGE_TRADITIONAL, &model);
     #else
     typedef struct {
         const char *subdir;
@@ -3362,9 +3368,9 @@ int main(int argc, char **argv)
         pid_t pid = fork();
         if (pid < 0) {
             /* Fallback to synchronous execution on fork failure */
-            failed |= render_language_pass(argv[2], jobs[i].subdir, jobs[i].lang, &model);
+            failed |= render_language_pass(out_root, jobs[i].subdir, jobs[i].lang, &model);
         } else if (pid == 0) {
-            int res = render_language_pass(argv[2], jobs[i].subdir, jobs[i].lang, &model);
+            int res = render_language_pass(out_root, jobs[i].subdir, jobs[i].lang, &model);
             FT_Done_Face(g_ui.face);
             free(bytes);
             _exit(res ? 1 : 0);
@@ -3385,6 +3391,9 @@ int main(int argc, char **argv)
         }
     }
     #endif
+    if (preview_no_write && !failed) {
+        puts("PASS: all NRO preview scenes checked in memory (3 languages, 4 styles, no disk writes)");
+    }
     FT_Done_Face(g_ui.face);
     free(bytes);
     return failed;

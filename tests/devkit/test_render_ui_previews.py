@@ -45,16 +45,19 @@ def test_selection_and_cache() -> None:
                 mock.patch.object(preview.subprocess, "run", side_effect=run):
             expected = sum(not name.startswith("overlay/") for name in preview.PREVIEW_FILES)
             assert render() == expected and len(calls) == 1
+            assert not list(directory.rglob("*.ppm")), "PPM intermediates must be removed after PNG conversion"
             first = json.loads((directory / ".nro-render.json").read_text(encoding="utf-8"))
             assert render() == expected and len(calls) == 1
             assert json.loads((directory / ".nro-render.json").read_text(encoding="utf-8")) == first
-            image = directory / "child/child-light.ppm"
+            image = directory / "child/child-light.png"
             image.unlink()
             render()
             assert len(calls) == 2 and image.is_file()
-            image.write_bytes(b"broken")
+            assert not list(directory.rglob("*.ppm"))
+            image.write_bytes(b"")
             render()
             assert len(calls) == 3
+            assert not list(directory.rglob("*.ppm"))
             binary.write_bytes(b"binary-v2")
             render()
             assert len(calls) == 4
@@ -64,7 +67,8 @@ def test_selection_and_cache() -> None:
             render(force=True)
             assert len(calls) == 6
             render("docs")
-            assert len(calls) == 7 and (directory / "en/child/child-light.ppm").is_file()
+            assert len(calls) == 7 and (directory / "en/child/child-light.png").is_file()
+            assert not list(directory.rglob("*.ppm"))
             render("docs")
             assert len(calls) == 7
 
@@ -94,8 +98,9 @@ def test_selected_conversion() -> None:
         selected = root / "selected.ppm"
         selected.write_bytes(b"P6\n1 1\n255\n\x01\x02\x03")
         (root / "old-unused.ppm").write_bytes(b"invalid legacy output")
-        assert convert_all(root, jobs=1, sources=[selected]) == (1, 0, 1)
-        assert convert_all(root, jobs=1, sources=[selected]) == (0, 1, 1)
+        assert convert_all(root, jobs=1, sources=[selected], remove_source=True) == (1, 0, 1)
+        assert not selected.exists() and (root / "selected.png").is_file()
+        assert convert_all(root, jobs=1, sources=[selected], remove_source=True) == (0, 1, 1)
         assert not (root / "old-unused.png").exists()
 
 
