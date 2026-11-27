@@ -416,6 +416,38 @@
         }
       },
       "id": 1373331
+    },
+    "v3.3.3": {
+      "assets": {
+        "SHA256SUMS.txt": {
+          "digest": "sha256:5a10895ddf7b6c40577f075c350e6b3b0342444931841947a6d7e4f030e54af5",
+          "gitee_id": 3854292,
+          "github_id": 799500571,
+          "md5": "26d44ddf0d1cd4cbf7ea75493625ab74",
+          "sha256": "5a10895ddf7b6c40577f075c350e6b3b0342444931841947a6d7e4f030e54af5",
+          "size": 179,
+          "updated_at": "2026-11-27T07:47:13Z"
+        },
+        "playwise-3.3.3.zip": {
+          "digest": "sha256:9440e61600847e7b5979e4cf1d3653ef1f109992f3fceea40691326136cf35e5",
+          "gitee_id": 3854247,
+          "github_id": 799500570,
+          "md5": "05d2a306b07c89bd2e4b8bb65faf7fa3",
+          "sha256": "9440e61600847e7b5979e4cf1d3653ef1f109992f3fceea40691326136cf35e5",
+          "size": 3880141,
+          "updated_at": "2026-11-27T07:47:16Z"
+        },
+        "playwise-complete-3.3.3.zip": {
+          "digest": "sha256:ee507f223ea128b3e8aefcd7e144e8dfc04df8619dae96a5a3ceafb84f467725",
+          "gitee_id": 3854286,
+          "github_id": 799500572,
+          "md5": "8f3f77bc1b69255ef35b17e32f8c577a",
+          "sha256": "ee507f223ea128b3e8aefcd7e144e8dfc04df8619dae96a5a3ceafb84f467725",
+          "size": 3898334,
+          "updated_at": "2026-11-27T07:47:16Z"
+        }
+      },
+      "id": 1375274
     }
   },
   "schema_version": 1,
@@ -443,6 +475,7 @@
     453716912,
     456857253,
     458343945,
-    459792967
+    459792967,
+    460295802
   ]
 }

@@ -54,19 +54,18 @@
   ],
   "releases": [
     {
-      "notes": "# 任我玩 PlayWise 3.3.2\n\n**休眠唤醒解锁后自动重弹受限浮窗（锁屏 3 连按 / 无锁屏 1 次确认） · 应用内更新重启生效提示与全流程引导**  \n**Auto re-show restriction overlay on sleep/wake (3-press lock-screen / 1-press no-lock fast pickup) · In-app update reboot guidance**\n\n## 简体中文\n\n3.3.2 聚焦**受限期间休眠唤醒的真实交互体验**与**应用内更新重启引导**：当主机在受限状态休眠后再唤醒，任我玩浮窗会准确识别系统锁屏解锁或无锁屏预唤醒确认动作，在用户真正进入桌面/游戏后约 1 秒自动重弹当前受限原因浮窗，不再漏弹或在未解锁预唤醒画面误弹；同时在应用内在线更新全流程补齐「需重启生效 / 浮窗已更新」提示与操作引导。\n\n### 休眠唤醒自动重弹受限浮窗\n\n- **受限唤醒自动重弹**：系统从真休眠唤醒且当前仍处于受限状态（每日额满 / 护眼休息 / 就寝 / 非电视限额）时，后台通过内存 IPC 通知驻留浮窗重新弹出当前受限原因提示，并自动跳过已解除的旧原因。\n- **系统锁屏开启态（3 连按 / 3 连触精确识别）**：对齐 HOS 系统「连按同键 3 次或连点屏幕 3 次解锁」逻辑，追踪同键 3 连按（`A/B/X/Y/方向键/L/R/ZL/ZR`）与 3 连触并过滤 `POWER` 键，确认解锁松手后立即结束冷却、约 1 秒内弹出浮窗；未完成解锁停留在锁屏页时不误弹。\n- **系统锁屏关闭态（预唤醒防误弹 + 1 次确认 ~1 秒快弹）**：针对 HOS 无锁屏态「按 POWER 后仍停在预唤醒画面、需再按 1 次任意键或点 1 次屏才进入亮屏桌面」的真实行为，以最新唤醒 `POWER` 事件为时间基准，未确认停留在预唤醒页时不误弹；确认进入桌面松手后约 1 秒即弹出（由原先约 8 秒大幅缩短）。\n- **唤醒诊断遥测（`wake_diag`）**：在状态与诊断链路补充唤醒时序、冷却提前释放原因与 `POWER` 基准偏移等只读诊断字段，便",
+      "notes": "# 任我玩 PlayWise 3.3.3\n\n**默认开启启动时检查更新 · 前置更新检查开关与精确版本状态展示 · 重启更新与浮窗引导文档可视化**  \n**Check for updates on startup enabled by default · Surfaced startup check toggle & accurate status pills · Visualized reboot/overlay update workflow**\n\n## 简体中文\n\n3.3.3 聚焦**应用内更新入口体验优化与状态准确性**，并将此前「需重启版本 / 浮窗更新引导」的完整操作流程补充至中英文使用文档与设计预览基线中。本次改动仅涉及主机客户端 NRO 设置入口与文档预览，未改动后台 `sysmodule` 或悬浮窗 `playwise.ovl` 的运行时逻辑。\n\n### 更新体验与状态优化\n\n- **默认开启启动时检查更新**：运行时默认配置、打包默认 `config.json` 与 Eden 初始配置统一默认开启 `update_check_on_startup`，减少首次安装后长期停留在未知更新状态的情况。\n- **开关前置至「检查更新与版本」页面**：在「检查更新与版本」弹窗内直接新增「启动时检查更新」交互卡片，支持触控点按、`Up/Down` 聚焦确认及 `ZL` 一键切换，并与「软件更新」页原有开关共用同一只读支持模式、更新忙碌及写盘失败回滚门禁。\n- **版本状态胶囊精确映射**：修复开启或关闭自动检查时顶部状态徽标固定显示「当前已是最新」的问题，按真实检查状态精确区分「有可用更新 / 正在检查 / 等待更新 / 检查失败 / 自动检查已关闭 / 未包含在当前更新通道 / 当前已是最新」，配合对应语义色展示。\n- **关闭态文案修正**：将「启动时检查更新」开关关闭态的状态胶囊文案由误用的「静音」修正为「关闭」。\n- **文档与预览可视化补充**：新增「需重启版本」软件更新页与第 4 步升级完成浮窗引导的 Host 预览场景及 3 语 × 4 风格 × 双主题防碰撞检查，并在中英文《使用指南》与《视觉风格与设计指南》同",
       "package": {
-        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.3.2/playwise-3.3.2.zip",
-        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.3.2/playwise-3.3.2.zip",
-        "md5": "7ed158b2df489f6f055c77148ba8dcba",
-        "name": "playwise-3.3.2.zip",
-        "sha256": "467d3dbce1fbbd84f3bbd68cbd08a3b5fac8008fa18ad2944ab82938a4ce1dab",
-        "size": 3879656
+        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.3.3/playwise-3.3.3.zip",
+        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.3.3/playwise-3.3.3.zip",
+        "md5": "05d2a306b07c89bd2e4b8bb65faf7fa3",
+        "name": "playwise-3.3.3.zip",
+        "sha256": "9440e61600847e7b5979e4cf1d3653ef1f109992f3fceea40691326136cf35e5",
+        "size": 3880141
       },
       "prerelease": false,
-      "requires_reboot": true,
-      "tag": "v3.3.2",
-      "version": "3.3.2"
+      "tag": "v3.3.3",
+      "version": "3.3.3"
     },
     {
       "notes": "这是 **3.1.8-beta.2 预发行测试版**。完整真机资格仍为 `pending`，面向愿意反馈问题的用户。\n\n## 本版变化\n\n- 优化主机应用、游戏内浮窗和离线家长网页的文案与操作流程，孩子页更清楚地展示受限提醒。\n- 修复任我玩驻留时简要提示的接收与清屏问题，优化隐藏浮窗唤醒、详情入口及重复提醒处理。\n- 减少后台轮询、通知续租、SD 文件读取和浮窗绘制的重复工作。\n- 修复英文护眼说明的单屏溢出，并同步“检查更新与版本”入口及安装包校验。\n\n## 验证范围\n\n最终 clean 候选为 `1cbf8a49c40add88beab59c92a4004e3413e4014`，构建身份为 `playwise-3.1.8-beta.2+1cbf8a49c40a.03190e8a8162f633`。统一 devkitPro 发布构建的 C／Python／UI 回归、标准包／完整包／Device Lab 校验及 Eden NRO 构建校验通过。\n\n同一最终 Eden NRO 完成首次设置、PIN、离线码与持久化等主场景 17/17、通知场景 4/4、离线家长网页及真实浏览器兑换场景 5/5；本批进程健康退出，证据封存并离线复核，所属运行目录按正式执行器清理。\n\n最终 beta.2 已在 Nintendo Switch OLED（HOS 22.5.0、Atmosphère 1.11.2）通过正常家长 PIN 的不同版本后台安全交接、新 boot 浮窗握手、孩子页和浮窗打开退出，以及约 62 秒的1952累计增长观察。限时窗口结束后恢复原30分钟周计划，完整0x44设置与原有效政策一致；额度耗尽后系统停止计时、累计保持稳定，操作者确认额度耗尽状态可见。标准采集以正常终末结束，三次完整原流一致且两段间隔均超过7秒。该烟测未重复最终版本的游戏、跨午夜、休眠或底座测试。\n\n版本前的主体候选已在 Nintendo Switch OLED、HOS 22.5.0、Atmosphère 1.11.2 上验证后台交接、浮窗正常打开退出、Woodo 的实际限制与恢复操控，以及原限时规则下的自然午夜累计归零和次日额度切换。历史证据按原候选范围引用，上",
