@@ -315,7 +315,10 @@ void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
     if (model->recovery_active || model->apply_pending_confirmation || model->disable_flag_present ||
         model->temporary_unlocked || strcmp(model->setup_phase, "active") != 0) {
         out->pending_reason = model->recovery_active ? PTC_UI_ESTIMATE_RECOVERY :
-            model->apply_pending_confirmation ? PTC_UI_ESTIMATE_READBACK : PTC_UI_ESTIMATE_RUNTIME;
+            model->apply_pending_confirmation ? PTC_UI_ESTIMATE_READBACK :
+            (!model->disable_flag_present && strcmp(model->setup_phase, "active") == 0 &&
+             model->temporary_unlocked) ? PTC_UI_ESTIMATE_TEMPORARY_UNLOCK :
+            PTC_UI_ESTIMATE_RUNTIME;
         for (int i = 0; i < 4; ++i)
             if (out->conditions[i] == PTC_UI_CONDITION_PASS) out->conditions[i] = PTC_UI_CONDITION_UNKNOWN;
         return;
@@ -412,6 +415,15 @@ void ptc_ui_project_overview(const PtcUiModel *model, int64_t now,
         if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) {
             snprintf(out->title, sizeof(out->title), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_BADGE));
             snprintf(out->hint, sizeof(out->hint), "%s", ptc_ui_text(PTC_UI_T_RECONFIRM_NOTICE_SUMMARY));
+            return;
+        }
+        if (!model->disable_flag_present && !model->recovery_active &&
+            !model->apply_pending_confirmation && strcmp(model->setup_phase, "active") == 0 &&
+            model->temporary_unlocked) {
+            out->state = PTC_POLICY_PENDING;
+            snprintf(out->title, sizeof(out->title), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_TITLE));
+            snprintf(out->value, sizeof(out->value), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_VALUE));
+            snprintf(out->hint, sizeof(out->hint), "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_HINT));
             return;
         }
         PtcUiTextId title = model->disable_flag_present ? PTC_UI_T_CONTROL_IS_DISABLED :

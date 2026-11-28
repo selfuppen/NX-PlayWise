@@ -484,3 +484,5 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_UPDATE_CTA_LOAD_HINT, "New app running: press A to ho
 PTC_UI_TEXT_VALUE(PTC_UI_T_UPDATE_CTA_RECOVER_HINT, "Interrupted install found: press A to restore previous files (settings kept).")
 PTC_UI_TEXT_VALUE(PTC_UI_T_UPDATE_CTA_CANCEL_CHECK, "Network task active; press A or B to safely cancel.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_UPDATE_TAB_LOCKED_BUSY, "Wait for the active update task to finish or cancel first.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SUPPORT_TEMP_UNLOCK_PROBLEM, "Official Parental Controls unlocked; limits paused")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SUPPORT_TEMP_UNLOCK_NEXT, "No repair needed: press Power to sleep briefly, then wake")

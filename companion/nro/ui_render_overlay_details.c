@@ -68,8 +68,11 @@ static const char *detail_pending_reason(PtcUiEstimatePending reason)
         PTC_UI_T_DETAIL_NO_PREDICTION, PTC_UI_T_DETAIL_ESTIMATE_STALE,
         PTC_UI_T_DETAIL_ESTIMATE_DATE, PTC_UI_T_DETAIL_ESTIMATE_REFRESH,
         PTC_UI_T_DETAIL_ESTIMATE_RECOVERY, PTC_UI_T_DETAIL_ESTIMATE_READBACK,
-        PTC_UI_T_DETAIL_ESTIMATE_RUNTIME
+        PTC_UI_T_DETAIL_ESTIMATE_RUNTIME, PTC_UI_T_DETAIL_ESTIMATE_TEMP_UNLOCK
     };
+    if ((unsigned)reason >= (unsigned)(sizeof(ids) / sizeof(ids[0]))) {
+        return ptc_ui_text(PTC_UI_T_DETAIL_ESTIMATE_RUNTIME);
+    }
     return ptc_ui_text(ids[reason]);
 }
 
@@ -103,6 +106,8 @@ static void detail_current(const PtcUiModel *model, const PtcUiTodayProjection *
     else if (model->disable_flag_present) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED));
     else if (model->recovery_active) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_RECOVERING));
     else if (model->apply_pending_confirmation) snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_WAITING_FOR_EFFECT));
+    else if (strcmp(model->setup_phase, "active") == 0 && model->temporary_unlocked)
+        snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_TITLE));
     else snprintf(out, size, "%s", ptc_ui_text(PTC_UI_T_DETAIL_PENDING));
 }
 

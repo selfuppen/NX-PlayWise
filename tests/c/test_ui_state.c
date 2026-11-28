@@ -3569,6 +3569,19 @@ static void test_support_next_step(void)
     model.recovery_active = model.disable_flag_present = false;
     model.error_code = 501;
     check_int(ptc_ui_support_recommended_action(&model), 4, "recent failure suggests diagnostics");
+    model.error_code = 0;
+    model.temporary_unlocked_available = true;
+    model.temporary_unlocked = true;
+    check_int(ptc_ui_support_recommended_action(&model), -1, "temporary unlock does not suggest repair");
+    check_true(strcmp(ptc_ui_support_problem(&model), ptc_ui_text(PTC_UI_T_SUPPORT_TEMP_UNLOCK_PROBLEM)) == 0,
+               "temporary unlock reports specific status in support health summary");
+    model.temporary_unlocked = false;
+    check_true(strcmp(ptc_ui_support_problem(&model), ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_PENDING_ISSUES)) == 0,
+               "clearing temporary unlock restores healthy support summary");
+    model.temporary_unlocked = true;
+    model.disable_flag_present = true;
+    check_true(strcmp(ptc_ui_support_problem(&model), ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED)) == 0,
+               "disable flag takes priority over temporary unlock in support summary");
 }
 
 static void test_time_menu_modal_touch_guards(void)
@@ -5077,6 +5090,27 @@ static void test_today_projection(void)
     ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
     check_true(!p.simulation_available, "pending readback suppresses simulation");
     check_int(p.pending_reason, PTC_UI_ESTIMATE_READBACK, "estimate explains pending readback");
+
+    m = today_projection_model();
+    m.temporary_unlocked_available = true;
+    m.temporary_unlocked = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "temporary unlock suppresses simulation");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_TEMPORARY_UNLOCK, "estimate explains temporary unlock");
+    PtcUiOverview overview;
+    ptc_ui_project_overview(&m, 1000, m.day_index, start, &overview);
+    check_true(!overview.available && !overview.blocked && overview.state == PTC_POLICY_PENDING,
+               "temporary unlock overview uses pending attention tone instead of blocked or available");
+    check_true(strcmp(overview.title, ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_TITLE)) == 0 &&
+               strcmp(overview.value, ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_VALUE)) == 0 &&
+               strcmp(overview.hint, ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_HINT)) == 0,
+               "temporary unlock overview guides user instead of showing pending confirmation");
+    m.disable_flag_present = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_RUNTIME, "disable flag keeps runtime pending priority");
+    ptc_ui_project_overview(&m, 1000, m.day_index, start, &overview);
+    check_true(strcmp(overview.title, ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED)) == 0,
+               "disable flag takes priority over temporary unlock in overview");
 }
 
 static void test_today_details_navigation(void)

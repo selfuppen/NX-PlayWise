@@ -530,6 +530,8 @@ const char *ptc_ui_support_problem(const PtcUiModel *model)
     if (model->setup_wizard_completed && model->setup_issue_mask) return ptc_ui_text(PTC_UI_T_SETUP_RECORDED_PROBLEMS);
     if (strcmp(model->setup_phase, "active") != 0) return ptc_ui_text(model->setup_wizard_completed
         ? PTC_UI_T_SETUP_CONTROLS_INACTIVE : PTC_UI_T_FIRST_TIME_SETUP_NOT_COMPLETED_YET);
+    if (model->temporary_unlocked_available && model->temporary_unlocked)
+        return ptc_ui_text(PTC_UI_T_SUPPORT_TEMP_UNLOCK_PROBLEM);
     return ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_PENDING_ISSUES);
 }
 

@@ -386,7 +386,7 @@ typedef struct {
 typedef enum {
     PTC_UI_ESTIMATE_READINGS, PTC_UI_ESTIMATE_STALE, PTC_UI_ESTIMATE_DATE,
     PTC_UI_ESTIMATE_REFRESH, PTC_UI_ESTIMATE_RECOVERY, PTC_UI_ESTIMATE_READBACK,
-    PTC_UI_ESTIMATE_RUNTIME
+    PTC_UI_ESTIMATE_RUNTIME, PTC_UI_ESTIMATE_TEMPORARY_UNLOCK
 } PtcUiEstimatePending;
 typedef struct {
     bool fresh, total_known, total_unlimited, undocked_known, undocked_unlimited;

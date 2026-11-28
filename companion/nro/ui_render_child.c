@@ -183,8 +183,11 @@ static const char *child_pending_reason_text(PtcUiEstimatePending reason)
         PTC_UI_T_DETAIL_NO_PREDICTION, PTC_UI_T_DETAIL_ESTIMATE_STALE,
         PTC_UI_T_DETAIL_ESTIMATE_DATE, PTC_UI_T_DETAIL_ESTIMATE_REFRESH,
         PTC_UI_T_DETAIL_ESTIMATE_RECOVERY, PTC_UI_T_DETAIL_ESTIMATE_READBACK,
-        PTC_UI_T_DETAIL_ESTIMATE_RUNTIME
+        PTC_UI_T_DETAIL_ESTIMATE_RUNTIME, PTC_UI_T_DETAIL_ESTIMATE_TEMP_UNLOCK
     };
+    if ((unsigned)reason >= (unsigned)(sizeof(ids) / sizeof(ids[0]))) {
+        return ptc_ui_text(PTC_UI_T_DETAIL_ESTIMATE_RUNTIME);
+    }
     return ptc_ui_text(ids[reason]);
 }
 
@@ -817,6 +820,9 @@ static void draw_child_projection_stage(uint32_t *pixels, uint32_t stride, const
             if (overview->reasons == PTC_UI_STOP_DAILY) subtext = ptc_ui_text(PTC_UI_T_CHILD_UNAVAIL_DAILY_SUB);
             else if (overview->reasons == PTC_UI_STOP_DOCK) subtext = ptc_ui_text(PTC_UI_T_CHILD_UNAVAIL_DOCK_SUB);
             else if (overview->reasons == PTC_UI_STOP_BEDTIME) subtext = ptc_ui_text(PTC_UI_T_CHILD_UNAVAIL_BED_SUB);
+        } else if (p->pending_reason == PTC_UI_ESTIMATE_TEMPORARY_UNLOCK) {
+            headline = ptc_ui_text(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_TITLE);
+            subtext = ptc_ui_text(PTC_UI_T_CHILD_UNAVAIL_TEMP_UNLOCK_SUB);
         } else {
             headline = child_pending_reason_text(p->pending_reason);
         }
@@ -900,12 +906,14 @@ static void draw_child_today_hero(uint32_t *pixels, uint32_t stride, const PtcUi
     draw_text_bold(pixels, stride, spill.x + 25, spill.y + 18, fitted_pill, 13, UI_ON_HERO);
 
     /* Left Mid: Hero Label + Big Value */
+    bool temp_unlocked = !parent_step_needed && p->pending_reason == PTC_UI_ESTIMATE_TEMPORARY_UNLOCK;
     const char *hero_lbl = overview->available ? ptc_ui_text(PTC_UI_T_CHILD_HERO_PLAYABLE) :
         (parent_step_needed ? ptc_ui_text(PTC_UI_T_CHILD_HERO_NEXT_STEP) :
         (overview->reasons == PTC_UI_STOP_EYE ? ptc_ui_text(PTC_UI_T_CHILD_HERO_REST_LEFT) :
         (!overview->fresh ? ptc_ui_text(PTC_UI_T_CHILD_HERO_PENDING) :
+        (temp_unlocked ? ptc_ui_text(PTC_UI_T_CHILD_HERO_TEMP_UNLOCK) :
         (overview->reasons == PTC_UI_STOP_DAILY ? ptc_ui_text(PTC_UI_T_CHILD_HERO_ENDED) :
-        ptc_ui_text(PTC_UI_T_CHILD_HERO_BLOCKED)))));
+        ptc_ui_text(PTC_UI_T_CHILD_HERO_BLOCKED))))));
     char fitted_lbl[96];
     fit_text(fitted_lbl, sizeof(fitted_lbl), hero_lbl, 14, left.width - 40);
     draw_text(pixels, stride, left.x + 22, left.y + 72, fitted_lbl, 14, UI_HERO_SECONDARY);

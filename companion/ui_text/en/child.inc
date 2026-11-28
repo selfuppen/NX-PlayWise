@@ -131,3 +131,8 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_CHILD_GUIDE_RECOVERY_SUB, "Please wait for recovery t
 PTC_UI_TEXT_VALUE(PTC_UI_T_CHILD_ACT_LOAD_NEW_VERSION, "Press - to load update")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CHILD_ACT_RECONFIRM_PARENT, "Press - to confirm")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CHILD_ACT_PARENT_HANDLE, "Press - for Parent")
+PTC_UI_TEXT_VALUE(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_TITLE, "Official lock paused")
+PTC_UI_TEXT_VALUE(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_VALUE, "Paused")
+PTC_UI_TEXT_VALUE(PTC_UI_T_OVERVIEW_TEMP_UNLOCK_HINT, "Not timed now; sleep briefly & wake to resume")
+PTC_UI_TEXT_VALUE(PTC_UI_T_CHILD_HERO_TEMP_UNLOCK, "Timer status")
+PTC_UI_TEXT_VALUE(PTC_UI_T_CHILD_UNAVAIL_TEMP_UNLOCK_SUB, "Rules and today's balance are kept, but timing and limits are paused. Sleep briefly and wake to resume.")

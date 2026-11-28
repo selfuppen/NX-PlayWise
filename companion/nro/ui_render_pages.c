@@ -241,10 +241,11 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     int recommended = ptc_ui_support_recommended_action(model);
     bool reconfirm = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
+    bool temp_unlocked = model->temporary_unlocked_available && model->temporary_unlocked;
     bool is_fault = !reconfirm && (model->disable_flag_present || model->recovery_active ||
         strcmp(model->setup_phase, "failed") == 0 || strcmp(model->setup_phase, "protection") == 0);
     bool is_warn = !is_fault && (reconfirm || recommended >= 0 || model->waiting || model->apply_pending_confirmation ||
-        (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0));
+        temp_unlocked || (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0));
 
     /* 1. Structured System Health Banner */
     {
@@ -280,7 +281,9 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
                            recommended == 4 ? ptc_ui_text(PTC_UI_T_SUGGESTION_EXPORT_DIAGNOSTIC_PACKAGE_AND_KEEP_PROBLEM) :
                            (model->waiting || model->apply_pending_confirmation || ptc_ui_setup_activating_grace(model)
                                ? ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN)
-                               : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU));
+                               : (temp_unlocked
+                                   ? ptc_ui_text(PTC_UI_T_SUPPORT_TEMP_UNLOCK_NEXT)
+                                   : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU)));
         draw_wrapped_text(pixels, stride, banner.x + 12, banner.y + 92, next, 12,
                           banner.width - 24, 16, 2, b_fg);
     }
