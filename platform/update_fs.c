@@ -194,7 +194,7 @@ static bool claim(void *ctx, const char *relative, const char *text)
 void ptc_update_fs_init(PtcUpdateFs *fs, const char *root, PtcStorage *storage)
 {
     memset(fs, 0, sizeof(*fs)); fs->root = root; fs->storage = storage;
-    fs->io = (PtcUpdateIo){fs, hash, exists, copy_file, publish, remove_file, read_text, write_text, commit, discard_temporary, claim};
+    fs->io = (PtcUpdateIo){fs, hash, exists, copy_file, publish, remove_file, read_text, write_text, commit, discard_temporary, claim, NULL};
 }
 
 bool ptc_update_fs_space(const PtcUpdateFs *fs, uint64_t required)

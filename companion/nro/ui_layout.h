@@ -151,7 +151,10 @@ typedef enum {
     PTC_UI_HIT_SOFTWARE_INFO_QR_TAB,
     PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE,
     PTC_UI_HIT_SOFTWARE_INFO_AUTO_CHECK,
-    PTC_UI_HIT_SETUP_PCTL_STEP
+    PTC_UI_HIT_SETUP_PCTL_STEP,
+    PTC_UI_HIT_VERSION_UPDATE_TAB,
+    PTC_UI_HIT_UPDATE_TRACK_OPTION,
+    PTC_UI_HIT_UPDATE_CHECK_REFRESH
 } PtcUiHitKind;
 
 typedef struct {
@@ -222,6 +225,12 @@ PtcUiRect ptc_ui_software_info_qr_tab_rect(int index);
 PtcUiRect ptc_ui_software_info_repo_source_rect(int index);
 PtcUiRect ptc_ui_software_info_update_banner_rect(void);
 PtcUiRect ptc_ui_software_info_auto_check_rect(void);
+PtcUiRect ptc_ui_version_update_tab_rect(int index);
+PtcUiRect ptc_ui_update_primary_rect(void);
+PtcUiRect ptc_ui_update_track_rect(int index);
+PtcUiRect ptc_ui_version_about_reload_rect(void);
+PtcUiRect ptc_ui_version_about_go_update_rect(void);
+PtcUiRect ptc_ui_update_check_footer_rect(void);
 PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_qr_panel_rect(int index);
 PtcUiRect ptc_ui_qr_code_rect(void);

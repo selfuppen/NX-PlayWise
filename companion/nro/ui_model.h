@@ -812,6 +812,10 @@ typedef struct {
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     int software_info_qr_tab;
     int software_info_repo_source; /* 0 = GitHub, 1 = Gitee */
+    int update_hub_tab; /* 0 = Online Updates, 1 = Version & QR */
+    unsigned update_progress_stage; /* 1=verify/extract, 2=prepare/backup, 3=install, 4=recover */
+    unsigned update_progress_step;
+    unsigned update_progress_total;
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
     PtcUiDiagnosticStatus diagnostic_status;
     char diagnostic_path[192];

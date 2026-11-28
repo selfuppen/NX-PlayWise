@@ -15,6 +15,7 @@ typedef struct {
     bool (*commit)(void *ctx);
     bool (*discard_temporary)(void *ctx, const char *path, const char *before_hash, const char *after_hash);
     bool (*claim)(void *ctx, const char *path, const char *text);
+    void (*on_progress)(void *ctx, unsigned step, unsigned total, unsigned stage);
 } PtcUpdateIo;
 
 typedef struct {

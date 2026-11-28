@@ -1940,8 +1940,8 @@ static void test_release_hit_targets(void)
     model.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
               "software information close button");
-    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
-              "software information has no invisible secondary button");
+    check_hit(hit_center(&model, ptc_ui_version_about_reload_rect()), PTC_UI_HIT_NONE, 0,
+              "current version has no inline hot reload button");
     check_true(ptc_ui_cancel_overlay(&model), "software information closes with the shared modal path");
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "software information close returns to support");
 
@@ -1950,13 +1950,15 @@ static void test_release_hit_targets(void)
     model.parent_support_only = true;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
               "read-only support retains only a close action");
-    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
-              "read-only support has no restart/defer controls");
+    check_hit(hit_center(&model, ptc_ui_version_about_reload_rect()), PTC_UI_HIT_NONE, 0,
+              "read-only support has no inline hot reload button");
     model.parent_support_only = false;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
               "pending software information exposes the parent hot reload action");
-    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
-              "pending software information exposes a visible defer action");
+    check_hit(hit_center(&model, ptc_ui_version_about_reload_rect()), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "pending software information exposes inline hot reload action");
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "pending software information exposes back button");
     model.operation = PTC_UI_OPERATION_HOT_RELOAD;
     model.overlay = PTC_UI_OVERLAY_CONFIRM;
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_HOT_RELOAD,
@@ -4226,31 +4228,36 @@ static void test_language_and_short_weekly_limits(void)
     check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
         "language top back button cancels overlay");
 
-    /* Software Info overlay: Scheme A QR tabs + update banner */
+    /* Version & Updates unified tabs + QR + Track segmented controls */
     memset(&model, 0, sizeof(model));
     model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
     {
+        PtcUiRect tab0 = ptc_ui_version_update_tab_rect(0);
+        PtcUiRect tab1 = ptc_ui_version_update_tab_rect(1);
         PtcUiRect qr0 = ptc_ui_software_info_qr_tab_rect(0);
         PtcUiRect qr1 = ptc_ui_software_info_qr_tab_rect(1);
         PtcUiRect repo0 = ptc_ui_software_info_repo_source_rect(0);
         PtcUiRect repo1 = ptc_ui_software_info_repo_source_rect(1);
-        PtcUiRect banner = ptc_ui_software_info_update_banner_rect();
-        PtcUiRect auto_check = ptc_ui_software_info_auto_check_rect();
+        PtcUiRect banner = ptc_ui_version_about_go_update_rect();
+        PtcUiRect refresh_btn = ptc_ui_update_check_footer_rect();
+        check_true(tab0.w > 0 && tab1.w > 0 && !rects_overlap(tab0, tab1), "version & update tabs do not overlap");
         check_true(qr0.w > 0 && qr1.w > 0 && !rects_overlap(qr0, qr1), "software info QR tabs do not overlap");
         check_true(repo0.w > 0 && repo1.w > 0 && !rects_overlap(repo0, repo1), "software info repo source tabs do not overlap");
         check_true(!rects_overlap(banner, qr0) && !rects_overlap(banner, qr1), "update banner and QR tabs do not overlap");
         check_true(!rects_overlap(banner, repo0) && !rects_overlap(banner, repo1), "update banner and repo source tabs do not overlap");
-        check_true(auto_check.w > 0 && auto_check.h > 0 && !rects_overlap(banner, auto_check) &&
-                   !rects_overlap(auto_check, qr0) && !rects_overlap(auto_check, qr1),
-                   "software info startup check card does not overlap banner or QR tabs");
+        check_true(!rects_overlap(refresh_btn, ptc_ui_settings_page_back_rect()) &&
+                   !rects_overlap(refresh_btn, ptc_ui_settings_page_primary_rect()),
+                   "footer Y check button does not overlap back or primary buttons");
+        check_hit(hit_center(&model, tab0), PTC_UI_HIT_VERSION_UPDATE_TAB, 0, "hit version & update tab 0");
+        check_hit(hit_center(&model, tab1), PTC_UI_HIT_VERSION_UPDATE_TAB, 1, "hit version & update tab 1");
+        check_hit(hit_center(&model, refresh_btn), PTC_UI_HIT_UPDATE_CHECK_REFRESH, 0, "hit footer Y check updates");
         check_hit(hit_center(&model, qr0), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 0, "hit software info QR tab 0");
         check_hit(hit_center(&model, qr1), PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, 1, "hit software info QR tab 1");
         check_hit(hit_center(&model, repo0), PTC_UI_HIT_NONE, 0, "repo source inactive on PWA tab");
         model.software_info_qr_tab = 1;
         check_hit(hit_center(&model, repo0), PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, 0, "hit software info repo source GitHub");
         check_hit(hit_center(&model, repo1), PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, 1, "hit software info repo source Gitee");
-        check_hit(hit_center(&model, banner), PTC_UI_HIT_UPDATE_ACTION, 8, "hit software info update banner");
-        check_hit(hit_center(&model, auto_check), PTC_UI_HIT_SOFTWARE_INFO_AUTO_CHECK, 0, "hit software info startup check toggle");
+        check_hit(hit_center(&model, banner), PTC_UI_HIT_VERSION_UPDATE_TAB, 0, "hit software info update banner switches to Updates tab");
         check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_OVERLAY_CANCEL, 0,
             "software info top back button cancels overlay");
     }
@@ -5317,13 +5324,28 @@ static void test_child_forecast_focus(void)
 static void test_online_update_layout(void)
 {
     PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
-    for (int i = 0; i < 8; ++i) {
+    const int ui_slots[4] = {0, 2, 3, 4};
+    for (int idx = 0; idx < 4; ++idx) {
+        int i = ui_slots[idx];
         PtcUiRect rect = ptc_ui_update_action_rect(i);
         check_hit(hit_center(&model, rect), PTC_UI_HIT_UPDATE_ACTION, i, "update action shares touch geometry");
         check_true(rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= 1280 && rect.y + rect.h <= 712, "update action fits app viewport");
         check_true(!rects_overlap(rect, ptc_ui_settings_page_back_rect()), "update action does not overlap footer back");
+        check_true(!rects_overlap(rect, ptc_ui_update_check_footer_rect()), "update action does not overlap footer refresh");
         check_true(!rects_overlap(rect, ptc_ui_update_notes_rect()), "update action does not overlap notes button");
-        for (int k = i + 1; k < 8; ++k) check_true(!rects_overlap(rect, ptc_ui_update_action_rect(k)), "update actions do not overlap");
+        for (int k = idx + 1; k < 4; ++k) check_true(!rects_overlap(rect, ptc_ui_update_action_rect(ui_slots[k])), "update actions do not overlap");
+    }
+    /* Situational primary CTA routes touch hits to the active state's action. */
+    {
+        const struct { int status; int expected_action; } cta_cases[] = {
+            {3, 1}, {10, 7}, {16, 5}, {14, 6}
+        };
+        for (size_t c = 0; c < sizeof(cta_cases) / sizeof(cta_cases[0]); ++c) {
+            model.update_status = cta_cases[c].status;
+            check_hit(hit_center(&model, ptc_ui_update_primary_rect()), PTC_UI_HIT_UPDATE_ACTION,
+                      cta_cases[c].expected_action, "situational primary CTA maps touch hit to state action");
+        }
+        model.update_status = 0;
     }
     /* Refresh attention helper: fresh suppresses highlight; stale/failed trigger it; waiting suppresses it. */
     {
@@ -5364,20 +5386,39 @@ static void test_online_update_layout(void)
     model.rules_dialog_open = false;
     check_hit(hit_center(&model, ptc_ui_rules_independent_tip_rect(&model)), PTC_UI_HIT_HOME_DETAILS_ACTION, 0, "rules guard principles button is touch accessible");
     model.overlay = PTC_UI_OVERLAY_ONLINE_UPDATE;
+    model.update_hub_tab = 0;
     check_hit(hit_center(&model, ptc_ui_update_notes_rect()), PTC_UI_HIT_UPDATE_ACTION, 8, "long notes have a touch reading entry");
     check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()), PTC_UI_HIT_UPDATE_ACTION, 12, "update back is touch accessible");
+    {
+        PtcUiRect t0 = ptc_ui_update_track_rect(0), t1 = ptc_ui_update_track_rect(1);
+        check_true(t0.w > 0 && t1.w > 0 && !rects_overlap(t0, t1), "release track segments do not overlap");
+        check_hit(hit_center(&model, t0), PTC_UI_HIT_UPDATE_TRACK_OPTION, 0, "stable track segment is touch accessible");
+        check_hit(hit_center(&model, t1), PTC_UI_HIT_UPDATE_TRACK_OPTION, 1, "beta track segment is touch accessible");
+        check_hit(hit_center(&model, ptc_ui_update_primary_rect()), PTC_UI_HIT_UPDATE_ACTION, 0, "primary CTA defaults to check updates");
+    }
     model.update_notes_open = true;
     check_hit(hit_center(&model, ptc_ui_update_action_rect(1)), PTC_UI_HIT_NONE, 0, "notes reading cannot fall through to installation");
     check_hit(hit_center(&model, ptc_ui_settings_page_primary_rect()), PTC_UI_HIT_UPDATE_ACTION, 10, "notes next page is touch accessible");
+    model.update_notes_open = false;
+    check_true(!ptc_ui_update_action_enabled(&model, 7), "exit and reopen action is disabled when idle");
+    model.update_status = 10; /* PTC_UPDATE_AWAITING_REOPEN */
+    check_true(ptc_ui_update_action_enabled(&model, 7) && ptc_ui_update_primary_action(&model) == 7,
+               "exit and reopen action becomes primary CTA only when awaiting reopen");
     model.update_status = 3;
     check_true(ptc_ui_update_action_enabled(&model, 1), "available update permits parent download");
     model.parent_support_only = true;
     check_true(!ptc_ui_update_action_enabled(&model, 1) && !ptc_ui_update_action_enabled(&model, 2), "read-only support cannot install or change preferences");
     check_true(ptc_ui_update_action_enabled(&model, 0), "read-only support may check metadata");
     model.parent_support_only = false; model.update_busy = true; model.update_status = 6;
-    check_true(ptc_ui_update_action_enabled(&model, 6) && !ptc_ui_update_action_enabled(&model, 1), "download permits cancellation only");
+    check_true(ptc_ui_update_action_enabled(&model, 6) && !ptc_ui_update_action_enabled(&model, 1) &&
+               !ptc_ui_online_update_blocks_input(&model), "download permits cancellation only without input lock");
     model.update_status = 9;
-    check_true(!ptc_ui_update_action_enabled(&model, 6), "installation cannot be canceled halfway");
+    check_true(!ptc_ui_update_action_enabled(&model, 6) && ptc_ui_online_update_blocks_input(&model) &&
+               ptc_ui_busy_modal_blocks_input(&model), "installation locks all input and cannot be canceled halfway");
+    check_hit(hit_center(&model, ptc_ui_settings_page_back_rect()), PTC_UI_HIT_NONE, 0, "locked install modal blocks touch hits");
+    model.update_status = 19; /* PTC_UPDATE_RECOVERING */
+    check_true(ptc_ui_online_update_blocks_input(&model) && ptc_ui_busy_modal_blocks_input(&model),
+               "recovery rollback locks all input");
     model.update_busy = false; model.update_status = 3;
     check_true(ptc_ui_update_can_resume_backup(&model), "normal parent can resume the original backup transaction");
     model.parent_support_only = true;
@@ -5400,7 +5441,7 @@ static void test_online_update_layout(void)
     model.waiting = true; check_true(!ptc_ui_update_badge_visible(&model), "update badge cannot navigate away from pending work");
     model.waiting = false; model.weekly_dirty = true; check_true(!ptc_ui_update_badge_visible(&model), "update badge preserves unsaved rule edits");
     model.weekly_dirty = false;
-    for (int state = 0; state <= 18; ++state) {
+    for (int state = 0; state <= 19; ++state) {
         model.update_status = state;
         check_true(ptc_ui_update_badge_visible(&model) == (state == 3), "offline, failed, excluded and equal versions never advertise an update");
     }

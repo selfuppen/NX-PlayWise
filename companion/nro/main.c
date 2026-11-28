@@ -245,7 +245,7 @@ int main(int argc, char **argv)
             memset(&ui.r_stick_repeat, 0, sizeof(ui.r_stick_repeat));
             ui.r_stick_prev_h_dir = 0;
         }
-        bool upgrade_input_blocked = ptc_ui_upgrade_flow_blocks_input(&ui.model);
+        bool upgrade_input_blocked = ptc_ui_busy_modal_blocks_input(&ui.model);
         if (upgrade_input_blocked) {
             if (down != 0 || (touch_active && !touch_down)) {
                 ptc_audio_play(PTC_SE_ERROR);

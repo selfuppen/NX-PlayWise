@@ -216,6 +216,7 @@ bool ptc_update_prepare(const PtcUpdateIo *io, PtcUpdateJournal *j)
     }
     if (!ptc_update_path(config, sizeof(config), j, "config-backup.json", -1) || !match(io, config, j->config_size, j->config_sha256)) return false;
     for (int i = 0; i < PTC_UPDATE_FILE_COUNT; ++i) {
+        if (io->on_progress) io->on_progress(io->ctx, (unsigned)i + 1u, PTC_UPDATE_FILE_COUNT, 1u);
         PtcUpdateFile *f = &j->files[i];
         PtcUpdateFile frozen = *f;
         char digest[65]; uint64_t size;
@@ -253,6 +254,7 @@ bool ptc_update_install(const PtcUpdateIo *io, PtcUpdateJournal *j)
     strcpy(j->phase, "installing");
     if (!ptc_update_journal_save(io, j)) return false;
     for (unsigned i = 0; i < PTC_UPDATE_FILE_COUNT; ++i) {
+        if (io->on_progress) io->on_progress(io->ctx, i + 1u, PTC_UPDATE_FILE_COUNT, 2u);
         const PtcUpdateFile *f = &j->files[i];
         j->next_file = i; /* Durable intent precedes every possible live-path mutation. */
         if (!ptc_update_journal_save(io, j) || !ptc_update_path(stage, sizeof(stage), j, "stage", (int)i) ||
@@ -287,6 +289,8 @@ bool ptc_update_rollback(const PtcUpdateIo *io, PtcUpdateJournal *j)
     strcpy(j->phase, "rolling_back");
     if (!ptc_update_journal_save(io, j)) return false;
     for (int i = PTC_UPDATE_FILE_COUNT - 1; i >= 0; --i) {
+        unsigned done = (unsigned)(PTC_UPDATE_FILE_COUNT - i);
+        if (io->on_progress) io->on_progress(io->ctx, done, PTC_UPDATE_FILE_COUNT, 3u);
         const PtcUpdateFile *f = &j->files[i];
         if (i == 1) continue;
         j->next_file = (unsigned)i;

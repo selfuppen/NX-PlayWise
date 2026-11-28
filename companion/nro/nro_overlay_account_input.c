@@ -266,37 +266,32 @@ static void handle_album_manager_overlay_input(UiState *ui, u64 down)
 
 static void handle_software_info_overlay_input(UiState *ui, u64 down)
 {
-    if (down & (HidNpadButton_Up | HidNpadButton_Down)) {
-        ptc_audio_play(PTC_SE_FOCUS);
-        ui->model.overlay_selection = ui->model.overlay_selection == 1 ? 0 : 1;
+    if (ptc_ui_busy_modal_blocks_input(&ui->model)) return;
+    if (down & (HidNpadButton_L | HidNpadButton_R)) {
+        if (ui->model.update_busy) {
+            ptc_audio_play(PTC_SE_ERROR);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_UPDATE_TAB_LOCKED_BUSY));
+            return;
+        }
+        int next_tab = (down & HidNpadButton_L) ? 0 : 1;
+        if (next_tab == 0) {
+            ptc_audio_play(PTC_SE_TAB);
+            open_version_update(ui, 0);
+        }
         return;
     }
-    if (down & HidNpadButton_ZL) {
-        toggle_update_check_on_startup(ui);
+    if (down & HidNpadButton_Y) {
+        online_update_refresh_check(ui);
         return;
     }
-    if (down & (HidNpadButton_L | HidNpadButton_Left)) {
+    if (down & (HidNpadButton_X | HidNpadButton_Left | HidNpadButton_Right)) {
         ptc_audio_play(PTC_SE_TAB);
-        ui->model.software_info_qr_tab = 0;
+        ui->model.software_info_qr_tab = ui->model.software_info_qr_tab ? 0 : 1;
         return;
     }
-    if (down & (HidNpadButton_R | HidNpadButton_Right)) {
-        ptc_audio_play(PTC_SE_TAB);
-        ui->model.software_info_qr_tab = 1;
-        return;
-    }
-    if ((down & HidNpadButton_Y) && ui->model.software_info_qr_tab == 1) {
+    if ((down & (HidNpadButton_ZL | HidNpadButton_ZR)) && ui->model.software_info_qr_tab == 1) {
         ptc_audio_play(PTC_SE_TAB);
         ui->model.software_info_repo_source = ui->model.software_info_repo_source ? 0 : 1;
-        return;
-    }
-    if (down & HidNpadButton_X) {
-        ptc_audio_play(PTC_SE_POPUP);
-        open_online_update(ui);
-        return;
-    }
-    if ((down & HidNpadButton_A) && ui->model.overlay_selection == 1) {
-        toggle_update_check_on_startup(ui);
         return;
     }
     if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
@@ -305,6 +300,7 @@ static void handle_software_info_overlay_input(UiState *ui, u64 down)
         open_hot_reload_confirmation(ui);
 #endif
     } else if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+        ptc_audio_play(PTC_SE_CANCEL);
         ptc_ui_cancel_overlay(&ui->model);
     }
     return;

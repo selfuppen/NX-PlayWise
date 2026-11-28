@@ -1,19 +1,47 @@
 #include "ui_state.h"
 #include "ui_layout.h"
 
+PtcUiRect ptc_ui_version_update_tab_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){834 + index * 198, 120, 194, 38};
+}
+
+PtcUiRect ptc_ui_update_primary_rect(void)
+{
+    return (PtcUiRect){74, 444, 520, 50};
+}
+
+PtcUiRect ptc_ui_update_track_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){469 + index * 173, 562, 169, 34};
+}
+
+PtcUiRect ptc_ui_version_about_reload_rect(void)
+{
+    return (PtcUiRect){544, 456, 218, 44};
+}
+
+PtcUiRect ptc_ui_version_about_go_update_rect(void)
+{
+    return (PtcUiRect){54, 554, 730, 86};
+}
+
+PtcUiRect ptc_ui_update_check_footer_rect(void)
+{
+    return (PtcUiRect){310, 664, 210, 44};
+}
+
 PtcUiRect ptc_ui_update_action_rect(int index)
 {
-    /* Row 0: 4-step update pipeline (0: Check -> 1: Download -> 7: Reopen -> 5: Load) */
-    if (index == 0) return (PtcUiRect){74, 422, 262, 70};
-    if (index == 1) return (PtcUiRect){364, 422, 262, 70};
-    if (index == 7) return (PtcUiRect){654, 422, 262, 70};
-    if (index == 5) return (PtcUiRect){944, 422, 262, 70};
-    /* Row 1: 3 preference and maintenance cards (2: Auto check, 3: Channel, 4: Backups) */
-    if (index == 2) return (PtcUiRect){54, 518, 378, 118};
-    if (index == 3) return (PtcUiRect){451, 518, 378, 118};
-    if (index == 4) return (PtcUiRect){848, 518, 378, 118};
-    /* Footer right: contextual cancel download / recover interrupted install */
-    if (index == 6) return (PtcUiRect){986, 664, 240, 44};
+    /* Situational primary CTA in Online Updates tab (0/1/5/6/7 share the primary button). */
+    if (index == 0 || index == 1 || index == 5 || index == 6 || index == 7)
+        return ptc_ui_update_primary_rect();
+    /* Bottom row: 3 preference and maintenance cards (2: Auto check, 3: Release track, 4: Backups) */
+    if (index == 2) return (PtcUiRect){54, 518, 378, 122};
+    if (index == 3) return (PtcUiRect){451, 518, 378, 122};
+    if (index == 4) return (PtcUiRect){848, 518, 378, 122};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -30,7 +58,7 @@ PtcUiRect ptc_ui_update_backup_action_rect(int index)
     return (PtcUiRect){0, 0, 0, 0};
 }
 
-PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){990, 194, 200, 30}; }
+PtcUiRect ptc_ui_update_notes_rect(void) { return (PtcUiRect){1002, 194, 190, 30}; }
 
 PtcUiRect ptc_ui_update_badge_rect(const PtcUiModel *model)
 {
@@ -397,12 +425,12 @@ PtcUiRect ptc_ui_software_info_repo_source_rect(int index)
 
 PtcUiRect ptc_ui_software_info_update_banner_rect(void)
 {
-    return (PtcUiRect){54, 384, 730, 86};
+    return ptc_ui_version_about_go_update_rect();
 }
 
 PtcUiRect ptc_ui_software_info_auto_check_rect(void)
 {
-    return (PtcUiRect){54, 480, 730, 68};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 /* Unified 3-in-1 Grant & Pairing full-page shell (Scheme A2):

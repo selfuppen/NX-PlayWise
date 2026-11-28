@@ -1899,6 +1899,18 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             failed |= save_preview(directory, "settings", "settings-online-update-downloading", &settings_dlg, dark);
             settings_dlg.update_busy = false; settings_dlg.update_status = 14;
             failed |= save_preview(directory, "settings", "settings-online-update-recovery", &settings_dlg, dark);
+            settings_dlg.update_busy = true;
+            settings_dlg.update_status = PTC_UPDATE_INSTALLING;
+            settings_dlg.update_progress_stage = 3;
+            settings_dlg.update_progress_step = 7;
+            settings_dlg.update_progress_total = 13;
+            failed |= save_preview(directory, "settings", "settings-online-update-installing", &settings_dlg, dark);
+            settings_dlg.update_status = PTC_UPDATE_RECOVERING;
+            settings_dlg.update_progress_stage = 4;
+            settings_dlg.update_progress_step = 5;
+            settings_dlg.update_progress_total = 13;
+            failed |= save_preview(directory, "settings", "settings-online-update-recovering", &settings_dlg, dark);
+            settings_dlg.update_busy = false;
             settings_dlg.overlay = PTC_UI_OVERLAY_UPDATE_BACKUPS;
             settings_dlg.update_backup_count = 2;
             snprintf(settings_dlg.update_backup_labels[0], sizeof(settings_dlg.update_backup_labels[0]), "2026-10-28 12:00 / %s\nplaywise-3.1.2-alpha+0123456789ab", ptc_ui_text(PTC_UI_T_UPDATE_BACKUP_VERIFIED));
@@ -2223,6 +2235,21 @@ static int check_action_text(UiRect card, const char *required_title)
     }
     if (!title) fprintf(stderr, "FAIL: missing required title '%s'\n", required_title);
     return failed + !title;
+}
+
+static int check_modal_action_text(UiRect dialog, const char *modal_title)
+{
+    int start = -1;
+    for (int i = 0; i < action_trace.count; ++i) {
+        if (strcmp(action_trace.text[i], modal_title) == 0) { start = i > 0 ? i - 1 : 0; break; }
+    }
+    if (start > 0) {
+        int keep = action_trace.count - start;
+        memmove(action_trace.bounds, action_trace.bounds + start, (size_t)keep * sizeof(action_trace.bounds[0]));
+        memmove(action_trace.text, action_trace.text + start, (size_t)keep * sizeof(action_trace.text[0]));
+        action_trace.count = keep;
+    }
+    return check_action_text(dialog, modal_title);
 }
 
 static int check_weekly_page_text(const PtcUiModel *baseline, bool dark, int style)
@@ -2795,7 +2822,7 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
             failed += check_action_text(to_uirect(ptc_ui_language_option_rect(c)), NULL);
     }
 
-    /* 3. Software Info & Check Updates (Scheme A: version/update workbench + startup check toggle + switchable QR card) */
+    /* 3. Version & QR tab: idle vs current vs available vs failed, QR tabs & repo source */
     for (int qr_tab = 0; qr_tab < 2; ++qr_tab) {
         int repo_sources = qr_tab == 1 ? 2 : 1;
         for (int repo_src = 0; repo_src < repo_sources; ++repo_src) {
@@ -2817,7 +2844,7 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
                 } else if (scenario == 1) {
                     model.update_status = PTC_UPDATE_CURRENT;
                     model.update_check_on_startup = true;
-                    model.overlay_selection = 1;
+                    model.overlay_selection = 0;
                 } else if (scenario == 2) {
                     model.update_status = PTC_UPDATE_AVAILABLE;
                     model.update_check_on_startup = true;
@@ -2825,35 +2852,32 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
                 } else {
                     model.update_status = PTC_UPDATE_FAILED;
                     model.update_check_on_startup = false;
-                    model.overlay_selection = 1;
+                    model.overlay_selection = 0;
                 }
                 ptc_ui_graphics_draw(&model, &theme);
                 memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
                 draw_support_overlay_surface(preview_pixels, 1280, &model);
                 action_trace.enabled = false;
-                failed += check_action_text((UiRect){54, 168, 730, 472}, NULL);
-                failed += check_action_text((UiRect){802, 168, 424, 472}, NULL);
+                failed += check_action_text((UiRect){54, 170, 730, 470}, NULL);
+                failed += check_action_text((UiRect){802, 170, 424, 470}, NULL);
                 if (scenario == 0 && (action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_UP_TO_DATE)) ||
                                       !action_trace_has_text(ptc_ui_text(PTC_UI_T_UPDATE_IDLE)) ||
-                                      !action_trace_has_text(ptc_ui_text(PTC_UI_T_OFF)) ||
                                       action_trace_has_text(ptc_ui_text(PTC_UI_T_MUTED)))) {
-                    fprintf(stderr, "FAIL: software info idle/off state text mismatch\n");
+                    fprintf(stderr, "FAIL: software info idle state text mismatch\n");
                     ++failed;
                 }
-                if (scenario == 1 && (!action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_UP_TO_DATE)) ||
-                                      !action_trace_has_text(ptc_ui_text(PTC_UI_T_ON)))) {
-                    fprintf(stderr, "FAIL: software info current/on state text mismatch\n");
+                if (scenario == 1 && !action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_UP_TO_DATE))) {
+                    fprintf(stderr, "FAIL: software info current state text mismatch\n");
                     ++failed;
                 }
-                if (scenario == 3 && (!action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_CHECK_FAILED)) ||
-                                      !action_trace_has_text(ptc_ui_text(PTC_UI_T_OFF)))) {
-                    fprintf(stderr, "FAIL: software info failed/off state text mismatch\n");
+                if (scenario == 3 && !action_trace_has_text(ptc_ui_text(PTC_UI_T_SW_INFO_CHECK_FAILED))) {
+                    fprintf(stderr, "FAIL: software info failed state text mismatch\n");
                     ++failed;
                 }
             }
         }
     }
-    /* 4. Online Update startup toggle off uses Off rather than Muted */
+    /* 4. Online Update startup toggle off & segmented release track check */
     {
         PtcUiModel model = *baseline;
         model.view = PTC_UI_PARENT;
@@ -2862,18 +2886,21 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
         model.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
         model.update_status = PTC_UPDATE_IDLE;
         model.update_check_on_startup = false;
-        model.overlay_selection = 2;
+        model.update_stable_only = true;
+        model.overlay_selection = 1;
         ptc_ui_graphics_draw(&model, &theme);
         memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
         draw_support_overlay_surface(preview_pixels, 1280, &model);
         action_trace.enabled = false;
         failed += check_action_text(to_uirect(ptc_ui_update_action_rect(2)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_update_action_rect(3)), NULL);
+        failed += check_action_text(to_uirect(ptc_ui_update_action_rect(4)), NULL);
         if (!action_trace_has_text(ptc_ui_text(PTC_UI_T_OFF)) || action_trace_has_text(ptc_ui_text(PTC_UI_T_MUTED))) {
             fprintf(stderr, "FAIL: online update startup toggle off text mismatch\n");
             ++failed;
         }
     }
-    /* 5. Reboot & overlay-changed update guidance (Online Update + Notes + Upgrade Flow Done) */
+    /* 5. Reboot & overlay-changed update guidance + locked install/recover modals */
     for (int mode = 0; mode < 2; ++mode) {
         PtcUiModel model = *baseline;
         model.view = PTC_UI_PARENT;
@@ -2893,8 +2920,8 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
         memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
         draw_support_overlay_surface(preview_pixels, 1280, &model);
         action_trace.enabled = false;
-        failed += check_action_text((UiRect){54, 168, 1172, 206}, NULL);
-        failed += check_action_text((UiRect){54, 386, 1172, 120}, NULL);
+        failed += check_action_text((UiRect){54, 170, 1172, 198}, NULL);
+        failed += check_action_text((UiRect){54, 380, 1172, 126}, NULL);
         if (!action_trace_has_text(ptc_ui_text(mode == 0 ? PTC_UI_T_UPDATE_REBOOT_PILL : PTC_UI_T_UPDATE_OVERLAY_RELOAD_PILL))) {
             fprintf(stderr, "FAIL: online update reboot/overlay pill missing mode=%d\n", mode);
             ++failed;
@@ -2907,6 +2934,27 @@ static int check_batch8_pages_text(const PtcUiModel *baseline, int dark, int sty
             draw_support_overlay_surface(preview_pixels, 1280, &model);
             action_trace.enabled = false;
             failed += check_action_text((UiRect){54, 174, 340, 464}, NULL);
+            model.update_notes_open = false;
+            model.update_busy = true;
+            model.update_status = PTC_UPDATE_INSTALLING;
+            model.update_progress_stage = 3;
+            model.update_progress_step = 7;
+            model.update_progress_total = 13;
+            ptc_ui_graphics_draw(&model, &theme);
+            memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+            draw_support_overlay_surface(preview_pixels, 1280, &model);
+            action_trace.enabled = false;
+            failed += check_modal_action_text(to_uirect(ptc_ui_dialog_rect(860, 476)),
+                                              ptc_ui_text(PTC_UI_T_UPDATE_MODAL_TITLE_INSTALL));
+            model.update_status = PTC_UPDATE_RECOVERING;
+            model.update_progress_stage = 4;
+            model.update_progress_step = 5;
+            ptc_ui_graphics_draw(&model, &theme);
+            memset(&action_trace, 0, sizeof(action_trace)); action_trace.enabled = true;
+            draw_support_overlay_surface(preview_pixels, 1280, &model);
+            action_trace.enabled = false;
+            failed += check_modal_action_text(to_uirect(ptc_ui_dialog_rect(860, 476)),
+                                              ptc_ui_text(PTC_UI_T_UPDATE_MODAL_TITLE_RECOVER));
         }
     }
     for (int mode = 0; mode < 3; ++mode) {

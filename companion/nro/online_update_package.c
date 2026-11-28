@@ -223,6 +223,7 @@ static bool extract(PtcOnlineUpdater *u, const char *zip)
             if (got < 0 || written != info.uncompressed_size) ok = false;
             if (out && fclose(out)) ok = false;
             if (unzCloseCurrentFile(archive) != UNZ_OK) ok = false;
+            if (ok && index >= 0) atomic_fetch_add_explicit(&u->progress_step, 1u, memory_order_relaxed);
         }
         next = unzGoToNextFile(archive);
     }

@@ -48,6 +48,7 @@ typedef struct {
     bool stable_only, started, worker_live, backup_submitted;
     atomic_bool cancel, done;
     atomic_ullong progress;
+    atomic_uint progress_stage, progress_step, progress_total;
     Thread worker;
     int job;
     PtcUpdateStatus calendar_status;

@@ -136,7 +136,7 @@ FORBIDDEN_EDEN_MARKERS = (
     b"playwise-eden-test-secret-00000001",
 )
 NRO_INFORMATION_MARKERS = (
-    "检查更新与版本".encode("utf-8"),
+    "版本与更新".encode("utf-8"),
     b"https://github.com/selfuppen/NX-PlayWise",
     b"https://gitee.com/selfuppen/nx-playwise",
     b"https://selfuppen.github.io/NX-PlayWise/",

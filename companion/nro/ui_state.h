@@ -206,6 +206,9 @@ bool ptc_ui_setup_activating_grace(const PtcUiModel *model);
 bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model);
 bool ptc_ui_upgrade_flow_busy(const PtcUiModel *model);
 bool ptc_ui_upgrade_flow_blocks_input(const PtcUiModel *model);
+bool ptc_ui_online_update_blocks_input(const PtcUiModel *model);
+bool ptc_ui_busy_modal_blocks_input(const PtcUiModel *model);
+int ptc_ui_update_primary_action(const PtcUiModel *model);
 void ptc_ui_upgrade_flow_open(PtcUiModel *model, PtcUiUpgradeFlowStage stage,
                               bool from_hot_reload, bool reconfirm_context, const char *detail);
 void ptc_ui_upgrade_flow_close(PtcUiModel *model);

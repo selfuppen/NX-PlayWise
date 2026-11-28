@@ -12,10 +12,22 @@
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <stddef.h>
 #ifdef _WIN32
 #include <direct.h>
 #define mkdir(path, mode) _mkdir(path)
 #endif
+
+_Static_assert(offsetof(PtcOnlineUpdater, fs) == 0, "PtcOnlineUpdater.fs must be at offset 0 for progress callback");
+
+static void update_install_progress(void *ctx, unsigned step, unsigned total, unsigned stage)
+{
+    PtcOnlineUpdater *u = (PtcOnlineUpdater *)ctx;
+    if (!u) return;
+    atomic_store_explicit(&u->progress_stage, stage + 1u, memory_order_relaxed);
+    atomic_store_explicit(&u->progress_step, step, memory_order_relaxed);
+    atomic_store_explicit(&u->progress_total, total, memory_order_relaxed);
+}
 
 typedef struct { PtcOnlineUpdater *u; FILE *file; char *text; size_t used, limit, headers, skipped; bool redirect; } Download;
 
@@ -298,6 +310,9 @@ static bool network_job(PtcOnlineUpdater *u)
             ok = u->fs.io.commit(&u->fs);
             if (!ok) u->error = PTC_UPDATE_ERROR_STORAGE;
             else {
+                atomic_store_explicit(&u->progress_stage, 1u, memory_order_relaxed);
+                atomic_store_explicit(&u->progress_step, 0u, memory_order_relaxed);
+                atomic_store_explicit(&u->progress_total, PTC_UPDATE_FILE_COUNT, memory_order_relaxed);
                 ok = ptc_online_update_package(u);
                 if (!ok && !u->error) u->error = PTC_UPDATE_ERROR_PACKAGE;
             }
@@ -337,6 +352,9 @@ static void worker(void *ctx)
             }
         }
     } else {
+        atomic_store_explicit(&u->progress_stage, 4u, memory_order_relaxed);
+        atomic_store_explicit(&u->progress_step, 0u, memory_order_relaxed);
+        atomic_store_explicit(&u->progress_total, PTC_UPDATE_FILE_COUNT, memory_order_relaxed);
         ok = ptc_update_rollback(&u->fs.io, &u->journal);
         if (ok) u->status = PTC_UPDATE_CANCELED;
     }
@@ -381,7 +399,9 @@ void ptc_online_update_init_at(PtcOnlineUpdater *u, PtcStorage *storage, const c
 {
     memset(u, 0, sizeof(*u));
     atomic_init(&u->cancel, false); atomic_init(&u->done, false); atomic_init(&u->progress, 0);
+    atomic_init(&u->progress_stage, 0); atomic_init(&u->progress_step, 0); atomic_init(&u->progress_total, 0);
     ptc_update_fs_init(&u->fs, root, storage);
+    u->fs.io.on_progress = update_install_progress;
     if (u->fs.io.exists(&u->fs, "switch/playwise/updates/active.json")) {
         if (!ptc_update_journal_load(&u->fs.io, &u->journal)) u->status = PTC_UPDATE_RECOVERY_REQUIRED;
         else if (!strcmp(u->journal.phase, "files_installed")) {
@@ -523,8 +543,11 @@ bool ptc_online_update_start(PtcOnlineUpdater *u, int job)
     }
     if (job == 1) u->started = true;
     atomic_store(&u->cancel, false); atomic_store(&u->done, false); atomic_store(&u->progress, 0);
+    atomic_store_explicit(&u->progress_stage, job == 3 ? 2u : (job == 4 ? 4u : 0u), memory_order_relaxed);
+    atomic_store_explicit(&u->progress_step, 0u, memory_order_relaxed);
+    atomic_store_explicit(&u->progress_total, job >= 3 && job <= 4 ? PTC_UPDATE_FILE_COUNT : 0u, memory_order_relaxed);
     if (calendar) u->calendar_status = PTC_UPDATE_CHECKING;
-    else u->status = job == 1 ? PTC_UPDATE_CHECKING : (job == 2 ? PTC_UPDATE_DOWNLOADING : PTC_UPDATE_INSTALLING);
+    else u->status = job == 1 ? PTC_UPDATE_CHECKING : (job == 2 ? PTC_UPDATE_DOWNLOADING : (job == 3 ? PTC_UPDATE_INSTALLING : PTC_UPDATE_RECOVERING));
     Result rc = threadCreate(&u->worker, worker, u, NULL, 128u * 1024u, 0x2c, -2);
     if (R_FAILED(rc)) {
         if (calendar) { u->calendar_status = PTC_UPDATE_FAILED; return false; }

@@ -42,7 +42,34 @@ static bool publish(void *ctx, const char *from, const char *to, const char *exp
         commit(ctx) && write_file(ctx, to, text) && commit(ctx);
 }
 static bool claim(void *ctx, const char *path, const char *text) { return !exists(ctx, path) && write_file(ctx, path, text); }
-static PtcUpdateIo io(Fixture *f) { return (PtcUpdateIo){f, hash, exists, copy_file, publish, remove_file, read_file, write_file, commit, NULL, claim}; }
+typedef struct {
+    Fixture *f;
+    unsigned count[4];
+    unsigned last_step[4];
+    unsigned last_total[4];
+} ProgressLog;
+
+static void record_progress(void *ctx, unsigned step, unsigned total, unsigned stage)
+{
+    ProgressLog *log = ctx;
+    if (stage < 4) {
+        ++log->count[stage];
+        log->last_step[stage] = step;
+        log->last_total[stage] = total;
+    }
+}
+static bool log_exists(void *ctx, const char *path) { return exists(((ProgressLog *)ctx)->f, path); }
+static bool log_read(void *ctx, const char *path, char *out, size_t size) { return read_file(((ProgressLog *)ctx)->f, path, out, size); }
+static bool log_write(void *ctx, const char *path, const char *text) { return write_file(((ProgressLog *)ctx)->f, path, text); }
+static bool log_remove(void *ctx, const char *path) { return remove_file(((ProgressLog *)ctx)->f, path); }
+static bool log_commit(void *ctx) { return commit(((ProgressLog *)ctx)->f); }
+static bool log_hash(void *ctx, const char *path, uint64_t *size, char hex[65]) { return hash(((ProgressLog *)ctx)->f, path, size, hex); }
+static bool log_copy(void *ctx, const char *from, const char *to) { return copy_file(((ProgressLog *)ctx)->f, from, to); }
+static bool log_publish(void *ctx, const char *from, const char *to, const char *expected_hash, bool allow_missing)
+{ return publish(((ProgressLog *)ctx)->f, from, to, expected_hash, allow_missing); }
+static bool log_claim(void *ctx, const char *path, const char *text) { return claim(((ProgressLog *)ctx)->f, path, text); }
+
+static PtcUpdateIo io(Fixture *f) { return (PtcUpdateIo){f, hash, exists, copy_file, publish, remove_file, read_file, write_file, commit, NULL, claim, NULL}; }
 
 static void fixture(Fixture *f, PtcUpdateJournal *j)
 {
@@ -198,6 +225,24 @@ int main(void)
     versions();
     Fixture *f = malloc(sizeof(*f)); assert(f); PtcUpdateJournal j, reopened;
     fixture(f, &j); PtcUpdateIo ops = io(f);
+    j.requires_reboot = true;
+    {
+        ProgressLog plog;
+        memset(&plog, 0, sizeof(plog));
+        plog.f = f;
+        PtcUpdateIo p_ops = {&plog, log_hash, log_exists, log_copy, log_publish, log_remove,
+                             log_read, log_write, log_commit, NULL, log_claim, record_progress};
+        assert(ptc_update_prepare(&p_ops, &j));
+        assert(ptc_update_install(&p_ops, &j));
+        assert(plog.count[1] == PTC_UPDATE_FILE_COUNT && plog.last_step[1] == PTC_UPDATE_FILE_COUNT && plog.last_total[1] == PTC_UPDATE_FILE_COUNT);
+        assert(plog.count[2] == PTC_UPDATE_FILE_COUNT && plog.last_step[2] == PTC_UPDATE_FILE_COUNT && plog.last_total[2] == PTC_UPDATE_FILE_COUNT);
+        assert(ptc_update_files_match(&p_ops, &j, true));
+        assert(ptc_update_journal_load(&p_ops, &reopened));
+        assert(ptc_update_rollback(&p_ops, &reopened));
+        assert(plog.count[3] == PTC_UPDATE_FILE_COUNT && plog.last_step[3] == PTC_UPDATE_FILE_COUNT && plog.last_total[3] == PTC_UPDATE_FILE_COUNT);
+        assert(ptc_update_files_match(&p_ops, &reopened, false));
+    }
+    fixture(f, &j);
     j.requires_reboot = true;
     assert(ptc_update_prepare(&ops, &j)); assert(ptc_update_install(&ops, &j));
     assert(ptc_update_files_match(&ops, &j, true)); unsigned operations = f->calls;

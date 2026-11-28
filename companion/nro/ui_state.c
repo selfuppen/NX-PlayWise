@@ -10,16 +10,31 @@ bool ptc_ui_calendar_update_action_enabled(const PtcUiModel *model, int action)
 
 bool ptc_ui_update_action_enabled(const PtcUiModel *m, int action)
 {
-    if (!m || m->view != PTC_UI_PARENT || action < 0 || action >= 8) return false;
+    if (!m || m->view != PTC_UI_PARENT || action < 0 || action > 8) return false;
+    if (ptc_ui_online_update_blocks_input(m)) return false;
     if (m->update_busy) return action == 6 && (m->update_status == PTC_UPDATE_CHECKING || m->update_status == PTC_UPDATE_DOWNLOADING || m->update_status == PTC_UPDATE_VERIFYING);
-    if (action == 7 || action == 4) return true;
+    if (action == 4) return true;
+    if (action == 7) return m->update_status == PTC_UPDATE_AWAITING_REOPEN;
+    if (action == 8) return m->update_notes[0] != '\0';
     if (action == 0) return m->update_status != PTC_UPDATE_RECOVERY_REQUIRED && m->update_status != PTC_UPDATE_AWAITING_REOPEN &&
         m->update_status != PTC_UPDATE_BACKEND_PENDING && m->update_status != PTC_UPDATE_RECONFIRM;
     if (m->parent_support_only) return false;
     if (action == 1) return m->update_status == PTC_UPDATE_AVAILABLE;
-    if (action == 5) return m->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING || m->update_status == PTC_UPDATE_RECONFIRM;
+    if (action == 5) return m->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING || m->update_status == PTC_UPDATE_RECONFIRM || m->update_status == PTC_UPDATE_BACKEND_PENDING;
     if (action == 6) return m->update_status == PTC_UPDATE_RECOVERY_REQUIRED;
     return true;
+}
+
+int ptc_ui_update_primary_action(const PtcUiModel *m)
+{
+    if (!m) return 0;
+    if (m->update_busy) return 6;
+    if (m->update_status == PTC_UPDATE_RECOVERY_REQUIRED) return 6;
+    if (m->update_status == PTC_UPDATE_AWAITING_REOPEN) return 7;
+    if (m->update_status == PTC_UPDATE_BACKEND_PENDING || m->update_status == PTC_UPDATE_RECONFIRM ||
+        (m->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !m->parent_support_only)) return 5;
+    if (m->update_status == PTC_UPDATE_AVAILABLE) return 1;
+    return 0;
 }
 
 bool ptc_ui_update_can_resume_backup(const PtcUiModel *m)
@@ -316,6 +331,20 @@ bool ptc_ui_upgrade_flow_blocks_input(const PtcUiModel *model)
     if (!model) return false;
     return model->hot_reload_status == PTC_UI_HOT_RELOAD_RUNNING ||
         ptc_ui_upgrade_flow_busy(model);
+}
+
+bool ptc_ui_online_update_blocks_input(const PtcUiModel *model)
+{
+    if (!model || !model->update_busy) return false;
+    return model->update_status == PTC_UPDATE_BACKUP_PENDING ||
+        model->update_status == PTC_UPDATE_INSTALLING ||
+        model->update_status == PTC_UPDATE_RECOVERING;
+}
+
+bool ptc_ui_busy_modal_blocks_input(const PtcUiModel *model)
+{
+    return ptc_ui_upgrade_flow_blocks_input(model) ||
+        ptc_ui_online_update_blocks_input(model);
 }
 
 void ptc_ui_upgrade_flow_open(PtcUiModel *model, PtcUiUpgradeFlowStage stage,

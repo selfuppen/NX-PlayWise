@@ -635,7 +635,7 @@ Refer to the buttons and prompts shown in your installed version. If both the ov
 
 ## Support & Recovery
 
-**Software information** is the sixth action card under **Parent Zone → Support & Recovery**. It shows the app version, app/backend build IDs and loading status, and provides the [manual hot-update entry](#manual-hot-update-steps).
+**Version & Updates** (formerly Software information) is the sixth action card under **Parent Zone → Support & Recovery**, combining the **Updates** and **Version & QR** tabs (`L/R` to switch, `Y` to check for updates). It shows the app version, app/backend build IDs and loading status, QR shortcuts, and provides the [manual hot-update entry](#manual-hot-update-steps).
 
 ![Software info and version check preview](../images/usage-en/settings/settings-software-info-dark.png)
 
@@ -707,9 +707,9 @@ Use a standard package with a running backend that supports safe handover. The c
 
    Also copy the package's `atmosphere/contents/4200000000BD2300/flags/boot2.flag` and default templates. Copy both full directories rather than individual files from this table.
 4. **Reopen the app and authenticate.** Launch PlayWise again from Homebrew Menu, enter the Parent Zone and verify the PlayWise parent PIN. An NRO already open during transfer keeps its old executable; refreshing its page does not load the new app. A different build offers a loading confirmation after parent authentication.
-5. **Open the manual entry.** If you dismissed the automatic prompt, use `L/R` to select **Support & Recovery**, open the sixth card **Software information** with `A` or touch, then select **A Load new version** when the status is pending. Confirm the handover dialog; `B` cancels. Read-only support access cannot start an update.
+5. **Open the manual entry.** If you dismissed the automatic prompt, use `L/R` to select **Support & Recovery**, open the sixth card **Version & Updates** with `A` or touch, press `R` for **Version & QR**, then select **A Load new version** when the status is pending. Confirm the handover dialog; `B` cancels. Read-only support access cannot start an update.
 6. **Wait for completion.** The app verifies the installed components first, then asks the old backend to stop accepting requests, finish current work and exit voluntarily. It starts the new backend, checks its identity and reconnects. Keep the app open; do not repeat confirmation or continue transferring files. Handover, exit and startup have respective deadlines of 10, 10 and 30 seconds; follow the displayed result if a stage fails.
-7. **Check the result.** Reopen **Support & Recovery → Software information**. The status should be loaded, and the build ID beside the app version should match the current backend ID. If prompted about an environment change, re-detect and confirm control, wait for synchronization and refresh with `Y`. Finally reopen the Overlay and check rules and status.
+7. **Check the result.** Reopen **Support & Recovery → Version & Updates** (`Version & QR` tab). The status should be loaded, and the build ID beside the app version should match the current backend ID. If prompted about an environment change, re-detect and confirm control, wait for synchronization and refresh with `Y`. Finally reopen the Overlay and check rules and status.
 
 Successful handover requires no console reboot. Reopening the app, restarting the backend and rebooting the console are separate operations.
 
@@ -777,11 +777,11 @@ See also [Development Environment Guide](../开发/DEVELOPMENT_ENVIRONMENT_GUIDE
 
 ## In-app online updates
 
-After manually installing a version with online-update support, open Parent area → Support and recovery → Check Updates & Version to toggle "Check on startup" directly (enabled by default) or press X / touch Update to open the update workbench. Startup checks are asynchronous and optional; installation always requires the parent's PIN and hold confirmation. Stable and prerelease versions are offered by default, and parents decide whether to update or select stable-only. Equal and older versions are not installed. Checks and downloads use the project Gitee repository first, with GitHub as fallback. The page shows the source and package size; downloads and installation never start automatically. Install the new updater in full once to migrate from the old store source.
+After manually installing a version with online-update support, open **Parent area → Support and recovery → Version & Updates** to check/install updates directly (`Y` to check for updates, `L/R` to switch between **Updates** and **Version & QR**). You can toggle "Check on startup" (enabled by default) or switch the segmented **Release track** between **Stable only** and **Include Beta**. Startup checks are asynchronous and optional; installation always requires the parent's PIN and hold confirmation. Equal and older versions are not installed. Download sources route automatically (Gitee first, GitHub fallback); the page shows the resolved source and package size, and downloads/installs never start automatically. Install the new updater in full once to migrate from the old store source.
 
-The app checks the complete package, independently backs up settings and old program files, and installs only program assets. Existing settings, PIN, pairing keys, usage and ledgers remain intact. Exit and reopen the app after file installation, then use the existing backend-loading flow and any required safety confirmation. An unsupported older package requires manual installation. The current source uses HTTPS and integrity checks without an independent publisher signature.
+The app checks the complete package, independently backs up settings and old program files, and installs only program assets. Existing settings, PIN, pairing keys, usage and ledgers remain intact. Checking and downloading can be canceled with `B`; non-cancelable stages (settings backup, file install, rollback recovery) display a centered locked progress modal with live file counts and block input until finished—keep the app open and do not press HOME or power off. Exit and reopen the app after file installation (`A Exit & reopen app`, no Switch reboot needed), then hot-reload the new backend and complete any safety recheck. An unsupported older package requires manual installation.
 
-When a release requires a full console reboot for all features, or when the update replaces the in-game overlay (`playwise.ovl`), the update status banner, release summary box, 4-step pipeline heading, and Step 4 completion dialog highlight an amber prompt ("Reboot needed" or "Reload overlay"). Finish Step 4 to hot-reload the background service with rules and allowance preserved, then hold POWER → Power Options → Restart (or exit and reopen the overlay with `B` when only the overlay changed).
+When a release requires a full Switch console reboot for all features, or when the update replaces the in-game overlay (`playwise.ovl`), the update status banner ("Switch reboot needed" or "Reload overlay / reboot"), summary box, workflow heading, and completion dialog highlight an amber prompt. Finish hot-reloading the background service with rules and allowance preserved, then hold POWER → Power Options → Restart (or exit and reopen the overlay with `B` when only the overlay changed).
 
 <details>
 <summary>View previews for updates requiring a reboot</summary>
@@ -793,7 +793,7 @@ When a release requires a full console reboot for all features, or when the upda
 
 Pre-update backups reuse selective restoration. Restoring pairing information rotates its key and requires pairing the phone again; restoration does not refund usage. If a backup receipt is unknown, wait for the original receipt rather than submitting again. Preserve the update directory after interrupted installation and follow Support and recovery. Restored files and a restored running process are separate outcomes. [Implementation and recovery contract (Chinese)](../设计/在线更新.md).
 
-Press Y or tap release notes to read the complete bounded description; use L/R or footer controls to page and B to return. Pre-update backups show verification, date and source, with touch paging and deletion controls.
+Press `X` or tap release notes to read the complete bounded description; use `L/R` or footer controls to page and `B` to return. Pre-update backups show verification, date and source, with touch paging and deletion controls.
 
 When an eligible newer version is found, a quiet Update hint appears in the upper-right status card. Tap it to open update details; children must pass the existing parent PIN first. Offline checks and failures show no update hint. Pending work and unsaved edits keep their current page.
 

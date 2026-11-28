@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <inttypes.h>
 #include "nro_app_internal.h"
+#include "../../common/update/update.h"
 #include "../../common/protocol/request_schema.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../companion/nro/eden_observe.h"
@@ -1452,16 +1453,26 @@ int main(void)
             handle_online_update_input(notes, HidNpadButton_B);
             check(sound_count == 3 && last_sound == PTC_SE_CANCEL, "update notes play one closing sound");
             check(!notes->model.update_notes_open && notes->model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE, "reading back returns to update details");
-            handle_online_update_input(notes, HidNpadButton_Y);
+            handle_online_update_input(notes, HidNpadButton_X);
             check(sound_count == 4 && last_sound == PTC_SE_POPUP && notes->model.update_notes_open,
-                  "controller shortcut shares the update notes opening sound");
-            handle_online_update_input(notes, HidNpadButton_Y);
+                  "controller X shortcut shares the update notes opening sound");
+            handle_online_update_input(notes, HidNpadButton_X);
             check(sound_count == 5 && last_sound == PTC_SE_CANCEL && !notes->model.update_notes_open,
-                  "controller shortcut plays the closing sound once");
+                  "controller X shortcut plays the closing sound once");
+            notes->model.update_notes[0] = '\0';
+            handle_online_update_input(notes, HidNpadButton_X);
+            check(sound_count == 6 && last_sound == PTC_SE_ERROR &&
+                  strcmp(notes->model.message, ptc_ui_text(PTC_UI_T_UPDATE_NOTES_EMPTY)) == 0,
+                  "pressing X without notes gives clear feedback instead of silent ignore");
+            sound_count = 5;
             notes->model.update_busy = true;
             online_update_action(notes, 8);
             check(!notes->model.update_notes_open, "worker completion owns notes until join");
-            notes->model.view = PTC_UI_CHILD; notes->model.update_busy = false;
+            notes->model.update_status = PTC_UPDATE_INSTALLING;
+            handle_online_update_input(notes, HidNpadButton_B);
+            check(notes->model.overlay == PTC_UI_OVERLAY_ONLINE_UPDATE,
+                  "busy install lock blocks B exit");
+            notes->model.view = PTC_UI_CHILD; notes->model.update_busy = false; notes->model.update_status = PTC_UPDATE_IDLE;
             open_online_update(notes);
             online_update_action(notes, 8);
             check(!notes->model.update_notes_open, "child cannot enter update reading or actions");

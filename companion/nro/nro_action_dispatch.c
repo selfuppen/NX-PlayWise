@@ -440,20 +440,7 @@ void handle_parent_action(UiState *ui)
             ptc_ui_text(PTC_UI_T_DIAGNOSTICS_MAY_CONTAIN_DEVICE_IDS_AND_FILE));
         break;
     case 5:
-#ifndef PLAYWISE_EDEN
-        ptc_hot_reload_inspect(&ui->hot_reload);
-        sync_hot_reload_model(ui);
-#endif
-        ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
-        ui->model.overlay_selection = 0;
-        ui->model.software_info_qr_tab = 0;
-        ui->model.software_info_repo_source = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH) ? 0 : 1;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
-        ui->model.overlay_body[0] = '\0';
-        snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_VERSION);
-        snprintf(ui->model.repository_url, sizeof(ui->model.repository_url), "%s", PLAYWISE_REPOSITORY_URL);
-        snprintf(ui->model.gitee_repository_url, sizeof(ui->model.gitee_repository_url), "%s", PLAYWISE_GITEE_REPOSITORY_URL);
-        snprintf(ui->model.pwa_url, sizeof(ui->model.pwa_url), "%s", PTC_PAIRING_BASE_URL);
+        open_version_update(ui, 0);
         break;
     default:
         break;

@@ -170,8 +170,38 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             if (ptc_ui_rect_contains(ptc_ui_settings_page_primary_rect(), x, y)) return make_hit(PTC_UI_HIT_UPDATE_ACTION, 10);
             return make_hit(PTC_UI_HIT_NONE, 0);
         }
+        for (i = 0; i < 2; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_version_update_tab_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_VERSION_UPDATE_TAB, i);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_update_check_footer_rect(), x, y))
+            return make_hit(PTC_UI_HIT_UPDATE_CHECK_REFRESH, 0);
+        if (model->update_hub_tab == 1) {
+            for (i = 0; i < 2; ++i)
+                if (ptc_ui_rect_contains(ptc_ui_software_info_qr_tab_rect(i), x, y))
+                    return make_hit(PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, i);
+            if (model->software_info_qr_tab == 1) {
+                for (i = 0; i < 2; ++i)
+                    if (ptc_ui_rect_contains(ptc_ui_software_info_repo_source_rect(i), x, y))
+                        return make_hit(PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, i);
+            }
+            if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&
+                ptc_ui_rect_contains(ptc_ui_version_about_reload_rect(), x, y))
+                return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
+            if (ptc_ui_rect_contains(ptc_ui_version_about_go_update_rect(), x, y))
+                return make_hit(PTC_UI_HIT_VERSION_UPDATE_TAB, 0);
+            if (ptc_ui_rect_contains(ptc_ui_settings_page_primary_rect(), x, y))
+                return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
+            return make_hit(PTC_UI_HIT_NONE, 0);
+        }
         if (ptc_ui_rect_contains(ptc_ui_update_notes_rect(), x, y)) return make_hit(PTC_UI_HIT_UPDATE_ACTION, 8);
-        for (int i = 0; i < 8; ++i) if (ptc_ui_rect_contains(ptc_ui_update_action_rect(i), x, y))
+        if (ptc_ui_rect_contains(ptc_ui_update_primary_rect(), x, y))
+            return make_hit(PTC_UI_HIT_UPDATE_ACTION, ptc_ui_update_primary_action(model));
+        for (i = 0; i < 2; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_update_track_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_UPDATE_TRACK_OPTION, i);
+        }
+        for (i = 2; i <= 4; ++i) if (ptc_ui_rect_contains(ptc_ui_update_action_rect(i), x, y))
             return make_hit(PTC_UI_HIT_UPDATE_ACTION, i);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -189,8 +219,14 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
-        if (ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y))
+        if (ptc_ui_rect_contains(ptc_ui_settings_page_back_rect(), x, y) ||
+            ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        for (i = 0; i < 2; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_version_update_tab_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_VERSION_UPDATE_TAB, i);
+        if (ptc_ui_rect_contains(ptc_ui_update_check_footer_rect(), x, y))
+            return make_hit(PTC_UI_HIT_UPDATE_CHECK_REFRESH, 0);
         for (i = 0; i < 2; ++i)
             if (ptc_ui_rect_contains(ptc_ui_software_info_qr_tab_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_SOFTWARE_INFO_QR_TAB, i);
@@ -199,17 +235,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 if (ptc_ui_rect_contains(ptc_ui_software_info_repo_source_rect(i), x, y))
                     return make_hit(PTC_UI_HIT_SOFTWARE_INFO_REPO_SOURCE, i);
         }
-        if (ptc_ui_rect_contains(ptc_ui_software_info_update_banner_rect(), x, y) ||
-            ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(2), x, y))
-            return make_hit(PTC_UI_HIT_UPDATE_ACTION, 8);
-        if (ptc_ui_rect_contains(ptc_ui_software_info_auto_check_rect(), x, y))
-            return make_hit(PTC_UI_HIT_SOFTWARE_INFO_AUTO_CHECK, 0);
+        if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&
+            ptc_ui_rect_contains(ptc_ui_version_about_reload_rect(), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
+        if (ptc_ui_rect_contains(ptc_ui_version_about_go_update_rect(), x, y))
+            return make_hit(PTC_UI_HIT_VERSION_UPDATE_TAB, 0);
         if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
-        if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&
-            (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y) ||
-             ptc_ui_rect_contains(ptc_ui_settings_page_footer_rect(1), x, y)))
-            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     /* Unified 3-in-1 Grant & Pairing full-page shell (PTC_UI_OVERLAY_QR and PTC_UI_OVERLAY_GRANT_LOCAL). */
@@ -609,7 +641,7 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
     if (!model) {
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (ptc_ui_upgrade_flow_blocks_input(model)) {
+    if (ptc_ui_busy_modal_blocks_input(model)) {
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (ptc_ui_update_badge_visible(model) && rect_contains_with_padding(ptc_ui_update_badge_rect(model), 4, x, y))
