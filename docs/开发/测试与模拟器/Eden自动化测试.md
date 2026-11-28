@@ -59,7 +59,7 @@ python -X utf8 tools/automation/eden_runner.py verify --run "device-reports/eden
 
 主流程在相同run命令追加`--suite main --timeout 1200`，仍使用全新输出目录；不要接着在原smoke目录补写新成绩。
 
-支持与恢复专项使用`--suite support --timeout 600`，单独创建隔离profile，依次执行首次设置、正常兑换前置、诊断导出、紧急停用、完整安装恢复和恢复后重开，共6项。它复用正常输入/回执门禁，不重复PIN错误等入口烟测；不计入main的17项。紧急停用是本地标记写入，须核对后台status已观察到该标记；完整恢复才以唯一`restore_install_snapshot`回执核对。专项要求两次健康进程退出，动作上限180，超时不重发。
+支持与恢复专项使用`--suite support --timeout 600`，单独创建隔离profile，依次执行首次设置、正常兑换前置、诊断/双页签版本更新页、模拟官方临时解除跳转与还原、紧急停用、完整安装恢复和恢复后重开，共7项。它复用正常输入/回执门禁，不重复PIN错误等入口烟测；不计入main的17项。其中`support_diagnostics`从`card_5`进入统一双页签全页`overlay=46`并验证`L/R`、项目码与Gitee/GitHub切换，`support_temp_unlock`通过私有用例标记切换模拟`temporary_unlocked`，核对今日安排、底栏状态条跳转支持与恢复、孩子首页及清除还原（仅覆盖模拟UI与状态投影，不代表真实Horizon官方临时解除或休眠恢复）。紧急停用是本地标记写入，须核对后台status已观察到该标记；完整恢复才以唯一`restore_install_snapshot`回执核对。专项要求两次健康进程退出，动作上限180，超时不重发。
 
 正常兑换前置先经既有家长入口核对页面，再返回孩子页兑换。首次设置跳过补充引导后位于孩子页时，使用正常PIN进入家长区；兼容此前设置直接进入家长区的状态。未知页面在返回输入前停止，避免将孩子页的B退出误作返回操作。
 
@@ -181,7 +181,7 @@ ui 白名单：view、parent_page、overlay、setup_step、setup_active、waitin
 
 主流程扩展同一只读schema v1的数字/布尔白名单：plan_page、overlay_selection、editor_index、weekly_dirty、confirm_hold_required、config_groups、config_backup_ready、daily_buffer_available/claimed、daily_restriction_active、dock_restriction_active、bedtime_active/skipped、eye_resting、restricted_now、unrestricted_today和today_minutes。targets另提供页签、对应页面卡片、周编辑、时长字段、备份字段、电视页及规则总开关的生产布局中心；时长键盘使用其专属生产几何。观察不接受动作指令，不赋予认证。formatter空间不足不发布截断JSON，Host测试覆盖类型、布局中心、敏感文本排除与失败路径。
 
-支持专项增加`disable_flag_present`、`recovery_active`两个布尔值和`diagnostic_status`整数（0空闲、1导出中、2成功、3失败，来自`PtcUiDiagnosticStatus`）。支持页的`card_*`中心来自`ptc_ui_support_card_rect`，不能沿用设置页坐标；不导出诊断路径或自由文本。
+支持专项增加`disable_flag_present`、`recovery_active`、`temporary_unlocked`、`parent_footer_status_visible`四个布尔值和`diagnostic_status`（0空闲、1导出中、2成功、3失败，来自`PtcUiDiagnosticStatus`）、`update_hub_tab`、`software_info_qr_tab`、`software_info_repo_source`四个整数。支持页的`card_*`中心来自`ptc_ui_support_card_rect`，`parent_status_footer`来自`ptc_ui_parent_status_footer_rect`，不能沿用设置页或硬编码坐标；不导出诊断路径或自由文本。
 
 采样能力位于外壳：`input_sampling_version:2`、正整数`input_sequence`、布尔`input_active`。独立HID流另有整数`schema_version:1`、`input_stream_version:1`、与`input_sequence`相同的`sequence`、十六进制`instance`和十进制字符串`tick`。序号饱和而不回绕；新实例由原instance区别。UI帧中的采样字段只作为完成帧关联，down/up握手读取独立HID流。旧`input_sampling_version:1`的历史报告继续按原UI流核验，不能用于新的运行。采样状态只来自正常HID读取，观察路径不处理命令。
 

@@ -123,7 +123,9 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         "\"daily_restriction_active\":%s,\"dock_restriction_active\":%s,"
         "\"bedtime_active\":%s,\"bedtime_skipped\":%s,\"eye_resting\":%s,"
         "\"restricted_now\":%d,\"unrestricted_today\":%d,\"today_minutes\":%u,"
-        "\"disable_flag_present\":%s,\"recovery_active\":%s,\"diagnostic_status\":%d,",
+        "\"disable_flag_present\":%s,\"recovery_active\":%s,\"diagnostic_status\":%d,"
+        "\"temporary_unlocked\":%s,\"parent_footer_status_visible\":%s,"
+        "\"update_hub_tab\":%d,\"software_info_qr_tab\":%d,\"software_info_repo_source\":%d,",
         (int)m->view, (int)m->parent_page, (int)m->overlay, m->setup_step,
         strcmp(m->setup_phase, "active") == 0 ? "true" : "false",
         m->waiting ? "true" : "false", m->status_loaded ? "true" : "false",
@@ -141,7 +143,10 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         strcmp(m->eye_care_phase, "resting") == 0 ? "true" : "false",
         m->restricted_now, m->unrestricted_today, (unsigned)m->forecast[0].minutes,
         m->disable_flag_present ? "true" : "false", m->recovery_active ? "true" : "false",
-        (int)m->diagnostic_status);
+        (int)m->diagnostic_status,
+        (m->temporary_unlocked_available && m->temporary_unlocked) ? "true" : "false",
+        ptc_ui_parent_footer_status_visible(m) ? "true" : "false",
+        m->update_hub_tab, m->software_info_qr_tab, m->software_info_repo_source);
     if (n < 0 || (size_t)n >= size) { out[0] = '\0'; return false; }
     used = (size_t)n;
     n = snprintf(out + used, size - used,
@@ -251,7 +256,8 @@ static inline bool ptc_eden_format_ui(const PtcUiModel *m, char *out, size_t siz
         !ptc_eden_target(out, size, &used, "header_language", ptc_ui_header_language_rect()) ||
         !ptc_eden_target(out, size, &used, "settings_language", ptc_ui_settings_language_rect()) ||
         !ptc_eden_target(out, size, &used, "child_code", ptc_ui_child_submit_rect()) ||
-        !ptc_eden_target(out, size, &used, "pin_confirm", ptc_ui_pin_confirm_rect())) goto fail;
+        !ptc_eden_target(out, size, &used, "pin_confirm", ptc_ui_pin_confirm_rect()) ||
+        !ptc_eden_target(out, size, &used, "parent_status_footer", ptc_ui_parent_status_footer_rect(m))) goto fail;
     if (m->overlay == PTC_UI_OVERLAY_NOTIFICATIONS) {
         for (int i = 0; i < PTC_UI_NOTIFICATION_OPTION_COUNT; ++i) {
             char key[24];

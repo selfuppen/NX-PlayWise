@@ -1366,19 +1366,40 @@ int main(void)
         model.disable_flag_present = true;
         model.recovery_active = false;
         model.diagnostic_status = PTC_UI_DIAGNOSTIC_SUCCESS;
+        model.temporary_unlocked_available = true;
+        model.temporary_unlocked = true;
+        model.update_hub_tab = 1;
+        model.software_info_qr_tab = 1;
+        model.software_info_repo_source = 1;
         check(ptc_eden_format_ui(&model, text, sizeof(text)), "support observation formats");
         json = cJSON_Parse(text);
         check(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "disable_flag_present")) &&
               cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "recovery_active")) &&
-              cJSON_GetObjectItemCaseSensitive(json, "diagnostic_status")->valueint == PTC_UI_DIAGNOSTIC_SUCCESS,
-              "support observation exposes typed recovery and local diagnostic state");
+              cJSON_GetObjectItemCaseSensitive(json, "diagnostic_status")->valueint == PTC_UI_DIAGNOSTIC_SUCCESS &&
+              cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "temporary_unlocked")) &&
+              cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "parent_footer_status_visible")) &&
+              cJSON_GetObjectItemCaseSensitive(json, "update_hub_tab")->valueint == 1 &&
+              cJSON_GetObjectItemCaseSensitive(json, "software_info_qr_tab")->valueint == 1 &&
+              cJSON_GetObjectItemCaseSensitive(json, "software_info_repo_source")->valueint == 1,
+              "support observation exposes typed recovery, temporary unlock, version hub and diagnostic state");
         {
-            cJSON *target = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json, "targets"), "card_3");
+            cJSON *targets = cJSON_GetObjectItemCaseSensitive(json, "targets");
+            cJSON *target = cJSON_GetObjectItemCaseSensitive(targets, "card_3");
             PtcUiRect rect = ptc_ui_support_card_rect(3);
             check(cJSON_GetArrayItem(target, 0)->valueint == rect.x + rect.w / 2 &&
                   cJSON_GetArrayItem(target, 1)->valueint == rect.y + rect.h / 2,
                   "support recovery target uses its own production layout");
+            cJSON *footer_target = cJSON_GetObjectItemCaseSensitive(targets, "parent_status_footer");
+            PtcUiRect footer_rect = ptc_ui_parent_status_footer_rect(&model);
+            check(cJSON_GetArrayItem(footer_target, 0)->valueint == footer_rect.x + footer_rect.w / 2 &&
+                  cJSON_GetArrayItem(footer_target, 1)->valueint == footer_rect.y + footer_rect.h / 2,
+                  "parent status footer target uses its own production layout");
         }
+        model.temporary_unlocked_available = false;
+        model.temporary_unlocked = false;
+        model.update_hub_tab = 0;
+        model.software_info_qr_tab = 0;
+        model.software_info_repo_source = 0;
         cJSON_Delete(json);
         model.bedtime_section = PTC_UI_BEDTIME_SCHEDULED;
         model.bedtime_dirty = true;

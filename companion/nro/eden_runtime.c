@@ -218,7 +218,7 @@ static PtcCompanionStatus eden_ipc_submit(
        drain cannot acquire a new artificial background-poll waiting window. */
     const char *fixture_path = PLAYWISE_EDEN_SD_ROOT "/support/automation-quota-status.txt";
     PtcStorage *storage = runtime->sysmodule.storage;
-    char fixture[16];
+    char fixture[32];
     /* A private Eden run can change one status sample or fail its transport.
        Consume before applying so a later refresh always uses the normal path. */
     if (storage->vtable->exists(storage, PLAYWISE_EDEN_SD_ROOT "/support/automation-observe.flag") &&
@@ -228,6 +228,13 @@ static PtcCompanionStatus eden_ipc_submit(
         if (!strcmp(fixture, "advance"))
             (void)ptc_pctl_stub_advance_usage_ns(&runtime->pctl, 60000000000ULL,
                 &runtime->usage_carry_ns);
+        else if (!strcmp(fixture, "temp_unlock_on")) {
+            runtime->pctl.status.temporary_unlocked_available = true;
+            runtime->pctl.status.temporary_unlocked = true;
+        } else if (!strcmp(fixture, "temp_unlock_off")) {
+            runtime->pctl.status.temporary_unlocked_available = true;
+            runtime->pctl.status.temporary_unlocked = false;
+        }
     }
     eden_process_request(runtime, request_id, json);
     snprintf(result_path, sizeof(result_path), "%s/results/%s.json", PLAYWISE_EDEN_SD_ROOT, request_id);

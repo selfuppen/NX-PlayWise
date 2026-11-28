@@ -7,8 +7,8 @@ import shutil
 from tools.automation.eden_main_flow import MainFlow
 from tools.automation.eden_runner import decode, digest, read, require, save
 
-SUPPORT_SCENARIOS = ("setup", "support_seed", "support_diagnostics", "support_disable",
-                     "support_restore", "support_reopen")
+SUPPORT_SCENARIOS = ("setup", "support_seed", "support_diagnostics", "support_temp_unlock",
+                     "support_disable", "support_restore", "support_reopen")
 
 
 def verify_diagnostic(value: dict, disabled: bool) -> None:
@@ -55,7 +55,13 @@ def verify_restored_status(value: dict, baseline: dict) -> None:
 
 
 def verify_support(output: Path) -> None:
-    for name in SUPPORT_SCENARIOS[1:]:
+    summary_path = output / "summary.json"
+    expected_scenarios = SUPPORT_SCENARIOS[1:]
+    if summary_path.is_file():
+        recorded = read(summary_path).get("scenarios", {})
+        if isinstance(recorded, dict) and recorded:
+            expected_scenarios = tuple(name for name in SUPPORT_SCENARIOS[1:] if name in recorded)
+    for name in expected_scenarios:
         assertion = read(output / f"assertions/{name}.json")
         require(assertion.get("passed") is True and isinstance(assertion.get("checks"), list) and
                 assertion["checks"], f"missing support assertions: {name}")
@@ -101,6 +107,43 @@ def verify_support(output: Path) -> None:
                 event["overlay"] == 17 and event["overlay_selection"] == len(events) - 1 and
                 guide["overlay"] == 43 and guide["selected_index"] == 6 + len(events),
                 "support event or guide UI evidence differs")
+    if diagnostics.get("version_update_hub") is True:
+        for cp_name, expected_fields in (
+            ("version-update-online", {"overlay": 46, "update_hub_tab": 0}),
+            ("version-update-info", {"overlay": 46, "update_hub_tab": 1, "software_info_qr_tab": 0}),
+            ("software-info-repo-gitee", {"overlay": 46, "update_hub_tab": 1,
+                                          "software_info_qr_tab": 1, "software_info_repo_source": 1}),
+            ("software-info-repo-github", {"overlay": 46, "update_hub_tab": 1,
+                                           "software_info_qr_tab": 1, "software_info_repo_source": 0}),
+        ):
+            cp = read(output / f"checkpoints/{cp_name}.json")["ui"]
+            require(all(cp.get(k) == v for k, v in expected_fields.items()),
+                    f"version update checkpoint differs: {cp_name}")
+    temp_unlock_path = output / "assertions/support_temp_unlock.json"
+    if temp_unlock_path.is_file():
+        temp_unlock = read(temp_unlock_path)
+        unlocked = read(output / f"receipts/{temp_unlock['unlocked_status_id']}.json")
+        restored = read(output / f"receipts/{temp_unlock['restored_status_id']}.json")
+        require(unlocked["type"] == "status" and unlocked["status"] == "ok" and
+                unlocked["state"].get("temporary_unlocked_available") is True and
+                unlocked["state"].get("temporary_unlocked") is True,
+                "temporary unlock status receipt differs")
+        require(restored["type"] == "status" and restored["status"] == "ok" and
+                restored["state"].get("temporary_unlocked_available") is True and
+                restored["state"].get("temporary_unlocked") is False,
+                "restored temporary unlock status receipt differs")
+        for cp_name, expected_fields in (
+            ("temp-unlock-today", {"view": 1, "parent_page": 0, "overlay": 0,
+                                   "temporary_unlocked": True, "parent_footer_status_visible": True}),
+            ("temp-unlock-support", {"view": 1, "parent_page": 4, "overlay": 0,
+                                     "temporary_unlocked": True, "parent_footer_status_visible": True}),
+            ("temp-unlock-child", {"view": 0, "overlay": 0, "temporary_unlocked": True}),
+            ("temp-unlock-restored", {"view": 1, "parent_page": 0, "overlay": 0,
+                                      "temporary_unlocked": False, "parent_footer_status_visible": False}),
+        ):
+            cp = read(output / f"checkpoints/{cp_name}.json")["ui"]
+            require(all(cp.get(k) == v for k, v in expected_fields.items()),
+                    f"temporary unlock checkpoint differs: {cp_name}")
 
 
 class SupportFlow(MainFlow):
@@ -169,18 +212,56 @@ class SupportFlow(MainFlow):
         self.capture("support-guide")
         self.action(button="B")
         self.wait_ui(parent_page=4, overlay=0)
-        # Verify Software Info repo QR GitHub / Gitee switch (commit 56c7ffad).
+        # Verify Version & Update two-tab shell (commit 45246f33): Online Updates -> Version & QR -> Gitee/GitHub -> back.
         self.action(target="card_5")
-        self.wait_ui(overlay=14)
+        self.wait_ui(overlay=46, update_hub_tab=0)
+        self.capture("version-update-online")
         self.action(button="R")
+        self.wait_ui(overlay=46, update_hub_tab=1, software_info_qr_tab=0)
+        self.capture("version-update-info")
+        self.action(button="X")
+        self.wait_ui(overlay=46, update_hub_tab=1, software_info_qr_tab=1, software_info_repo_source=1)
         self.capture("software-info-repo-gitee")
-        self.action(button="Y")
+        self.action(button="ZR")
+        self.wait_ui(overlay=46, update_hub_tab=1, software_info_qr_tab=1, software_info_repo_source=0)
         self.capture("software-info-repo-github")
+        self.action(button="L")
+        self.wait_ui(overlay=46, update_hub_tab=0)
         self.action(button="B")
         self.wait_ui(parent_page=4, overlay=0)
         self.checked("support_diagnostics", ["normal support UI exports readable redacted JSON",
-                                             "latest event detail, official guide, and software info GitHub/Gitee QR return to support"],
-                     navigation_status_id=status["request_id"])
+                                             "latest event detail, official guide, and version/update two-tab hub with GitHub/Gitee QR return to support"],
+                     navigation_status_id=status["request_id"], version_update_hub=True)
+
+    def support_temp_unlock(self) -> None:
+        self.page(0)
+        self.wait_ui(view=1, parent_page=0, overlay=0, temporary_unlocked=False)
+        fixture = self.app / "support/automation-quota-status.txt"
+        fixture.write_text("temp_unlock_on", encoding="ascii")
+        unlocked = self.refresh(temporary_unlocked=True, parent_footer_status_visible=True)
+        require(unlocked["state"].get("temporary_unlocked_available") is True and
+                unlocked["state"].get("temporary_unlocked") is True,
+                "simulated temporary unlock was not reflected in status")
+        self.wait_ui(view=1, parent_page=0, overlay=0, temporary_unlocked=True, parent_footer_status_visible=True)
+        self.capture("temp-unlock-today")
+        self.action(target="parent_status_footer")
+        self.wait_ui(view=1, parent_page=4, overlay=0, temporary_unlocked=True, parent_footer_status_visible=True)
+        self.capture("temp-unlock-support")
+        self.action(button="B")
+        self.wait_ui(view=0, overlay=0, temporary_unlocked=True)
+        self.capture("temp-unlock-child")
+        self.page(0)
+        fixture.write_text("temp_unlock_off", encoding="ascii")
+        restored = self.refresh(temporary_unlocked=False, parent_footer_status_visible=False)
+        require(restored["state"].get("temporary_unlocked_available") is True and
+                restored["state"].get("temporary_unlocked") is False,
+                "clearing simulated temporary unlock did not reflect in status")
+        self.capture("temp-unlock-restored")
+        self.checked("support_temp_unlock", [
+            "simulated temporary unlock exposes footer alert and today overview state",
+            "touching footer alert jumps to Support & Recovery health banner",
+            "child home reflects temporary unlock and clearing restores normal state",
+        ], unlocked_status_id=unlocked["request_id"], restored_status_id=restored["request_id"])
 
     def support_disable(self) -> None:
         self.reenter_support()

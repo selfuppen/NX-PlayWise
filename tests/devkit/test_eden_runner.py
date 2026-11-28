@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -321,7 +322,7 @@ def test_support_suite_evidence_gates() -> None:
         SUPPORT_SCENARIOS, verify_diagnostic, verify_restored_status, verify_support,
     )
     assert scenario_names("support") == SUPPORT_SCENARIOS
-    assert len(set(SUPPORT_SCENARIOS)) == 6 and "pin_wrong" not in SUPPORT_SCENARIOS
+    assert len(set(SUPPORT_SCENARIOS)) == 7 and "support_temp_unlock" in SUPPORT_SCENARIOS and "pin_wrong" not in SUPPORT_SCENARIOS
     diagnostic = {"version": 1, "redaction": "credentials-auth-codes-and-nonces-omitted",
                   "runtime_snapshot": {"status_loaded": True, "disable_flag_present": True, "status_age_seconds": 0}}
     verify_diagnostic(diagnostic, True)
@@ -344,6 +345,75 @@ def test_support_suite_evidence_gates() -> None:
         for name in SUPPORT_SCENARIOS[1:]:
             save(root / f"assertions/{name}.json", {"passed": True, "checks": ["fixture"]})
         rejected(lambda: verify_support(root))  # Positive flags cannot replace underlying files/receipts.
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        baseline_doc = {"status": "ok", "setup": {"phase": "restored", "disable_flag_present": True, "recovery_active": False},
+                        "state": {**baseline["state"], "remaining_available": True, "played_minutes_available": True}}
+        save(root / "support-before/status.json", baseline)
+        save(root / "support-before/install_pctl_snapshot.json", {"version": 1})
+        save(root / "app-final/backups/install_pctl_snapshot.json", {"version": 1})
+        save(root / "app-final/setup.json", {"phase": "restored"})
+        (root / "app-final/flags").mkdir(parents=True)
+        (root / "app-final/flags/disable.flag").write_text("install_snapshot_restored\n", encoding="utf-8")
+        (root / "app-final/ledger").mkdir(parents=True)
+        (root / "app-final/ledger/used_nonces.jsonl").write_bytes(b"nonce\n")
+        save(root / "assertions/grant.json", {"ledger_sha256": hashlib.sha256(b"nonce\n").hexdigest()})
+        save(root / "support-before/rules-after-grant.json",
+             {"week": [], "today_override_present": False, "today_override_day_index": 0, "today_override_minutes": 0})
+        save(root / "app-final/rules.json",
+             {"week": [], "today_override_present": False, "today_override_day_index": 0, "today_override_minutes": 0})
+        (root / "support-before").mkdir(exist_ok=True)
+        (root / "support-before/activity.jsonl").write_text("", encoding="utf-8")
+        (root / "app-final/activity").mkdir(parents=True)
+        (root / "app-final/activity/history.jsonl").write_text('{"action":"offline_grant"}\n', encoding="utf-8")
+        for name in ("restored", "reopened"):
+            save(root / f"support-status/{name}.json", baseline_doc)
+        for name, disabled in (("active", False), ("disabled", True)):
+            save(root / f"diagnostics/{name}.json",
+                 {"version": 1, "redaction": "credentials-auth-codes-and-nonces-omitted",
+                  "runtime_snapshot": {"status_loaded": True, "disable_flag_present": disabled, "status_age_seconds": 0}})
+        save(root / "receipts/r1.json", {"request_id": "r1", "type": "offline_code", "status": "ok"})
+        save(root / "receipts/r2.json", {"request_id": "r2", "type": "restore_install_snapshot", "status": "ok"})
+        save(root / "receipts/r3.json", {"request_id": "r3", "type": "status", "status": "ok",
+                                         "state": {"temporary_unlocked_available": True, "temporary_unlocked": True}})
+        save(root / "receipts/r4.json", {"request_id": "r4", "type": "status", "status": "ok",
+                                         "state": {"temporary_unlocked_available": True, "temporary_unlocked": False}})
+        save(root / "checkpoints/support_diagnostics.json", {"ui": {"diagnostic_status": 2}})
+        save(root / "checkpoints/support_disable.json", {"ui": {"disable_flag_present": True}})
+        for name in SUPPORT_SCENARIOS[1:]:
+            if name not in ("support_diagnostics", "support_temp_unlock"):
+                save(root / f"assertions/{name}.json", {"passed": True, "checks": ["fixture"]})
+        save(root / "assertions/support_diagnostics.json",
+             {"passed": True, "checks": ["fixture"], "version_update_hub": True})
+        save(root / "assertions/support_temp_unlock.json",
+             {"passed": True, "checks": ["fixture"], "unlocked_status_id": "r3", "restored_status_id": "r4"})
+        for cp_name, ui in (
+            ("version-update-online", {"overlay": 46, "update_hub_tab": 0}),
+            ("version-update-info", {"overlay": 46, "update_hub_tab": 1, "software_info_qr_tab": 0}),
+            ("software-info-repo-gitee", {"overlay": 46, "update_hub_tab": 1,
+                                          "software_info_qr_tab": 1, "software_info_repo_source": 1}),
+            ("software-info-repo-github", {"overlay": 46, "update_hub_tab": 1,
+                                           "software_info_qr_tab": 1, "software_info_repo_source": 0}),
+            ("temp-unlock-today", {"view": 1, "parent_page": 0, "overlay": 0,
+                                   "temporary_unlocked": True, "parent_footer_status_visible": True}),
+            ("temp-unlock-support", {"view": 1, "parent_page": 4, "overlay": 0,
+                                     "temporary_unlocked": True, "parent_footer_status_visible": True}),
+            ("temp-unlock-child", {"view": 0, "overlay": 0, "temporary_unlocked": True}),
+            ("temp-unlock-restored", {"view": 1, "parent_page": 0, "overlay": 0,
+                                      "temporary_unlocked": False, "parent_footer_status_visible": False}),
+        ):
+            save(root / f"checkpoints/{cp_name}.json", {"ui": ui})
+        verify_support(root)
+        (root / "checkpoints/version-update-online.json").write_text(
+            json.dumps({"ui": {"overlay": 14, "update_hub_tab": 0}}), encoding="utf-8")
+        rejected(lambda: verify_support(root))
+        (root / "checkpoints/version-update-online.json").write_text(
+            json.dumps({"ui": {"overlay": 46, "update_hub_tab": 0}}), encoding="utf-8")
+        (root / "checkpoints/temp-unlock-support.json").write_text(
+            json.dumps({"ui": {"view": 1, "parent_page": 4, "overlay": 0,
+                               "temporary_unlocked": False, "parent_footer_status_visible": False}}),
+            encoding="utf-8")
+        rejected(lambda: verify_support(root))
 
 
 def test_post_screenshot_neutral_progress() -> None:
