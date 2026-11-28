@@ -54,19 +54,18 @@
   ],
   "releases": [
     {
-      "notes": "# 任我玩 PlayWise 3.3.4\n\n**修复热更新后旧版常驻浮窗锁死 Ultrahand 的问题 · 补齐输入归属版本失配识别与单次自重载生命周期**  \n**Fixed stale resident overlay locking out Ultrahand after hot update · Added release-mismatch detection & one-shot reload lifecycle**\n\n## 简体中文\n\n3.3.4 针对「开启开机预加载（--pw-preload）并完成应用内在线热更新后，按 ZL+ZR+↓ 唤醒浮窗闪现即消失且无法退出或呼出 Ultrahand 主界面」的严重冲突完成根治修复。\n\n> [!IMPORTANT]\n> **升级提醒**：若你的主机此前已开启开机预加载并运行着 **3.3.3 或更早版本**，内存中当前驻留的仍是旧版 playwise.ovl，完成本次 3.3.4 在线更新后请**正常重启一次 Switch** 让新版浮窗驻留生效；从 3.3.4 起，后续在线热更新将由常驻浮窗自动完成单次自重载或安全退场，不再锁死 Ultrahand。\n\n### 核心修复内容\n\n- **区分版本失配与存储/后台异常**（companion/input_owner.{h,c}）：新增 elease_mismatch 标志与 ptc_input_owner_runtime_release_mismatch()，仅在 handover/runtime-ready.json 为合法的新 elease_id 时识别为版本失配，与后台未启动、文件缺失或存储错误严格区分。\n- **修复 libtesla 关闭与单次重载生命周期**（companion/overlay/vendor/libtesla/include/tesla.hpp）：新增 --pw-reload-once 启动参数及 onReloadOnceArg() 钩子；在 onHiddenPoll() 和 show() 后立即响应 shouldClose()（避免闪现和卡入内层循环），并在内层循环将 shouldClose() 置于 shouldHide() 之前防止退出请求被吞。\n- **浮窗失配单次自重载与安全退场**（companion/overlay/source/{main.cpp,input_pages.hpp}）：在 onShow()、update()、handleInput() 及后台隐藏轮询检测到 elease_mismatch 时，首次通过 sl::setNextOverlay(\"sdmc:/switch/.overlays/playwise.ovl\", ...) 携带 --pw-reload-once 自动重载 SD 卡上的新版 playwise.ovl（隐藏态附带 --pw-preload）；若重载一次后",
+      "notes": "# 任我玩 PlayWise 3.3.5\n\n**重构「版本与更新」双页签与耗时操作锁定加固 · 优化官方临时解除状态展示与健康体检引导 · 重构获取与签发加时码互斥分类与三语配对文案**  \n**Unified Version & Updates dual-tab UI with locked critical update stages · Improved official temporary-unlock status & health guidance · Reworked grant/pairing page categories & trilingual instructions**\n\n## 简体中文\n\n3.3.5 聚焦**应用内更新交互安全性、官方临时解除状态清晰度与家长配对引导体验**，并进一步完善构建与模拟器自动化门禁。本次改动仅涉及主机客户端 NRO 界面交互、构建工具链及 Eden 测试适配，未变更后台 `sysmodule` 与悬浮窗 `playwise.ovl` 运行时逻辑。\n\n### 核心更新内容\n\n- **重构「版本与更新」双页签与耗时锁定加固**（`companion/nro/{ui_render_overlay_support.c,nro_online_update.c,online_update.c}`）：\n  - 将原「检查更新与版本」与「软件更新」整合为统一的双页签全页「版本与更新」（`L` 在线更新 / `R` 版本与扫码），修正面包屑归属与打包信息页标记。\n  - 为备份、准备替换、写入安装与回滚恢复阶段新增 `PTC_UPDATE_RECOVERING` 状态及逐文件进度上报，不可取消阶段弹出居中锁定模态并屏蔽按键与触控，同时修复非 `awaiting_reopen` 状态下退出重开按钮误启用问题。\n  - 在状态胶囊、4 步路径条、情境主按钮与说明摘要中明确区分重开应用、重启 Switch 主机与重开浮窗对象；将更新通道升级为「版本偏好」并排分段控件（仅正式版 / 含测试版），明确标注自动下载源路由及命中体积；统一双页签 `Y` 键检查/刷新。\n- **官方家长控制临时解除状态展示与引导优化**（`companion/nro/{ui_status_state.c,ui_render_overlay_support.c,ui_render_child.c,ui_render_pages.c}`）：\n  - 底栏与顶栏胶囊统一明确为「官方临时解除 | 按 A 查看说明」与「",
       "package": {
-        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.3.4/playwise-3.3.4.zip",
-        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.3.4/playwise-3.3.4.zip",
-        "md5": "892179f97c16493533a9a6c61f0982ce",
-        "name": "playwise-3.3.4.zip",
-        "sha256": "0aec495904be4311b8ff5ef191228cefce8182d920b22d8a61a43c2659ab2478",
-        "size": 3880423
+        "gitee_url": "https://gitee.com/selfuppen/nx-playwise/releases/download/v3.3.5/playwise-3.3.5.zip",
+        "github_url": "https://github.com/selfuppen/NX-PlayWise/releases/download/v3.3.5/playwise-3.3.5.zip",
+        "md5": "398b756eebaa21323925411546470121",
+        "name": "playwise-3.3.5.zip",
+        "sha256": "798c82d2be4066d0ce4a099c71671be10619f795cdd00974c6d6ca4adcad5dd0",
+        "size": 3888008
       },
       "prerelease": false,
-      "requires_reboot": true,
-      "tag": "v3.3.4",
-      "version": "3.3.4"
+      "tag": "v3.3.5",
+      "version": "3.3.5"
     },
     {
       "notes": "这是 **3.1.8-beta.2 预发行测试版**。完整真机资格仍为 `pending`，面向愿意反馈问题的用户。\n\n## 本版变化\n\n- 优化主机应用、游戏内浮窗和离线家长网页的文案与操作流程，孩子页更清楚地展示受限提醒。\n- 修复任我玩驻留时简要提示的接收与清屏问题，优化隐藏浮窗唤醒、详情入口及重复提醒处理。\n- 减少后台轮询、通知续租、SD 文件读取和浮窗绘制的重复工作。\n- 修复英文护眼说明的单屏溢出，并同步“检查更新与版本”入口及安装包校验。\n\n## 验证范围\n\n最终 clean 候选为 `1cbf8a49c40add88beab59c92a4004e3413e4014`，构建身份为 `playwise-3.1.8-beta.2+1cbf8a49c40a.03190e8a8162f633`。统一 devkitPro 发布构建的 C／Python／UI 回归、标准包／完整包／Device Lab 校验及 Eden NRO 构建校验通过。\n\n同一最终 Eden NRO 完成首次设置、PIN、离线码与持久化等主场景 17/17、通知场景 4/4、离线家长网页及真实浏览器兑换场景 5/5；本批进程健康退出，证据封存并离线复核，所属运行目录按正式执行器清理。\n\n最终 beta.2 已在 Nintendo Switch OLED（HOS 22.5.0、Atmosphère 1.11.2）通过正常家长 PIN 的不同版本后台安全交接、新 boot 浮窗握手、孩子页和浮窗打开退出，以及约 62 秒的1952累计增长观察。限时窗口结束后恢复原30分钟周计划，完整0x44设置与原有效政策一致；额度耗尽后系统停止计时、累计保持稳定，操作者确认额度耗尽状态可见。标准采集以正常终末结束，三次完整原流一致且两段间隔均超过7秒。该烟测未重复最终版本的游戏、跨午夜、休眠或底座测试。\n\n版本前的主体候选已在 Nintendo Switch OLED、HOS 22.5.0、Atmosphère 1.11.2 上验证后台交接、浮窗正常打开退出、Woodo 的实际限制与恢复操控，以及原限时规则下的自然午夜累计归零和次日额度切换。历史证据按原候选范围引用，上",
